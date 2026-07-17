@@ -18,10 +18,6 @@ DROP TABLE IF EXISTS SCHOOL_YEAR;
 DROP TABLE IF EXISTS SCHOOL;
 SET FOREIGN_KEY_CHECKS = 1;
 
--- ==========================================
--- 1. INDEPENDENT / PARENT TABLES
--- ==========================================
-
 CREATE TABLE SCHOOL (
     school_id BIGINT PRIMARY KEY AUTO_INCREMENT,
     school_name VARCHAR(100) NOT NULL,
@@ -70,10 +66,6 @@ CREATE TABLE COMPONENT_TYPE (
     percentage DECIMAL(5,2) NOT NULL
 );
 
--- ==========================================
--- 2. FIRST-LEVEL DEPENDENT TABLES (Rely on Parents)
--- ==========================================
-
 CREATE TABLE USER (
     user_id BIGINT PRIMARY KEY AUTO_INCREMENT,
     school_id BIGINT,
@@ -105,17 +97,13 @@ CREATE TABLE GRADE_SUBMISSION (
     FOREIGN KEY (school_year_id) REFERENCES SCHOOL_YEAR(school_year_id) ON DELETE CASCADE
 );
 
--- ==========================================
--- 3. SECOND-LEVEL DEPENDENT TABLES
--- ==========================================
-
 CREATE TABLE SUBJECT (
     subject_id BIGINT PRIMARY KEY AUTO_INCREMENT,
     subject_name VARCHAR(100) NOT NULL,
     subject_code VARCHAR(10) NOT NULL,
     description VARCHAR(100),
-    student_section_id BIGINT, -- Handled below using ALTER TABLE to avoid circular dependency
-    user_id BIGINT, -- Teacher assigned
+    student_section_id BIGINT, 
+    user_id BIGINT, 
     FOREIGN KEY (user_id) REFERENCES USER(user_id) ON DELETE SET NULL
 );
 
@@ -129,14 +117,10 @@ CREATE TABLE STUDENT_SECTION (
     FOREIGN KEY (school_year_id) REFERENCES SCHOOL_YEAR(school_year_id) ON DELETE CASCADE
 );
 
--- Resolve the circular reference between SUBJECT and STUDENT_SECTION
 ALTER TABLE SUBJECT 
 ADD CONSTRAINT fk_subject_student_section
 FOREIGN KEY (student_section_id) REFERENCES STUDENT_SECTION(student_section_id) ON DELETE SET NULL;
 
--- ==========================================
--- 4. SCORE, ATTENDANCE & REQUEST TABLES
--- ==========================================
 
 CREATE TABLE SCORE (
     score_id BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -148,7 +132,7 @@ CREATE TABLE SCORE (
     term_grade DECIMAL(5,2),
     descriptor VARCHAR(50),
     remark VARCHAR(50),
-    locked_status BOOLEAL DEFAULT FALSE,
+    locked_status BOOLEAN DEFAULT FALSE,
     submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     subject_id BIGINT,
     student_section_id BIGINT,
@@ -179,16 +163,12 @@ CREATE TABLE GRADE_REOPEN_REQUEST (
     FOREIGN KEY (submission_id) REFERENCES GRADE_SUBMISSION(submission_id) ON DELETE CASCADE
 );
 
--- ==========================================
--- 5. UTILITY & SYSTEM LOGS (AUDIT, NOTIFICATION, FEEDBACK)
--- ==========================================
-
 CREATE TABLE AUDIT_LOG (
     audit_id BIGINT PRIMARY KEY AUTO_INCREMENT,
     user_id BIGINT,
     score_id BIGINT,
     action_type ENUM('update', 'delete') NOT NULL,
-    module_name DATE, -- Adjust data type if module_name should be VARCHAR
+    module_name DATE,
     affected_table VARCHAR(10),
     previous_value INT,
     new_value INT,
