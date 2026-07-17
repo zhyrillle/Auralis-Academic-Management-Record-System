@@ -21,10 +21,35 @@ router.get('/email/:email', async (req, res) => {
   }
 });
 
-router.post('/', async (req, res) => {
+router.post('/login', async (req, res) => {
   try {
-    const newId = await User.create(req.body);
-    res.status(201).json({ message: 'User created successfully', user_id: newId });
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
+    }
+
+    const user = await User.findByEmail(email);
+
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+
+    if (user.password !== password) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+
+    res.json({
+      message: 'Login successful',
+      user: {
+        user_id: user.user_id,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        email: user.email,
+        role: user.role
+      }
+    });
+
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

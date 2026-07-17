@@ -1,16 +1,13 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const path = require('path');
 const app = express();
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 
-app.use(express.static(path.join(__dirname, '../frontend')));
-
-// import routes
+// Import routes
 const schoolRoutes = require('./routes/schoolRoutes');
 const gradeLevelRoutes = require('./routes/gradeLevelRoutes');
 const studentRoutes = require('./routes/studentRoutes');
@@ -45,16 +42,11 @@ app.use('/api/audit-logs', auditLogRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/feedback', feedbackRoutes);
 
-app.get('/login', (req, res) => {
-  res.sendFile(path.join(__dirname, '../frontend/index.html'));
-});
-
-// redirect routes
 app.get('/', (req, res) => {
-  res.redirect('/login');
+  res.json({ status: "Backend API is running" });
 });
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`📡 Server running on http://localhost:${PORT}`);
+  console.log(`📡 API Server running on http://localhost:${PORT}`);
 });
