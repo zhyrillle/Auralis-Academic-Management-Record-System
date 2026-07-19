@@ -17,7 +17,7 @@ export default function ResetPassword() {
   };
 
   return (
-    <AuthLayout hideRectangles>
+    <AuthLayout hideRectangles pageType="recovery">
       <h2 className="auth-title">RESET YOUR<br />PASSWORD</h2>
       <p className="auth-subtitle">Please enter your new password below.</p>
 

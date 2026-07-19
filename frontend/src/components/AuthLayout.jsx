@@ -15,7 +15,7 @@ const MAX_VIEWPORT = 1920;
 const CURVE_BOUNDARY_RATIO = 0.50;
 const CURVE_LEFT = DESIGN_WIDTH * CURVE_BOUNDARY_RATIO - 260; // 260 = tuning offset, adjust to taste
 
-export default function AuthLayout({ children, showPhoto = false, illustration = null, hideRectangles = false }) {
+export default function AuthLayout({ children, showPhoto = false, illustration = null, hideRectangles = false, pageType = "login" }) {
   const [scale, setScale] = useState(1);
 
   useEffect(() => {
@@ -29,9 +29,9 @@ export default function AuthLayout({ children, showPhoto = false, illustration =
   }, []);
 
   return (
-    <div className="auth-viewport">
+    <div className={`auth-viewport ${pageType === "login" ? "login-view" : "recovery-view"}`}>
       <div
-        className="design-canvas"
+        className={`design-canvas ${pageType === "login" ? "login-view" : "recovery-view"}`}
         style={{
           width: DESIGN_WIDTH,
           height: DESIGN_HEIGHT,

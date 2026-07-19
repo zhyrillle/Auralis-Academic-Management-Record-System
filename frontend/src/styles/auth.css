@@ -22,14 +22,28 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.auth-viewport.login-view {
   background: #ffffff;
+}
+
+.auth-viewport.recovery-view {
+  background: #123062;
 }
 
 .design-canvas {
   position: relative;
-  background: #ffffff;
   flex-shrink: 0;
   overflow: hidden;   /* ADD THIS */
+}
+
+.design-canvas.login-view {
+  background: #ffffff;
+}
+
+.design-canvas.recovery-view {
+  background: #123062;
 }
 
 .layer-photo {
@@ -100,7 +114,7 @@ body {
   font-family: "Montserrat", sans-serif;
   font-size: 28px;
   font-weight: 700;
-  color: #14235c;
+  color: #123062;
   margin-bottom: 24px;
 }
 
@@ -114,26 +128,26 @@ body {
 .auth-field-label {
   font-family: "Montserrat", sans-serif;
   font-weight: 600;
-  color: #14235c;
+  color: #123062;
   margin-bottom: 6px;
   display: block;
 }
 
 .auth-input {
-  font-family: "DM Sans", sans-serif;
+  font-family: "Montserrat", sans-serif;
   width: 100%;
   padding: 12px 16px;
   border-radius: 24px;
   border: none;
-  background-color: #b7c6ec;
-  color: #1a1a2e;
+  background-color: #ADC4EB;
+  color: #032140;
   font-size: 14px;
   margin-bottom: 16px;
 }
 
 .auth-input::placeholder {
-  font-family: "DM Sans", sans-serif;
-  color: #4a5578;
+  font-family: "Montserrat", sans-serif;
+  color: #032140;
 }
 
 .forgot-link {
@@ -154,7 +168,7 @@ body {
 
 .btn-primary {
   font-family: "Montserrat", sans-serif;
-  background-color: #14235c;
+  background-color: #123062;
   color: white;
   border: none;
   border-radius: 24px;
@@ -179,6 +193,7 @@ body {
 
 .otp-inputs {
   display: flex;
+  justify-content: center;
   gap: 12px;
   margin-bottom: 24px;
 }
@@ -189,7 +204,10 @@ body {
   text-align: center;
   font-size: 24px;
   border-radius: 8px;
-  border: 1px solid #ccc;
+  border: 1px solid #123062;
+  background-color: #ADC4EB;
+  color: #032140;
+  font-family: "Montserrat", sans-serif;
 }
 
 .resend-link {

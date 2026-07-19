@@ -13,7 +13,7 @@ export default function ForgotPassword() {
   };
 
   return (
-    <AuthLayout illustration={illustration} hideRectangles>
+    <AuthLayout illustration={illustration} hideRectangles pageType="recovery">
       <h2 className="auth-title">FORGOT<br />YOUR PASSWORD?</h2>
       <p className="auth-subtitle">
         Don't worry! Enter your email address for the OTP code to reset your password.

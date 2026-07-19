@@ -52,7 +52,7 @@ export default function Login() {
   };
 
   return (
-    <AuthLayout showPhoto={true}>
+    <AuthLayout showPhoto={true} pageType="login">
       <img
         src={logo}
         alt="Auralis"

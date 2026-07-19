@@ -26,7 +26,7 @@ export default function OtpVerify() {
   };
 
   return (
-    <AuthLayout illustration={illustration} hideRectangles>
+    <AuthLayout illustration={illustration} hideRectangles pageType="recovery">
       <h2 className="auth-title">ENTER OTP CODE</h2>
       <p className="auth-subtitle">
         We've sent a verification code to your registered email. Enter the code below to
