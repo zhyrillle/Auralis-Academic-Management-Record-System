@@ -3,6 +3,8 @@
    Styles exclusive to GradingSheet.jsx and its sub-components.
    ========================================================================== */
 
+@import "./themes.css";
+
 /* ---- Container ---- */
 .grading-sheet-container {
   animation: gsfadeIn 0.4s ease-out;
@@ -10,8 +12,15 @@
 }
 
 @keyframes gsfadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* ---- Header Bar ---- */
@@ -25,7 +34,7 @@
 .grading-sheet-title-area {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 15px;
 }
 
 .back-btn {
@@ -49,40 +58,42 @@
 }
 
 .grading-sheet-title {
-  font-size: 24px;
+  font-family: var(--font-dm-sans);
+  font-size: var(--fs-h2);
   font-weight: 700;
-  color: var(--sidebar-bg, #112d61);
+  color: var(--primary-highlight-color);
+  cursor: pointer;
 }
 
 .download-btn {
   display: flex;
   align-items: center;
   gap: 8px;
-  background-color: #ffffff;
-  border: 1px solid #e2e8f0;
-  color: #475569;
-  padding: 10px 20px;
+  background-color: #123062;
+  border: 1px solid #123062;
+  color: #ffffff;
+  padding: 10px 25px;
   border-radius: 10px;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: var(--fs-subtext);
+  font-weight: var(--fw-bold);
   cursor: pointer;
   transition: all 0.2s;
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.01);
 }
 
 .download-btn:hover {
-  background-color: var(--sidebar-bg, #112d61);
+  background-color: var(--button-primary-hover-color);
   color: #ffffff;
-  border-color: var(--sidebar-bg, #112d61);
+  border-color: var(--button-primary-hover-color);
   box-shadow: 0 4px 12px rgba(17, 45, 97, 0.15);
 }
 
 /* ---- Sub-header ---- */
 .total-students-desc {
-  font-size: 14px;
-  color: #64748b;
+  font-size: var(--fs-body);
+  color: var(--subtext-color);
   margin-bottom: 16px;
-  font-weight: 500;
+  font-weight: var(--fw-normal);
 }
 
 /* ---- Filters Row ---- */
@@ -102,9 +113,21 @@
   flex-wrap: wrap;
 }
 
+.grading-filters-text {
+  font-size: 14px;
+  font-weight: 400;
+  color: #757575;
+}
+
+.grading-filters-right {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
 .search-bar-container {
   position: relative;
-  min-width: 280px;
+  min-width: 480px;
 }
 
 .search-input {
@@ -238,7 +261,7 @@
 }
 
 .final-grade-cell {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
   color: #1e293b;
   text-align: center;
@@ -265,11 +288,30 @@
   font-weight: 600;
 }
 
-.badge-outstanding        { background-color: #d1fae5; color: #065f46; }
-.badge-very-satisfactory  { background-color: #dbeafe; color: #1e40af; }
-.badge-satisfactory       { background-color: #e0f2fe; color: #0369a1; }
-.badge-fairly-satisfactory{ background-color: #fef3c7; color: #92400e; }
-.badge-did-not-meet       { background-color: #fee2e2; color: #991b1b; }
+.badge-advancing {
+  background-color: #d1fae5;
+  color: #065f46;
+}
+
+.badge-benchmarking {
+  background-color: #dbeafe;
+  color: #1e40af;
+}
+
+.badge-connecting {
+  background-color: #e0f2fe;
+  color: #0369a1;
+}
+
+.badge-developing {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+.badge-emerging {
+  background-color: #fee2e2;
+  color: #991b1b;
+}
 
 .badge-passed {
   background-color: #d1fae5;
@@ -376,9 +418,33 @@
 }
 
 @keyframes slideInRight {
-  from { transform: translateX(120%); }
-  to   { transform: translateX(0); }
+  from {
+    transform: translateX(120%);
+  }
+
+  to {
+    transform: translateX(0);
+  }
 }
 
-.toast-success { border-left: 4px solid #10b981; }
-.toast-info    { border-left: 4px solid #3b82f6; }
+.toast-success {
+  border-left: 4px solid #10b981;
+}
+
+.toast-info {
+  border-left: 4px solid #3b82f6;
+}
+
+/* ---- Back Button Focus & Border Reset ---- */
+.back-btn {
+  border: none !important;
+  /* Removes the default light gray border */
+  outline: none !important;
+  /* Prevents the default browser focus ring */
+  box-shadow: none !important;
+  /* Clears out any active shadow effects */
+  background-color: transparent !important;
+  /* Removes the white background */
+  background: transparent !important;
+  /* Double fallback to clear all backgrounds */
+}

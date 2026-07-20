@@ -80,7 +80,7 @@ export default function AdviserSections() {
 
   // Navigation View State
   const [currentView, setCurrentView] = useState("dashboard");
-  const [selectedClass, setSelectedClass] = useState(null);
+  const [activeSelectedClass, setactiveSelectedClass] = useState(null);
 
   // Controls Filters and Sorting
   const [filterSubject, setFilterSubject] = useState("All");
@@ -149,23 +149,48 @@ export default function AdviserSections() {
     triggerToast(`Successfully updated details for ${editFormData.gradeLevel} - ${editFormData.sectionName}`);
   };
 
-  const handleGradeSubmit = (classId) => {
+  const handleGradeSubmit = async (classId) => {
+    // simulate API call if needed
+    // await api.submitGrades(classId);
+
     setClasses((prev) =>
-      prev.map((c) => (c.id === classId ? { ...c, submitted: true } : c))
+      prev.map((c) =>
+        c.id === classId
+          ? { ...c, submitted: true }
+          : c
+      )
     );
-    triggerToast(`Grading sheet for ${selectedClass.gradeLevel} - ${selectedClass.sectionName} has been submitted!`);
+
+    // ⭐ THIS IS THE IMPORTANT PART ⭐
+    setactiveSelectedClass((prev) => ({
+      ...prev,
+      submitted: true,
+    }));
+
+    triggerToast(
+      `Grading sheet for ${activeSelectedClass.gradeLevel} - ${activeSelectedClass.sectionName} has been submitted!`
+    );
   };
 
+  const activeactiveSelectedClass = useMemo(() => {
+    if (!activeSelectedClass) return null;
+
+    return (
+      classes.find((c) => c.id === activeSelectedClass.id) ||
+      activeSelectedClass
+    );
+  }, [classes, activeSelectedClass]);
+
   const activeClassStats = useMemo(() => {
-    if (!selectedClass) return null;
-    const students = studentsBySection[selectedClass.id] || [];
+    if (!activeSelectedClass) return null;
+    const students = studentsBySection[activeSelectedClass.id] || [];
     const total = students.length;
     const males = students.filter((s) => s.sex === "M").length;
     const females = students.filter((s) => s.sex === "F").length;
     const grades = students.map((s) => calculateFinalGrade(s.term1, s.term2, s.term3)).filter((g) => g !== "");
     const avgGrade = grades.length > 0 ? Math.round(grades.reduce((sum, val) => sum + val, 0) / grades.length) : "N/A";
     return { total, males, females, avgGrade };
-  }, [selectedClass, studentsBySection]);
+  }, [activeSelectedClass, studentsBySection]);
 
   return (
     <div className="sections-page-container">
@@ -202,19 +227,19 @@ export default function AdviserSections() {
               {filteredAndSortedClasses.map((cls) => (
                 <ClassCard
                   key={cls.id} cls={cls}
-                  onView={(c) => { setSelectedClass(c); setViewDrawerOpen(true); }}
-                  onGradingSheet={(c) => { setSelectedClass(c); setCurrentView("grading-sheet"); }}
-                  onEdit={(c) => { setSelectedClass(c); setEditFormData({ ...c }); setEditModalOpen(true); }}
+                  onView={(c) => { setactiveSelectedClass(c); setViewDrawerOpen(true); }}
+                  onGradingSheet={(c) => { setactiveSelectedClass(c); setCurrentView("grading-sheet"); }}
+                  onEdit={(c) => { setactiveSelectedClass(c); setEditFormData({ ...c }); setEditModalOpen(true); }}
                 />
               ))}
             </div>
           )}
         </>
       ) : (
-        selectedClass && (
+        activeSelectedClass && (
           <GradingSheet
-            selectedClass={selectedClass}
-            students={studentsBySection[selectedClass.id] || []}
+            activeSelectedClass={activeactiveSelectedClass}
+            students={studentsBySection[activeSelectedClass.id] || []}
             onBack={() => setCurrentView("dashboard")}
             triggerToast={triggerToast}
             calculateFinalGrade={calculateFinalGrade}
@@ -268,7 +293,7 @@ export default function AdviserSections() {
       )}
 
       {/* CLASS INFORMATION DRAWER */}
-      {viewDrawerOpen && selectedClass && activeClassStats && (
+      {viewDrawerOpen && activeSelectedClass && activeClassStats && (
         <div className="drawer-overlay" onClick={() => setViewDrawerOpen(false)}>
           <div className="drawer-content" onClick={(e) => e.stopPropagation()}>
             <div className="drawer-header">
@@ -277,9 +302,9 @@ export default function AdviserSections() {
             </div>
             <div className="drawer-body">
               <div style={{ marginBottom: "24px" }}>
-                <h2 style={{ fontSize: "24px", fontWeight: "700", color: "#1e293b", margin: "0 0 4px 0" }}>{selectedClass.gradeLevel} - {selectedClass.sectionName}</h2>
-                <p style={{ color: "#64748b", margin: 0, fontWeight: "500" }}>{selectedClass.subject}</p>
-                <span className="class-type-tag" style={{ marginTop: "10px", display: "inline-block" }}>{selectedClass.classType}</span>
+                <h2 style={{ fontSize: "24px", fontWeight: "700", color: "#1e293b", margin: "0 0 4px 0" }}>{activeSelectedClass.gradeLevel} - {activeSelectedClass.sectionName}</h2>
+                <p style={{ color: "#64748b", margin: 0, fontWeight: "500" }}>{activeSelectedClass.subject}</p>
+                <span className="class-type-tag" style={{ marginTop: "10px", display: "inline-block" }}>{activeSelectedClass.classType}</span>
               </div>
               <div className="drawer-section-title">Academic Indicators</div>
               <div className="stats-grid">
@@ -298,7 +323,7 @@ export default function AdviserSections() {
               </div>
               <div className="drawer-section-title">Students Registry</div>
               <div className="students-mini-list">
-                {(studentsBySection[selectedClass.id] || []).map((stud) => (
+                {(studentsBySection[activeSelectedClass.id] || []).map((stud) => (
                   <div key={stud.id} className="student-mini-item">
                     <span className="student-mini-name">{stud.lastName}, {stud.firstName}</span>
                     <span className={`student-mini-sex ${stud.sex === "M" ? "sex-m" : "sex-f"}`}>{stud.sex === "M" ? "Male" : "Female"}</span>
