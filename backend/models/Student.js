@@ -12,21 +12,21 @@ const Student = {
   },
 
   create: async (student) => {
-    const { LRN, first_name, middle_name, last_name, extension_name, birthdate, sex, street, city, province, country, postal_code } = student;
+    const { LRN, first_name, middle_name, last_name, extension_name, birthdate, sex, street, barangay, city, province, country, postal_code } = student;
     const [result] = await db.query(
-      `INSERT INTO STUDENT (LRN, first_name, middle_name, last_name, extension_name, birthdate, sex, street, city, province, country, postal_code) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [LRN, first_name, middle_name, last_name, extension_name, birthdate, sex, street, city, province, country, postal_code]
+      `INSERT INTO STUDENT (LRN, first_name, middle_name, last_name, extension_name, birthdate, sex, street, barangay, city, province, country, postal_code) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [LRN, first_name, middle_name, last_name, extension_name, birthdate, sex, street, barangay, city, province, country, postal_code]
     );
     return result.insertId;
   },
 
   update: async (id, student) => {
-    const { first_name, middle_name, last_name, extension_name, birthdate, sex, street, city, province, country, postal_code } = student;
+    const { first_name, middle_name, last_name, extension_name, birthdate, sex, street, barangay, city, province, country, postal_code } = student;
     await db.query(
-      `UPDATE STUDENT SET first_name = ?, middle_name = ?, last_name = ?, extension_name = ?, birthdate = ?, sex = ?, street = ?, city = ?, province = ?, country = ?, postal_code = ? 
+      `UPDATE STUDENT SET first_name = ?, middle_name = ?, last_name = ?, extension_name = ?, birthdate = ?, sex = ?, street = ?, barangay = ?, city = ?, province = ?, country = ?, postal_code = ? 
        WHERE student_id = ?`,
-      [first_name, middle_name, last_name, extension_name, birthdate, sex, street, city, province, country, postal_code, id]
+      [first_name, middle_name, last_name, extension_name, birthdate, sex, street, barangay, city, province, country, postal_code, id]
     );
   }
 };
