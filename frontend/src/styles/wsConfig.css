@@ -1,0 +1,341 @@
+.ws-config-page {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding-bottom: 48px;
+  color: #1e293b;
+  animation: ws-config-fade-in 0.35s ease-out;
+}
+
+@keyframes ws-config-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ws-config-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.ws-config-header__copy h1 {
+  margin: 0 0 7px;
+  color: var(--sidebar-bg, #112d61);
+  font-size: clamp(25px, 3vw, 31px);
+  line-height: 1.2;
+}
+
+.ws-config-header__copy p,
+.ws-config-panel__heading p {
+  margin: 0;
+  color: #64748b;
+  font-size: 14px;
+}
+
+.ws-config-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+.ws-config-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 10px 16px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
+}
+
+.ws-config-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.ws-config-button:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.2);
+  outline-offset: 2px;
+}
+
+.ws-config-button--primary {
+  color: #ffffff;
+  background: var(--sidebar-bg, #112d61);
+  box-shadow: 0 4px 12px rgba(17, 45, 97, 0.16);
+}
+
+.ws-config-button--primary:hover:not(:disabled) {
+  background: var(--sidebar-bg-hover, #1e3e78);
+}
+
+.ws-config-button--secondary {
+  color: #475569;
+  background: #ffffff;
+  border-color: #dbe3ec;
+}
+
+.ws-config-button--secondary:hover {
+  color: #1e293b;
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.ws-config-button:disabled {
+  color: #94a3b8;
+  background: #e2e8f0;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.ws-config-success {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: fit-content;
+  margin-bottom: 18px;
+  padding: 10px 14px;
+  color: #047857;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ws-config-panel {
+  overflow: hidden;
+  background: #ffffff;
+  border: 1px solid #eef2f6;
+  border-radius: 16px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
+}
+
+.ws-config-panel__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 22px 24px;
+  border-bottom: 1px solid #eef2f6;
+}
+
+.ws-config-panel__heading h2 {
+  margin: 0 0 4px;
+  color: var(--sidebar-bg, #112d61);
+  font-size: 19px;
+  font-weight: 700;
+}
+
+.ws-config-panel__count {
+  padding: 6px 10px;
+  color: #64748b;
+  background: #f1f5f9;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.ws-config-table-wrapper {
+  overflow-x: auto;
+}
+
+.ws-config-table {
+  width: 100%;
+  min-width: 900px;
+  border-collapse: collapse;
+}
+
+.ws-config-table th,
+.ws-config-table td {
+  height: 66px;
+  padding: 12px 22px;
+  border-bottom: 1px solid #f1f5f9;
+  vertical-align: middle;
+}
+
+.ws-config-table thead th {
+  height: auto;
+  padding-top: 13px;
+  padding-bottom: 13px;
+  color: #64748b;
+  background: #f8fafc;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.ws-config-table thead th:first-child {
+  text-align: left;
+}
+
+.ws-config-table tbody tr:last-child th,
+.ws-config-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.ws-config-table tbody tr {
+  transition: background-color 0.18s ease;
+}
+
+.ws-config-table tbody tr:hover {
+  background: #fbfdff;
+}
+
+.ws-config-table tbody tr.ws-config-row--invalid {
+  background: #fffafa;
+}
+
+.ws-config-subject {
+  min-width: 170px;
+  color: #334155;
+  font-size: 14px;
+  font-weight: 700;
+  text-align: left;
+}
+
+.ws-config-number-cell,
+.ws-config-total-cell {
+  min-width: 160px;
+  text-align: center;
+}
+
+.ws-config-percentage,
+.ws-config-total-cell strong {
+  color: #334155;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.ws-config-total-cell {
+  min-width: 230px;
+}
+
+.ws-config-total-cell strong {
+  display: block;
+}
+
+.ws-config-total--invalid {
+  color: #b91c1c !important;
+}
+
+.ws-config-error {
+  display: block;
+  margin-top: 4px;
+  color: #b91c1c;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.ws-config-input-wrapper {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 104px;
+  padding-right: 10px;
+  color: #64748b;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.ws-config-input-wrapper:focus-within {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.ws-config-row--invalid .ws-config-input-wrapper {
+  border-color: #fca5a5;
+}
+
+.ws-config-row--invalid .ws-config-input-wrapper:focus-within {
+  border-color: #dc2626;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+}
+
+.ws-config-input-wrapper input {
+  width: 76px;
+  padding: 9px 6px 9px 11px;
+  color: #1e293b;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: right;
+}
+
+.ws-config-input-wrapper span:not(.sr-only) {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 720px) {
+  .ws-config-page {
+    padding-bottom: 28px;
+  }
+
+  .ws-config-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .ws-config-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .ws-config-panel__heading {
+    align-items: flex-start;
+    padding: 20px;
+  }
+}
+
+@media (max-width: 430px) {
+  .ws-config-actions {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+
+  .ws-config-button {
+    width: 100%;
+  }
+}

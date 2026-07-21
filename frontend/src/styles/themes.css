@@ -1,55 +1,53 @@
 /* src/styles/theme.css */
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Inter:wght@400;500;600;700&family=Montserrat:wght@400;500;600;700&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Inter:wght@400;500;600;700&family=Montserrat:wght@400;500;600;700&display=swap");
 
 :root {
-    /* --- Color Palette --- */
-    --primary-color: #123062;
+  /* --- Color Palette --- */
+  --primary-color: #123062;
 
-    /* --- Text Colors --- */
-    --default-text-color: #000000;
-    --white-text-color: #ffffff;
-    --subtext-color: #757575;
-    --primary-highlight-color: #123062;
-    --success-text-color: #10B981;
-    --warning-text-color: #F59E0B;
-    --danger-text-color: #DC2626;
-    --cancel-text-color: #757575;
-    --unavailable-text-color: #EDEDED;
+  /* --- Text Colors --- */
+  --default-text-color: #000000;
+  --white-text-color: #ffffff;
+  --subtext-color: #757575;
+  --primary-highlight-color: #123062;
+  --success-text-color: #10b981;
+  --warning-text-color: #f59e0b;
+  --danger-text-color: #dc2626;
+  --cancel-text-color: #757575;
+  --unavailable-text-color: #ededed;
 
-    /* --- Backgrounds --- */
-    --success-bg: #9deed0;
-    --warning-bg: #ffd894;
-    --danger-bg: #cf7979;
-    --bg-white: #ffffff;
-    --unavailable-bg: #CCCCCC;
+  /* --- Backgrounds --- */
+  --success-bg: #9deed0;
+  --warning-bg: #ffd894;
+  --danger-bg: #cf7979;
+  --bg-white: #ffffff;
+  --unavailable-bg: #cccccc;
 
-    /* --- Buttons --- */
-    --button-primary-color: #123062;
-    --button-primary-hover-color: #1e3e78;
-    --button-secondary-color: #C9A227;
-    --button-secondary-darker-color: #886C14;
+  /* --- Buttons --- */
+  --button-primary-color: #123062;
+  --button-primary-hover-color: #1e3e78;
+  --button-secondary-color: #c9a227;
+  --button-secondary-darker-color: #886c14;
 
-    /* --- Typography --- */
-    --font-montserrat: 'Montserrat', sans-serif;
-    --font-dm-sans: 'DM Sans', sans-serif;
-    --font-inter: 'Inter', sans-serif;
+  /* --- Typography --- */
+  --font-montserrat: "Montserrat", sans-serif;
+  --font-dm-sans: "DM Sans", sans-serif;
+  --font-inter: "Inter", sans-serif;
 
-    /* --- Font Sizes --- */
-    --fs-display: 48px;
-    --fs-h1: 32px;
-    --fs-h2: 24px;
-    --fs-h3: 20px;
-    --fs-body: 16px;
-    --fs-subtext: 14px;
-    --fs-caption: 12px;
+  /* --- Font Sizes --- */
+  --fs-display: 48px;
+  --fs-h1: 32px;
+  --fs-h2: 24px;
+  --fs-h3: 20px;
+  --fs-body: 16px;
+  --fs-subtext: 14px;
+  --fs-caption: 12px;
 
-    /* --- Font Weights --- */
-    --fw-light: 300;
-    --fw-normal: 400;
-    --fw-medium: 500;
-    --fw-semibold: 600;
-    --fw-bold: 700;
-    --fw-extrabold: 900;
-
-
+  /* --- Font Weights --- */
+  --fw-light: 300;
+  --fw-normal: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --fw-bold: 700;
+  --fw-extrabold: 900;
 }
