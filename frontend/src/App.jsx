@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Login from "./pages/Login";
 import ForgotPassword from "./pages/ForgotPassword";
 import OtpVerify from "./pages/OtpVerify";
@@ -13,6 +13,7 @@ import TeacherDashboard from "./pages/teacher/TeacherDashboard";
 import PlaceholderPage from "./pages/PlaceholderPage";
 import DashboardLayout from "./components/layout/DashboardLayout";
 import AdviserSections from "./pages/adviser/AdviserSections";
+import Profile from "./pages/Profile";
 
 export default function App() {
   const [user, setUser] = useState({
@@ -51,6 +52,9 @@ export default function App() {
             <DashboardLayout user={user} onRoleChange={handleRoleChange} />
           }
         >
+          {/* Shared account route for every authenticated role */}
+          <Route path="/profile" element={<Profile user={user} />} />
+
           {/* 1. System Administrator */}
           <Route path="/system-admin/dashboard" element={<AdminDashboard />} />
           <Route

@@ -12,6 +12,7 @@ export default function Sidebar({ user = { role: "principal" }, collapsed = fals
   // Resolve mapping names dynamically
   const roleKey = user.role?.toLowerCase() || "principal";
   const menuItems = sidebarConfig[roleKey] || sidebarConfig["principal"] || [];
+  const isProfileActive = location.pathname === "/profile";
 
   // Track open states of submenus
   const [openMenus, setOpenMenus] = useState({});
@@ -200,7 +201,13 @@ export default function Sidebar({ user = { role: "principal" }, collapsed = fals
         {/* Footer Actions (Profile & Logout) */}
         <div className="sidebar-footer">
           {/* Profile Card */}
-          <div className="profile-card" title={`${profile.name} - ${profile.displayRole}`}>
+          <Link
+            to="/profile"
+            onClick={onCloseMobile}
+            className={`profile-card profile-card-link ${isProfileActive ? "active" : ""}`}
+            title={`${profile.name} - ${profile.displayRole}`}
+            aria-current={isProfileActive ? "page" : undefined}
+          >
             <div className="profile-avatar">
               {initials || <CircleUser size={20} />}
             </div>
@@ -208,7 +215,7 @@ export default function Sidebar({ user = { role: "principal" }, collapsed = fals
               <span className="profile-name">{profile.name}</span>
               <span className="profile-role">{profile.displayRole}</span>
             </div>
-          </div>
+          </Link>
 
           {/* Logout Button */}
           <button onClick={handleLogout} className="logout-btn" title="Logout">
