@@ -14,7 +14,7 @@
   --submenu-active-text: #ffffff;
   --submenu-inactive-text: #112d61;
   --transition-speed: 0.3s;
-  --font-family: 'Outfit', 'Inter', system-ui, sans-serif;
+  --font-family: "Outfit", "Inter", system-ui, sans-serif;
   --content-bg: #f3f6f9;
 }
 
@@ -143,7 +143,9 @@
   font-size: 15px;
   font-weight: 500;
   cursor: pointer;
-  transition: background-color var(--transition-speed), color var(--transition-speed);
+  transition:
+    background-color var(--transition-speed),
+    color var(--transition-speed);
   position: relative;
   white-space: nowrap;
 }
@@ -201,7 +203,7 @@
 /* Active Link Curve Trick (only on desktop and when sidebar is expanded) */
 @media (min-width: 1025px) {
   .sidebar-container:not(.collapsed) .sidebar-item.active::before {
-    content: '';
+    content: "";
     position: absolute;
     right: 0;
     top: -20px;
@@ -214,7 +216,7 @@
   }
 
   .sidebar-container:not(.collapsed) .sidebar-item.active::after {
-    content: '';
+    content: "";
     position: absolute;
     right: 0;
     bottom: -20px;
@@ -229,7 +231,7 @@
   /* Adjust active curves for menu group wrappers containing submenus */
   .sidebar-container:not(.collapsed) .menu-group.has-submenu-active::before,
   .sidebar-container:not(.collapsed) .menu-group.is-open::before {
-    content: '';
+    content: "";
     position: absolute;
     right: 0;
     top: -20px;
@@ -243,7 +245,7 @@
 
   .sidebar-container:not(.collapsed) .menu-group.has-submenu-active::after,
   .sidebar-container:not(.collapsed) .menu-group.is-open::after {
-    content: '';
+    content: "";
     position: absolute;
     right: 0;
     bottom: -20px;
@@ -280,7 +282,9 @@
   overflow: hidden;
   max-height: 0;
   opacity: 0;
-  transition: max-height var(--transition-speed) ease-in-out, opacity var(--transition-speed) ease-in-out;
+  transition:
+    max-height var(--transition-speed) ease-in-out,
+    opacity var(--transition-speed) ease-in-out;
 }
 
 .menu-group.is-open .sidebar-submenu {
@@ -305,7 +309,9 @@
   font-weight: 500;
   border-radius: 8px;
   color: var(--submenu-inactive-text);
-  transition: background-color var(--transition-speed), color var(--transition-speed);
+  transition:
+    background-color var(--transition-speed),
+    color var(--transition-speed);
 }
 
 .submenu-item:hover {
@@ -342,6 +348,38 @@
   overflow: hidden;
   white-space: nowrap;
   transition: opacity var(--transition-speed);
+}
+
+.profile-card-link {
+  padding: 9px;
+  color: inherit;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  text-decoration: none;
+  transition:
+    background-color var(--transition-speed),
+    border-color var(--transition-speed),
+    box-shadow var(--transition-speed);
+}
+
+.profile-card-link:hover {
+  background-color: rgba(255, 255, 255, 0.07);
+}
+
+.profile-card-link:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.8);
+  outline-offset: 2px;
+}
+
+.profile-card-link.active {
+  background-color: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: inset 3px 0 0 rgba(255, 255, 255, 0.65);
+}
+
+.profile-card-link.active .profile-avatar {
+  background-color: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.55);
 }
 
 .profile-avatar {
@@ -381,6 +419,10 @@
 .sidebar-container.collapsed .profile-info {
   display: none;
   opacity: 0;
+}
+
+.sidebar-container.collapsed .profile-card-link {
+  padding: 6px;
 }
 
 /* Logout Button */
@@ -555,8 +597,12 @@
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @media (max-width: 1024px) {
@@ -567,7 +613,7 @@
     bottom: 0;
     width: var(--sidebar-width-expanded) !important;
   }
-  
+
   .sidebar-container.mobile-open {
     left: 0;
   }
