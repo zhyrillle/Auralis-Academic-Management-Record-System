@@ -5,13 +5,19 @@ import { ChevronDown, LogOut, CircleUser } from "lucide-react";
 import logoName from "../../assets/auralis-logo-name.png";
 import logoIcon from "../../assets/auralis-logo.png";
 
-export default function Sidebar({ user = { role: "principal" }, collapsed = false, mobileOpen = false, onCloseMobile }) {
+export default function Sidebar({
+  user = { role: "principal" },
+  collapsed = false,
+  mobileOpen = false,
+  onCloseMobile,
+}) {
   const location = useLocation();
   const navigate = useNavigate();
-  
+
   // Resolve mapping names dynamically
   const roleKey = user.role?.toLowerCase() || "principal";
   const menuItems = sidebarConfig[roleKey] || sidebarConfig["principal"] || [];
+  const isProfileActive = location.pathname === "/profile";
 
   // Track open states of submenus
   const [openMenus, setOpenMenus] = useState({});
@@ -24,7 +30,7 @@ export default function Sidebar({ user = { role: "principal" }, collapsed = fals
     menuItems.forEach((item, index) => {
       if (item.submenu) {
         const isChildActive = item.submenu.some(
-          (sub) => location.pathname === sub.path
+          (sub) => location.pathname === sub.path,
         );
         if (isChildActive && !openMenus[index]) {
           updatedOpen[index] = true;
@@ -100,14 +106,24 @@ export default function Sidebar({ user = { role: "principal" }, collapsed = fals
 
   return (
     <>
-      <aside className={`sidebar-container ${collapsed ? "collapsed" : ""} ${mobileOpen ? "mobile-open" : ""}`}>
+      <aside
+        className={`sidebar-container ${collapsed ? "collapsed" : ""} ${mobileOpen ? "mobile-open" : ""}`}
+      >
         {/* Header / Logo */}
         <div className="sidebar-header">
           <Link to={`/${roleKey}/dashboard`} className="sidebar-logo-container">
             {collapsed ? (
-              <img src={logoIcon} className="sidebar-logo-icon-img" alt="Auralis Icon" />
+              <img
+                src={logoIcon}
+                className="sidebar-logo-icon-img"
+                alt="Auralis Icon"
+              />
             ) : (
-              <img src={logoName} className="sidebar-logo-name-img" alt="Auralis Logo" />
+              <img
+                src={logoName}
+                className="sidebar-logo-name-img"
+                alt="Auralis Logo"
+              />
             )}
           </Link>
         </div>
@@ -145,13 +161,18 @@ export default function Sidebar({ user = { role: "principal" }, collapsed = fals
                           <IconComponent size={20} />
                         </span>
                       )}
-                      {!collapsed && <span className="sidebar-item-label">{item.title}</span>}
+                      {!collapsed && (
+                        <span className="sidebar-item-label">{item.title}</span>
+                      )}
                     </div>
                     {!collapsed && (
                       <ChevronDown
                         size={16}
                         className="submenu-arrow"
-                        style={{ color: (isActive || isOpen) ? "var(--active-text)" : "white" }}
+                        style={{
+                          color:
+                            isActive || isOpen ? "var(--active-text)" : "white",
+                        }}
                       />
                     )}
                   </a>
@@ -159,7 +180,8 @@ export default function Sidebar({ user = { role: "principal" }, collapsed = fals
                   {/* Submenu links */}
                   <div className="sidebar-submenu">
                     {item.submenu.map((subItem, subIndex) => {
-                      const isSubItemActive = location.pathname === subItem.path;
+                      const isSubItemActive =
+                        location.pathname === subItem.path;
                       return (
                         <Link
                           key={subIndex}
@@ -188,9 +210,11 @@ export default function Sidebar({ user = { role: "principal" }, collapsed = fals
                   {IconComponent && (
                     <span className="sidebar-item-icon">
                       <IconComponent size={20} />
-                  </span>
+                    </span>
                   )}
-                  {!collapsed && <span className="sidebar-item-label">{item.title}</span>}
+                  {!collapsed && (
+                    <span className="sidebar-item-label">{item.title}</span>
+                  )}
                 </div>
               </Link>
             );
@@ -200,7 +224,13 @@ export default function Sidebar({ user = { role: "principal" }, collapsed = fals
         {/* Footer Actions (Profile & Logout) */}
         <div className="sidebar-footer">
           {/* Profile Card */}
-          <div className="profile-card" title={`${profile.name} - ${profile.displayRole}`}>
+          <Link
+            to="/profile"
+            onClick={onCloseMobile}
+            className={`profile-card profile-card-link ${isProfileActive ? "active" : ""}`}
+            title={`${profile.name} - ${profile.displayRole}`}
+            aria-current={isProfileActive ? "page" : undefined}
+          >
             <div className="profile-avatar">
               {initials || <CircleUser size={20} />}
             </div>
@@ -208,7 +238,7 @@ export default function Sidebar({ user = { role: "principal" }, collapsed = fals
               <span className="profile-name">{profile.name}</span>
               <span className="profile-role">{profile.displayRole}</span>
             </div>
-          </div>
+          </Link>
 
           {/* Logout Button */}
           <button onClick={handleLogout} className="logout-btn" title="Logout">
