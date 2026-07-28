@@ -9,11 +9,56 @@ export default function SubmissionFooter({
     userRole = "teacher",
     customDeadlineLabel,
 
-    modalTitle = "Send grades to adviser?",
-    modalDescription = "This will forward your section's grades to the class adviser for consolidation.",
-    confirmText = "Submit",
-    cancelText = "Cancel",
+    // These can be explicitly overridden by the caller;
+    // if omitted, the component derives them from userRole via getRoleConfig().
+    modalTitle,
+    modalDescription,
+    confirmText,
+    cancelText,
 }) {
+    // ── Role-based content map ─────────────────────────────────────────────
+    // Add a new case here whenever a new role needs its own modal wording.
+    const getRoleConfig = () => {
+        switch (userRole) {
+            case "adviser":
+                return {
+                    modalTitle:       "Send to Department Head?",
+                    modalDescription: "Please ensure all subject grades are accounted for.",
+                    confirmText:      "Submit",
+                    cancelText:       "Cancel",
+                };
+            case "admin":
+                return {
+                    modalTitle:       "Force-Lock Grades?",
+                    modalDescription: "This will override all pending submissions and lock the grading period.",
+                    confirmText:      "Force Lock",
+                    cancelText:       "Cancel",
+                };
+            case "registrar":
+                return {
+                    modalTitle:       "Verify & Finalize Record?",
+                    modalDescription: "This will mark the registry as verified and close it for further edits.",
+                    confirmText:      "Verify",
+                    cancelText:       "Cancel",
+                };
+            // teacher / default
+            default:
+                return {
+                    modalTitle:       "Send grades to adviser?",
+                    modalDescription: "This will forward your section's grades to the class adviser for consolidation.",
+                    confirmText:      "Submit",
+                    cancelText:       "Cancel",
+                };
+        }
+    };
+
+    // Explicit props take priority; fall back to role defaults.
+    const roleConfig   = getRoleConfig();
+    const resolvedTitle       = modalTitle       ?? roleConfig.modalTitle;
+    const resolvedDescription = modalDescription ?? roleConfig.modalDescription;
+    const resolvedConfirm     = confirmText      ?? roleConfig.confirmText;
+    const resolvedCancel      = cancelText       ?? roleConfig.cancelText;
+
     const [showModal, setShowModal] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
 
@@ -150,7 +195,7 @@ export default function SubmissionFooter({
                                         color: "var(--primary-highlight-color)",
                                     }}
                                 >
-                                    {modalTitle}
+                                    {resolvedTitle}
                                 </h1>
 
                                 <p
@@ -163,7 +208,7 @@ export default function SubmissionFooter({
                                         lineHeight: 1.6,
                                     }}
                                 >
-                                    {modalDescription}
+                                    {resolvedDescription}
                                 </p>
 
                                 <div
@@ -188,7 +233,7 @@ export default function SubmissionFooter({
                                             cursor: "pointer",
                                         }}
                                     >
-                                        {cancelText}
+                                        {resolvedCancel}
                                     </button>
 
                                     <button
@@ -206,7 +251,7 @@ export default function SubmissionFooter({
                                             cursor: "pointer",
                                         }}
                                     >
-                                        {confirmText}
+                                        {resolvedConfirm}
                                     </button>
                                 </div>
                             </>
