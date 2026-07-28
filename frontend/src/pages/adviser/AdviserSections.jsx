@@ -1,8 +1,8 @@
 import { useState, useMemo } from "react";
-import { Check, FileSpreadsheet, X } from "lucide-react";
+import { Check, FileSpreadsheet, X, ArrowDownNarrowWide } from "lucide-react";
 
 // Components
-import SectionsControls from "../../components/sections/SectionsControls";
+import SelectFilter from "../../components/common/SelectFilter.jsx";
 import ClassCard from "../../components/sections/ClassCard";
 import GradingSheet from "./GradingSheet"; // Imported the separated component
 
@@ -15,8 +15,8 @@ import "../../styles/sections.css";
 const INITIAL_CLASSES = [
   {
     id: "class-1",
-    sectionName: "Rizal",
-    gradeLevel: "Grade 10",
+    sectionName: "Mahogany",
+    gradeLevel: "G10",
     subject: "Mathematics",
     classType: "Advisory Class",
     deadline: "2026-07-31",
@@ -24,8 +24,8 @@ const INITIAL_CLASSES = [
   },
   {
     id: "class-2",
-    sectionName: "Bonifacio",
-    gradeLevel: "Grade 10",
+    sectionName: "Gemelina",
+    gradeLevel: "G10",
     subject: "Mathematics",
     classType: "Regular Class",
     deadline: "2026-08-05",
@@ -33,8 +33,8 @@ const INITIAL_CLASSES = [
   },
   {
     id: "class-3",
-    sectionName: "Aguinaldo",
-    gradeLevel: "Grade 9",
+    sectionName: "Narra",
+    gradeLevel: "G9",
     subject: "Advanced Algebra",
     classType: "Regular Class",
     deadline: "2026-07-28",
@@ -42,8 +42,8 @@ const INITIAL_CLASSES = [
   },
   {
     id: "class-4",
-    sectionName: "Mabini",
-    gradeLevel: "Grade 10",
+    sectionName: "Tanguile",
+    gradeLevel: "G10",
     subject: "Geometry",
     classType: "Regular Class",
     deadline: "2026-08-12",
@@ -87,13 +87,6 @@ export default function AdviserSections() {
   const [filterGrade, setFilterGrade] = useState("All");
   const [sortBy, setSortBy] = useState("sectionName");
   const [sortAscending, setSortAscending] = useState(true);
-
-  // Drawer & Modal States
-  const [viewDrawerOpen, setViewDrawerOpen] = useState(false);
-  const [editModalOpen, setEditModalOpen] = useState(false);
-  const [editFormData, setEditFormData] = useState({
-    id: "", sectionName: "", gradeLevel: "", subject: "", classType: "", deadline: "",
-  });
 
   const [toasts, setToasts] = useState([]);
 
@@ -139,15 +132,6 @@ export default function AdviserSections() {
 
   const subjectOptions = useMemo(() => ["All", ...Array.from(new Set(classes.map((c) => c.subject)))], [classes]);
   const gradeOptions = useMemo(() => ["All", ...Array.from(new Set(classes.map((c) => c.gradeLevel)))], [classes]);
-
-  const handleSaveEdit = (e) => {
-    e.preventDefault();
-    setClasses((prev) =>
-      prev.map((c) => (c.id === editFormData.id ? { ...c, ...editFormData } : c))
-    );
-    setEditModalOpen(false);
-    triggerToast(`Successfully updated details for ${editFormData.gradeLevel} - ${editFormData.sectionName}`);
-  };
 
   const handleGradeSubmit = async (classId) => {
     // simulate API call if needed
@@ -211,11 +195,70 @@ export default function AdviserSections() {
             <p className="sections-subtext">View all your assigned classes and their corresponding details.</p>
           </div>
 
-          <SectionsControls
-            filterSubject={filterSubject} setFilterSubject={setFilterSubject} subjectOptions={subjectOptions}
-            filterGrade={filterGrade} setFilterGrade={setFilterGrade} gradeOptions={gradeOptions}
-            sortBy={sortBy} setSortBy={setSortBy} sortAscending={sortAscending} setSortAscending={setSortAscending}
-          />
+          <div className="controls-row">
+            <div className="control-left">
+              <div className="control-text">
+                Filters:
+              </div>
+
+              <SelectFilter
+                value={filterSubject}
+                onChange={setFilterSubject}
+                options={[
+                  { value: "All", label: "All Subjects" },
+                  ...subjectOptions
+                    .filter((s) => s !== "All")
+                    .map((s) => ({
+                      value: s,
+                      label: s,
+                    })),
+                ]}
+                minWidth="150px"
+              />
+
+              <SelectFilter
+                value={filterGrade}
+                onChange={setFilterGrade}
+                options={[
+                  { value: "All", label: "All Grade Levels" },
+                  ...gradeOptions
+                    .filter((g) => g !== "All")
+                    .map((g) => ({
+                      value: g,
+                      label: g,
+                    })),
+                ]}
+                minWidth="150px"
+              />
+            </div>
+            <div className="control-right">
+              <div className="control-text">
+                Sort by:
+              </div>
+
+              <SelectFilter
+                value={sortBy}
+                onChange={setSortBy}
+                options={[
+                  { value: "sectionName", label: "Section Name" },
+                  { value: "gradeLevel", label: "Grade Level" },
+                  { value: "subject", label: "Subject" },
+                ]}
+                minWidth="150px"
+              />
+
+              <button
+                className="sort-order-btn"
+                onClick={() => setSortAscending(!sortAscending)}
+                title="Toggle sorting order"
+              >
+                < ArrowDownNarrowWide
+                  size={22}
+                  style={{ transform: sortAscending ? "none" : "rotate(180deg)" }}
+                />
+              </button>
+            </div>
+          </div>
 
           {filteredAndSortedClasses.length === 0 ? (
             <div style={{ textAlign: "center", padding: "40px", backgroundColor: "#ffffff", borderRadius: "16px", color: "#64748b", border: "1px solid #eef2f6" }}>
@@ -248,92 +291,6 @@ export default function AdviserSections() {
         )
       )}
 
-      {/* EDIT CLASS DETAILS MODAL */}
-      {editModalOpen && (
-        <div className="modal-overlay" onClick={() => setEditModalOpen(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3 className="modal-title">Edit Class Details</h3>
-              <button className="modal-close-btn" onClick={() => setEditModalOpen(false)}><X size={20} /></button>
-            </div>
-            <form onSubmit={handleSaveEdit}>
-              <div className="modal-body">
-                <div className="form-group">
-                  <label className="form-label">Section Name</label>
-                  <input type="text" required className="form-input" value={editFormData.sectionName} onChange={(e) => setEditFormData({ ...editFormData, sectionName: e.target.value })} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Grade Level</label>
-                  <select className="form-input" value={editFormData.gradeLevel} onChange={(e) => setEditFormData({ ...editFormData, gradeLevel: e.target.value })}>
-                    <option value="Grade 7">Grade 7</option><option value="Grade 8">Grade 8</option><option value="Grade 9">Grade 9</option><option value="Grade 10">Grade 10</option>
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Subject</label>
-                  <input type="text" required className="form-input" value={editFormData.subject} onChange={(e) => setEditFormData({ ...editFormData, subject: e.target.value })} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Class Type</label>
-                  <select className="form-input" value={editFormData.classType} onChange={(e) => setEditFormData({ ...editFormData, classType: e.target.value })}>
-                    <option value="Regular Class">Regular Class</option><option value="Advisory Class">Advisory Class</option>
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Submission Deadline</label>
-                  <input type="date" required className="form-input" value={editFormData.deadline} onChange={(e) => setEditFormData({ ...editFormData, deadline: e.target.value })} />
-                </div>
-              </div>
-              <div className="modal-footer">
-                <button type="button" className="modal-btn modal-btn-cancel" onClick={() => setEditModalOpen(false)}>Cancel</button>
-                <button type="submit" className="modal-btn modal-btn-save">Save Changes</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* CLASS INFORMATION DRAWER */}
-      {viewDrawerOpen && activeSelectedClass && activeClassStats && (
-        <div className="drawer-overlay" onClick={() => setViewDrawerOpen(false)}>
-          <div className="drawer-content" onClick={(e) => e.stopPropagation()}>
-            <div className="drawer-header">
-              <h3 className="modal-title">Class Information</h3>
-              <button className="modal-close-btn" onClick={() => setViewDrawerOpen(false)}><X size={20} /></button>
-            </div>
-            <div className="drawer-body">
-              <div style={{ marginBottom: "24px" }}>
-                <h2 style={{ fontSize: "24px", fontWeight: "700", color: "#1e293b", margin: "0 0 4px 0" }}>{activeSelectedClass.gradeLevel} - {activeSelectedClass.sectionName}</h2>
-                <p style={{ color: "#64748b", margin: 0, fontWeight: "500" }}>{activeSelectedClass.subject}</p>
-                <span className="class-type-tag" style={{ marginTop: "10px", display: "inline-block" }}>{activeSelectedClass.classType}</span>
-              </div>
-              <div className="drawer-section-title">Academic Indicators</div>
-              <div className="stats-grid">
-                <div className="stat-widget"><span className="stat-val">{activeClassStats.total}</span><span className="stat-lbl">Total Students</span></div>
-                <div className="stat-widget"><span className="stat-val" style={{ color: "#10b981" }}>{activeClassStats.avgGrade}%</span><span className="stat-lbl">Class Average</span></div>
-              </div>
-              <div className="stat-widget" style={{ marginBottom: "24px", width: "100%" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", fontWeight: 600, color: "#475569" }}>
-                  <span>Gender Breakdown</span>
-                  <span>M: {activeClassStats.males} | F: {activeClassStats.females}</span>
-                </div>
-                <div className="stats-gender-bar">
-                  <div className="gender-bar-male" style={{ width: `${(activeClassStats.males / activeClassStats.total) * 100}%` }} />
-                  <div className="gender-bar-female" style={{ width: `${(activeClassStats.females / activeClassStats.total) * 100}%` }} />
-                </div>
-              </div>
-              <div className="drawer-section-title">Students Registry</div>
-              <div className="students-mini-list">
-                {(studentsBySection[activeSelectedClass.id] || []).map((stud) => (
-                  <div key={stud.id} className="student-mini-item">
-                    <span className="student-mini-name">{stud.lastName}, {stud.firstName}</span>
-                    <span className={`student-mini-sex ${stud.sex === "M" ? "sex-m" : "sex-f"}`}>{stud.sex === "M" ? "Male" : "Female"}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
