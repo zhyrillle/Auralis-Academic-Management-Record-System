@@ -171,7 +171,7 @@ export default function MasterSheet() {
             return (
                 <tr>
                     <td
-                        colSpan={2 + SUBJECTS.length * 4}
+                        colSpan={3 + SUBJECTS.length * 4}
                         className="ms-empty-row"
                     >
                         No {fallbackLabel} students found
@@ -179,27 +179,36 @@ export default function MasterSheet() {
                 </tr>
             );
         }
-        return students.map((s) => (
-            <tr key={s.id} className="ms-student-row">
-                <td className="ms-name-cell">
-                    {s.lastName}, {s.firstName}{" "}
-                    {s.middleName ? `${s.middleName.charAt(0)}.` : ""}
-                    <span className="ms-lrn">LRN: {s.lrn}</span>
-                </td>
-                {SUBJECTS.map((sub) => {
-                    const g = s[sub.key];
-                    const final = calcFinal(g);
-                    return (
-                        <React.Fragment key={`${s.id}-${sub.key}`}>
-                            <td className="ms-grade-cell">{g.t1}</td>
-                            <td className="ms-grade-cell">{g.t2}</td>
-                            <td className="ms-grade-cell">{g.t3}</td>
-                            <td className="ms-final-cell">{final}</td>
-                        </React.Fragment>
-                    );
-                })}
-            </tr>
-        ));
+        return students.map((s) => {
+            // Compute each subject's final grade, then average them all
+            const finalGrades = SUBJECTS.map((sub) => calcFinal(s[sub.key])).filter((f) => f !== "");
+            const genAvg = finalGrades.length > 0
+                ? Math.round(finalGrades.reduce((a, b) => a + b, 0) / finalGrades.length)
+                : "";
+
+            return (
+                <tr key={s.id} className="ms-student-row">
+                    <td className="ms-name-cell">
+                        {s.lastName}, {s.firstName}{" "}
+                        {s.middleName ? `${s.middleName.charAt(0)}.` : ""}
+                        <span className="ms-lrn">LRN: {s.lrn}</span>
+                    </td>
+                    {SUBJECTS.map((sub) => {
+                        const g = s[sub.key];
+                        const final = calcFinal(g);
+                        return (
+                            <React.Fragment key={`${s.id}-${sub.key}`}>
+                                <td className="ms-grade-cell">{g.t1}</td>
+                                <td className="ms-grade-cell">{g.t2}</td>
+                                <td className="ms-grade-cell">{g.t3}</td>
+                                <td className="ms-final-cell">{final}</td>
+                            </React.Fragment>
+                        );
+                    })}
+                    <td className="ms-gen-avg-cell">{genAvg}</td>
+                </tr>
+            );
+        });
     };
 
     return (
@@ -243,6 +252,10 @@ export default function MasterSheet() {
                                     {sub.label}
                                 </th>
                             ))}
+                            {/* General Average spans all 3 header rows */}
+                            <th rowSpan={3} className="ms-gen-avg-header">
+                                General Average
+                            </th>
                         </tr>
 
                         {/* Row 2 — "Term" label + Final Grade per subject */}
@@ -273,7 +286,7 @@ export default function MasterSheet() {
                     <tbody>
                         {/* ── Male group ── */}
                         <tr className="ms-sex-header-row">
-                            <td colSpan={2 + SUBJECTS.length * 4} className="ms-sex-header-cell">
+                            <td colSpan={3 + SUBJECTS.length * 4} className="ms-sex-header-cell">
                                 Male
                             </td>
                         </tr>
@@ -281,7 +294,7 @@ export default function MasterSheet() {
 
                         {/* ── Female group ── */}
                         <tr className="ms-sex-header-row ms-sex-header-row--female">
-                            <td colSpan={2 + SUBJECTS.length * 4} className="ms-sex-header-cell">
+                            <td colSpan={3 + SUBJECTS.length * 4} className="ms-sex-header-cell">
                                 Female
                             </td>
                         </tr>
