@@ -2,9 +2,9 @@ import { useState, useMemo } from "react";
 import { Download } from "lucide-react";
 import { Check } from "lucide-react";
 import backIconUrl from "../../assets/backButton.svg";
-import SearchBar from "../../components/SearchBar";
-import SelectFilter from "../../components/SelectFilter";
-import SubmissionFooter from "../../components/SubmissionFooter.jsx"; // Integrated here
+import SearchBar from "../../components/common/SearchBar.jsx";
+import SelectFilter from "../../components/common/SelectFilter.jsx";
+import SubmissionFooter from "../../components/common/SubmissionFooter.jsx"; // Integrated here
 import { downloadGradingSheetCSV } from "../../utils/downloadHelper";
 import "../../styles/gradingSheet.css";
 

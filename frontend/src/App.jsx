@@ -13,6 +13,7 @@ import TeacherDashboard from "./pages/teacher/TeacherDashboard";
 import PlaceholderPage from "./pages/PlaceholderPage";
 import DashboardLayout from "./components/layout/DashboardLayout";
 import AdviserSections from "./pages/adviser/AdviserSections";
+import MasterSheet from "./pages/adviser/MasterSheet";
 
 export default function App() {
   const [user, setUser] = useState({
@@ -118,7 +119,7 @@ export default function App() {
           <Route path="/adviser/dashboard" element={<AdviserDashboard />} />
           <Route path="/adviser/sections" element={<AdviserSections />} />
           <Route path="/adviser/notifications" element={<PlaceholderPage />} />
-          <Route path="/adviser/master-sheet" element={<PlaceholderPage />} />
+          <Route path="/adviser/master-sheet" element={<MasterSheet />} />
           <Route path="/adviser/performance" element={<PlaceholderPage />} />
           <Route path="/adviser/feedback" element={<PlaceholderPage />} />
           <Route path="/adviser/request" element={<PlaceholderPage />} />
