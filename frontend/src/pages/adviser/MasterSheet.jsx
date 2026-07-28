@@ -214,7 +214,7 @@ export default function MasterSheet() {
     return (
         <div className="ms-container">
 
-            <h1 className="header">Rizal</h1>
+            <h1 className="header">Mahogany</h1>
             {/* ── Top controls row ── */}
             <div className="ms-controls-row">
                 <div className="cr-left">
