@@ -6,10 +6,12 @@ import SelectFilter from "../../components/common/SelectFilter.jsx";
 import ClassCard from "../../components/sections/ClassCard";
 import GradingSheet from "./GradingSheet"; // Imported the separated component
 import StudentSF9Page from "./StudentSF9Page";
+import AttendanceSheet from "./AttendanceSheet";
 
 // Style
 import "../../styles/sections.css";
 import "../../styles/studentSF9.css";
+import "../../styles/attendanceSheet.css";
 
 // -------------------------------------------------------------
 // INITIAL MOCK DATA
@@ -274,12 +276,16 @@ export default function AdviserSections() {
                   key={cls.id} cls={cls}
                   onView={(c) => { setactiveSelectedClass(c); setCurrentView("student-sf9"); }}
                   onGradingSheet={(c) => { setactiveSelectedClass(c); setCurrentView("grading-sheet"); }}
-                  onEdit={(c) => { /* no-op placeholder since edit isn't defined */ }}
+                  onEdit={(c) => { setactiveSelectedClass(c); setCurrentView("attendance-sheet"); }}
                 />
               ))}
             </div>
           )}
         </>
+      ) : currentView === "attendance-sheet" ? (
+        <AttendanceSheet
+          onBack={() => setCurrentView("dashboard")}
+        />
       ) : currentView === "student-sf9" ? (
         <StudentSF9Page
           student={activeSelectedClass}
