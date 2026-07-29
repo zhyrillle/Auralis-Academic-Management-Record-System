@@ -5,9 +5,11 @@ import { Check, FileSpreadsheet, X, ArrowDownNarrowWide } from "lucide-react";
 import SelectFilter from "../../components/common/SelectFilter.jsx";
 import ClassCard from "../../components/sections/ClassCard";
 import GradingSheet from "./GradingSheet"; // Imported the separated component
+import StudentSF9Page from "./StudentSF9Page";
 
 // Style
 import "../../styles/sections.css";
+import "../../styles/studentSF9.css";
 
 // -------------------------------------------------------------
 // INITIAL MOCK DATA
@@ -270,14 +272,19 @@ export default function AdviserSections() {
               {filteredAndSortedClasses.map((cls) => (
                 <ClassCard
                   key={cls.id} cls={cls}
-                  onView={(c) => { setactiveSelectedClass(c); setViewDrawerOpen(true); }}
+                  onView={(c) => { setactiveSelectedClass(c); setCurrentView("student-sf9"); }}
                   onGradingSheet={(c) => { setactiveSelectedClass(c); setCurrentView("grading-sheet"); }}
-                  onEdit={(c) => { setactiveSelectedClass(c); setEditFormData({ ...c }); setEditModalOpen(true); }}
+                  onEdit={(c) => { /* no-op placeholder since edit isn't defined */ }}
                 />
               ))}
             </div>
           )}
         </>
+      ) : currentView === "student-sf9" ? (
+        <StudentSF9Page
+          student={activeSelectedClass}
+          onBack={() => setCurrentView("dashboard")}
+        />
       ) : (
         activeSelectedClass && (
           <GradingSheet
