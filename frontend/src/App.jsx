@@ -14,6 +14,7 @@ import PlaceholderPage from "./pages/PlaceholderPage";
 import DashboardLayout from "./components/layout/DashboardLayout";
 import AdviserSections from "./pages/adviser/AdviserSections";
 import MasterSheet from "./pages/adviser/MasterSheet";
+import AdviserFeedback from "./pages/adviser/AdviserFeedback";
 
 export default function App() {
   const [user, setUser] = useState({
@@ -121,7 +122,7 @@ export default function App() {
           <Route path="/adviser/notifications" element={<PlaceholderPage />} />
           <Route path="/adviser/master-sheet" element={<MasterSheet />} />
           <Route path="/adviser/performance" element={<PlaceholderPage />} />
-          <Route path="/adviser/feedback" element={<PlaceholderPage />} />
+          <Route path="/adviser/feedback" element={<AdviserFeedback />} />
           <Route path="/adviser/request" element={<PlaceholderPage />} />
 
           {/* 5. Subject Teacher */}
