@@ -1,0 +1,378 @@
+/* src/styles/teacherEvalList.css */
+
+/*  Container  */
+.tel-container {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  width: 100%;
+  padding-bottom: 40px;
+  animation: telFadeIn 0.35s ease-out both;
+  font-family: var(--font-family, "Outfit", "Inter", sans-serif);
+}
+
+@keyframes telFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/*  Header  */
+.tel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tel-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Shared back button style */
+.back-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  background-color: #ffffff;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.back-btn:hover {
+  background-color: #f8fafc;
+  color: #112d61;
+  border-color: #112d61;
+}
+
+.tel-page-title {
+  font-size: 26px;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0;
+}
+
+.tel-header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/*  Search Toggle Button  */
+.tel-search-toggle {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1.5px solid #e2e8f0;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #112d61;
+  transition: background 0.2s, box-shadow 0.2s;
+}
+
+.tel-search-toggle:hover {
+  background: #eef2fb;
+  box-shadow: 0 2px 8px rgba(17, 45, 97, 0.12);
+}
+
+/*  Expanded Search Bar  */
+.tel-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #ffffff;
+  border: 1.5px solid #112d61;
+  border-radius: 10px;
+  padding: 8px 12px;
+  width: 300px;
+  box-shadow: 0 2px 8px rgba(17, 45, 97, 0.08);
+}
+
+.tel-search-icon {
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+
+.tel-search-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  font-size: 13px;
+  color: #1e293b;
+  font-family: var(--font-family, "Outfit", "Inter", sans-serif);
+  background: transparent;
+}
+
+.tel-search-input::placeholder {
+  color: #94a3b8;
+}
+
+.tel-search-clear,
+.tel-search-close {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  padding: 0;
+  transition: color 0.2s;
+}
+
+.tel-search-clear:hover,
+.tel-search-close:hover {
+  color: #ef4444;
+}
+
+/*  Filter Bar  */
+.tel-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 12px 18px;
+  flex-wrap: wrap;
+}
+
+.tel-filter-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+}
+
+/*  Select Wrapper  */
+.tel-select-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.tel-select {
+  appearance: none;
+  -webkit-appearance: none;
+  background: #f8fafc;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 7px 32px 7px 12px;
+  font-size: 13px;
+  font-family: var(--font-family, "Outfit", "Inter", sans-serif);
+  color: #374151;
+  font-weight: 500;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  min-width: 120px;
+}
+
+.tel-select:focus {
+  border-color: #112d61;
+  box-shadow: 0 0 0 3px rgba(17, 45, 97, 0.08);
+}
+
+.tel-select-arrow {
+  position: absolute;
+  right: 10px;
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+/*  Clear Filters Button  */
+.tel-clear-filters {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: #fee2e2;
+  color: #dc2626;
+  border: none;
+  border-radius: 8px;
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+  font-family: var(--font-family, "Outfit", "Inter", sans-serif);
+}
+
+.tel-clear-filters:hover {
+  background: #fecaca;
+}
+
+/*  Result Count  */
+.tel-result-count {
+  margin-left: auto;
+  font-size: 12px;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+/*  List Card  */
+.tel-list-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+/*  List  */
+.tel-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.tel-list-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 24px;
+  border-bottom: 1px solid #f1f5f9;
+  transition: background 0.15s;
+  animation: telItemIn 0.3s ease-out both;
+}
+
+@keyframes telItemIn {
+  from {
+    opacity: 0;
+    transform: translateX(-6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.tel-list-item:last-child {
+  border-bottom: none;
+}
+
+.tel-list-item:hover {
+  background: #f8fafc;
+}
+
+/*  Department Label Row (Dept Head list)  */
+.tel-dept-label-row {
+  list-style: none;
+  padding: 12px 24px 6px;
+  border-bottom: 1px solid #f1f5f9;
+  background: #f8fafc;
+}
+
+.tel-dept-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+
+/*  Avatar  */
+.tel-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #e8eef8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/*  Info  */
+.tel-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.tel-name {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: #112d61;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tel-meta {
+  font-size: 12.5px;
+  color: #64748b;
+  margin: 3px 0 0;
+  font-weight: 400;
+}
+
+/*  Create Feedback Button  */
+.tel-create-btn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 18px;
+  background: #ffffff;
+  border: 1.5px solid #112d61;
+  border-radius: 9px;
+  color: #112d61;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font-family, "Outfit", "Inter", sans-serif);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.2s, color 0.2s, transform 0.15s, box-shadow 0.2s;
+  flex-shrink: 0;
+}
+
+.tel-create-btn:hover {
+  background: #112d61;
+  color: #ffffff;
+  transform: scale(1.03);
+  box-shadow: 0 4px 14px rgba(17, 45, 97, 0.2);
+}
+
+/*  Empty State  */
+.tel-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 60px 24px;
+  color: #94a3b8;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/*  Responsive  */
+@media (max-width: 768px) {
+  .tel-list-item {
+    padding: 14px 16px;
+    gap: 12px;
+  }
+
+  .tel-create-btn {
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+
+  .tel-search-bar {
+    width: 220px;
+  }
+}
