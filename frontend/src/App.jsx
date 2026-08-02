@@ -7,6 +7,7 @@ import AdminDashboard from "./pages/system-admin/AdminDashboard";
 import AdviserDashboard from "./pages/adviser/AdviserDashboard";
 import DeptDashboard from "./pages/department-head/DeptDashboard";
 import PrincipalDashboard from "./pages/principal/PrincipalDashboard";
+import PerformanceReport from "./pages/adviser/PerformanceReport";
 
 export default function App() {
   return (
@@ -21,6 +22,7 @@ export default function App() {
         {/* 2. Dashboard routes */}
         <Route path="/system-admin/dashboard" element={<AdminDashboard />} />
         <Route path="/adviser/dashboard" element={<AdviserDashboard />} />
+        <Route path="/adviser/performance" element={<PerformanceReport />} />
         <Route path="/department-head/dashboard" element={<DeptDashboard />} />
         <Route path="/principal/dashboard" element={<PrincipalDashboard />} />
       </Routes>
