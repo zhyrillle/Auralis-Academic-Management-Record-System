@@ -1,18 +1,7 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import sidebarLogo from "../../assets/adviser-assets/SidebarLogo.png";
-import dashboardIcon from "../../assets/adviser-assets/Dashboard.png";
-import sectionsIcon from "../../assets/adviser-assets/Sections.png";
-import notificationIcon from "../../assets/adviser-assets/Notification.png";
-import masterSheetIcon from "../../assets/adviser-assets/Mastersheet.png";
-import performanceIcon from "../../assets/adviser-assets/Performance.png";
-import feedbackIcon from "../../assets/adviser-assets/Feedback.png";
-import requestIcon from "../../assets/adviser-assets/Request.png";
-import defaultProfileImg from "../../assets/adviser-assets/Default Profile.png";
-import logoutIcon from "../../assets/adviser-assets/logout-svgrepo-com 1.png";
+import "../../styles/performanceReport.css";
 
-export default function PerformanceReport({ user = "User" }) {
-  const navigate = useNavigate();
+export default function PerformanceReport() {
   const [termOptions] = useState([]);
   const [sectionOptions] = useState([]);
   const [dataProvided] = useState(false);
@@ -31,58 +20,6 @@ export default function PerformanceReport({ user = "User" }) {
 
   return (
     <div className="performance-page">
-      <aside className="performance-sidebar">
-        <div className="brand">
-          <img src={sidebarLogo} alt="Sidebar Logo" className="brand-logo" />
-        </div>
-
-        <nav className="sidebar-nav">
-          <Link className="nav-link" to="/adviser/dashboard">
-            <img src={dashboardIcon} alt="Dashboard" className="nav-icon" />
-            Dashboard
-          </Link>
-          <Link className="nav-link" to="#">
-            <img src={sectionsIcon} alt="Sections" className="nav-icon" />
-            Sections
-          </Link>
-          <Link className="nav-link" to="#">
-            <img src={notificationIcon} alt="Notifications" className="nav-icon" />
-            Notifications
-          </Link>
-          <Link className="nav-link" to="#">
-            <img src={masterSheetIcon} alt="Master Sheet" className="nav-icon" />
-            Master Sheet
-          </Link>
-          <Link className="nav-link active" to="/adviser/performance">
-            <img src={performanceIcon} alt="Performance" className="nav-icon" />
-            Performance
-          </Link>
-          <Link className="nav-link" to="#">
-            <img src={feedbackIcon} alt="Feedback" className="nav-icon" />
-            Feedback
-          </Link>
-          <Link className="nav-link" to="#">
-            <img src={requestIcon} alt="Request" className="nav-icon" />
-            Request
-          </Link>
-        </nav>
-
-        <div className="sidebar-footer">
-          <div className="profile-block">
-            <img src={defaultProfileImg} alt="Profile" className="profile-avatar" />
-            <div>
-              <p className="profile-name">{user}</p>
-              <p className="profile-role">Adviser</p>
-            </div>
-          </div>
-
-          <div className="logout-block" onClick={() => navigate("/")}>
-            <img src={logoutIcon} alt="Logout" className="logout-icon" />
-            <span>Logout</span>
-          </div>
-        </div>
-      </aside>
-
       <main className="performance-main">
         <div className="performance-content">
           <h1 className="page-title">Performance Report</h1>

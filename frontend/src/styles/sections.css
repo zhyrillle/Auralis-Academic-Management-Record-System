@@ -1,0 +1,103 @@
+/* sections.css - Styles exclusive to AdviserSections.jsx and its sub-components.
+   All grading-sheet styles live in gradingSheet.css */
+
+@import "./themes.css";
+
+.sections-page-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding-bottom: 80px;
+  /* Space for sticky footer */
+  animation: fadeIn 0.4s ease-out;
+  font-family: var(--font-family, 'Outfit', 'Inter', sans-serif);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Header Section */
+.sections-header {
+  margin-bottom: 30px;
+}
+
+.sections-title {
+  font-size: var(--fs-h1);
+  font-weight: var(--fw-bold);
+  color: var(--sidebar-bg, #112d61);
+  margin-bottom: 4px;
+}
+
+.sections-subtext {
+  font-size: var(--fs-subtext);
+  color: #64748b;
+}
+
+/* Control Row (Filters and Sorting) */
+.controls-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 24px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+.control-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.control-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.control-text {
+  font-size: var(--fs-subtext);
+  color: var(--subtext-color);
+}
+
+.sort-order-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background-color: transparent;
+  color: var(--primary-color);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.sort-order-btn:hover {
+  background-color: transparent;
+  border: none;
+  color: var(--sidebar-bg, #112d61);
+}
+
+.sort-order-btn:active {
+  transform: translateY(0);
+}
+
+/* Assigned Classes Card Grid */
+.classes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 15px;
+}

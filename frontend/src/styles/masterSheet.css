@@ -1,0 +1,327 @@
+/* ==========================================================================
+   MASTER SHEET STYLES (masterSheet.css)
+   Styles exclusive to MasterSheet.jsx – consistent with gradingSheet.css.
+   ========================================================================== */
+
+@import "./themes.css";
+
+/* ─── Container ─────────────────────────────────────────────────────────── */
+.ms-container {
+  animation: ms-fadeIn 0.4s ease-out;
+  font-family: var(--font-family, 'Outfit', 'Inter', sans-serif);
+  padding-bottom: 90px;
+  /* room for sticky footer */
+}
+
+@keyframes ms-fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.header {
+  text-align: left;
+  color: var(--primary-highlight-color);
+  font-size: var(--fs-h1);
+  font-weight: var(--fw-bold);
+  font-family: var(--font-dm-sans);
+  margin-bottom: 10px;
+}
+
+/* ─── Top Controls Row ───────────────────────────────────────────────────── */
+/* "Total Students" | Search Bar | Download Button — all in one row */
+.ms-controls-row {
+  display: flex;
+  align-items: left;
+  justify-content: left;
+  gap: 25px;
+  margin-bottom: 20px;
+}
+
+.cr-left {
+  width: 100%;
+  justify-content: center;
+}
+
+.cr-right {
+  display: flex;
+  gap: 16px;
+}
+
+/* Total students badge */
+.ms-total-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  background: #f8fafc;
+  padding: 9px 0px;
+}
+
+.ms-total-label {
+  font-size: var(--fs-subtext);
+  color: var(--subtext-color);
+  font-weight: var(--fw-normal);
+}
+
+.ms-total-count {
+  font-size: var(--fs-subtext);
+  font-weight: var(--fw-bold);
+  color: var(--primary-highlight-color);
+}
+
+/* Stretch search bar to fill remaining space */
+.ms-controls-row>.search-bar-container {
+  flex: 1;
+  min-width: 200px;
+}
+
+/* Download button — mirrors .download-btn from gradingSheet.css */
+.ms-download-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: #123062;
+  border: 1px solid #123062;
+  color: #ffffff;
+  padding: 5px 25px;
+  border-radius: 10px;
+  font-size: var(--fs-subtext);
+  font-weight: var(--fw-bold);
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.06);
+  white-space: nowrap;
+}
+
+.ms-download-btn:hover {
+  background-color: var(--button-primary-hover-color);
+  border-color: var(--button-primary-hover-color);
+  box-shadow: 0 4px 12px rgba(17, 45, 97, 0.18);
+}
+
+/* ─── Table Wrapper ──────────────────────────────────────────────────────── */
+.ms-table-wrapper {
+  background-color: #ffffff;
+  border-radius: 16px;
+  border: 1px solid #eef2f6;
+  box-shadow: 0 4px 25px rgba(0, 0, 0, 0.03);
+  overflow-x: auto;
+  margin-bottom: 24px;
+}
+
+/* ─── Table Base ─────────────────────────────────────────────────────────── */
+.ms-table {
+  width: max-content;
+  /* allow table to grow beyond viewport */
+  min-width: 100%;
+  border-collapse: collapse;
+  text-align: center;
+  font-size: 13px;
+}
+
+.ms-table th,
+.ms-table td {
+  padding: 10px 14px;
+  border: 1px solid #e2e8f0;
+  vertical-align: middle;
+}
+
+/* ─── Header Row 1 — Subject Names ──────────────────────────────────────── */
+.ms-header-row-1 th {
+  background-color: #f8fafc;
+  color: #334155;
+  font-weight: 700;
+}
+
+.ms-name-header-cell {
+  background-color: #f1f5f9 !important;
+  text-transform: uppercase;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  color: #475569;
+  text-align: center;
+  min-width: 200px;
+  white-space: nowrap;
+  border-right: 2px solid #cbd5e1 !important;
+  vertical-align: middle;
+}
+
+.ms-subject-header {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--primary-highlight-color);
+  text-align: center;
+  border-bottom: 2px solid #cbd5e1 !important;
+  /* first and last cell of each group get accent borders */
+  border-left: 2px solid #cbd5e1 !important;
+  white-space: nowrap;
+  padding: 12px 10px;
+}
+
+/* ─── Header Row 2 — "Term" label ───────────────────────────────────────── */
+.ms-header-row-2 th {
+  background-color: #f8fafc;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  border-left: 2px solid #cbd5e1 !important;
+  border-bottom: none;
+}
+
+.ms-term-group-header {
+  border-bottom: 1px solid #e2e8f0 !important;
+}
+
+/* ─── Header Row 3 — Term 1 / 2 / 3 / Final Grade ──────────────────────── */
+.ms-header-row-3 th {
+  background-color: #f1f5f9;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #475569;
+  letter-spacing: 0.5px;
+}
+
+/* "Final Grade" in header row 2 — aligns with the Final Grade data column */
+.ms-fg-header-cell {
+  background-color: #f8fafc;
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  border-right: 2px solid #cbd5e1 !important;
+  border-left: none;
+  white-space: nowrap;
+  min-width: 88px;
+}
+
+.ms-term-cell {
+  width: 44px;
+  min-width: 44px;
+}
+
+/* Empty cell below "Final Grade" in row 3 (data already shown in row 2 header) */
+.ms-final-col-cell {
+  min-width: 88px;
+  font-size: 10px;
+  white-space: nowrap;
+  border-right: 2px solid #cbd5e1 !important;
+  background-color: #f1f5f9;
+}
+
+.ms-fg-cell {
+  min-width: 88px;
+  font-size: 10px;
+  white-space: nowrap;
+  border-right: 2px solid #cbd5e1 !important;
+}
+
+/* First term column of each subject group gets a left separator */
+.ms-header-row-3 th:nth-child(4n+1) {
+  border-left: 2px solid #cbd5e1 !important;
+}
+
+/* ─── Sex Group Header Rows ──────────────────────────────────────────────── */
+.ms-sex-header-row {
+  background-color: rgba(17, 45, 97, 0.04);
+}
+
+.ms-sex-header-row--female {
+  border-top: 2px solid #cbd5e1;
+}
+
+.ms-sex-header-cell {
+  text-align: left;
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--primary-highlight-color);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  padding: 10px 16px;
+}
+
+/* ─── Student Body Rows ──────────────────────────────────────────────────── */
+.ms-student-row {
+  transition: background-color 0.15s;
+}
+
+.ms-student-row:hover {
+  background-color: #f8fafc;
+}
+
+.ms-name-cell {
+  text-align: left;
+  font-weight: 600;
+  color: #1e293b;
+  min-width: 200px;
+  white-space: nowrap;
+  border-right: 2px solid #cbd5e1 !important;
+}
+
+.ms-lrn {
+  display: block;
+  font-size: 11px;
+  color: #8c9ba5;
+  font-weight: 400;
+  margin-top: 2px;
+}
+
+.ms-grade-cell {
+  text-align: center;
+  font-weight: 600;
+  color: #334155;
+  width: 40px;
+  min-width: 40px;
+}
+
+.ms-final-cell {
+  text-align: center;
+  font-weight: 700;
+  color: #1e293b;
+  background-color: rgba(248, 250, 252, 0.8);
+  min-width: 88px;
+  border-right: 2px solid #cbd5e1 !important;
+}
+
+/* Accent left border for every first-term-column within data rows */
+.ms-student-row td:nth-child(4n+2) {
+  border-left: 2px solid #e2e8f0 !important;
+}
+
+/* ─── Empty state ────────────────────────────────────────────────────────── */
+.ms-empty-row {
+  text-align: center;
+  color: #94a3b8;
+  font-style: italic;
+  padding: 18px;
+}
+
+/* ─── Scrollbar styling (Webkit) ─────────────────────────────────────────── */
+.ms-table-wrapper::-webkit-scrollbar {
+  height: 7px;
+}
+
+.ms-table-wrapper::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+
+.ms-table-wrapper::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+.ms-table-wrapper::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
