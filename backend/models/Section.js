@@ -1,24 +1,37 @@
 const db = require('../config/db');
 
-const Section = {
-  findAll: async () => {
-    const [rows] = await db.query(`
-      SELECT s.*, gl.grade_level_name, CONCAT(u.first_name, ' ', u.last_name) AS adviser_name 
-      FROM SECTION s
-      LEFT JOIN GRADE_LEVEL gl ON s.grade_level_id = gl.grade_level_id
-      LEFT JOIN USER u ON s.user_id = u.user_id
-    `);
+class Section {
+  static async findAll() {
+    const [rows] = await db.execute('SELECT * FROM SECTION');
     return rows;
-  },
+  }
 
-  create: async (section) => {
-    const { section_name, grade_level_id, user_id } = section;
-    const [result] = await db.query(
-      'INSERT INTO SECTION (section_name, grade_level_id, user_id) VALUES (?, ?, ?)',
-      [section_name, grade_level_id, user_id]
+  static async findById(id) {
+    const [rows] = await db.execute('SELECT * FROM SECTION WHERE section_id = ?', [id]);
+    return rows[0];
+  }
+
+  static async create(data) {
+    const { section_name, grade_level_id } = data;
+    const [result] = await db.execute(
+      `INSERT INTO SECTION (section_name, grade_level_id) VALUES (?, ?)`,
+      [section_name, grade_level_id]
     );
     return result.insertId;
   }
-};
+
+  static async update(id, data) {
+    const keys = Object.keys(data);
+    const values = Object.values(data);
+    const setClause = keys.map(key => `${key} = ?`).join(', ');
+    await db.execute(`UPDATE SECTION SET ${setClause} WHERE section_id = ?`, [...values, id]);
+    return this.findById(id);
+  }
+
+  static async delete(id) {
+    const [result] = await db.execute('DELETE FROM SECTION WHERE section_id = ?', [id]);
+    return result.affectedRows > 0;
+  }
+}
 
 module.exports = Section;

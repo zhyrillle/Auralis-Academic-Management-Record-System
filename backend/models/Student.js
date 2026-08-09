@@ -1,34 +1,43 @@
 const db = require('../config/db');
 
-const Student = {
-  findAll: async () => {
-    const [rows] = await db.query('SELECT * FROM STUDENT');
+class Student {
+  static async findAll() {
+    const [rows] = await db.execute('SELECT * FROM STUDENT');
     return rows;
-  },
+  }
 
-  findByLrn: async (lrn) => {
-    const [rows] = await db.query('SELECT * FROM STUDENT WHERE LRN = ?', [lrn]);
+  static async findById(id) {
+    const [rows] = await db.execute('SELECT * FROM STUDENT WHERE student_id = ?', [id]);
     return rows[0];
-  },
+  }
 
-  create: async (student) => {
-    const { LRN, first_name, middle_name, last_name, extension_name, birthdate, sex, street, barangay, city, province, country, postal_code } = student;
-    const [result] = await db.query(
-      `INSERT INTO STUDENT (LRN, first_name, middle_name, last_name, extension_name, birthdate, sex, street, barangay, city, province, country, postal_code) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [LRN, first_name, middle_name, last_name, extension_name, birthdate, sex, street, barangay, city, province, country, postal_code]
+  static async findByLRN(lrn) {
+    const [rows] = await db.execute('SELECT * FROM STUDENT WHERE LRN = ?', [lrn]);
+    return rows[0];
+  }
+
+  static async create(data) {
+    const { LRN, first_name, middle_name, last_name, extension_name, birthdate, sex, street, barangay, city, province, country, postal_code, status } = data;
+    const [result] = await db.execute(
+      `INSERT INTO STUDENT (LRN, first_name, middle_name, last_name, extension_name, birthdate, sex, street, barangay, city, province, country, postal_code, status) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [LRN, first_name, middle_name, last_name, extension_name, birthdate, sex, street, barangay, city, province, country, postal_code, status || 'ACTIVE']
     );
     return result.insertId;
-  },
-
-  update: async (id, student) => {
-    const { first_name, middle_name, last_name, extension_name, birthdate, sex, street, barangay, city, province, country, postal_code } = student;
-    await db.query(
-      `UPDATE STUDENT SET first_name = ?, middle_name = ?, last_name = ?, extension_name = ?, birthdate = ?, sex = ?, street = ?, barangay = ?, city = ?, province = ?, country = ?, postal_code = ? 
-       WHERE student_id = ?`,
-      [first_name, middle_name, last_name, extension_name, birthdate, sex, street, barangay, city, province, country, postal_code, id]
-    );
   }
-};
+
+  static async update(id, data) {
+    const keys = Object.keys(data);
+    const values = Object.values(data);
+    const setClause = keys.map(key => `${key} = ?`).join(', ');
+    await db.execute(`UPDATE STUDENT SET ${setClause} WHERE student_id = ?`, [...values, id]);
+    return this.findById(id);
+  }
+
+  static async delete(id) {
+    const [result] = await db.execute('DELETE FROM STUDENT WHERE student_id = ?', [id]);
+    return result.affectedRows > 0;
+  }
+}
 
 module.exports = Student;

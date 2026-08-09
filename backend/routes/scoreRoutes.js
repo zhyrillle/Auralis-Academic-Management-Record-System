@@ -2,10 +2,20 @@ const express = require('express');
 const router = express.Router();
 const Score = require('../models/Score');
 
-router.get('/student-section/:id', async (req, res) => {
+router.get('/', async (req, res) => {
   try {
-    const scores = await Score.findByStudentSection(req.params.id);
+    const scores = await Score.findAll();
     res.json(scores);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/:id', async (req, res) => {
+  try {
+    const score = await Score.findById(req.params.id);
+    if (!score) return res.status(404).json({ message: 'Score entry not found' });
+    res.json(score);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -13,17 +23,27 @@ router.get('/student-section/:id', async (req, res) => {
 
 router.post('/', async (req, res) => {
   try {
-    const newId = await Score.create(req.body);
-    res.status(201).json({ message: 'Score record created successfully', score_id: newId });
+    const id = await Score.create(req.body);
+    res.status(201).json({ message: 'Score recorded successfully', score_id: id });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-router.put('/lock/subject/:id', async (req, res) => {
+router.put('/:id', async (req, res) => {
   try {
-    await Score.lockScores(req.params.id);
-    res.json({ message: 'Scores locked successfully for this subject' });
+    const updated = await Score.update(req.params.id, req.body);
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete('/:id', async (req, res) => {
+  try {
+    const success = await Score.delete(req.params.id);
+    if (!success) return res.status(404).json({ message: 'Score entry not found' });
+    res.json({ message: 'Score deleted successfully' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

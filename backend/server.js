@@ -1,52 +1,73 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+
 const app = express();
 
-// Middleware
 app.use(cors());
 app.use(express.json());
 
-// Import routes
 const schoolRoutes = require('./routes/schoolRoutes');
-const gradeLevelRoutes = require('./routes/gradeLevelRoutes');
-const studentRoutes = require('./routes/studentRoutes');
 const schoolYearRoutes = require('./routes/schoolYearRoutes');
-const componentTypeRoutes = require('./routes/componentTypeRoutes');
+const academicTermRoutes = require('./routes/academicTermRoutes');
 const userRoutes = require('./routes/userRoutes');
-const sectionRoutes = require('./routes/sectionRoutes');
-const gradeSubmissionRoutes = require('./routes/gradeSubmissionRoutes');
+const departmentRoutes = require('./routes/departmentRoutes');
+const departmentHeadRoutes = require('./routes/departmentHeadRoutes');
 const subjectRoutes = require('./routes/subjectRoutes');
+const gradeLevelRoutes = require('./routes/gradeLevelRoutes');
+const sectionRoutes = require('./routes/sectionRoutes');
+const studentRoutes = require('./routes/studentRoutes');
+const componentTypeRoutes = require('./routes/componentTypeRoutes');
+const subjectOfferingRoutes = require('./routes/subjectOfferingRoutes');
+const teacherAssignmentRoutes = require('./routes/teacherAssignmentRoutes');
+const adviserAssignmentRoutes = require('./routes/adviserAssignmentRoutes');
 const studentSectionRoutes = require('./routes/studentSectionRoutes');
+const subjectComponentWeightRoutes = require('./routes/subjectComponentWeightRoutes');
+const gradeSheetRoutes = require('./routes/gradeSheetRoutes');
+const gradeActivityRoutes = require('./routes/gradeActivityRoutes');
 const scoreRoutes = require('./routes/scoreRoutes');
-const attendanceRoutes = require('./routes/attendanceRoutes');
+const gradeSheetReviewRoutes = require('./routes/gradeSheetReviewRoutes');
 const gradeReopenRequestRoutes = require('./routes/gradeReopenRequestRoutes');
-const auditLogRoutes = require('./routes/auditLogRoutes');
+const temporaryReopeningRoutes = require('./routes/temporaryReopeningRoutes');
+const attendanceSheetRoutes = require('./routes/attendanceSheetRoutes');
+const attendanceRoutes = require('./routes/attendanceRoutes');
+const auditEventRoutes = require('./routes/auditEventRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const feedbackRoutes = require('./routes/feedbackRoutes');
 
 app.use('/api/schools', schoolRoutes);
-app.use('/api/grade-levels', gradeLevelRoutes);
-app.use('/api/students', studentRoutes);
 app.use('/api/school-years', schoolYearRoutes);
-app.use('/api/component-types', componentTypeRoutes);
+app.use('/api/academic-terms', academicTermRoutes);
 app.use('/api/users', userRoutes);
-app.use('/api/sections', sectionRoutes);
-app.use('/api/submissions', gradeSubmissionRoutes);
+app.use('/api/departments', departmentRoutes);
+app.use('/api/department-heads', departmentHeadRoutes);
 app.use('/api/subjects', subjectRoutes);
+app.use('/api/grade-levels', gradeLevelRoutes);
+app.use('/api/sections', sectionRoutes);
+app.use('/api/students', studentRoutes);
+app.use('/api/component-types', componentTypeRoutes);
+app.use('/api/subject-offerings', subjectOfferingRoutes);
+app.use('/api/teacher-assignments', teacherAssignmentRoutes);
+app.use('/api/section-adviser-assignments', adviserAssignmentRoutes);
 app.use('/api/student-sections', studentSectionRoutes);
+app.use('/api/subject-component-weights', subjectComponentWeightRoutes);
+app.use('/api/grade-sheets', gradeSheetRoutes);
+app.use('/api/grade-activities', gradeActivityRoutes);
 app.use('/api/scores', scoreRoutes);
-app.use('/api/attendance', attendanceRoutes);
+app.use('/api/grade-sheet-reviews', gradeSheetReviewRoutes);
 app.use('/api/reopen-requests', gradeReopenRequestRoutes);
-app.use('/api/audit-logs', auditLogRoutes);
+app.use('/api/temporary-reopenings', temporaryReopeningRoutes);
+app.use('/api/attendance-sheets', attendanceSheetRoutes);
+app.use('/api/attendance', attendanceRoutes);
+app.use('/api/audit-logs', auditEventRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/feedback', feedbackRoutes);
 
 app.get('/', (req, res) => {
-  res.json({ status: "Backend API is running" });
+  res.json({ status: 'Backend API is running' });
 });
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`📡 API Server running on http://localhost:${PORT}`);
+  console.log(`API Server running on http://localhost:${PORT}`);
 });

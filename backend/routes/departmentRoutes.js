@@ -1,11 +1,11 @@
 const express = require('express');
 const router = express.Router();
-const User = require('../models/User');
+const Department = require('../models/Department');
 
 router.get('/', async (req, res) => {
   try {
-    const users = await User.findAll();
-    res.json(users);
+    const departments = await Department.findAll();
+    res.json(departments);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -13,9 +13,9 @@ router.get('/', async (req, res) => {
 
 router.get('/:id', async (req, res) => {
   try {
-    const user = await User.findById(req.params.id);
-    if (!user) return res.status(404).json({ message: 'User not found' });
-    res.json(user);
+    const department = await Department.findById(req.params.id);
+    if (!department) return res.status(404).json({ message: 'Department not found' });
+    res.json(department);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -23,8 +23,8 @@ router.get('/:id', async (req, res) => {
 
 router.post('/', async (req, res) => {
   try {
-    const id = await User.create(req.body);
-    res.status(201).json({ message: 'User created successfully', user_id: id });
+    const id = await Department.create(req.body);
+    res.status(201).json({ message: 'Department created successfully', department_id: id });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -32,7 +32,7 @@ router.post('/', async (req, res) => {
 
 router.put('/:id', async (req, res) => {
   try {
-    const updated = await User.update(req.params.id, req.body);
+    const updated = await Department.update(req.params.id, req.body);
     res.json(updated);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -41,9 +41,9 @@ router.put('/:id', async (req, res) => {
 
 router.delete('/:id', async (req, res) => {
   try {
-    const success = await User.delete(req.params.id);
-    if (!success) return res.status(404).json({ message: 'User not found' });
-    res.json({ message: 'User deleted successfully' });
+    const success = await Department.delete(req.params.id);
+    if (!success) return res.status(404).json({ message: 'Department not found' });
+    res.json({ message: 'Department deleted successfully' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

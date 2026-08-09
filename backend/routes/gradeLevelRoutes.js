@@ -4,8 +4,8 @@ const GradeLevel = require('../models/GradeLevel');
 
 router.get('/', async (req, res) => {
   try {
-    const gradeLevels = await GradeLevel.findAll();
-    res.json(gradeLevels);
+    const levels = await GradeLevel.findAll();
+    res.json(levels);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -13,9 +13,9 @@ router.get('/', async (req, res) => {
 
 router.get('/:id', async (req, res) => {
   try {
-    const gradeLevel = await GradeLevel.findById(req.params.id);
-    if (!gradeLevel) return res.status(404).json({ error: 'Grade level not found' });
-    res.json(gradeLevel);
+    const level = await GradeLevel.findById(req.params.id);
+    if (!level) return res.status(404).json({ message: 'Grade Level not found' });
+    res.json(level);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -23,10 +23,17 @@ router.get('/:id', async (req, res) => {
 
 router.post('/', async (req, res) => {
   try {
-    const { grade_level_name } = req.body;
-    if (!grade_level_name) return res.status(400).json({ error: 'Grade level name is required' });
-    const newId = await GradeLevel.create(grade_level_name);
-    res.status(201).json({ message: 'Grade level created successfully', grade_level_id: newId });
+    const id = await GradeLevel.create(req.body);
+    res.status(201).json({ message: 'Grade Level created successfully', grade_level_id: id });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.put('/:id', async (req, res) => {
+  try {
+    const updated = await GradeLevel.update(req.params.id, req.body);
+    res.json(updated);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -34,8 +41,9 @@ router.post('/', async (req, res) => {
 
 router.delete('/:id', async (req, res) => {
   try {
-    await GradeLevel.delete(req.params.id);
-    res.json({ message: 'Grade level deleted successfully' });
+    const success = await GradeLevel.delete(req.params.id);
+    if (!success) return res.status(404).json({ message: 'Grade Level not found' });
+    res.json({ message: 'Grade Level deleted successfully' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

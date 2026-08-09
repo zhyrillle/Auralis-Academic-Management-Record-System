@@ -11,20 +11,39 @@ router.get('/', async (req, res) => {
   }
 });
 
-router.post('/', async (req, res) => {
+router.get('/:id', async (req, res) => {
   try {
-    const newId = await GradeReopenRequest.create(req.body);
-    res.status(201).json({ message: 'Reopen request submitted successfully', request_id: newId });
+    const request = await GradeReopenRequest.findById(req.params.id);
+    if (!request) return res.status(404).json({ message: 'Reopen Request not found' });
+    res.json(request);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-router.put('/:id/status', async (req, res) => {
+router.post('/', async (req, res) => {
   try {
-    const { status, reopen_until } = req.body; // status: 'approved' | 'declined'
-    await GradeReopenRequest.updateStatus(req.params.id, status, reopen_until);
-    res.json({ message: `Request status updated to ${status}` });
+    const id = await GradeReopenRequest.create(req.body);
+    res.status(201).json({ message: 'Reopen Request submitted successfully', request_id: id });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.put('/:id', async (req, res) => {
+  try {
+    const updated = await GradeReopenRequest.update(req.params.id, req.body);
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete('/:id', async (req, res) => {
+  try {
+    const success = await GradeReopenRequest.delete(req.params.id);
+    if (!success) return res.status(404).json({ message: 'Reopen Request not found' });
+    res.json({ message: 'Reopen Request deleted successfully' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
