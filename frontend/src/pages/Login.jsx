@@ -14,6 +14,7 @@ export default function Login() {
     setError("");
 
     try {
+      // Ensure this endpoint matches your server route (e.g., /api/auth/login or /api/users/login)
       const response = await fetch("http://localhost:5000/api/users/login", {
         method: "POST",
         headers: {
@@ -25,17 +26,18 @@ export default function Login() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "Login failed");
+        throw new Error(data.error || data.message || "Login failed");
       }
 
-      localStorage.setItem("user", JSON.stringify(data.user));
+      // Handle response structure (whether response is { user: {...} } or directly {...})
+      const userObj = data.user || data;
+      localStorage.setItem("user", JSON.stringify(userObj));
 
-      const userRole = data.user.role.toLowerCase();
-      
+      const userRole = userObj.role ? userObj.role.toLowerCase() : "";
+
+      // Navigation mapping without 'adviser'
       if (userRole === "admin") {
-        navigate("/system-admin/dashboard"); 
-      } else if (userRole === "adviser") {
-        navigate("/adviser/dashboard");
+        navigate("/system-admin/dashboard");
       } else if (userRole === "subject teacher") {
         navigate("/adviser/dashboard");
       } else if (userRole === "department head") {
