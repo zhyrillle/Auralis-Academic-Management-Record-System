@@ -1,5 +1,7 @@
 const db = require('../config/db');
 
+const ALLOWED_ROLES = ['admin', 'principal', 'department head', 'subject teacher'];
+
 class User {
   static async findAll() {
     const [rows] = await db.execute('SELECT user_id, role, first_name, middle_name, last_name, extension_name, email, pfp_url, account_status, last_login_at FROM USER');
@@ -18,6 +20,11 @@ class User {
 
   static async create(data) {
     const { role, first_name, middle_name, last_name, extension_name, email, password, pfp_url, account_status } = data;
+
+    if (!ALLOWED_ROLES.includes(role)) {
+      throw new Error(`Invalid role '${role}'. Allowed roles are: ${ALLOWED_ROLES.join(', ')}`);
+    }
+
     const [result] = await db.execute(
       `INSERT INTO USER (role, first_name, middle_name, last_name, extension_name, email, password, pfp_url, account_status) 
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -27,6 +34,10 @@ class User {
   }
 
   static async update(id, data) {
+    if (data.role && !ALLOWED_ROLES.includes(data.role)) {
+      throw new Error(`Invalid role '${data.role}'. Allowed roles are: ${ALLOWED_ROLES.join(', ')}`);
+    }
+
     const keys = Object.keys(data);
     const values = Object.values(data);
     const setClause = keys.map(key => `${key} = ?`).join(', ');
