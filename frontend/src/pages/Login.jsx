@@ -1,20 +1,28 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import AuthLayout from "../components/AuthLayout";
 import logo from "../assets/auralis-logo.png";
+import { setStoredUser, getRoleDefaultPath } from "../utils/auth";
 
-export default function Login() {
+export default function Login({ user, onLoginSuccess }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const navigate = useNavigate();
+
+  // Redirect if already logged in
+  useEffect(() => {
+    if (user && user.role) {
+      const dest = getRoleDefaultPath(user.role);
+      navigate(dest, { replace: true });
+    }
+  }, [user, navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
 
     try {
-      // Ensure this endpoint matches your server route (e.g., /api/auth/login or /api/users/login)
       const response = await fetch("http://localhost:5000/api/users/login", {
         method: "POST",
         headers: {
@@ -31,19 +39,15 @@ export default function Login() {
 
       // Handle response structure (whether response is { user: {...} } or directly {...})
       const userObj = data.user || data;
-      localStorage.setItem("user", JSON.stringify(userObj));
+      setStoredUser(userObj);
 
-      const userRole = userObj.role ? userObj.role.toLowerCase() : "";
+      if (onLoginSuccess) {
+        onLoginSuccess(userObj);
+      }
 
-      // Navigation mapping without 'adviser'
-      if (userRole === "admin") {
-        navigate("/system-admin/dashboard");
-      } else if (userRole === "subject teacher") {
-        navigate("/adviser/dashboard");
-      } else if (userRole === "department head") {
-        navigate("/department-head/dashboard");
-      } else if (userRole === "principal") {
-        navigate("/principal/dashboard");
+      const targetPath = getRoleDefaultPath(userObj.role);
+      if (targetPath && targetPath !== "/") {
+        navigate(targetPath);
       } else {
         setError("Unknown user role mapped to this account.");
       }
