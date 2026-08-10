@@ -1,7 +1,19 @@
-// Normalize role string from backend or input to a standard canonical role key
-export const normalizeRole = (role) => {
-  if (!role) return "guest";
-  const r = role.toString().trim().toLowerCase().replace(/_/g, "-");
+// Normalize role string from backend or user object to a standard canonical role key
+export const normalizeRole = (role, userObj) => {
+  let targetUser = userObj;
+  let targetRole = role;
+
+  if (typeof role === "object" && role !== null) {
+    targetUser = role;
+    targetRole = role.role;
+  }
+
+  if (targetUser && (targetUser.is_adviser || targetUser.isAdviser)) {
+    return "adviser";
+  }
+
+  if (!targetRole) return "guest";
+  const r = targetRole.toString().trim().toLowerCase().replace(/_/g, "-");
 
   if (
     r === "admin" ||

@@ -11,6 +11,21 @@ class SectionAdviserAssignment {
     return rows[0];
   }
 
+  static async findByUserId(userId) {
+    try {
+      const [rows] = await db.execute('SELECT * FROM SECTION_ADVISER_ASSIGNMENT WHERE user_id = ?', [userId]);
+      if (rows && rows.length > 0) return rows;
+    } catch (err) {
+      // Fallback if SECTION_ADVISER_ASSIGNMENT table is not used
+    }
+    try {
+      const [rows] = await db.execute('SELECT * FROM SECTION WHERE user_id = ?', [userId]);
+      return rows;
+    } catch (err) {
+      return [];
+    }
+  }
+
   static async create(data) {
     const { section_id, school_year_id, user_id, assigned_from, assigned_until } = data;
     const [result] = await db.execute(
