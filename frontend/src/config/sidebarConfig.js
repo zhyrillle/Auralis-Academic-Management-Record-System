@@ -174,11 +174,6 @@ export const sidebarConfig = {
       icon: BookOpen,
     },
     {
-      title: "Notifications",
-      path: "/adviser/notifications",
-      icon: Bell,
-    },
-    {
       title: "Master Sheet",
       path: "/adviser/master-sheet",
       icon: ClipboardList,
@@ -209,11 +204,6 @@ export const sidebarConfig = {
       title: "Sections",
       path: "/teacher/sections",
       icon: BookOpen,
-    },
-    {
-      title: "Notifications",
-      path: "/teacher/notifications",
-      icon: Bell,
     },
     {
       title: "Performance",
