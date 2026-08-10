@@ -5,12 +5,11 @@ import { Check, FileSpreadsheet, X, ArrowDownNarrowWide } from "lucide-react";
 import SelectFilter from "../../components/common/SelectFilter.jsx";
 import ClassCard from "../../components/sections/ClassCard";
 import GradingSheet from "./GradingSheet"; // Imported the separated component
-import StudentSF9Page from "./StudentSF9Page";
 import AttendanceSheet from "./AttendanceSheet";
+import SectionDetails from "./SectionDetails.jsx";
 
 // Style
 import "../../styles/sections.css";
-import "../../styles/studentSF9.css";
 import "../../styles/attendanceSheet.css";
 
 // -------------------------------------------------------------
@@ -274,7 +273,7 @@ export default function AdviserSections() {
               {filteredAndSortedClasses.map((cls) => (
                 <ClassCard
                   key={cls.id} cls={cls}
-                  onView={(c) => { setactiveSelectedClass(c); setCurrentView("student-sf9"); }}
+                  onView={(c) => { setactiveSelectedClass(c); setCurrentView("section-details"); }}
                   onGradingSheet={(c) => { setactiveSelectedClass(c); setCurrentView("grading-sheet"); }}
                   onEdit={(c) => { setactiveSelectedClass(c); setCurrentView("attendance-sheet"); }}
                 />
@@ -286,8 +285,8 @@ export default function AdviserSections() {
         <AttendanceSheet
           onBack={() => setCurrentView("dashboard")}
         />
-      ) : currentView === "student-sf9" ? (
-        <StudentSF9Page
+      ) : currentView === "section-details" ? (
+        <SectionDetails
           student={activeSelectedClass}
           onBack={() => setCurrentView("dashboard")}
         />

@@ -50,4 +50,30 @@
   --fw-semibold: 600;
   --fw-bold: 700;
   --fw-extrabold: 900;
+
+  /* --- Metric KPI Summary Grid Colors --- */
+  --kpi-advancing-color: #10b981;
+  --kpi-benchmarking-color: #f97316;
+  --kpi-connecting-color: #fbbf24;
+  --kpi-developing-color: #4f46e5;
+  --kpi-emerging-color: #f43f5e;
+  --kpi-atrisk-color: #e11d48;
+
+  /* --- Risk Status Badge Colors --- */
+  --badge-risk-low-bg: #d1fae5;
+  --badge-risk-low-text: #10B981;
+  --badge-risk-medium-bg: #fef3c7;
+  --badge-risk-medium-text: #F59E0B;
+  --badge-risk-atrisk-bg: #ffe4e6;
+  --badge-risk-atrisk-text: #DC2626;
+
+  /* --- Honor Status Badge Colors --- */
+  --badge-honor-with-bg: #ffe4c8;
+  --badge-honor-with-text: #CD7F32;
+  --badge-honor-high-bg: #e5f0ff;
+  --badge-honor-high-text: #95B0D6;
+  --badge-honor-highest-bg: #fef9c3;
+  --badge-honor-highest-text: #D4AF37;
+  --badge-honor-none-bg: #f3f3f3;
+  --badge-honor-none-text: #B3B3B3;
 }

@@ -135,6 +135,7 @@ export default function ClassCard({ cls, onView, onGradingSheet, onEdit }) {
 
         {/* View Button */}
         <button
+          title="Section Details"
           style={{
             flex: 1,
             display: "flex",
@@ -180,7 +181,7 @@ export default function ClassCard({ cls, onView, onGradingSheet, onEdit }) {
 
         {/* Edit */}
         <button
-          title="Edit Details"
+          title="Class Record"
           style={{
             width: "40px",
             height: "40px",
