@@ -33,15 +33,21 @@ export default function Navbar({
       <div className="navbar-left">
         {/* Mobile menu toggle */}
         <button
-          className="toggle-sidebar-btn"
+          type="button"
+          className="toggle-sidebar-btn mobile-menu-button"
           onClick={onToggleMobileSidebar}
-          style={{ display: "none" }} /* Styled via media queries or inline conditional classes */
+          aria-label="Open navigation menu"
         >
-          <Menu size={20} className="lg:hidden" />
+          <Menu size={20} />
         </button>
 
         {/* Desktop/Default toggle */}
-        <button className="toggle-sidebar-btn" onClick={onToggleSidebar}>
+        <button
+          type="button"
+          className="toggle-sidebar-btn desktop-sidebar-button"
+          onClick={onToggleSidebar}
+          aria-label="Collapse navigation sidebar"
+        >
           <Menu size={20} />
         </button>
 
@@ -63,19 +69,13 @@ export default function Navbar({
 
       {/* Right side: Notifications */}
       <div className="navbar-right">
-        <button className="toggle-sidebar-btn" style={{ position: "relative" }}>
+        <button
+          type="button"
+          className="toggle-sidebar-btn notification-button"
+          aria-label="Notifications"
+        >
           <Bell size={20} />
-          <span
-            style={{
-              position: "absolute",
-              top: "4px",
-              right: "4px",
-              width: "8px",
-              height: "8px",
-              backgroundColor: "var(--logout-color)",
-              borderRadius: "50%",
-            }}
-          />
+          <span className="notification-indicator" aria-hidden="true" />
         </button>
       </div>
     </header>

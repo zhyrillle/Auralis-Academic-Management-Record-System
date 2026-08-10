@@ -90,6 +90,9 @@ export const isPathAllowedForRole = (path, role) => {
   const normRole = normalizeRole(role);
   if (!normRole || normRole === "guest") return false;
 
+  // The profile page is shared by every authenticated account.
+  if (path === "/profile") return true;
+
   const rolePrefixes = {
     "system-admin": "/system-admin",
     "principal": "/principal",

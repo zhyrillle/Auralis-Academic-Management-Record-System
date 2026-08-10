@@ -23,6 +23,11 @@ export default function DashboardLayout({ user, onLogout }) {
     }
   }
 
+  const handleMobileSidebarToggle = () => {
+    setCollapsed(false);
+    setMobileOpen((isOpen) => !isOpen);
+  };
+
   return (
     <div className="dashboard-layout">
       {/* Mobile drawer backdrop overlay */}
@@ -45,7 +50,7 @@ export default function DashboardLayout({ user, onLogout }) {
         {/* Top Navbar */}
         <Navbar
           onToggleSidebar={() => setCollapsed(!collapsed)}
-          onToggleMobileSidebar={() => setMobileOpen(!mobileOpen)}
+          onToggleMobileSidebar={handleMobileSidebarToggle}
         />
 
         {/* Content outlet */}
