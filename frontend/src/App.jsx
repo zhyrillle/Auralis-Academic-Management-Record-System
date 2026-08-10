@@ -6,6 +6,7 @@ import OtpVerify from "./pages/OtpVerify";
 import ResetPassword from "./pages/ResetPassword";
 import AdminDashboard from "./pages/system-admin/AdminDashboard";
 import WSConfig from "./pages/system-admin/WSConfig";
+import ManageUsers from "./pages/system-admin/ManageUsers";
 import AdviserDashboard from "./pages/adviser/AdviserDashboard";
 import DeptDashboard from "./pages/department-head/DeptDashboard";
 import PrincipalDashboard from "./pages/principal/PrincipalDashboard";
@@ -21,7 +22,6 @@ import AtRiskBreakdown from "./pages/principal/AtRiskBreakdown";
 import AtRiskPrediction from "./pages/principal/AtRiskPrediction";
 import GradeReopeningRequest from "./pages/adviser/GradeReopeningRequest";
 import SectionDetails from "./pages/adviser/SectionDetails";
-import { getStoredUser } from "./utils/auth";
 import { getStoredUser, setStoredUser } from "./utils/auth";
 
 export default function App() {
@@ -74,7 +74,7 @@ export default function App() {
           <Route path="/system-admin/dashboard" element={<AdminDashboard />} />
           <Route
             path="/system-admin/manage-users"
-            element={<PlaceholderPage />}
+            element={<ManageUsers />}
           />
           <Route
             path="/system-admin/grade-lock"
