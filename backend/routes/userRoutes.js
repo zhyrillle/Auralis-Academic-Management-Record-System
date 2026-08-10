@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
+const SectionAdviserAssignment = require('../models/SectionAdviserAssignment');
 const { uploadProfilePicture } = require('../services/profilePictureStorage');
 
 const imageExtensions = {
@@ -53,6 +54,15 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
     const safeUser = await User.updateLastLogin(user.user_id);
+
+    // Check if the user is assigned as an adviser in SECTION_ADVISER_ASSIGNMENT or SECTION table
+    const adviserAssignments = await SectionAdviserAssignment.findByUserId(safeUser.user_id);
+    if (adviserAssignments && adviserAssignments.length > 0) {
+      safeUser.is_adviser = true;
+      safeUser.adviser_assignment = adviserAssignments[0];
+      safeUser.role = 'adviser';
+    }
+
     res.json({ message: 'Login successful', user: safeUser });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -184,6 +194,14 @@ router.get('/:id', async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const adviserAssignments = await SectionAdviserAssignment.findByUserId(user.user_id);
+    if (adviserAssignments && adviserAssignments.length > 0) {
+      user.is_adviser = true;
+      user.adviser_assignment = adviserAssignments[0];
+      user.role = 'adviser';
+    }
+
     res.json(user);
   } catch (err) {
     res.status(500).json({ error: err.message });

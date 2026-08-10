@@ -1,9 +1,7 @@
 import { useLocation } from "react-router-dom";
-import { Menu, ChevronRight, Bell, Sparkles } from "lucide-react";
+import { Menu, ChevronRight, Bell } from "lucide-react";
 
 export default function Navbar({
-  user,
-  onRoleChange,
   onToggleSidebar,
   onToggleMobileSidebar,
 }) {
@@ -69,28 +67,13 @@ export default function Navbar({
         </div>
       </div>
 
-      {/* Right side: Quick Role Swapper & Notifications */}
+      {/* Right side: Notifications */}
       <div className="navbar-right">
-        {/* Capstone Role Switcher for live inspection */}
-        <div className="demo-role-control">
-          <Sparkles size={16} className="demo-role-icon" aria-hidden="true" />
-          <label htmlFor="demo-role-select" className="demo-role-label">Demo Role:</label>
-          <select
-            id="demo-role-select"
-            value={user.role}
-            onChange={(e) => onRoleChange(e.target.value)}
-            className="role-switcher-dropdown"
-            aria-label="Demo role"
-          >
-            <option value="system-admin">System Administrator</option>
-            <option value="principal">Principal</option>
-            <option value="department-head">Department Head</option>
-            <option value="adviser">Adviser</option>
-            <option value="teacher">Subject Teacher</option>
-          </select>
-        </div>
-
-        <button type="button" className="toggle-sidebar-btn notification-button" aria-label="Notifications">
+        <button
+          type="button"
+          className="toggle-sidebar-btn notification-button"
+          aria-label="Notifications"
+        >
           <Bell size={20} />
           <span className="notification-indicator" aria-hidden="true" />
         </button>

@@ -1,18 +1,22 @@
 import { useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { sidebarConfig } from "../../config/sidebarConfig";
+import { normalizeRole, getRoleDisplayTitle, removeStoredUser, getRoleDefaultPath } from "../../utils/auth";
 import { ChevronDown, LogOut, CircleUser } from "lucide-react";
 import logoName from "../../assets/auralis-logo-name.png";
 import logoIcon from "../../assets/auralis-logo.png";
 
-export default function Sidebar({ user = { role: "principal" }, collapsed = false, mobileOpen = false, onCloseMobile }) {
+export default function Sidebar({ user, onLogout, collapsed = false, mobileOpen = false, onCloseMobile }) {
   const location = useLocation();
   const navigate = useNavigate();
   
-  // Resolve mapping names dynamically
-  const rawRoleKey = user.role?.toLowerCase() || "principal";
-  const roleKey = rawRoleKey === "subject teacher" ? "adviser" : rawRoleKey;
-  const menuItems = sidebarConfig[roleKey] || sidebarConfig.principal;
+  // Resolve mapping names dynamically based on normalized user role
+  const roleKey = normalizeRole(user);
+  const menuItems = useMemo(
+    () => sidebarConfig[roleKey] || sidebarConfig[user?.role] || sidebarConfig.principal || [],
+    [roleKey, user?.role],
+  );
+  const defaultDashboardPath = getRoleDefaultPath(user?.role);
   const isProfileActive = location.pathname === "/profile";
 
   // Track user-controlled submenu states and derive route-based expansion.
@@ -31,8 +35,6 @@ export default function Sidebar({ user = { role: "principal" }, collapsed = fals
   );
 
   const toggleSubmenu = (index, e) => {
-    // If sidebar is collapsed, we don't want to expand submenus inside the small bar,
-    // or we might want to expand the sidebar first. Let's toggle.
     e.preventDefault();
     e.stopPropagation();
     setOpenMenus((prev) => ({
@@ -42,65 +44,38 @@ export default function Sidebar({ user = { role: "principal" }, collapsed = fals
   };
 
   const handleLogout = () => {
-    localStorage.removeItem("user");
+    removeStoredUser();
+    if (onLogout) {
+      onLogout();
+    }
     navigate("/");
   };
 
-  // Profile cards data matching the mockups
-  const getProfileData = () => {
-    const roleLower = user.role?.toLowerCase();
-    switch (roleLower) {
-      case "admin":
-      case "system-admin":
-        return {
-          name: user.name || "System Admin",
-          displayRole: "Administrator",
-        };
-      case "department-head":
-      case "departmenthead":
-        return {
-          name: user.name || "Jolly Bee",
-          displayRole: "Department Head",
-        };
-      case "adviser":
-        return {
-          name: user.name || "Harvey Babia",
-          displayRole: "Adviser",
-        };
-      case "teacher":
-      case "subjectteacher":
-        return {
-          name: user.name || "Harvey Babia",
-          displayRole: "Subject Teacher",
-        };
-      case "principal":
-      default:
-        return {
-          name: user.name || "Harvey Babia",
-          displayRole: "Principal",
-        };
+  const getUserName = () => {
+    if (!user) return "User";
+    if (user.first_name || user.last_name) {
+      return `${user.first_name || ""} ${user.last_name || ""}`.trim();
     }
+    return user.name || "User";
   };
 
-  const profile = getProfileData();
-  const profilePicture = user.pfp_url
-    ? /^(https?:|data:)/.test(user.pfp_url)
-      ? user.pfp_url
-      : `http://localhost:5000${user.pfp_url.startsWith("/") ? "" : "/"}${user.pfp_url}`
-    : null;
-  const initials = profile.name
+  const profileName = getUserName();
+  const displayRole = getRoleDisplayTitle(user?.role);
+  const profilePicture = user?.pfp_url || null;
+  const initials = profileName
     .split(" ")
+    .filter(Boolean)
     .map((n) => n[0])
     .join("")
     .substring(0, 2)
-    .toUpperCase();
+    .toUpperCase() || "U";
 
   return (
     <>
       <aside className={`sidebar-container ${collapsed ? "collapsed" : ""} ${mobileOpen ? "mobile-open" : ""}`}>
         {/* Header / Logo */}
         <div className="sidebar-header">
-          <Link to={`/${roleKey}/dashboard`} className="sidebar-logo-container">
+          <Link to={defaultDashboardPath} className="sidebar-logo-container">
             {collapsed ? (
               <img src={logoIcon} className="sidebar-logo-icon-img" alt="Auralis Icon" />
             ) : (
@@ -201,7 +176,7 @@ export default function Sidebar({ user = { role: "principal" }, collapsed = fals
             to="/profile"
             onClick={onCloseMobile}
             className={`profile-card profile-card-link ${isProfileActive ? "active" : ""}`}
-            title={`${profile.name} - ${profile.displayRole}`}
+            title={`${profileName} - ${displayRole}`}
             aria-current={isProfileActive ? "page" : undefined}
           >
             <div className="profile-avatar">
@@ -212,8 +187,8 @@ export default function Sidebar({ user = { role: "principal" }, collapsed = fals
               )}
             </div>
             <div className="profile-info">
-              <span className="profile-name">{profile.name}</span>
-              <span className="profile-role">{profile.displayRole}</span>
+              <span className="profile-name">{profileName}</span>
+              <span className="profile-role">{displayRole}</span>
             </div>
           </Link>
 

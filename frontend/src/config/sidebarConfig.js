@@ -65,6 +65,11 @@ export const sidebarConfig = {
   ],
   principal: [
     {
+      title: "Dashboard",
+      path: "/principal/dashboard",
+      icon: LayoutDashboard,
+    },
+    {
       title: "At-Risk Students",
       path: "/principal/at-risk-students",
       icon: AlertTriangle,
@@ -169,11 +174,6 @@ export const sidebarConfig = {
       icon: BookOpen,
     },
     {
-      title: "Notifications",
-      path: "/adviser/notifications",
-      icon: Bell,
-    },
-    {
       title: "Master Sheet",
       path: "/adviser/master-sheet",
       icon: ClipboardList,
@@ -204,11 +204,6 @@ export const sidebarConfig = {
       title: "Sections",
       path: "/teacher/sections",
       icon: BookOpen,
-    },
-    {
-      title: "Notifications",
-      path: "/teacher/notifications",
-      icon: Bell,
     },
     {
       title: "Performance",

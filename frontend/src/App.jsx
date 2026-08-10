@@ -17,62 +17,36 @@ import AdviserSections from "./pages/adviser/AdviserSections";
 import MasterSheet from "./pages/adviser/MasterSheet";
 import AdviserFeedback from "./pages/adviser/AdviserFeedback";
 import ProfilePage from "./pages/ProfilePage";
-
-const defaultUser = {
-  role: "principal",
-  name: "Harvey Babia",
-};
-
-const toLayoutUser = (apiUser) => {
-  if (!apiUser) return defaultUser;
-
-  const databaseRole = String(apiUser.role || "").toLowerCase();
-  const layoutRole = databaseRole === "subject teacher" ? "adviser" : databaseRole;
-  const name = [apiUser.first_name, apiUser.middle_name, apiUser.last_name]
-    .filter(Boolean)
-    .join(" ");
-
-  return {
-    ...apiUser,
-    role: layoutRole || defaultUser.role,
-    databaseRole: apiUser.role,
-    name: name || apiUser.name || defaultUser.name,
-  };
-};
-
-const getInitialUser = () => {
-  try {
-    return toLayoutUser(JSON.parse(localStorage.getItem("user") || "null"));
-  } catch {
-    return defaultUser;
-  }
-};
+import AtRiskBreakdown from "./pages/principal/AtRiskBreakdown";
+import AtRiskPrediction from "./pages/principal/AtRiskPrediction";
+import GradeReopeningRequest from "./pages/adviser/GradeReopeningRequest";
+import { getStoredUser, setStoredUser } from "./utils/auth";
 
 export default function App() {
-  const [user, setUser] = useState(getInitialUser);
+  const [user, setUser] = useState(() => getStoredUser());
 
-  const handleAuthenticatedUser = (authenticatedUser) => {
-    setUser(toLayoutUser(authenticatedUser));
+  const handleLoginSuccess = (userObj) => {
+    setUser(userObj);
   };
 
-  const handleRoleChange = (newRole) => {
-    let name = "Harvey Babia";
-    const roleLower = newRole.toLowerCase();
-    if (roleLower === "system-admin" || roleLower === "admin") {
-      name = "Admin User";
-    } else if (
-      roleLower === "department-head" ||
-      roleLower === "departmenthead"
-    ) {
-      name = "Jolly Bee";
-    }
-    setUser((currentUser) => ({ ...currentUser, role: newRole, name }));
+  const handleUserUpdated = (updatedUser) => {
+    setStoredUser(updatedUser);
+    setUser(updatedUser);
+  };
+
+  const handleLogout = () => {
+    setUser(null);
   };
 
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Login onLogin={handleAuthenticatedUser} />} />
+        <Route
+          path="/"
+          element={
+            <Login user={user} onLoginSuccess={handleLoginSuccess} />
+          }
+        />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/otp" element={<OtpVerify />} />
         <Route path="/reset-password" element={<ResetPassword />} />
@@ -80,7 +54,7 @@ export default function App() {
         {/* Protected Dashboard Layout routes */}
         <Route
           element={
-            <DashboardLayout user={user} onRoleChange={handleRoleChange} />
+            <DashboardLayout user={user} onLogout={handleLogout} />
           }
         >
           {/* Shared profile route for every signed-in account */}
@@ -89,7 +63,7 @@ export default function App() {
             element={
               <ProfilePage
                 user={user}
-                onUserUpdated={handleAuthenticatedUser}
+                onUserUpdated={handleUserUpdated}
               />
             }
           />
@@ -110,11 +84,11 @@ export default function App() {
           <Route path="/principal/dashboard" element={<PrincipalDashboard />} />
           <Route
             path="/principal/at-risk-students/prediction"
-            element={<PlaceholderPage />}
+            element={<AtRiskPrediction />}
           />
           <Route
             path="/principal/at-risk-students/breakdown"
-            element={<PlaceholderPage />}
+            element={<AtRiskBreakdown />}
           />
           <Route
             path="/principal/performance-level/grade-levels"
@@ -164,7 +138,7 @@ export default function App() {
           <Route path="/adviser/master-sheet" element={<MasterSheet />} />
           <Route path="/adviser/performance" element={<PerformanceReport />} />
           <Route path="/adviser/feedback" element={<AdviserFeedback />} />
-          <Route path="/adviser/request" element={<PlaceholderPage />} />
+          <Route path="/adviser/request" element={<GradeReopeningRequest />} />
 
           {/* 5. Subject Teacher */}
           <Route path="/teacher/dashboard" element={<TeacherDashboard />} />
@@ -185,7 +159,9 @@ export default function App() {
             element={<PlaceholderPage />}
           />
           <Route
-            path="/teacher/request" element={<PlaceholderPage />} />
+            path="/teacher/request"
+            element={<GradeReopeningRequest />}
+          />
         </Route>
       </Routes>
     </BrowserRouter>

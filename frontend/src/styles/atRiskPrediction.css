@@ -1,0 +1,241 @@
+/* Reuse shared at-risk styles from atRiskBreakdown.css */
+@import url("./atRiskBreakdown.css");
+
+/* ============================================================
+   At-Risk Prediction Styles (new additions)
+   ============================================================ */
+
+.ar-filter-group {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+/* Risk sections */
+.ar-prediction-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.ar-risk-section {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 8px 24px rgba(0, 0, 0, 0.04);
+  border: 1px solid #eef2f6;
+}
+
+.ar-risk-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.ar-risk-section-title {
+  font-family: "DM Sans", sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.ar-see-all-btn {
+  background: none;
+  border: none;
+  color: #0033C4;
+  font-family: "Montserrat", sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 8px;
+  transition: background 0.2s;
+}
+
+.ar-see-all-btn:hover {
+  background: #eff6ff;
+}
+
+.ar-risk-section-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ar-see-all-hint {
+  display: flex;
+  justify-content: center;
+  margin-top: 4px;
+}
+
+.ar-no-data {
+  color: #475569;
+  font-size: 14px;
+  padding: 16px 0;
+  text-align: center;
+}
+
+/* Student cards */
+.ar-student-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid #eef2f6;
+  background: #ffffff;
+  border-left: 4px solid #16A34A;
+  transition: box-shadow 0.2s;
+}
+
+.ar-student-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.ar-student-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.ar-student-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.ar-student-avatar-skeleton {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(90deg, #eef2f6 25%, #f8fafc 50%, #eef2f6 75%);
+  background-size: 200% 100%;
+  animation: ar-shimmer 1.4s infinite;
+  flex-shrink: 0;
+}
+
+.ar-student-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ar-student-name {
+  font-weight: 700;
+  font-size: 14px;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ar-student-meta {
+  font-size: 13px;
+  color: #475569;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ar-student-flags {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.ar-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.ar-student-score {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 14px;
+  border-radius: 10px;
+  flex-shrink: 0;
+  min-width: 72px;
+}
+
+.ar-score-value {
+  font-family: "DM Sans", sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.ar-score-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.8;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .ar-student-card {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .ar-student-main {
+    width: 100%;
+  }
+
+  .ar-student-flags {
+    width: 100%;
+  }
+
+  .ar-student-score {
+    align-self: flex-end;
+  }
+
+  .ar-filter-group {
+    width: 100%;
+  }
+
+  .ar-filter-control {
+    flex: 1;
+    min-width: 140px;
+  }
+}
+
+@media (max-width: 1024px) {
+  .ar-stats-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .ar-stats-row {
+    grid-template-columns: 1fr;
+  }
+
+  .ar-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .ar-filter-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
