@@ -35,15 +35,21 @@ export default function Navbar({
       <div className="navbar-left">
         {/* Mobile menu toggle */}
         <button
-          className="toggle-sidebar-btn"
+          type="button"
+          className="toggle-sidebar-btn mobile-menu-button"
           onClick={onToggleMobileSidebar}
-          style={{ display: "none" }} /* Styled via media queries or inline conditional classes */
+          aria-label="Open navigation menu"
         >
-          <Menu size={20} className="lg:hidden" />
+          <Menu size={20} />
         </button>
 
         {/* Desktop/Default toggle */}
-        <button className="toggle-sidebar-btn" onClick={onToggleSidebar}>
+        <button
+          type="button"
+          className="toggle-sidebar-btn desktop-sidebar-button"
+          onClick={onToggleSidebar}
+          aria-label="Collapse navigation sidebar"
+        >
           <Menu size={20} />
         </button>
 
@@ -66,13 +72,15 @@ export default function Navbar({
       {/* Right side: Quick Role Swapper & Notifications */}
       <div className="navbar-right">
         {/* Capstone Role Switcher for live inspection */}
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <Sparkles size={16} style={{ color: "#d97706" }} />
-          <span style={{ fontSize: "12px", fontWeight: "600", color: "#8c9ba5" }}>Demo Role:</span>
+        <div className="demo-role-control">
+          <Sparkles size={16} className="demo-role-icon" aria-hidden="true" />
+          <label htmlFor="demo-role-select" className="demo-role-label">Demo Role:</label>
           <select
+            id="demo-role-select"
             value={user.role}
             onChange={(e) => onRoleChange(e.target.value)}
             className="role-switcher-dropdown"
+            aria-label="Demo role"
           >
             <option value="system-admin">System Administrator</option>
             <option value="principal">Principal</option>
@@ -82,19 +90,9 @@ export default function Navbar({
           </select>
         </div>
 
-        <button className="toggle-sidebar-btn" style={{ position: "relative" }}>
+        <button type="button" className="toggle-sidebar-btn notification-button" aria-label="Notifications">
           <Bell size={20} />
-          <span
-            style={{
-              position: "absolute",
-              top: "4px",
-              right: "4px",
-              width: "8px",
-              height: "8px",
-              backgroundColor: "var(--logout-color)",
-              borderRadius: "50%",
-            }}
-          />
+          <span className="notification-indicator" aria-hidden="true" />
         </button>
       </div>
     </header>

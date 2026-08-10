@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import AuthLayout from "../components/AuthLayout";
 import logo from "../assets/auralis-logo.png";
 
-export default function Login() {
+export default function Login({ onLogin }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -32,6 +32,7 @@ export default function Login() {
       // Handle response structure (whether response is { user: {...} } or directly {...})
       const userObj = data.user || data;
       localStorage.setItem("user", JSON.stringify(userObj));
+      onLogin?.(userObj);
 
       const userRole = userObj.role ? userObj.role.toLowerCase() : "";
 

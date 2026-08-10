@@ -344,6 +344,33 @@
   transition: opacity var(--transition-speed);
 }
 
+.profile-card-link {
+  padding: 9px;
+  color: inherit;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  text-decoration: none;
+  transition:
+    background-color var(--transition-speed),
+    border-color var(--transition-speed),
+    box-shadow var(--transition-speed);
+}
+
+.profile-card-link:hover {
+  background-color: rgba(255, 255, 255, 0.07);
+}
+
+.profile-card-link:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.8);
+  outline-offset: 2px;
+}
+
+.profile-card-link.active {
+  background-color: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: inset 3px 0 0 rgba(255, 255, 255, 0.65);
+}
+
 .profile-avatar {
   width: 42px;
   height: 42px;
@@ -356,6 +383,13 @@
   font-weight: 600;
   border: 2px solid rgba(255, 255, 255, 0.2);
   flex-shrink: 0;
+}
+
+.profile-avatar img {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
 }
 
 .profile-info {
@@ -381,6 +415,10 @@
 .sidebar-container.collapsed .profile-info {
   display: none;
   opacity: 0;
+}
+
+.sidebar-container.collapsed .profile-card-link {
+  padding: 6px;
 }
 
 /* Logout Button */
@@ -482,6 +520,10 @@
   background-color: #f3f6f9;
 }
 
+.mobile-menu-button {
+  display: none;
+}
+
 .navbar-title-container {
   display: flex;
   flex-direction: column;
@@ -505,6 +547,40 @@
   display: flex;
   align-items: center;
   gap: 24px;
+}
+
+.demo-role-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.demo-role-icon {
+  flex: 0 0 auto;
+  color: #d97706;
+}
+
+.demo-role-label {
+  flex: 0 0 auto;
+  color: #8c9ba5;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.notification-button {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.notification-indicator {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 8px;
+  height: 8px;
+  background-color: var(--logout-color);
+  border-radius: 50%;
 }
 
 /* Quick User Role Switcher (For Capstone presentation and testing) */
@@ -560,6 +636,40 @@
 }
 
 @media (max-width: 1024px) {
+  .navbar-container {
+    padding: 0 18px;
+  }
+
+  .navbar-left {
+    gap: 12px;
+    min-width: 0;
+  }
+
+  .navbar-title-container {
+    min-width: 0;
+  }
+
+  .navbar-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .navbar-right {
+    gap: 12px;
+  }
+
+  .demo-role-label,
+  .demo-role-icon {
+    display: none;
+  }
+
+  .role-switcher-dropdown {
+    max-width: 165px;
+  }
+}
+
+@media (max-width: 768px) {
   .sidebar-container {
     position: fixed;
     left: -280px;
@@ -585,6 +695,80 @@
   }
 
   .navbar-container {
-    padding: 0 16px;
+    height: 64px;
+    padding: 0 12px;
+  }
+
+  .mobile-menu-button {
+    display: inline-flex;
+  }
+
+  .desktop-sidebar-button {
+    display: none;
+  }
+
+  .navbar-left {
+    gap: 8px;
+  }
+
+  .navbar-title {
+    margin: 0;
+    font-size: 1rem;
+  }
+
+  .navbar-breadcrumbs {
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .navbar-right {
+    gap: 6px;
+  }
+
+  .role-switcher-dropdown {
+    max-width: 132px;
+    padding: 6px 8px;
+    font-size: 0.75rem;
+  }
+
+  .page-content-area {
+    padding: 22px 18px;
+  }
+}
+
+@media (max-width: 560px) {
+  .navbar-container {
+    padding: 0 8px;
+  }
+
+  .navbar-breadcrumbs {
+    display: none;
+  }
+
+  .role-switcher-dropdown {
+    width: 108px;
+    max-width: 108px;
+  }
+
+  .toggle-sidebar-btn {
+    padding: 7px;
+  }
+
+  .page-content-area {
+    padding: 18px 14px;
+  }
+}
+
+@media (max-width: 400px) {
+  .navbar-title {
+    max-width: 74px;
+  }
+
+  .role-switcher-dropdown {
+    width: 98px;
+    max-width: 98px;
+    padding-right: 4px;
   }
 }

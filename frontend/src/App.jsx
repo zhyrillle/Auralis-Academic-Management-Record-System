@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Login from "./pages/Login";
 import ForgotPassword from "./pages/ForgotPassword";
 import OtpVerify from "./pages/OtpVerify";
@@ -16,12 +16,44 @@ import DashboardLayout from "./components/layout/DashboardLayout";
 import AdviserSections from "./pages/adviser/AdviserSections";
 import MasterSheet from "./pages/adviser/MasterSheet";
 import AdviserFeedback from "./pages/adviser/AdviserFeedback";
+import ProfilePage from "./pages/ProfilePage";
+
+const defaultUser = {
+  role: "principal",
+  name: "Harvey Babia",
+};
+
+const toLayoutUser = (apiUser) => {
+  if (!apiUser) return defaultUser;
+
+  const databaseRole = String(apiUser.role || "").toLowerCase();
+  const layoutRole = databaseRole === "subject teacher" ? "adviser" : databaseRole;
+  const name = [apiUser.first_name, apiUser.middle_name, apiUser.last_name]
+    .filter(Boolean)
+    .join(" ");
+
+  return {
+    ...apiUser,
+    role: layoutRole || defaultUser.role,
+    databaseRole: apiUser.role,
+    name: name || apiUser.name || defaultUser.name,
+  };
+};
+
+const getInitialUser = () => {
+  try {
+    return toLayoutUser(JSON.parse(localStorage.getItem("user") || "null"));
+  } catch {
+    return defaultUser;
+  }
+};
 
 export default function App() {
-  const [user, setUser] = useState({
-    role: "principal",
-    name: "Harvey Babia",
-  });
+  const [user, setUser] = useState(getInitialUser);
+
+  const handleAuthenticatedUser = (authenticatedUser) => {
+    setUser(toLayoutUser(authenticatedUser));
+  };
 
   const handleRoleChange = (newRole) => {
     let name = "Harvey Babia";
@@ -34,16 +66,13 @@ export default function App() {
     ) {
       name = "Jolly Bee";
     }
-    setUser({
-      role: newRole,
-      name,
-    });
+    setUser((currentUser) => ({ ...currentUser, role: newRole, name }));
   };
 
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Login />} />
+        <Route path="/" element={<Login onLogin={handleAuthenticatedUser} />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/otp" element={<OtpVerify />} />
         <Route path="/reset-password" element={<ResetPassword />} />
@@ -54,6 +83,17 @@ export default function App() {
             <DashboardLayout user={user} onRoleChange={handleRoleChange} />
           }
         >
+          {/* Shared profile route for every signed-in account */}
+          <Route
+            path="/profile"
+            element={
+              <ProfilePage
+                user={user}
+                onUserUpdated={handleAuthenticatedUser}
+              />
+            }
+          />
+
           {/* 1. System Administrator */}
           <Route path="/system-admin/dashboard" element={<AdminDashboard />} />
           <Route

@@ -1,15 +1,30 @@
 const db = require('../config/db');
 
 const ALLOWED_ROLES = ['admin', 'principal', 'department head', 'subject teacher'];
+const PUBLIC_USER_COLUMNS = `
+  user_id,
+  role,
+  first_name,
+  middle_name,
+  last_name,
+  extension_name,
+  email,
+  pfp_url,
+  account_status,
+  last_login_at
+`;
 
 class User {
   static async findAll() {
-    const [rows] = await db.execute('SELECT user_id, role, first_name, middle_name, last_name, extension_name, email, pfp_url, account_status, last_login_at FROM USER');
+    const [rows] = await db.execute(`SELECT ${PUBLIC_USER_COLUMNS} FROM USER`);
     return rows;
   }
 
   static async findById(id) {
-    const [rows] = await db.execute('SELECT * FROM USER WHERE user_id = ?', [id]);
+    const [rows] = await db.execute(
+      `SELECT ${PUBLIC_USER_COLUMNS} FROM USER WHERE user_id = ?`,
+      [id]
+    );
     return rows[0];
   }
 
@@ -42,6 +57,48 @@ class User {
     const values = Object.values(data);
     const setClause = keys.map(key => `${key} = ?`).join(', ');
     await db.execute(`UPDATE USER SET ${setClause} WHERE user_id = ?`, [...values, id]);
+    return this.findById(id);
+  }
+
+  static async updateProfile(id, data) {
+    const {
+      first_name,
+      middle_name,
+      last_name,
+      extension_name,
+      email,
+    } = data;
+
+    await db.execute(
+      `UPDATE USER
+       SET first_name = ?, middle_name = ?, last_name = ?, extension_name = ?, email = ?
+       WHERE user_id = ?`,
+      [
+        first_name,
+        middle_name || null,
+        last_name,
+        extension_name || null,
+        email,
+        id,
+      ]
+    );
+
+    return this.findById(id);
+  }
+
+  static async updateProfilePicture(id, profilePictureUrl) {
+    await db.execute(
+      'UPDATE USER SET pfp_url = ? WHERE user_id = ?',
+      [profilePictureUrl, id]
+    );
+    return this.findById(id);
+  }
+
+  static async updateLastLogin(id) {
+    await db.execute(
+      'UPDATE USER SET last_login_at = CURRENT_TIMESTAMP WHERE user_id = ?',
+      [id]
+    );
     return this.findById(id);
   }
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { sidebarConfig } from "../../config/sidebarConfig";
 import { ChevronDown, LogOut, CircleUser } from "lucide-react";
@@ -10,33 +10,25 @@ export default function Sidebar({ user = { role: "principal" }, collapsed = fals
   const navigate = useNavigate();
   
   // Resolve mapping names dynamically
-  const roleKey = user.role?.toLowerCase() || "principal";
-  const menuItems = sidebarConfig[roleKey] || sidebarConfig["principal"] || [];
+  const rawRoleKey = user.role?.toLowerCase() || "principal";
+  const roleKey = rawRoleKey === "subject teacher" ? "adviser" : rawRoleKey;
+  const menuItems = sidebarConfig[roleKey] || sidebarConfig.principal;
+  const isProfileActive = location.pathname === "/profile";
 
-  // Track open states of submenus
+  // Track user-controlled submenu states and derive route-based expansion.
   const [openMenus, setOpenMenus] = useState({});
-
-  // Auto-expand submenu if one of its items is active on mount or location change
-  useEffect(() => {
-    const updatedOpen = { ...openMenus };
-    let changed = false;
-
-    menuItems.forEach((item, index) => {
-      if (item.submenu) {
-        const isChildActive = item.submenu.some(
-          (sub) => location.pathname === sub.path
-        );
-        if (isChildActive && !openMenus[index]) {
-          updatedOpen[index] = true;
-          changed = true;
-        }
-      }
-    });
-
-    if (changed) {
-      setOpenMenus(updatedOpen);
-    }
-  }, [location.pathname, menuItems]);
+  const routeOpenMenus = useMemo(
+    () =>
+      Object.fromEntries(
+        menuItems.map((item, index) => [
+          index,
+          Boolean(
+            item.submenu?.some((sub) => location.pathname === sub.path),
+          ),
+        ]),
+      ),
+    [location.pathname, menuItems],
+  );
 
   const toggleSubmenu = (index, e) => {
     // If sidebar is collapsed, we don't want to expand submenus inside the small bar,
@@ -45,12 +37,12 @@ export default function Sidebar({ user = { role: "principal" }, collapsed = fals
     e.stopPropagation();
     setOpenMenus((prev) => ({
       ...prev,
-      [index]: !prev[index],
+      [index]: !(prev[index] ?? routeOpenMenus[index]),
     }));
   };
 
   const handleLogout = () => {
-    // Handle mock logout by redirecting to login page
+    localStorage.removeItem("user");
     navigate("/");
   };
 
@@ -91,6 +83,11 @@ export default function Sidebar({ user = { role: "principal" }, collapsed = fals
   };
 
   const profile = getProfileData();
+  const profilePicture = user.pfp_url
+    ? /^(https?:|data:)/.test(user.pfp_url)
+      ? user.pfp_url
+      : `http://localhost:5000${user.pfp_url.startsWith("/") ? "" : "/"}${user.pfp_url}`
+    : null;
   const initials = profile.name
     .split(" ")
     .map((n) => n[0])
@@ -121,7 +118,7 @@ export default function Sidebar({ user = { role: "principal" }, collapsed = fals
               : false;
             const isDirectActive = location.pathname === item.path;
             const isActive = isDirectActive || isSubActive;
-            const isOpen = !!openMenus[index];
+            const isOpen = openMenus[index] ?? routeOpenMenus[index] ?? false;
 
             const IconComponent = item.icon;
 
@@ -200,15 +197,25 @@ export default function Sidebar({ user = { role: "principal" }, collapsed = fals
         {/* Footer Actions (Profile & Logout) */}
         <div className="sidebar-footer">
           {/* Profile Card */}
-          <div className="profile-card" title={`${profile.name} - ${profile.displayRole}`}>
+          <Link
+            to="/profile"
+            onClick={onCloseMobile}
+            className={`profile-card profile-card-link ${isProfileActive ? "active" : ""}`}
+            title={`${profile.name} - ${profile.displayRole}`}
+            aria-current={isProfileActive ? "page" : undefined}
+          >
             <div className="profile-avatar">
-              {initials || <CircleUser size={20} />}
+              {profilePicture ? (
+                <img src={profilePicture} alt="" />
+              ) : (
+                initials || <CircleUser size={20} />
+              )}
             </div>
             <div className="profile-info">
               <span className="profile-name">{profile.name}</span>
               <span className="profile-role">{profile.displayRole}</span>
             </div>
-          </div>
+          </Link>
 
           {/* Logout Button */}
           <button onClick={handleLogout} className="logout-btn" title="Logout">
