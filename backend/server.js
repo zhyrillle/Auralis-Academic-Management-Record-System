@@ -34,6 +34,7 @@ const attendanceRoutes = require('./routes/attendanceRoutes');
 const auditEventRoutes = require('./routes/auditEventRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const feedbackRoutes = require('./routes/feedbackRoutes');
+const departmentHeadDashboardRoutes = require('./routes/departmentHeadDashboard.routes');
 
 app.use('/api/schools', schoolRoutes);
 app.use('/api/school-years', schoolYearRoutes);
@@ -62,6 +63,7 @@ app.use('/api/attendance', attendanceRoutes);
 app.use('/api/audit-logs', auditEventRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/feedback', feedbackRoutes);
+app.use('/api/department-head', departmentHeadDashboardRoutes);
 
 app.get('/', (req, res) => {
   res.json({ status: 'Backend API is running' });

@@ -1,0 +1,594 @@
+/* ============================================================
+   Department Head Dashboard Styles
+   Colors:
+     Navy sidebar/bg: #0A1229
+     Primary accent:  #0033C4
+     Warning/at-risk:  #F4B400
+     Pass/green:       #16A34A
+     Fail/red:         #EF4444
+   ============================================================ */
+
+.dept-dashboard-page {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.dept-dashboard-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.dept-dashboard-title {
+  font-family: "DM Sans", sans-serif;
+  font-size: 28px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
+
+.dept-dashboard-subtitle {
+  font-size: 14px;
+  color: #475569;
+  margin: 4px 0 0 0;
+}
+
+.dept-filter-bar {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.dept-filter-control {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 180px;
+}
+
+.dept-filter-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.dept-filter-select {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid #d1d5db;
+  background: #ffffff;
+  color: #111827;
+  font-family: "Montserrat", sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.dept-filter-select:focus {
+  border-color: #0033C4;
+}
+
+.dept-error-banner {
+  background: #fef2f2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-size: 14px;
+}
+
+.dept-dashboard-body {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.dept-main-cards {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr;
+  gap: 24px;
+}
+
+.dept-card {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 8px 24px rgba(0, 0, 0, 0.04);
+  border: 1px solid #eef2f6;
+}
+
+.dept-card-wide {
+  grid-column: span 1;
+}
+
+.dept-card-narrow {
+  grid-column: span 1;
+}
+
+.dept-card-title {
+  font-family: "DM Sans", sans-serif;
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 16px 0;
+}
+
+.dept-card-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.dept-distribution-sy {
+  width: auto;
+  min-width: 180px;
+}
+
+.dept-no-data {
+  color: #475569;
+  font-size: 14px;
+}
+
+.dept-error-text {
+  color: #991b1b;
+  font-size: 14px;
+}
+
+/* Comparative Analysis */
+.dept-comparative-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.dept-comparative-row {
+  display: grid;
+  grid-template-columns: 90px 1fr auto auto;
+  align-items: center;
+  gap: 14px;
+}
+
+.dept-comparative-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.dept-comparative-bar-track {
+  height: 12px;
+  border-radius: 999px;
+  overflow: hidden;
+  display: flex;
+  background: #f1f5f9;
+}
+
+.dept-comparative-bar-above {
+  height: 100%;
+  background: #16A34A;
+  border-radius: 999px 0 0 999px;
+  transition: width 0.3s ease;
+}
+
+.dept-comparative-bar-fail {
+  height: 100%;
+  background: #EF4444;
+  border-radius: 0 999px 999px 0;
+  transition: width 0.3s ease;
+}
+
+.dept-comparative-counts {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  min-width: 100px;
+}
+
+.dept-passed-count {
+  font-size: 12px;
+  color: #16A34A;
+  font-weight: 600;
+}
+
+.dept-failed-count {
+  font-size: 12px;
+  color: #EF4444;
+  font-weight: 600;
+}
+
+.dept-comparative-rate {
+  min-width: 48px;
+  text-align: right;
+  font-weight: 700;
+  font-size: 14px;
+  color: #0f172a;
+}
+
+.dept-legend {
+  display: flex;
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.dept-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #334155;
+  font-weight: 500;
+}
+
+.dept-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.dept-legend-green {
+  background: #16A34A;
+}
+
+.dept-legend-red {
+  background: #EF4444;
+}
+
+/* Overall Pass Rate */
+.dept-pass-rate-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.dept-donut {
+  position: relative;
+  width: 140px;
+  height: 140px;
+}
+
+.dept-donut-svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.dept-donut-bg {
+  fill: none;
+  stroke: #EF4444;
+  stroke-width: 3.8;
+}
+
+.dept-donut-pass {
+  fill: none;
+  stroke: #16A34A;
+  stroke-width: 3.8;
+  stroke-linecap: round;
+}
+
+.dept-donut-center {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+
+.dept-donut-percent {
+  font-family: "DM Sans", sans-serif;
+  font-size: 24px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.dept-pass-rate-subtitle {
+  font-size: 13px;
+  color: #475569;
+  text-align: center;
+  margin: 0;
+}
+
+/* Stat Cards */
+.dept-stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+.dept-stat-card {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 8px 24px rgba(0, 0, 0, 0.04);
+  border: 1px solid #eef2f6;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dept-stat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dept-stat-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.dept-stat-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dept-stat-value {
+  font-family: "DM Sans", sans-serif;
+  font-size: 28px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.dept-stat-caption {
+  font-size: 13px;
+  color: #475569;
+}
+
+.dept-stat-caption-inline {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dept-stat-progress-track {
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: #eef2f6;
+  overflow: hidden;
+}
+
+.dept-stat-progress-fill {
+  height: 100%;
+  background: #0033C4;
+  border-radius: 999px;
+}
+
+/* Tables */
+.dept-table-wrap {
+  overflow-x: auto;
+}
+
+.dept-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 720px;
+}
+
+.dept-table th {
+  background: #0A1229;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 12px 14px;
+  text-align: left;
+}
+
+.dept-table td {
+  padding: 14px;
+  font-size: 14px;
+  color: #334155;
+  border-bottom: 1px solid #eef2f6;
+}
+
+.dept-no-data-row {
+  text-align: center;
+  color: #475569;
+  padding: 24px 0;
+}
+
+.dept-text-green {
+  color: #16A34A;
+  font-weight: 600;
+}
+
+/* Pills */
+.dept-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.dept-pill-icon {
+  font-size: 10px;
+  line-height: 1;
+}
+
+.dept-pill-amber {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.dept-pill-green {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.dept-pill-red {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.dept-pill-neutral {
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+}
+
+/* Progress cell (submission monitor) */
+.dept-progress-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dept-progress-track {
+  flex: 1;
+  height: 8px;
+  border-radius: 999px;
+  background: #eef2f6;
+  overflow: hidden;
+}
+
+.dept-progress-fill {
+  height: 100%;
+  background: #0033C4;
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+.dept-progress-text {
+  font-size: 13px;
+  color: #334155;
+  font-weight: 600;
+  min-width: 40px;
+  text-align: right;
+}
+
+/* Grade Distribution */
+.dept-grade-table th,
+.dept-grade-table td {
+  text-align: center;
+}
+
+.dept-grade-row-header {
+  text-align: left;
+}
+
+.dept-grade-super-header {
+  background: #0A1229;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 10px 14px;
+}
+
+.dept-average-row {
+  background: #f8fafc;
+}
+
+.dept-card-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+
+.dept-link-btn {
+  background: none;
+  border: none;
+  color: #0033C4;
+  font-family: "Montserrat", sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 8px;
+  transition: background 0.2s;
+}
+
+.dept-link-btn:hover {
+  background: #eff6ff;
+}
+
+/* Skeletons */
+.dept-skeleton-bar {
+  height: 16px;
+  border-radius: 8px;
+  background: linear-gradient(90deg, #eef2f6 25%, #f8fafc 50%, #eef2f6 75%);
+  background-size: 200% 100%;
+  animation: dept-shimmer 1.4s infinite;
+  margin-bottom: 12px;
+}
+
+.dept-skeleton-ring {
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  background: linear-gradient(90deg, #eef2f6 25%, #f8fafc 50%, #eef2f6 75%);
+  background-size: 200% 100%;
+  animation: dept-shimmer 1.4s infinite;
+  margin: 0 auto;
+}
+
+.dept-skeleton-table {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dept-skeleton-table::before {
+  content: "";
+  display: block;
+  height: 18px;
+  border-radius: 8px;
+  background: linear-gradient(90deg, #eef2f6 25%, #f8fafc 50%, #eef2f6 75%);
+  background-size: 200% 100%;
+  animation: dept-shimmer 1.4s infinite;
+}
+
+@keyframes dept-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .dept-main-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .dept-stats-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .dept-stats-row {
+    grid-template-columns: 1fr;
+  }
+
+  .dept-comparative-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .dept-comparative-counts {
+    flex-direction: row;
+    justify-content: flex-end;
+  }
+}
