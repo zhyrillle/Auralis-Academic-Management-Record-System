@@ -1,0 +1,396 @@
+/* src/styles/sectionDetails.css */
+@import "./themes.css";
+
+/* ---- Page Container & Animation ---- */
+.section-details-page {
+  animation: gsfadeIn 0.4s ease-out;
+  font-family: var(--font-family, 'Outfit', 'Inter', sans-serif);
+}
+
+@keyframes gsfadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ---- Header Bar (Following gradingSheet.css) ---- */
+.section-details-header-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.section-details-title-area {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.back-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  background-color: #ffffff;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.2s;
+  padding: 0;
+}
+
+.back-btn:hover {
+  background-color: #f8fafc;
+  color: var(--primary-highlight-color, #123062);
+  border-color: var(--primary-highlight-color, #123062);
+}
+
+.section-details-title {
+  font-family: var(--font-dm-sans);
+  font-size: var(--fs-h2);
+  font-weight: 700;
+  color: var(--primary-highlight-color);
+  cursor: pointer;
+  margin: 0;
+}
+
+/* Metric KPI Summary Grid */
+.kpi-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+@media (min-width: 768px) {
+  .kpi-summary-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .kpi-summary-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+.kpi-card {
+  background-color: var(--bg-white, #ffffff);
+  border-radius: 10px;
+  padding: 1rem;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  height: 130px;
+}
+
+.kpi-label {
+  font-size: var(--fs-subtext);
+  color: var(--subtext-color);
+  font-family: var(--font-dm-sans);
+  font-weight: var(--fw-normal);
+}
+
+.kpi-count {
+  font-size: var(--fs-h3);
+  font-family: var(--font-dm-sans);
+  font-weight: var(--fw-bold);
+  padding-top: 8px;
+}
+
+.kpi-count.advancing {
+  color: var(--kpi-advancing-color, #10b981);
+}
+
+.kpi-count.benchmarking {
+  color: var(--kpi-benchmarking-color, #f97316);
+}
+
+.kpi-count.connecting {
+  color: var(--kpi-connecting-color, #fbbf24);
+}
+
+.kpi-count.developing {
+  color: var(--kpi-developing-color, #4f46e5);
+}
+
+.kpi-count.emerging {
+  color: var(--kpi-emerging-color, #f43f5e);
+}
+
+.kpi-count.atrisk {
+  color: var(--kpi-atrisk-color, #e11d48);
+}
+
+.kpi-range {
+  font-size: var(--fs-caption);
+  color: var(--subtext-color);
+  font-family: var(--font-dm-sans);
+  font-weight: var(--fw-normal);
+  padding-top: 30px;
+}
+
+/* Toolbar Row */
+.toolbar-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  flex-wrap: wrap;
+}
+
+/* Rectangular Filter Groups (Risk & Honor) */
+.filter-segmented-group {
+  display: inline-flex;
+  align-items: center;
+  height: 33px;
+  padding: 2px 22px;
+  border-radius: 10px;
+  background-color: #E9E9E9;
+  gap: 4px;
+  box-sizing: border-box;
+}
+
+.filter-rect-btn {
+  height: 25px;
+  padding: 0 14px;
+  font-family: var(--font-montserrat);
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 5px;
+  border: none;
+  background-color: transparent;
+  color: var(--subtext-color);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.filter-rect-btn:hover {
+  background-color: #A3A3A3;
+  color: #D9D9D9;
+}
+
+.filter-rect-btn.active {
+  background-color: var(--primary-color, #123062);
+  color: var(--white-text-color, #ffffff);
+}
+
+/* Main Table Container Card */
+.table-container-card {
+  background-color: var(--bg-white, #ffffff);
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  padding: 1.25rem 1.5rem;
+}
+
+/* Sub-Header Controls (NO bottom line/border below total students) */
+.table-sub-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 0.75rem;
+  margin-bottom: 0.5rem;
+  border-bottom: none;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.total-students-label {
+  font-size: var(--fs-subtext);
+  font-family: var(--font-dm-sans);
+  font-weight: var(--fw-medium);
+  color: var(--subtext-color);
+}
+
+.sub-header-controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.sort-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.sort-label {
+  font-size: var(--fs-subtext);
+  font-family: var(--font-inter);
+  font-weight: var(--fw-normal);
+  color: var(--subtext-color);
+}
+
+.sort-order-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 33px;
+  height: 33px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background-color: var(--bg-white, #ffffff);
+  cursor: pointer;
+  color: var(--primary-color, #123062);
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+  padding: 0;
+}
+
+.sort-order-btn:hover {
+  background-color: #f1f5f9;
+  border-color: var(--primary-color, #123062);
+}
+
+/* Table Structure */
+.section-data-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+/* Thickened line below column headers */
+.section-data-table thead tr {
+  border-bottom: 1px solid #929292;
+}
+
+.section-data-table th {
+  font-size: var(--fs-subtext);
+  font-weight: var(--fw-medium);
+  font-family: var(--font-dm-sans);
+  color: var(--subtext-color, #757575);
+  padding: 0.75rem 1rem;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+/* NO lines in between student records */
+.section-data-table tbody tr {
+  border-bottom: none;
+  transition: background-color 0.15s ease;
+}
+
+.section-data-table tbody tr:hover {
+  background-color: rgba(248, 250, 252, 0.9);
+}
+
+.section-data-table td {
+  padding: 0.875rem 1rem;
+  font-size: var(--fs-subtext);
+  font-family: var(--font-dm-sans);
+  font-weight: var(--fw-medium);
+  color: var(--subtext-color);
+  vertical-align: middle;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+/* Alignment classes */
+.text-left {
+  text-align: left;
+}
+
+.text-center {
+  text-align: center;
+}
+
+.student-lrn,
+.student-name {
+  color: var(--subtext-color);
+  vertical-align: middle;
+  line-height: 1.2;
+}
+
+/* Rectangular Status Badges taking full width of column header width */
+.badge-rect {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  text-align: center;
+  padding: 0.35rem 0.5rem;
+  font-size: var(--fs-subtext);
+  font-family: var(--font-dm-sans);
+  font-weight: var(--fw-medium);
+  border-radius: 8px;
+}
+
+/* Risk Badges using themes.css variables */
+.badge-risk-low {
+  background-color: var(--badge-risk-low-bg, #d1fae5);
+  color: var(--badge-risk-low-text, #047857);
+}
+
+.badge-risk-medium {
+  background-color: var(--badge-risk-medium-bg, #fef3c7);
+  color: var(--badge-risk-medium-text, #b45309);
+}
+
+.badge-risk-atrisk {
+  background-color: var(--badge-risk-atrisk-bg, #ffe4e6);
+  color: var(--badge-risk-atrisk-text, #be123c);
+}
+
+/* Honor Badges using themes.css variables */
+.badge-honor-with {
+  background-color: var(--badge-honor-with-bg);
+  color: var(--badge-honor-with-text);
+}
+
+.badge-honor-high {
+  background-color: var(--badge-honor-high-bg);
+  color: var(--badge-honor-high-text);
+}
+
+.badge-honor-highest {
+  background-color: var(--badge-honor-highest-bg);
+  color: var(--badge-honor-highest-text);
+}
+
+.badge-honor-none {
+  background-color: var(--badge-honor-none-bg);
+  color: var(--badge-honor-none-text);
+}
+
+/* Gold Action Eye Button */
+.action-eye-btn {
+  background-color: var(--button-secondary-color, #c9a227);
+  color: var(--white-text-color, #ffffff);
+  width: 100%;
+  max-width: 65px;
+  height: 28px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.15s ease;
+  padding: 0;
+  margin: 0 auto;
+}
+
+.action-eye-btn:hover {
+  background-color: var(--button-secondary-darker-color, #886c14);
+}
