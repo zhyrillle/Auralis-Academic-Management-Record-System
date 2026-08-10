@@ -1,9 +1,7 @@
 import { useLocation } from "react-router-dom";
-import { Menu, ChevronRight, Bell, Sparkles } from "lucide-react";
+import { Menu, ChevronRight, Bell } from "lucide-react";
 
 export default function Navbar({
-  user,
-  onRoleChange,
   onToggleSidebar,
   onToggleMobileSidebar,
 }) {
@@ -63,25 +61,8 @@ export default function Navbar({
         </div>
       </div>
 
-      {/* Right side: Quick Role Swapper & Notifications */}
+      {/* Right side: Notifications */}
       <div className="navbar-right">
-        {/* Capstone Role Switcher for live inspection */}
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <Sparkles size={16} style={{ color: "#d97706" }} />
-          <span style={{ fontSize: "12px", fontWeight: "600", color: "#8c9ba5" }}>Demo Role:</span>
-          <select
-            value={user.role}
-            onChange={(e) => onRoleChange(e.target.value)}
-            className="role-switcher-dropdown"
-          >
-            <option value="system-admin">System Administrator</option>
-            <option value="principal">Principal</option>
-            <option value="department-head">Department Head</option>
-            <option value="adviser">Adviser</option>
-            <option value="teacher">Subject Teacher</option>
-          </select>
-        </div>
-
         <button className="toggle-sidebar-btn" style={{ position: "relative" }}>
           <Bell size={20} />
           <span

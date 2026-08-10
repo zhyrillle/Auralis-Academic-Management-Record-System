@@ -18,34 +18,28 @@ import MasterSheet from "./pages/adviser/MasterSheet";
 import AdviserFeedback from "./pages/adviser/AdviserFeedback";
 import AtRiskBreakdown from "./pages/principal/AtRiskBreakdown";
 import AtRiskPrediction from "./pages/principal/AtRiskPrediction";
+import { getStoredUser } from "./utils/auth";
 
 export default function App() {
-  const [user, setUser] = useState({
-    role: "principal",
-    name: "Harvey Babia",
-  });
+  const [user, setUser] = useState(() => getStoredUser());
 
-  const handleRoleChange = (newRole) => {
-    let name = "Harvey Babia";
-    const roleLower = newRole.toLowerCase();
-    if (roleLower === "system-admin" || roleLower === "admin") {
-      name = "Admin User";
-    } else if (
-      roleLower === "department-head" ||
-      roleLower === "departmenthead"
-    ) {
-      name = "Jolly Bee";
-    }
-    setUser({
-      role: newRole,
-      name,
-    });
+  const handleLoginSuccess = (userObj) => {
+    setUser(userObj);
+  };
+
+  const handleLogout = () => {
+    setUser(null);
   };
 
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Login />} />
+        <Route
+          path="/"
+          element={
+            <Login user={user} onLoginSuccess={handleLoginSuccess} />
+          }
+        />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/otp" element={<OtpVerify />} />
         <Route path="/reset-password" element={<ResetPassword />} />
@@ -53,7 +47,7 @@ export default function App() {
         {/* Protected Dashboard Layout routes */}
         <Route
           element={
-            <DashboardLayout user={user} onRoleChange={handleRoleChange} />
+            <DashboardLayout user={user} onLogout={handleLogout} />
           }
         >
           {/* 1. System Administrator */}
