@@ -16,6 +16,8 @@ import DashboardLayout from "./components/layout/DashboardLayout";
 import AdviserSections from "./pages/adviser/AdviserSections";
 import MasterSheet from "./pages/adviser/MasterSheet";
 import AdviserFeedback from "./pages/adviser/AdviserFeedback";
+import AtRiskBreakdown from "./pages/principal/AtRiskBreakdown";
+import AtRiskPrediction from "./pages/principal/AtRiskPrediction";
 
 export default function App() {
   const [user, setUser] = useState({
@@ -70,11 +72,11 @@ export default function App() {
           <Route path="/principal/dashboard" element={<PrincipalDashboard />} />
           <Route
             path="/principal/at-risk-students/prediction"
-            element={<PlaceholderPage />}
+            element={<AtRiskPrediction />}
           />
           <Route
             path="/principal/at-risk-students/breakdown"
-            element={<PlaceholderPage />}
+            element={<AtRiskBreakdown />}
           />
           <Route
             path="/principal/performance-level/grade-levels"
