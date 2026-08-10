@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Camera,
   CheckCircle2,
+  Eye,
   LoaderCircle,
   LockKeyhole,
   Mail,
@@ -127,6 +128,7 @@ export default function ProfilePage({ user, onUserUpdated }) {
   const [pendingAvatar, setPendingAvatar] = useState(null);
   const [avatarError, setAvatarError] = useState("");
   const [isAvatarUploading, setIsAvatarUploading] = useState(false);
+  const [isAvatarPreviewOpen, setIsAvatarPreviewOpen] = useState(false);
   const [cropZoom, setCropZoom] = useState(1);
   const [cropPosition, setCropPosition] = useState({ x: 0, y: 0 });
   const [cropImageSize, setCropImageSize] = useState({ width: 1, height: 1 });
@@ -197,6 +199,17 @@ export default function ProfilePage({ user, onUserUpdated }) {
     const timer = window.setTimeout(() => setToastMessage(""), 3000);
     return () => window.clearTimeout(timer);
   }, [toastMessage]);
+
+  useEffect(() => {
+    if (!isAvatarPreviewOpen) return undefined;
+
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape") setIsAvatarPreviewOpen(false);
+    };
+
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [isAvatarPreviewOpen]);
 
   useEffect(
     () => () => {
@@ -509,11 +522,25 @@ export default function ProfilePage({ user, onUserUpdated }) {
 
       <section className="profile-identity-card" aria-labelledby="profile-name">
         <div className="profile-avatar-area">
-          <div className="profile-avatar-large" aria-busy={isAvatarUploading}>
+          <button
+            type="button"
+            className={`profile-avatar-large ${displayedAvatar ? "profile-avatar-preview-trigger" : ""}`}
+            onClick={() => displayedAvatar && setIsAvatarPreviewOpen(true)}
+            aria-label={displayedAvatar ? "View profile picture" : "No profile picture to preview"}
+            aria-busy={isAvatarUploading}
+            disabled={!displayedAvatar || isAvatarUploading}
+            title={displayedAvatar ? "View profile picture" : undefined}
+          >
             {displayedAvatar ? (
               <img src={displayedAvatar} alt={`${fullName} profile`} />
             ) : (
               <span aria-hidden="true">{initials || "AU"}</span>
+            )}
+            {displayedAvatar && !isAvatarUploading && (
+              <span className="profile-avatar-view-overlay" aria-hidden="true">
+                <Eye size={20} />
+                <span>View photo</span>
+              </span>
             )}
             {isAvatarUploading && (
               <span className="profile-avatar-upload-overlay" role="status">
@@ -521,7 +548,7 @@ export default function ProfilePage({ user, onUserUpdated }) {
                 <span>Uploading</span>
               </span>
             )}
-          </div>
+          </button>
           <button type="button" className="profile-camera-button" onClick={openAvatarPicker} aria-label="Choose a new profile picture" title="Change profile picture" disabled={isAvatarUploading}>
             <Camera size={18} aria-hidden="true" />
           </button>
@@ -541,6 +568,40 @@ export default function ProfilePage({ user, onUserUpdated }) {
           {avatarError && <p className="profile-avatar-error" role="alert">{avatarError}</p>}
         </div>
       </section>
+
+      {isAvatarPreviewOpen && displayedAvatar && (
+        <div
+          className="profile-picture-preview-overlay"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setIsAvatarPreviewOpen(false);
+          }}
+        >
+          <section
+            className="profile-picture-preview-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="profile-picture-preview-title"
+          >
+            <header className="profile-picture-preview-modal__header">
+              <div>
+                <h2 id="profile-picture-preview-title">Profile picture</h2>
+                <p>{fullName}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAvatarPreviewOpen(false)}
+                aria-label="Close profile picture preview"
+                autoFocus
+              >
+                <X size={20} aria-hidden="true" />
+              </button>
+            </header>
+            <div className="profile-picture-preview-modal__body">
+              <img src={displayedAvatar} alt={`${fullName} profile picture`} />
+            </div>
+          </section>
+        </div>
+      )}
 
       <section className="profile-information-card" aria-labelledby="personal-info-title">
         <div className="profile-information-card__header">
