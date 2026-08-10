@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { sidebarConfig } from "../../config/sidebarConfig";
 import { normalizeRole, getRoleDisplayTitle, removeStoredUser, getRoleDefaultPath } from "../../utils/auth";
@@ -11,41 +11,35 @@ export default function Sidebar({ user, onLogout, collapsed = false, mobileOpen 
   const navigate = useNavigate();
   
   // Resolve mapping names dynamically based on normalized user role
-  const roleKey = normalizeRole(user?.role);
-  const menuItems = sidebarConfig[roleKey] || sidebarConfig[user?.role] || sidebarConfig["principal"] || [];
+  const roleKey = normalizeRole(user);
+  const menuItems = useMemo(
+    () => sidebarConfig[roleKey] || sidebarConfig[user?.role] || sidebarConfig.principal || [],
+    [roleKey, user?.role],
+  );
   const defaultDashboardPath = getRoleDefaultPath(user?.role);
+  const isProfileActive = location.pathname === "/profile";
 
-  // Track open states of submenus
+  // Track user-controlled submenu states and derive route-based expansion.
   const [openMenus, setOpenMenus] = useState({});
-
-  // Auto-expand submenu if one of its items is active on mount or location change
-  useEffect(() => {
-    const updatedOpen = { ...openMenus };
-    let changed = false;
-
-    menuItems.forEach((item, index) => {
-      if (item.submenu) {
-        const isChildActive = item.submenu.some(
-          (sub) => location.pathname === sub.path
-        );
-        if (isChildActive && !openMenus[index]) {
-          updatedOpen[index] = true;
-          changed = true;
-        }
-      }
-    });
-
-    if (changed) {
-      setOpenMenus(updatedOpen);
-    }
-  }, [location.pathname, menuItems]);
+  const routeOpenMenus = useMemo(
+    () =>
+      Object.fromEntries(
+        menuItems.map((item, index) => [
+          index,
+          Boolean(
+            item.submenu?.some((sub) => location.pathname === sub.path),
+          ),
+        ]),
+      ),
+    [location.pathname, menuItems],
+  );
 
   const toggleSubmenu = (index, e) => {
     e.preventDefault();
     e.stopPropagation();
     setOpenMenus((prev) => ({
       ...prev,
-      [index]: !prev[index],
+      [index]: !(prev[index] ?? routeOpenMenus[index]),
     }));
   };
 
@@ -67,6 +61,7 @@ export default function Sidebar({ user, onLogout, collapsed = false, mobileOpen 
 
   const profileName = getUserName();
   const displayRole = getRoleDisplayTitle(user?.role);
+  const profilePicture = user?.pfp_url || null;
   const initials = profileName
     .split(" ")
     .filter(Boolean)
@@ -98,7 +93,7 @@ export default function Sidebar({ user, onLogout, collapsed = false, mobileOpen 
               : false;
             const isDirectActive = location.pathname === item.path;
             const isActive = isDirectActive || isSubActive;
-            const isOpen = !!openMenus[index];
+            const isOpen = openMenus[index] ?? routeOpenMenus[index] ?? false;
 
             const IconComponent = item.icon;
 
@@ -177,15 +172,25 @@ export default function Sidebar({ user, onLogout, collapsed = false, mobileOpen 
         {/* Footer Actions (Profile & Logout) */}
         <div className="sidebar-footer">
           {/* Profile Card */}
-          <div className="profile-card" title={`${profileName} - ${displayRole}`}>
+          <Link
+            to="/profile"
+            onClick={onCloseMobile}
+            className={`profile-card profile-card-link ${isProfileActive ? "active" : ""}`}
+            title={`${profileName} - ${displayRole}`}
+            aria-current={isProfileActive ? "page" : undefined}
+          >
             <div className="profile-avatar">
-              {initials || <CircleUser size={20} />}
+              {profilePicture ? (
+                <img src={profilePicture} alt="" />
+              ) : (
+                initials || <CircleUser size={20} />
+              )}
             </div>
             <div className="profile-info">
               <span className="profile-name">{profileName}</span>
               <span className="profile-role">{displayRole}</span>
             </div>
-          </div>
+          </Link>
 
           {/* Logout Button */}
           <button onClick={handleLogout} className="logout-btn" title="Logout">

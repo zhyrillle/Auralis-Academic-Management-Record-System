@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Login from "./pages/Login";
 import ForgotPassword from "./pages/ForgotPassword";
 import OtpVerify from "./pages/OtpVerify";
@@ -16,16 +16,22 @@ import DashboardLayout from "./components/layout/DashboardLayout";
 import AdviserSections from "./pages/adviser/AdviserSections";
 import MasterSheet from "./pages/adviser/MasterSheet";
 import AdviserFeedback from "./pages/adviser/AdviserFeedback";
+import ProfilePage from "./pages/ProfilePage";
 import AtRiskBreakdown from "./pages/principal/AtRiskBreakdown";
 import AtRiskPrediction from "./pages/principal/AtRiskPrediction";
 import GradeReopeningRequest from "./pages/adviser/GradeReopeningRequest";
-import { getStoredUser } from "./utils/auth";
+import { getStoredUser, setStoredUser } from "./utils/auth";
 
 export default function App() {
   const [user, setUser] = useState(() => getStoredUser());
 
   const handleLoginSuccess = (userObj) => {
     setUser(userObj);
+  };
+
+  const handleUserUpdated = (updatedUser) => {
+    setStoredUser(updatedUser);
+    setUser(updatedUser);
   };
 
   const handleLogout = () => {
@@ -51,6 +57,17 @@ export default function App() {
             <DashboardLayout user={user} onLogout={handleLogout} />
           }
         >
+          {/* Shared profile route for every signed-in account */}
+          <Route
+            path="/profile"
+            element={
+              <ProfilePage
+                user={user}
+                onUserUpdated={handleUserUpdated}
+              />
+            }
+          />
+
           {/* 1. System Administrator */}
           <Route path="/system-admin/dashboard" element={<AdminDashboard />} />
           <Route

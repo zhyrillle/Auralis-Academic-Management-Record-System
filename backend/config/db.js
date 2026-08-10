@@ -1,5 +1,5 @@
-require('dotenv').config();
-const mysql = require('mysql2/promise');
+require("dotenv").config();
+const mysql = require("mysql2/promise");
 let connectionUri = process.env.DATABASE_URL;
 
 const pool = mysql.createPool({
@@ -7,12 +7,13 @@ const pool = mysql.createPool({
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
-  
+  timezone: "Z",
+
   ssl: {
-    rejectUnauthorized: false
-  }
+    rejectUnauthorized: false,
+  },
 });
 
-console.log('MySQL Connection Pool Initialized.');
+console.log("MySQL Connection Pool Initialized.");
 
 module.exports = pool;
