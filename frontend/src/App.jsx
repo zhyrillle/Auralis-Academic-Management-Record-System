@@ -18,6 +18,7 @@ import MasterSheet from "./pages/adviser/MasterSheet";
 import AdviserFeedback from "./pages/adviser/AdviserFeedback";
 import AtRiskBreakdown from "./pages/principal/AtRiskBreakdown";
 import AtRiskPrediction from "./pages/principal/AtRiskPrediction";
+import GradeReopeningRequest from "./pages/adviser/GradeReopeningRequest";
 import { getStoredUser } from "./utils/auth";
 
 export default function App() {
@@ -120,7 +121,7 @@ export default function App() {
           <Route path="/adviser/master-sheet" element={<MasterSheet />} />
           <Route path="/adviser/performance" element={<PerformanceReport />} />
           <Route path="/adviser/feedback" element={<AdviserFeedback />} />
-          <Route path="/adviser/request" element={<PlaceholderPage />} />
+          <Route path="/adviser/request" element={<GradeReopeningRequest />} />
 
           {/* 5. Subject Teacher */}
           <Route path="/teacher/dashboard" element={<TeacherDashboard />} />
@@ -141,7 +142,9 @@ export default function App() {
             element={<PlaceholderPage />}
           />
           <Route
-            path="/teacher/request" element={<PlaceholderPage />} />
+            path="/teacher/request"
+            element={<GradeReopeningRequest />}
+          />
         </Route>
       </Routes>
     </BrowserRouter>
