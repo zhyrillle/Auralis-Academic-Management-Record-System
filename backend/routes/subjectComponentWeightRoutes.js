@@ -1,6 +1,131 @@
 const express = require('express');
 const router = express.Router();
 const SubjectComponentWeight = require('../models/SubjectComponentWeight');
+const SchoolYear = require('../models/SchoolYear');
+
+const isPositiveInteger = (value) => Number.isInteger(Number(value)) && Number(value) > 0;
+
+const validateConfiguration = (weights) => {
+  if (!Array.isArray(weights) || weights.length === 0) {
+    return 'At least one subject weight is required.';
+  }
+
+  const totalsBySubject = new Map();
+  const componentsBySubject = new Map();
+
+  for (const weight of weights) {
+    if (!isPositiveInteger(weight.subject_id) || !isPositiveInteger(weight.component_type_id)) {
+      return 'Every weight must have a valid subject and component type.';
+    }
+
+    const percentage = Number(weight.percentage);
+    if (!Number.isFinite(percentage) || percentage < 0 || percentage > 100) {
+      return 'Every percentage must be between 0 and 100.';
+    }
+
+    const subjectId = Number(weight.subject_id);
+    const componentId = Number(weight.component_type_id);
+    const componentKey = `${subjectId}:${componentId}`;
+    const subjectComponents = componentsBySubject.get(subjectId) || new Set();
+
+    if (subjectComponents.has(componentKey)) {
+      return 'A component type may only appear once per subject.';
+    }
+
+    subjectComponents.add(componentKey);
+    componentsBySubject.set(subjectId, subjectComponents);
+    totalsBySubject.set(subjectId, (totalsBySubject.get(subjectId) || 0) + percentage);
+  }
+
+  for (const total of totalsBySubject.values()) {
+    if (Math.abs(total - 100) > 0.001) {
+      return 'Component weights for every subject must total exactly 100%.';
+    }
+  }
+
+  return null;
+};
+
+router.get('/configuration/:schoolYearId', async (req, res) => {
+  if (!isPositiveInteger(req.params.schoolYearId)) {
+    return res.status(400).json({ error: 'Invalid school year ID.' });
+  }
+
+  try {
+    const rows = await SubjectComponentWeight.findConfiguration(
+      Number(req.params.schoolYearId)
+    );
+    res.json({ school_year_id: Number(req.params.schoolYearId), rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/configuration/:schoolYearId/inherit', async (req, res) => {
+  if (!isPositiveInteger(req.params.schoolYearId)) {
+    return res.status(400).json({ error: 'Invalid school year ID.' });
+  }
+
+  try {
+    const result = await SubjectComponentWeight.inheritFromPreviousSchoolYear(
+      Number(req.params.schoolYearId)
+    );
+
+    res.json({
+      message:
+        result.inserted_count > 0
+          ? 'Component weights inherited from the previous school year.'
+          : 'No additional component weights needed to be inherited.',
+      school_year_id: Number(req.params.schoolYearId),
+      ...result,
+    });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: err.message });
+  }
+});
+
+router.put('/configuration/:schoolYearId', async (req, res) => {
+  if (!isPositiveInteger(req.params.schoolYearId)) {
+    return res.status(400).json({ error: 'Invalid school year ID.' });
+  }
+
+  const validationError = validateConfiguration(req.body.weights);
+  if (validationError) {
+    return res.status(400).json({ error: validationError });
+  }
+
+  try {
+    const schoolYear = await SchoolYear.findById(
+      Number(req.params.schoolYearId)
+    );
+
+    if (!schoolYear) {
+      return res.status(404).json({ error: 'School year not found.' });
+    }
+
+    if (String(schoolYear.status).toLowerCase() !== 'ongoing') {
+      return res.status(409).json({
+        error: 'Only the ongoing school-year configuration can be edited.',
+      });
+    }
+
+    const rows = await SubjectComponentWeight.saveConfiguration(
+      Number(req.params.schoolYearId),
+      req.body.weights.map((weight) => ({
+        subject_id: Number(weight.subject_id),
+        component_type_id: Number(weight.component_type_id),
+        percentage: Number(weight.percentage),
+      }))
+    );
+    res.json({
+      message: 'Component weights saved successfully.',
+      school_year_id: Number(req.params.schoolYearId),
+      rows,
+    });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: err.message });
+  }
+});
 
 router.get('/', async (req, res) => {
   try {
