@@ -6,20 +6,24 @@ export default function StatCard({
   className = "",
   variant = "primary",
 }) {
-  const classes = ["stat-card", `stat-card--${variant}`, className]
+  const classes = [
+    "summary-stat-card",
+    `summary-stat-card--${variant}`,
+    className,
+  ]
     .filter(Boolean)
     .join(" ");
 
   return (
     <article className={classes}>
-      <div className="stat-card__content">
-        <p className="stat-card__title">{title}</p>
-        <strong className="stat-card__value">{value}</strong>
-        <p className="stat-card__description">{description}</p>
+      <div className="summary-stat-card__content">
+        <p className="summary-stat-card__title">{title}</p>
+        <strong className="summary-stat-card__value">{value}</strong>
+        <p className="summary-stat-card__description">{description}</p>
       </div>
 
       {Icon && (
-        <div className="stat-card__icon" aria-hidden="true">
+        <div className="summary-stat-card__icon" aria-hidden="true">
           <Icon size={24} strokeWidth={2} />
         </div>
       )}
