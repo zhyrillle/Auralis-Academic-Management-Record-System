@@ -11,6 +11,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import DropdownSelect from "../../components/common/DropdownSelect";
 import {
   getSchoolYears,
   getSubjectWeightConfiguration,
@@ -878,28 +879,20 @@ export default function WSConfig() {
             {completedSchoolYears.length > 0 ? (
               <>
                 <div className="ws-config-history-toolbar">
-                  <label>
+                  <div className="ws-config-history-school-year">
                     <span>School Year</span>
-                    <span className="ws-config-history-select-control">
-                      <select
-                        value={historySchoolYearId}
-                        onChange={(event) =>
-                          loadHistoryConfiguration(event.target.value)
-                        }
-                        disabled={isHistoryLoading}
-                      >
-                        {completedSchoolYears.map((schoolYear) => (
-                          <option
-                            key={schoolYear.school_year_id}
-                            value={schoolYear.school_year_id}
-                          >
-                            {formatSchoolYear(schoolYear)}
-                          </option>
-                        ))}
-                      </select>
-                      <ChevronDown size={16} aria-hidden="true" />
-                    </span>
-                  </label>
+                    <DropdownSelect
+                      className="ws-config-history-dropdown"
+                      label="Historical school year"
+                      value={historySchoolYearId}
+                      onChange={loadHistoryConfiguration}
+                      disabled={isHistoryLoading}
+                      options={completedSchoolYears.map((schoolYear) => ({
+                        value: String(schoolYear.school_year_id),
+                        label: formatSchoolYear(schoolYear),
+                      }))}
+                    />
+                  </div>
                   <span className="ws-config-history-badge">Read-only</span>
                 </div>
 
