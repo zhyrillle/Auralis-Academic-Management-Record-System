@@ -196,7 +196,7 @@ export default function ProfilePage({ user, onUserUpdated }) {
 
   useEffect(() => {
     if (!toastMessage) return undefined;
-    const timer = window.setTimeout(() => setToastMessage(""), 3000);
+    const timer = window.setTimeout(() => setToastMessage(""), 3200);
     return () => window.clearTimeout(timer);
   }, [toastMessage]);
 
