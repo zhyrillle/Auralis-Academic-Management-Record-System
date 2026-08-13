@@ -697,8 +697,7 @@
   border-color: #dbe3ec;
 }
 
-.ws-config-history-close:focus-visible,
-.ws-config-history-toolbar select:focus-visible {
+.ws-config-history-close:focus-visible {
   outline: 3px solid rgba(37, 99, 235, 0.18);
   outline-offset: 2px;
 }
@@ -713,13 +712,13 @@
   border-bottom: 1px solid #d7e0e9;
 }
 
-.ws-config-history-toolbar label {
+.ws-config-history-school-year {
   display: inline-flex;
   align-items: center;
   gap: 11px;
 }
 
-.ws-config-history-toolbar label > span {
+.ws-config-history-school-year > span {
   color: #64748b;
   font-size: 10px;
   font-weight: 800;
@@ -727,36 +726,20 @@
   text-transform: uppercase;
 }
 
-.ws-config-history-select-control {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
+.ws-config-history-dropdown {
+  min-width: 190px;
 }
 
-.ws-config-history-toolbar select {
-  min-width: 190px;
+.ws-config-history-dropdown .dropdown-select__trigger {
   min-height: 40px;
-  padding: 8px 42px 8px 14px;
-  color: #1e293b;
-  background: #ffffff;
-  border: 1px solid #cbd5e1;
+  border-color: #cbd5e1;
   border-radius: 8px;
-  font: inherit;
   font-size: 13px;
   font-weight: 700;
-  appearance: none;
-  cursor: pointer;
 }
 
-.ws-config-history-toolbar select option {
-  padding: 8px 12px;
-}
-
-.ws-config-history-select-control svg {
-  position: absolute;
-  right: 13px;
-  color: #64748b;
-  pointer-events: none;
+.ws-config-history-dropdown .dropdown-select__menu {
+  z-index: 150;
 }
 
 .ws-config-history-badge {
@@ -1121,16 +1104,13 @@
     flex-direction: column;
   }
 
-  .ws-config-history-toolbar label {
+  .ws-config-history-school-year {
     align-items: flex-start;
     flex-direction: column;
-  }
-
-  .ws-config-history-select-control {
     width: 100%;
   }
 
-  .ws-config-history-toolbar select {
+  .ws-config-history-dropdown {
     width: 100%;
   }
 
