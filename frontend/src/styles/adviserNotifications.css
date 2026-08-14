@@ -1,0 +1,255 @@
+/* =========================================
+   Adviser Notifications Page
+   ========================================= */
+
+/* Page Wrapper */
+.notifications-page-container {
+    background-color: #f8fafc;
+    padding: 32px;
+    min-height: 100vh;
+    box-sizing: border-box;
+    font-family: var(--font-family, "Outfit", "Inter", sans-serif);
+}
+
+/* Page Title */
+.notifications-title {
+    font-size: 24px;
+    font-weight: 700;
+    color: #1e293b;
+    margin: 0 0 24px 0;
+}
+
+/* =========================================
+   Filter Controls
+   ========================================= */
+
+.notifications-filter-group {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 32px;
+}
+
+.filter-btn {
+    padding: 8px 36px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 700;
+    border: none;
+    cursor: pointer;
+    letter-spacing: 0.5px;
+    color: #ffffff;
+    transition:
+        background-color 0.2s ease,
+        transform 0.15s ease,
+        box-shadow 0.2s ease;
+}
+
+.filter-btn:hover {
+    transform: translateY(-1px);
+}
+
+.filter-btn:active {
+    transform: translateY(0);
+}
+
+.filter-btn.active {
+    background-color: #d9a21b;
+    box-shadow: 0 3px 8px rgba(217, 162, 27, 0.2);
+}
+
+.filter-btn.inactive {
+    background-color: #64748b;
+}
+
+/* =========================================
+   Notifications List
+   ========================================= */
+
+.notifications-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+/* =========================================
+   Time Divider
+   ========================================= */
+
+.notification-time-divider {
+    font-size: 14px;
+    font-weight: 700;
+    color: #1e293b;
+    letter-spacing: 0.5px;
+    margin-top: 24px;
+    margin-bottom: -4px;
+    text-transform: uppercase;
+}
+
+.notification-time-divider:first-child {
+    margin-top: 0;
+}
+
+/* =========================================
+   Notification Card
+   ========================================= */
+
+.notification-card {
+    background-color: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 20px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 24px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
+    transition:
+        transform 0.15s ease,
+        box-shadow 0.15s ease,
+        border-color 0.15s ease;
+}
+
+.notification-card:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+/* Slight visual distinction for unread notifications */
+.notification-unread {
+    border-left: 3px solid #d9a21b;
+}
+
+/* =========================================
+   Notification Content
+   ========================================= */
+
+.notification-content {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-width: 80%;
+    min-width: 0;
+}
+
+.notification-item-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: #1e293b;
+    margin: 0;
+    line-height: 1.4;
+}
+
+.notification-item-message {
+    font-size: 14px;
+    color: #64748b;
+    margin: 0;
+    line-height: 1.5;
+}
+
+/* =========================================
+   Timestamp
+   ========================================= */
+
+.notification-timestamp {
+    font-size: 13px;
+    font-weight: 600;
+    color: #d9a21b;
+    white-space: nowrap;
+    flex-shrink: 0;
+    padding-top: 2px;
+}
+
+/* =========================================
+   Empty State
+   ========================================= */
+
+.notifications-empty-state {
+    background-color: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 40px 24px;
+    text-align: center;
+    color: #64748b;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
+}
+
+.notifications-empty-state p {
+    margin: 0;
+    font-size: 14px;
+}
+
+/* =========================================
+   Responsive Design
+   ========================================= */
+
+@media (max-width: 768px) {
+    .notifications-page-container {
+        padding: 24px 18px;
+    }
+
+    .notifications-title {
+        font-size: 22px;
+    }
+
+    .notifications-filter-group {
+        justify-content: flex-start;
+        margin-bottom: 24px;
+    }
+
+    .filter-btn {
+        padding: 8px 28px;
+    }
+
+    .notification-card {
+        padding: 18px;
+        gap: 16px;
+    }
+
+    .notification-content {
+        max-width: 75%;
+    }
+
+    .notification-item-title {
+        font-size: 15px;
+    }
+
+    .notification-item-message {
+        font-size: 13px;
+    }
+}
+
+@media (max-width: 520px) {
+    .notifications-page-container {
+        padding: 20px 14px;
+    }
+
+    .notifications-filter-group {
+        gap: 10px;
+    }
+
+    .filter-btn {
+        flex: 1;
+        padding: 8px 20px;
+    }
+
+    .notification-card {
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .notification-content {
+        max-width: 100%;
+    }
+
+    .notification-timestamp {
+        align-self: flex-start;
+    }
+
+    .notification-time-divider {
+        margin-top: 20px;
+    }
+}

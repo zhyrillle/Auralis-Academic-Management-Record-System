@@ -22,6 +22,7 @@ import AtRiskBreakdown from "./pages/principal/AtRiskBreakdown";
 import AtRiskPrediction from "./pages/principal/AtRiskPrediction";
 import GradeReopeningRequest from "./pages/adviser/GradeReopeningRequest";
 import SectionDetails from "./pages/adviser/SectionDetails";
+import AdviserNotifications from "./pages/adviser/AdviserNotifications";
 import { getStoredUser, setStoredUser } from "./utils/auth";
 
 export default function App() {
@@ -137,7 +138,7 @@ export default function App() {
           <Route path="/adviser/dashboard" element={<AdviserDashboard />} />
           <Route path="/adviser/sections" element={<AdviserSections />} />
           <Route path="/adviser/sections/details" element={<SectionDetails />} />
-          <Route path="/adviser/notifications" element={<PlaceholderPage />} />
+          <Route path="/adviser/notifications" element={<AdviserNotifications />} />
           <Route path="/adviser/master-sheet" element={<MasterSheet />} />
           <Route path="/adviser/performance" element={<PerformanceReport />} />
           <Route path="/adviser/feedback" element={<AdviserFeedback />} />
