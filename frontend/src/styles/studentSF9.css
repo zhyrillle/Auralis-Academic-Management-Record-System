@@ -6,7 +6,6 @@
   gap: 24px;
   width: 100%;
   padding-bottom: 40px;
-  animation: fadeIn 0.4s ease-out;
 }
 
 @keyframes fadeIn {
@@ -14,6 +13,7 @@
     opacity: 0;
     transform: translateY(10px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -69,7 +69,8 @@
   .student-header-grid {
     grid-template-columns: 1fr 1fr;
   }
-  .student-header-grid > :first-child {
+
+  .student-header-grid> :first-child {
     grid-column: span 2;
   }
 }
@@ -78,7 +79,8 @@
   .student-header-grid {
     grid-template-columns: 1fr;
   }
-  .student-header-grid > :first-child {
+
+  .student-header-grid> :first-child {
     grid-column: span 1;
   }
 }
@@ -187,9 +189,11 @@
   background-color: #d1fae5;
   color: #065f46;
 }
+
 .stat-metric-card.present .stat-metric-value {
   color: #065f46;
 }
+
 .stat-metric-card.present .stat-metric-label {
   color: #065f46;
   opacity: 0.8;
@@ -199,9 +203,11 @@
   background-color: #fef3c7;
   color: #92400e;
 }
+
 .stat-metric-card.absent .stat-metric-value {
   color: #92400e;
 }
+
 .stat-metric-card.absent .stat-metric-label {
   color: #92400e;
   opacity: 0.8;
@@ -211,9 +217,11 @@
   background-color: #fee2e2;
   color: #991b1b;
 }
+
 .stat-metric-card.missing .stat-metric-value {
   color: #991b1b;
 }
+
 .stat-metric-card.missing .stat-metric-label {
   color: #991b1b;
   opacity: 0.8;
@@ -420,7 +428,7 @@
   font-size: 11px;
 }
 
-.sf9-progress-table th, 
+.sf9-progress-table th,
 .sf9-progress-table td {
   border: 1px solid #000000;
   padding: 6px;
@@ -639,16 +647,19 @@
   background-color: #d1fae5;
   color: #065f46;
 }
+
 .observed-value-select.so {
   border-color: rgba(245, 158, 11, 0.4);
   background-color: #fef3c7;
   color: #92400e;
 }
+
 .observed-value-select.ro {
   border-color: rgba(249, 115, 22, 0.4);
   background-color: #ffedd5;
   color: #9a3412;
 }
+
 .observed-value-select.no {
   border-color: rgba(239, 68, 68, 0.4);
   background-color: #fee2e2;
@@ -765,195 +776,275 @@
   padding-left: 6px;
 }
 
-/* PERSONAL INFO TAB LAYOUT */
+/* =========================================================
+   PERSONAL INFO TAB LAYOUT (Dual Column Side-by-Side)
+   ========================================================= */
+
+/* Main 2-Column Grid Container */
 .personal-info-grid {
   display: grid;
-  grid-template-columns: 4.5fr 5.5fr;
+  grid-template-columns: 1fr 2fr;
+  /* Left column 1x, Right column 2x width */
   gap: 24px;
   align-items: start;
+  width: 100%;
 }
 
-@media (max-width: 992px) {
-  .personal-info-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* Profile details card */
-.profile-info-section {
+/* ---------------------------------------------------------
+   LEFT COLUMN: STUDENT PROFILE INFORMATION
+   --------------------------------------------------------- */
+.profile-info-column {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
 }
 
-.profile-info-title-row {
-  margin-bottom: 8px;
+.profile-info-header {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .profile-info-title {
   font-family: var(--font-dm-sans);
-  font-size: 18px;
+  font-size: var(--fs-body);
   font-weight: var(--fw-bold);
-  color: #1e293b;
-  margin: 0 0 4px 0;
+  color: black;
+  margin: 0 0 2px 0;
 }
 
 .profile-info-subtitle {
+  font-family: var(--font-dm-sans);
   font-size: var(--fs-subtext);
-  color: #64748b;
+  font-weight: var(--fw-medium);
+  color: var(--subtext-color);
   margin: 0;
 }
 
-.profile-data-field {
+.profile-info-card {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid #f1f5f9;
+  justify-content: flex-start;
+  background-color: #ffffff;
+  border: 1px solid #eef2f6;
+  border-radius: 10px;
+  padding: 20px 24px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+  margin-top: 5px;
 }
 
-.profile-data-field:last-child {
-  border-bottom: none;
-  padding-bottom: 0;
+.profile-fields-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.profile-field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .profile-field-label {
-  font-size: var(--fs-caption);
-  font-weight: var(--fw-semibold);
-  color: #64748b;
-  text-transform: uppercase;
+  font-size: var(--fs-subtext);
+  font-weight: var(--fw-medium);
+  color: var(--subtext-color);
   letter-spacing: 0.5px;
 }
 
 .profile-field-value {
   font-size: var(--fs-body);
   font-weight: var(--fw-bold);
-  color: #1e293b;
+  color: black;
 }
 
-/* Document cards (Right column of Personal Info) */
-.documents-card-list {
+/* ---------------------------------------------------------
+   RIGHT COLUMN: DOCUMENTS SECTION
+   --------------------------------------------------------- */
+.documents-section {
   display: flex;
   flex-direction: column;
+  gap: 12px;
+  container-type: inline-size;
+  container-name: docs-section;
+}
+
+.documents-section-title {
+  font-family: var(--font-dm-sans);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-bold);
+  color: black;
+  margin-bottom: 26px;
+}
+
+/* Document Cards Grid — 1 column by default, 2 columns when container is wide enough */
+.documents-grid {
+  display: grid;
+  grid-template-columns: 1fr;
   gap: 16px;
 }
 
-.document-item-card {
+@container docs-section (min-width: 480px) {
+  .documents-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.document-item-card,
+.doc-card {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   justify-content: space-between;
   background-color: #ffffff;
   border: 1px solid #eef2f6;
-  border-radius: 15px;
-  padding: 20px 24px;
+  border-radius: 10px;
+  padding: 16px 18px;
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
   transition: all 0.3s ease;
 }
 
-.document-item-card:hover {
+.document-item-card:hover,
+.doc-card:hover {
   box-shadow: 0 16px 35px rgba(15, 23, 42, 0.12);
   transform: translateY(-2px);
 }
 
-.doc-left-side {
+/* Card Upper Content */
+.doc-card-top {
   display: flex;
-  align-items: center;
-  gap: 16px;
+  align-items: flex-start;
+  gap: 14px;
 }
 
-.doc-icon-container {
+.doc-icon-container,
+.doc-icon-box {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 48px;
-  height: 48px;
+  width: 44px;
+  height: 44px;
   border-radius: 12px;
-  background-color: #f1f5f9;
-  color: #886c14;
+  background-color: #D9D9D9;
+  color: #929292;
+  flex-shrink: 0;
 }
 
 .doc-details {
+  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 4px;
+  width: 100%;
 }
 
 .doc-title {
   font-family: var(--font-dm-sans);
   font-size: var(--fs-body);
   font-weight: var(--fw-bold);
-  color: #1e293b;
+  color: black;
   margin: 0;
 }
 
 .doc-subtitle {
-  font-size: var(--fs-caption);
-  color: #64748b;
+  font-family: var(--font-dm-sans);
+  font-size: var(--fs-subtext);
+  font-weight: var(--fw-medium);
+  color: var(--subtext-color);
   margin: 0;
 }
 
-.doc-badge-available {
+.doc-badge-available,
+.doc-status-badge {
   align-self: flex-start;
-  background-color: #d1fae5;
-  color: #065f46;
+  background-color: var(--success-bg2);
+  color: var(--success-text-color);
   padding: 4px 10px;
   border-radius: 20px;
   font-size: 11px;
-  font-weight: var(--fw-bold);
+  width: fit-content;
+  margin-top: 2px;
+  font-family: var(--font-dm-sans);
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-normal);
 }
 
-.doc-right-side {
+/* ---------------------------------------------------------
+   ACTION BUTTONS
+   --------------------------------------------------------- */
+.doc-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
 }
 
-/* Buttons style */
 .btn-doc-action {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  border-radius: 20px;
-  padding: 8px 18px;
-  font-size: 13px;
-  font-weight: var(--fw-semibold);
+  gap: 6px;
+  border-radius: 30px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: var(--fw-semibold, 600);
   cursor: pointer;
   transition: all 0.2s ease;
+  white-space: nowrap;
 }
 
-.btn-doc-action.preview {
-  background-color: #f1f5f9;
-  color: #886c14;
+.btn-doc-action.preview,
+.btn-preview {
+  background-color: #D9D9D9;
+  color: #929292;
   border: none;
 }
 
-.btn-doc-action.preview:hover {
+.btn-doc-action.preview:hover,
+.btn-preview:hover {
   background-color: #e2e8f0;
 }
 
-.btn-doc-action.download {
-  background-color: #c9a227;
+.btn-doc-action.download,
+.btn-download {
+  background-color: #C9A227;
   color: #ffffff;
   border: none;
-  box-shadow: 0 2px 8px rgba(201, 162, 39, 0.15);
 }
 
-.btn-doc-action.download:hover {
-  background-color: #b08d1f;
-  box-shadow: 0 4px 12px rgba(201, 162, 39, 0.3);
+.btn-doc-action.download:hover,
+.btn-download:hover {
+  background-color: #e2b82d;
+  color: #ffffff;
 }
 
-.btn-doc-action.zip-download {
-  background-color: #c9a227;
+.btn-doc-action.zip-download,
+.btn-bulk-download {
+  background-color: #C9A227;
   color: #ffffff;
   border: none;
   width: 100%;
   justify-content: center;
   padding: 10px 20px;
-  box-shadow: 0 2px 8px rgba(201, 162, 39, 0.15);
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.2);
 }
 
-.btn-doc-action.zip-download:hover {
-  background-color: #b08d1f;
-  box-shadow: 0 4px 12px rgba(201, 162, 39, 0.3);
+.btn-doc-action.zip-download:hover,
+.btn-bulk-download:hover {
+  background-color: #e2b82d;
+  color: #ffffff;
+}
+
+/* ---------------------------------------------------------
+   RESPONSIVE BREAKPOINTS
+   --------------------------------------------------------- */
+@media (max-width: 900px) {
+  .personal-info-grid {
+    grid-template-columns: 1fr;
+    /* Stacks column 1 and column 2 on smaller screens */
+  }
+
+  .documents-grid {
+    grid-template-columns: 1fr;
+    /* Stacks document cards on mobile */
+  }
 }

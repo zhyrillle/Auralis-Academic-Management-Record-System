@@ -108,7 +108,7 @@ export default function StudentSF9Page({ student, onBack }) {
     <div className="student-sf9-container">
       {/* Top Navigation / Breadcrumb Area */}
       <div className="sf9-header-bar">
-        <button className="back-btn" onClick={onBack} title="Back to Classes">
+        <button className="back-btn" onClick={onBack} title="Back to Mahogany">
           <img src={backIconUrl} alt="Back" width={17} height={17} />
         </button>
         <h1 className="sf9-section-title">{studentProfile.section}</h1>
@@ -505,106 +505,121 @@ export default function StudentSF9Page({ student, onBack }) {
         /* Personal Info Tab Layout (Dual Column) */
         <div className="personal-info-grid">
 
-          {/* Left Column: Student Profile Details */}
-          <div className="sf9-card profile-info-section">
-            <div className="profile-info-title-row">
-              <h3 className="profile-info-title">Student Profile Information</h3>
+          {/* Left Column (1 span): Student Profile Information Card */}
+          <div className="profile-info-column">
+            {/* Section heading – outside the card */}
+            <div className="profile-info-header">
+              <h3 className="profile-info-title">Student Profile</h3>
               <p className="profile-info-subtitle">Student demographic and enrollment details</p>
             </div>
 
-            <div className="profile-data-field">
-              <span className="profile-field-label">Full Name</span>
-              <span className="profile-field-value">{studentProfile.name}</span>
-            </div>
+            {/* Card */}
+            <div className="profile-info-card sf9-card">
+              {/* Profile Data Fields */}
+              <div className="profile-fields-list">
+                <div className="profile-field-group">
+                  <span className="profile-field-label">Full Name</span>
+                  <span className="profile-field-value">{studentProfile.name}</span>
+                </div>
 
-            <div className="profile-data-field">
-              <span className="profile-field-label">Learner Reference Number</span>
-              <span className="profile-field-value">{studentProfile.lrn}</span>
-            </div>
+                <div className="profile-field-group">
+                  <span className="profile-field-label">Learner Reference Number</span>
+                  <span className="profile-field-value">{studentProfile.lrn}</span>
+                </div>
 
-            <div className="profile-data-field">
-              <span className="profile-field-label">Sex</span>
-              <span className="profile-field-value">{studentProfile.sex}</span>
-            </div>
+                <div className="profile-field-group">
+                  <span className="profile-field-label">Sex</span>
+                  <span className="profile-field-value">{studentProfile.sex}</span>
+                </div>
 
-            <div className="profile-data-field">
-              <span className="profile-field-label">Date of Birth</span>
-              <span className="profile-field-value">{studentProfile.dateOfBirth}</span>
-            </div>
+                <div className="profile-field-group">
+                  <span className="profile-field-label">Date of Birth</span>
+                  <span className="profile-field-value">{studentProfile.dateOfBirth}</span>
+                </div>
 
-            <div className="profile-data-field" style={{ borderBottom: "none" }}>
-              <span className="profile-field-label">Address</span>
-              <span className="profile-field-value">{studentProfile.address}</span>
+                <div className="profile-field-group">
+                  <span className="profile-field-label">Address</span>
+                  <span className="profile-field-value">{studentProfile.address}</span>
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* Right Column: Documents List */}
-          <div className="documents-card-list">
-            <div className="profile-info-title-row" style={{ paddingLeft: "4px" }}>
-              <h3 className="profile-info-title" style={{ fontSize: "18px" }}>Documents</h3>
-            </div>
+          {/* Right Column (2 spans): Documents Section */}
+          <div className="documents-section">
+            {/* Section heading – outside the cards */}
+            <h3 className="documents-section-title">Documents</h3>
 
-            {/* Form 10 - Permanent Record Card */}
-            <div className="document-item-card">
-              <div className="doc-left-side">
-                <div className="doc-icon-container">
-                  <FileText size={24} />
-                </div>
-                <div className="doc-details">
-                  <h4 className="doc-title">Form 10 — Permanent Record</h4>
-                  <p className="doc-subtitle">Official cumulative student record</p>
-                  <span className="doc-badge-available">Available</span>
-                </div>
-              </div>
-              <div className="doc-right-side">
-                <button className="btn-doc-action preview" title="Preview Document">
-                  <Eye size={16} />
-                  <span>Preview</span>
-                </button>
-                <button className="btn-doc-action download" title="Download Document">
-                  <Download size={16} />
-                  <span>Download</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Form 9 - Report Card Card */}
-            <div className="document-item-card">
-              <div className="doc-left-side">
-                <div className="doc-icon-container">
-                  <FileText size={24} />
-                </div>
-                <div className="doc-details">
-                  <h4 className="doc-title">Form 9 — Report Card</h4>
-                  <p className="doc-subtitle">Per term performance report</p>
-                  <span className="doc-badge-available">Available</span>
+            {/* Document Cards Grid (2-column card grid) */}
+            <div className="documents-grid">
+              {/* Form 10 - Permanent Record Card */}
+              <div className="doc-card">
+                <div className="doc-card-top">
+                  <div className="doc-icon-box">
+                    <FileText size={20} />
+                  </div>
+                  <div className="doc-details">
+                    <h4 className="doc-title">Form 10 - Permanent Record</h4>
+                    <p className="doc-subtitle">Official cumulative student record</p>
+                    <span className="doc-status-badge">Available</span>
+                    <div className="doc-actions">
+                      <button className="btn-doc-action preview" title="Preview Document">
+                        <Eye size={14} />
+                        <span>Preview</span>
+                      </button>
+                      <button className="btn-doc-action download" title="Download Document">
+                        <Download size={14} />
+                        <span>Download</span>
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
-              <div className="doc-right-side">
-                <button className="btn-doc-action preview" title="Preview Document">
-                  <Eye size={16} />
-                  <span>Preview</span>
-                </button>
-                <button className="btn-doc-action download" title="Download Document">
-                  <Download size={16} />
-                  <span>Download</span>
-                </button>
+
+              {/* Form 9 - Report Card Card */}
+              <div className="doc-card">
+                <div className="doc-card-top">
+                  <div className="doc-icon-box">
+                    <FileText size={20} />
+                  </div>
+                  <div className="doc-details">
+                    <h4 className="doc-title">Form 9 - Report Card</h4>
+                    <p className="doc-subtitle">Per term performance report</p>
+                    <span className="doc-status-badge">Available</span>
+                    <div className="doc-actions">
+                      <button className="btn-doc-action preview" title="Preview Document">
+                        <Eye size={14} />
+                        <span>Preview</span>
+                      </button>
+                      <button className="btn-doc-action download" title="Download Document">
+                        <Download size={14} />
+                        <span>Download</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bulk Actions Card */}
+              <div className="doc-card">
+                <div className="doc-card-top">
+                  <div className="doc-icon-box">
+                    <FileText size={20} />
+                  </div>
+                  <div className="doc-details">
+                    <h4 className="doc-title">Bulk Actions</h4>
+                    <p className="doc-subtitle">Perform actions on multiple documents</p>
+                    <span className="doc-status-badge">Available</span>
+                    <div className="doc-actions">
+                      <button className="btn-doc-action zip-download" title="Download All Documents (ZIP)">
+                        <Download size={14} />
+                        <span>Download All Documents (ZIP)</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
-
-            {/* Bulk Actions Card */}
-            <div className="document-item-card" style={{ padding: "24px" }}>
-              <div style={{ flexGrow: 1 }}>
-                <h4 className="doc-title" style={{ fontSize: "16px", marginBottom: "4px" }}>Bulk Actions</h4>
-                <p className="doc-subtitle" style={{ marginBottom: "16px" }}>Perform actions on multiple documents</p>
-                <span className="doc-badge-available" style={{ display: "inline-block", marginBottom: "16px" }}>Available</span>
-                <button className="btn-doc-action zip-download" title="Download All as ZIP">
-                  <Download size={16} />
-                  <span>Download All Documents (ZIP)</span>
-                </button>
-              </div>
-            </div>
-
           </div>
 
         </div>
