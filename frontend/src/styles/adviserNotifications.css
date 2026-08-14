@@ -1,3 +1,5 @@
+@import "themes.css";
+
 /* =========================================
    Adviser Notifications Page
    ========================================= */
@@ -5,7 +7,7 @@
 /* Page Wrapper */
 .notifications-page-container {
     background-color: #f8fafc;
-    padding: 32px;
+    padding: 0px;
     min-height: 100vh;
     box-sizing: border-box;
     font-family: var(--font-family, "Outfit", "Inter", sans-serif);
@@ -13,9 +15,10 @@
 
 /* Page Title */
 .notifications-title {
-    font-size: 24px;
-    font-weight: 700;
-    color: #1e293b;
+    color: var(--primary-highlight-color);
+    font-size: var(--fs-h2);
+    font-weight: var(--fw-bold);
+    font-family: var(--font-dm-sans);
     margin: 0 0 24px 0;
 }
 
@@ -34,8 +37,9 @@
 .filter-btn {
     padding: 8px 36px;
     border-radius: 20px;
-    font-size: 13px;
-    font-weight: 700;
+    font-family: var(--font-montserrat);
+    font-size: var(--fs-caption);
+    font-weight: var(--fw-bold);
     border: none;
     cursor: pointer;
     letter-spacing: 0.5px;
@@ -55,12 +59,12 @@
 }
 
 .filter-btn.active {
-    background-color: #d9a21b;
+    background-color: var(--button-secondary-color);
     box-shadow: 0 3px 8px rgba(217, 162, 27, 0.2);
 }
 
 .filter-btn.inactive {
-    background-color: #64748b;
+    background-color: #757575;
 }
 
 /* =========================================
@@ -80,9 +84,10 @@
    ========================================= */
 
 .notification-time-divider {
-    font-size: 14px;
-    font-weight: 700;
     color: #1e293b;
+    font-size: var(--fs-body);
+    font-weight: var(--fw-bold);
+    font-family: var(--font-dm-sans);
     letter-spacing: 0.5px;
     margin-top: 24px;
     margin-bottom: -4px;
@@ -130,24 +135,27 @@
 .notification-content {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 4px;
     max-width: 80%;
     min-width: 0;
 }
 
 .notification-item-title {
-    font-size: 16px;
-    font-weight: 700;
     color: #1e293b;
     margin: 0;
     line-height: 1.4;
+    font-size: var(--fs-body);
+    font-weight: var(--fw-bold);
+    font-family: var(--font-dm-sans);
 }
 
 .notification-item-message {
-    font-size: 14px;
-    color: #64748b;
+    color: var(--subtext-color);
     margin: 0;
     line-height: 1.5;
+    font-size: var(--fs-subtext);
+    font-weight: var(--fw-medium);
+    font-family: var(--font-dm-sans);
 }
 
 /* =========================================
@@ -155,9 +163,10 @@
    ========================================= */
 
 .notification-timestamp {
-    font-size: 13px;
-    font-weight: 600;
     color: #d9a21b;
+    font-size: var(--fs-subtext);
+    font-weight: var(--fw-medium);
+    font-family: var(--font-dm-sans);
     white-space: nowrap;
     flex-shrink: 0;
     padding-top: 2px;
