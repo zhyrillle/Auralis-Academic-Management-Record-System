@@ -198,392 +198,220 @@ select {
   outline: none;
   background: transparent;
   width: 100%;
-  margin-left: 12px;
+  margin-left: 10px;
   font-size: 15px;
 }
 
-.search-box input::placeholder {
-  color: #222;
-}
-
-.filter-icon {
-  color: #617593;
-  margin-left: 43px;
-  display: flex;
-  align-items: center;
-}
-
 .filter-container select {
-  width: 160px;
-  height: 42px;
-  padding: 0 36px 0 16px;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  background-color: #f8fafc;
-  
-  font-size: 13px;
-  font-weight: 500;
-  color: #334155;
+  height: 48px;
+  border: 1px solid #d9dce2;
+  border-radius: 11px;
+  padding: 0 18px;
+  font-size: 15px;
+  color: #111;
+  background: #fbfbfd;
   outline: none;
   cursor: pointer;
-  transition: all 0.2s ease;
-
-  -webkit-appearance: none;
-  -moz-appearance: none;
-  appearance: none;
-
-  background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='16'%20height='16'%20viewBox='0 0 24 24'%20fill='none'%20stroke='%2364748b'%20stroke-width='2'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpolyline%20points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  
-  background-position: right 18px center;
-  background-size: 16px;
-}
-
-.filter-container select:hover {
-  background-color: #f1f5f9;
-  border-color: #cbd5e1;
-}
-
-.filter-container select:focus {
-  border-color: #2563eb;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
-}
-
-.filter-container select option {
-  background-color: #ffffff;
-  color: #334155;
 }
 
 /* =========================
-   TABLE & TYPOGRAPHY
+   TABLE
 ========================= */
 
 .table-container {
-  border: 1px solid #eef2f6;
-  border-radius: 16px;
-  overflow: hidden;
-  background: white;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
+  border: 1px solid #999;
+  border-radius: 13px;
+  background: #ffffff;
 }
 
 table {
   width: 100%;
   border-collapse: collapse;
-  table-layout: fixed;
-  text-align: left;
 }
 
-thead {
-  background: #f8fafc;
+thead tr {
+  border-bottom: 1px solid #999;
 }
 
 th {
+  padding: 16px 20px;
   text-align: left;
-  font-size: 11px;
-  font-weight: 700;
-  color: #64748b;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  padding: 12px 22px;
-  border-bottom: 1px solid #eef2f6;
+  font-size: 15px;
+  font-weight: 500;
+  color: #202d43;
 }
 
 td {
-  height: auto;
-  padding: 16px 22px;
-  border-bottom: 1px solid #f1f5f9;
-  color: #475569;
-  font-size: 13px;
+  padding: 16px 20px;
+  font-size: 15px;
+  border-bottom: 1px solid #999;
   vertical-align: middle;
-}
-
-tbody tr {
-  transition: background-color 0.15s ease-in-out;
-}
-
-tbody tr:hover {
-  background-color: #fbfdff;
 }
 
 tbody tr:last-child td {
   border-bottom: none;
 }
 
-/* =========================
-   USER NAME & SUBTEXT
-========================= */
-
-.user-name span {
-  display: block;
-  color: #334155;
-  font-weight: 600;
-  font-size: 13px;
-  margin-bottom: 2px;
+.user-name {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
-.user-name small {
-  display: block;
-  color: #94a3b8;
-  font-size: 11px;
-  font-weight: 400;
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+.actions button {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 6px;
+  color: #687b9b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.actions button:hover {
+  background: #f1f3f7;
+  color: #202d43;
 }
 
 /* =========================
-   ROLE BADGES
+   BADGES
 ========================= */
 
 .role-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 5px 12px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 1;
-  white-space: nowrap;
-  letter-spacing: 0.02em;
-  border: none;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: capitalize;
+  letter-spacing: 0.3px;
 }
 
-.subject-teacher,
-.adviser,
-.principal,
-.department-head {
-  color: #1e3a8a;
-  background: #dbeafe;
+.role-badge.principal {
+  background: #ede9fe;
+  color: #6d28d9;
+  border: 1px solid #ddd6fe;
 }
 
-/* =========================
-   TABLE HOVER
-========================= */
-
-tbody tr {
-  transition: background-color 0.15s ease-in-out; 
-  cursor: pointer;
+.role-badge.department-head {
+  background: #e0f2fe;
+  color: #0369a1;
+  border: 1px solid #bae6fd;
 }
 
-tbody tr:hover {
-  background-color: #f1f5f9; 
+.role-badge.adviser {
+  background: #fef3c7;
+  color: #b45309;
+  border: 1px solid #fde68a;
 }
 
-/* =========================
-   STATUS BADGES
-========================= */
+.role-badge.subject-teacher {
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+}
 
 .status-badge {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  height: 27px;
-  padding: 0 11px;
+  gap: 6px;
+  padding: 4px 10px;
   border-radius: 6px;
   font-size: 12px;
   font-weight: 600;
 }
 
-.status-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-}
-
 .status-badge.active {
-  color: #00a97b;
-  background: #d5f8ec;
-  border: 1px solid #00bd88;
-}
-
-.status-badge.active .status-dot {
-  background: #00b984;
+  background: #dcfce7;
+  color: #15803d;
 }
 
 .status-badge.inactive {
-  color: #999;
-  background: #f1f1f1;
-  border: 1px solid #aaa;
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.status-badge.active .status-dot {
+  background: #22c55e;
 }
 
 .status-badge.inactive .status-dot {
-  background: #aaa;
+  background: #ef4444;
 }
 
 /* =========================
-   ACTIONS
-========================= */
-
-.actions {
-  display: flex;
-  align-items: center;
-  gap: 21px;
-}
-
-.actions button {
-  border: none;
-  background: transparent;
-  padding: 0;
-  color: #666;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-}
-
-.actions button:hover {
-  color: #17386c;
-}
-
-/* =========================
-   RESPONSIVE
-========================= */
-
-@media (max-width: 1200px) {
-
-  .sidebar {
-    width: 250px;
-  }
-
-  .main-content {
-    margin-left: 250px;
-    width: calc(100% - 250px);
-  }
-
-  .logo {
-    padding-left: 40px;
-  }
-
-  .stats-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .filter-icon {
-    margin-left: 10px;
-  }
-
-}
-
-@media (max-width: 850px) {
-
-  .sidebar {
-    width: 80px;
-  }
-
-  .logo {
-    padding-left: 25px;
-  }
-
-  .logo span:last-child {
-    display: none;
-  }
-
-  .nav-item {
-    padding: 0;
-    justify-content: center;
-  }
-
-  .nav-item span {
-    display: none;
-  }
-
-  .admin-profile div:last-child,
-  .logout span {
-    display: none;
-  }
-
-  .admin-profile {
-    justify-content: center;
-    padding: 0;
-  }
-
-  .logout {
-    justify-content: center;
-    padding: 0;
-  }
-
-  .main-content {
-    margin-left: 80px;
-    width: calc(100% - 80px);
-  }
-
-  .table-container {
-    overflow-x: auto;
-  }
-
-  table {
-    min-width: 1000px;
-  }
-}
-
-/* =========================
-   ADD USER MODAL
+   ADD / EDIT USER MODAL
 ========================= */
 
 .modal-overlay {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.48);
-
   display: flex;
   align-items: center;
   justify-content: center;
-
   z-index: 9999;
 }
-
-/* =========================
-   MODAL CONTAINER
-========================= */
 
 .add-user-modal {
   width: 625px;
   max-height: 90vh;
-
   background: #ffffff;
   border-radius: 13px;
-
   padding: 30px 35px 32px;
-
   box-shadow: 0 10px 35px rgba(0, 0, 0, 0.15);
-
   overflow-y: auto;
 }
-
-/* =========================
-   MODAL HEADER
-========================= */
 
 .modal-header {
   margin-bottom: 20px;
 }
 
 .modal-header h2 {
-  margin: 0 0 8px;
-
-  font-size: 25px;
+  margin: 0 0 6px;
+  font-size: 24px;
   font-weight: 600;
   color: #26354d;
 }
 
 .modal-header p {
   margin: 0;
-
-  font-size: 16px;
-  color: #999999;
+  font-size: 14px;
+  color: #94a3b8;
 }
 
-/* =========================
-   FORM GRID
-========================= */
+.form-error {
+  background: #fee2e2;
+  color: #b91c1c;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 16px;
+  border: 1px solid #fecaca;
+}
 
 .form-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  column-gap: 45px;
-  row-gap: 12px;
+  column-gap: 30px;
+  row-gap: 14px;
 }
-
-/* =========================
-   FORM GROUP
-========================= */
 
 .form-group {
   display: flex;
@@ -591,151 +419,167 @@ tbody tr:hover {
 }
 
 .form-group label {
-  margin-bottom: 7px;
-
-  font-size: 15px;
-  color: #26354d;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #334155;
 }
 
 .form-group input,
 .form-group select {
   width: 100%;
-  height: 35px;
-
+  height: 38px;
   box-sizing: border-box;
-
-  border: 1px solid #d8dce2;
-  border-radius: 10px;
-
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
   background: #fbfbfd;
-
-  padding: 0 13px;
-
+  padding: 0 12px;
   font-size: 14px;
-  color: #222;
-
+  color: #1e293b;
   outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .form-group input:focus,
 .form-group select:focus {
-  border-color: #17386c;
+  border-color: #10ad7b;
+  box-shadow: 0 0 0 3px rgba(16, 173, 123, 0.12);
 }
-
-/* =========================
-   SELECT
-========================= */
 
 .form-group select {
   cursor: pointer;
 }
 
 /* =========================
-   TEACHER ASSIGNMENT
+   TEACHER / ADVISER ASSIGNMENT BOX
 ========================= */
 
-.teacher-assignment {
-  margin-top: 24px;
-
-  padding: 22px 22px 22px;
-
-  border: 1px solid #dcdfe5;
-  border-radius: 13px;
-
-  background: #ffffff;
+.assignment-box {
+  margin-top: 22px;
+  padding: 20px 22px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
 }
 
-.teacher-assignment h3 {
-  margin: 0 0 25px;
-
-  font-size: 16px;
-  font-weight: 500;
-
-  color: #555555;
-}
-
-.teacher-assignment .form-grid {
-  column-gap: 45px;
-}
-
-.teacher-assignment .form-group label {
-  color: #3d348b;
-}
-
-/* =========================
-   ACCOUNT STATUS
-========================= */
-
-.account-status {
-  margin-top: 24px;
-}
-
-.account-status > label {
-  display: block;
-
-  margin-bottom: 8px;
-
-  font-size: 15px;
-  color: #26354d;
-}
-
-.status-options {
+.assignment-header {
   display: flex;
-  gap: 20px;
-}
-
-.account-status-btn {
-  height: 35px;
-
-  padding: 0 13px;
-
-  display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 8px;
+  margin-bottom: 16px;
+}
 
-  border-radius: 7px;
+.assignment-header h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #1e293b;
+}
 
+.assignment-subtitle {
+  margin: 3px 0 0;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.add-assignment-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid #a7e8d3;
+  background: #e6f7f2;
+  color: #0f8a62;
   font-size: 13px;
   font-weight: 600;
-
+  border-radius: 9px;
   cursor: pointer;
+  transition: all 0.2s ease;
 }
 
-/* Active */
-
-.account-status-btn.active {
-  color: #00a97b;
-
-  background: #d5f8ec;
-
-  border: 1px solid #00bd88;
+.add-assignment-btn:hover {
+  background: #10ad7b;
+  color: #ffffff;
+  border-color: #10ad7b;
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(16, 173, 123, 0.22);
 }
 
-/* Inactive */
-
-.account-status-btn.inactive {
-  color: #999999;
-
-  background: #f1f1f1;
-
-  border: 1px solid #aaaaaa;
+.add-assignment-btn:active {
+  transform: translateY(0);
 }
 
-.account-status-btn .status-dot {
-  width: 7px;
-  height: 7px;
-
-  border-radius: 50%;
-
-  display: block;
+.assignment-empty-state {
+  padding: 20px 16px;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 13px;
+  background: #ffffff;
+  border: 1px dashed #cbd5e1;
+  border-radius: 10px;
 }
 
-.account-status-btn.active .status-dot {
-  background: #00b984;
+.assignment-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.3fr auto;
+  align-items: flex-end;
+  gap: 10px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-.account-status-btn.inactive .status-dot {
-  background: #aaaaaa;
+.assignment-row:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+}
+
+.assignment-row .form-group {
+  margin: 0;
+}
+
+.assignment-row .form-group label {
+  margin-bottom: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #475569;
+}
+
+.assignment-row .form-group select {
+  height: 36px;
+  font-size: 13px;
+  background: #fbfbfd;
+}
+
+.remove-btn {
+  height: 36px;
+  width: 36px;
+  min-width: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #ef4444;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 0;
+}
+
+.remove-btn:hover {
+  background: #ef4444;
+  color: #ffffff;
+  border-color: #ef4444;
+  transform: translateY(-1px);
+}
+
+.remove-btn:active {
+  transform: translateY(0);
 }
 
 /* =========================
@@ -746,50 +590,47 @@ tbody tr:hover {
   display: flex;
   justify-content: flex-end;
   align-items: center;
-
   gap: 11px;
-
-  margin-top: 76px;
+  margin-top: 32px;
 }
 
 .modal-close-btn,
 .modal-save-btn {
-  height: 46px;
-
-  padding: 0 17px;
-
+  height: 44px;
+  padding: 0 20px;
   border-radius: 11px;
-
-  font-size: 16px;
-
+  font-size: 15px;
+  font-weight: 500;
   cursor: pointer;
+  transition: all 0.2s ease;
 }
 
 .modal-close-btn {
   background: #ffffff;
-
   color: #26354d;
-
-  border: 1px solid #999999;
+  border: 1px solid #d8dce2;
 }
 
 .modal-save-btn {
-  background: #26354d;
-
+  background: #10ad7b;
   color: #ffffff;
-
-  border: 1px solid #26354d;
+  border: 1px solid #10ad7b;
 }
 
 .modal-close-btn:hover {
-  background: #f5f5f5;
+  background: #f1f5f9;
+  border-color: #cbd5e1;
 }
 
 .modal-save-btn:hover {
-  background: #1c2b41;
+  background: #0d986d;
+  border-color: #0d986d;
 }
 
-
+.modal-save-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
 
 /* =========================
    USER PROFILE MODAL
@@ -797,78 +638,101 @@ tbody tr:hover {
 
 .user-profile-modal {
   width: 625px;
-  min-height: 445px;
+  max-height: 90vh;
   background: #ffffff;
   border-radius: 13px;
   padding: 32px 35px 28px;
   box-sizing: border-box;
   box-shadow: 0 10px 35px rgba(0, 0, 0, 0.15);
+  overflow-y: auto;
 }
 
 .profile-modal-header {
-  margin-bottom: 32px;
+  margin-bottom: 26px;
 }
 
 .profile-modal-header h2 {
-  margin: 0 0 9px;
-  font-size: 25px;
+  margin: 0 0 6px;
+  font-size: 24px;
   font-weight: 600;
   color: #26354d;
 }
 
 .profile-modal-header p {
   margin: 0;
-  font-size: 16px;
-  color: #999999;
+  font-size: 15px;
+  color: #94a3b8;
 }
 
 .profile-summary {
   display: flex;
   align-items: center;
   position: relative;
+  gap: 20px;
+}
+
+.profile-avatar-wrapper {
+  width: 90px;
+  height: 90px;
+  min-width: 90px;
+  min-height: 90px;
+  border-radius: 50%;
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #202d43;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.1);
+  border: 3px solid #f1f5f9;
+}
+
+.profile-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .profile-summary .profile-avatarz,
 div.profile-avatarz {
-  width: 100px !important;
-  height: 100px !important;
-  min-width: 100px !important;
-  min-height: 100px !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-width: 100% !important;
+  min-height: 100% !important;
   border-radius: 50% !important;
   background-color: #202d43 !important;
-
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
-
   color: #ffffff !important;
-  font-size: 28px !important;
+  font-size: 26px !important;
   font-weight: 600 !important;
   line-height: 1 !important;
 }
 
 .profile-main-info {
-  margin-left: 31px;
+  flex: 1;
 }
 
 .profile-main-info h3 {
-  margin: 0 0 10px;
-  font-size: 25px;
-  font-weight: 500;
-  color: #26354d;
+  margin: 0 0 4px;
+  font-size: 22px;
+  font-weight: 600;
+  color: #1e293b;
 }
 
 .profile-username {
-  margin: 0 0 10px;
-  font-size: 16px;
-  color: #999999;
+  margin: 0 0 8px;
+  font-size: 14px;
+  color: #64748b;
 }
 
 .profile-main-info .role-badge {
   min-width: auto;
-  height: 27px;
+  height: 26px;
   padding: 0 10px;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .profile-status {
@@ -885,18 +749,16 @@ div.profile-avatarz {
 .profile-divider {
   width: 100%;
   height: 1px;
-  background: #d7d7d7;
-
-  margin-top: 25px;
-  margin-bottom: 20px;
+  background: #e2e8f0;
+  margin-top: 22px;
+  margin-bottom: 18px;
 }
 
 .profile-details {
   display: grid;
   grid-template-columns: 1fr 1fr;
-
-  column-gap: 60px;
-  row-gap: 18px;
+  column-gap: 40px;
+  row-gap: 16px;
 }
 
 .profile-detail {
@@ -905,41 +767,114 @@ div.profile-avatarz {
 }
 
 .profile-detail span {
-  margin-bottom: 6px;
-  font-size: 15px;
-  color: #999999;
+  margin-bottom: 4px;
+  font-size: 13px;
+  color: #64748b;
+  font-weight: 500;
 }
 
 .profile-detail strong {
-  font-size: 16px;
-  font-weight: 400;
+  font-size: 15px;
+  font-weight: 500;
+  color: #1e293b;
+}
+
+/* Profile teaching assignments section */
+.profile-assignments-section {
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.profile-assignments-title {
+  font-size: 14px;
+  font-weight: 600;
   color: #26354d;
+  margin: 0 0 10px;
+}
+
+.profile-assignments-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 180px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.profile-assignment-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 14px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.profile-assignment-sub {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.profile-assignment-sub strong {
+  color: #1e293b;
+  font-weight: 600;
+}
+
+.profile-code-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 6px;
+  background: #e2e8f0;
+  color: #475569;
+  border-radius: 4px;
+}
+
+.profile-assignment-sec {
+  color: #0f8a62;
+  font-weight: 500;
+  background: #e6f7f2;
+  padding: 3px 9px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.profile-assignments-empty {
+  padding: 14px;
+  text-align: center;
+  font-size: 13px;
+  color: #94a3b8;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
 }
 
 .profile-modal-actions {
   display: flex;
   justify-content: flex-end;
   align-items: center;
-
   gap: 11px;
-  margin-top: 66px;
+  margin-top: 28px;
 }
 
 .profile-close-btn,
 .profile-edit-btn {
-  height: 47px;
-  padding: 0 17px;
-
+  height: 44px;
+  padding: 0 20px;
   border-radius: 11px;
-  font-size: 16px;
-
+  font-size: 15px;
+  font-weight: 500;
   cursor: pointer;
+  transition: all 0.2s ease;
 }
 
 .profile-close-btn {
   background: #ffffff;
   color: #26354d;
-  border: 1px solid #999999;
+  border: 1px solid #d8dce2;
 }
 
 .profile-edit-btn {
@@ -949,155 +884,102 @@ div.profile-avatarz {
 }
 
 .profile-close-btn:hover {
-  background: #f5f5f5;
+  background: #f1f5f9;
+  border-color: #cbd5e1;
 }
 
 .profile-edit-btn:hover {
-  background: #1c2b41;
+  background: #172338;
 }
 
 /* =========================
    DELETE USER MODAL
 ========================= */
 
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.5);
-
-  display: flex;
-  align-items: center;
-  justify-content: center;
-
-  z-index: 9999;
-}
-
 .delete-modal {
   width: 625px;
   background: #ffffff;
   border-radius: 13px;
-
   padding: 32px 35px 34px;
-
   box-sizing: border-box;
-
   box-shadow: 0 10px 35px rgba(0, 0, 0, 0.18);
 }
 
-/* =========================
-   HEADER
-========================= */
-
 .delete-modal-header h2 {
   margin: 0 0 10px;
-
   font-size: 22px;
   font-weight: 600;
-
   color: #202d43;
 }
 
 .delete-modal-header p {
   margin: 0;
-
   font-size: 14px;
-  color: #999999;
+  color: #687b9b;
 }
 
-/* =========================
-   USER INFORMATION
-========================= */
-
 .delete-user-info {
-  margin-top: 24px;
-
-  height: 94px;
-
-  padding: 0 34px;
-
-  border: 1px solid #ff3030;
-  border-radius: 11px;
-
-  background: #fdeaea;
-
+  margin: 24px 0 32px;
+  padding: 16px 20px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  gap: 4px;
 }
 
 .delete-user-info strong {
-  display: block;
-
-  margin-bottom: 6px;
-
   font-size: 16px;
-  font-weight: 700;
-
-  color: #202d43;
+  color: #1e293b;
 }
 
 .delete-user-info span {
-  display: block;
-
   font-size: 14px;
-
-  color: #999999;
+  color: #64748b;
 }
-
-/* =========================
-   DELETE BUTTON
-========================= */
 
 .delete-modal-actions {
   display: flex;
   justify-content: flex-end;
-  align-items: center;
-
   gap: 12px;
-
-  margin-top: 22px;
 }
-
-.delete-close-btn,
-.delete-confirm-btn {
-  height: 47px;
-
-  border-radius: 11px;
-
-  padding: 0 17px;
-
-  font-family: inherit;
-  font-size: 15px;
-
-  cursor: pointer;
-}
-
-/* CLOSE */
 
 .delete-close-btn {
+  height: 44px;
+  padding: 0 20px;
+  border-radius: 11px;
   background: #ffffff;
-
-  border: 1px solid #999999;
-
-  color: #202d43;
+  border: 1px solid #d8dce2;
+  color: #334155;
+  font-size: 15px;
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
 
 .delete-close-btn:hover {
-  background: #f5f5f5;
+  background: #f1f5f9;
 }
 
-/* DELETE */
-
 .delete-confirm-btn {
-  background: #ed2727;
-
-  border: 1px solid #ed2727;
-
+  height: 44px;
+  padding: 0 20px;
+  border-radius: 11px;
+  background: #ef4444;
+  border: 1px solid #ef4444;
   color: #ffffff;
-
-  padding: 0 19px;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
 
 .delete-confirm-btn:hover {
-  background: #d91f1f;
+  background: #dc2626;
+  border-color: #dc2626;
+}
+
+.delete-confirm-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
