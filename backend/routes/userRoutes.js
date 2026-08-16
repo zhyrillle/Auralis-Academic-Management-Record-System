@@ -1,232 +1,669 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const User = require('../models/User');
-const SectionAdviserAssignment = require('../models/SectionAdviserAssignment');
-const { uploadProfilePicture } = require('../services/profilePictureStorage');
 
-const imageExtensions = {
-  'image/jpeg': 'jpg',
-  'image/png': 'png',
-  'image/webp': 'webp',
-};
+const db = require("../config/db");
+
+const User = require("../models/User");
+const UserManagementOptions = require("../models/UserManagementOptions");
 
 const isValidUserId = (id) => /^\d+$/.test(String(id));
 
+const ROLE_MAP = {
+  "Subject Teacher": "subject teacher",
+  "Adviser": "subject teacher",
+  "Principal": "principal",
+  "Department Head": "department head",
+  "Admin": "admin",
+  "subject_teacher": "subject teacher",
+  "department_head": "department head",
+  "subject teacher": "subject teacher",
+  "department head": "department head",
+  "principal": "principal",
+  "admin": "admin",
+};
+
+const normalizeRole = (role) => {
+  if (!role) return null;
+  return ROLE_MAP[String(role).trim()] || null;
+};
+
 const sendDatabaseError = (res, err) => {
-  if (err.code === 'ER_DUP_ENTRY') {
-    return res.status(409).json({ error: 'That email address is already in use.' });
+  console.error("Database error:", err);
+  if (err.code === "ER_DUP_ENTRY") {
+    return res.status(409).json({ error: "That email address is already in use." });
   }
   return res.status(500).json({ error: err.message });
 };
 
-const sendProfilePictureError = (res, err) => {
-  if (err.code === 'PROFILE_STORAGE_NOT_CONFIGURED') {
-    return res.status(503).json({
-      error: 'Shared profile-picture storage is not configured on the backend.',
-    });
+const toNullable = (value) => {
+  if (value === undefined || value === null || String(value).trim() === "") {
+    return null;
   }
-
-  const providerMessage = String(err.message || '').toLowerCase();
-  const credentialsRejected =
-    err.http_code === 401 ||
-    providerMessage.includes('api key') ||
-    providerMessage.includes('signature') ||
-    providerMessage.includes('cloud name');
-
-  if (credentialsRejected) {
-    console.error('Profile picture storage credentials were rejected:', err.message);
-    return res.status(502).json({
-      error: 'Shared image storage rejected the backend credentials. Check the Cloudinary configuration and restart the backend.',
-    });
-  }
-
-  console.error('Profile picture upload failed:', err.message);
-  return res.status(502).json({
-    error: `The profile picture could not be uploaded: ${err.message || 'unknown storage error'}`,
-  });
+  return value;
 };
 
-router.post('/login', async (req, res) => {
-  const { email, password } = req.body;
+const getCurrentSchoolYear = async (connection) => {
+  const [rows] = await connection.execute(`
+    SELECT school_year_id, school_id, starts_on, ends_on, curriculum, status
+    FROM SCHOOL_YEAR
+    WHERE status IN ('ACTIVE', 'ONGOING')
+    ORDER BY school_year_id DESC
+    LIMIT 1
+  `);
+  return rows[0] || null;
+};
+
+const formatDate = (val) => {
+  if (!val || String(val).trim() === "") return null;
+  const d = new Date(val);
+  if (isNaN(d.getTime())) return null;
+  return d.toISOString().slice(0, 10);
+};
+
+const getAssignmentDates = (body, schoolYear) => {
+  const assignedFrom = formatDate(body.assigned_from) || new Date().toISOString().slice(0, 10);
+  
+  let assignedUntil = formatDate(body.assigned_until);
+
+  if (!assignedUntil && schoolYear?.ends_on) {
+    const rawEnd = String(schoolYear.ends_on).trim();
+    assignedUntil = rawEnd.length === 4 ? `${rawEnd}-12-31` : formatDate(rawEnd);
+  }
+
+  return { assignedFrom, assignedUntil };
+};
+
+const getManagementUsers = async () => {
+  const [rows] = await db.execute(`
+    SELECT
+      u.user_id,
+      u.role,
+      u.department_id,
+      u.first_name,
+      u.middle_name,
+      u.last_name,
+      u.extension_name,
+      u.email,
+      u.pfp_url,
+      u.account_status,
+      u.last_login_at,
+      CONCAT(COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, '')) AS username,
+      CASE
+        WHEN EXISTS (
+          SELECT 1
+          FROM SECTION_ADVISER_ASSIGNMENT saa
+          LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = saa.school_year_id
+          WHERE saa.user_id = u.user_id AND sy.status IN ('ACTIVE', 'ONGOING')
+        ) AND u.role IN ('subject_teacher', 'subject teacher') THEN 'adviser'
+        WHEN u.role IN ('subject_teacher', 'subject teacher') THEN 'subject teacher'
+        WHEN u.role IN ('department_head', 'department head') THEN 'department head'
+        WHEN u.role = 'principal' THEN 'principal'
+        ELSE u.role
+      END AS display_role,
+      CASE
+        WHEN u.role = 'principal' THEN 'School Administration'
+        WHEN u.department_id IS NOT NULL THEN (
+          SELECT d.department_name
+          FROM DEPARTMENT d
+          WHERE d.department_id = u.department_id
+          LIMIT 1
+        )
+        WHEN u.role IN ('department_head', 'department head') THEN (
+          SELECT d.department_name
+          FROM DEPARTMENT_HEAD dh
+          INNER JOIN DEPARTMENT d ON d.department_id = dh.department_id
+          LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = dh.school_year_id
+          WHERE dh.user_id = u.user_id AND sy.status IN ('ACTIVE', 'ONGOING')
+          ORDER BY dh.department_head_id DESC LIMIT 1
+        )
+        WHEN u.role IN ('subject_teacher', 'subject teacher') THEN (
+          SELECT GROUP_CONCAT(DISTINCT d.department_name ORDER BY d.department_name SEPARATOR ', ')
+          FROM TEACHER_ASSIGNMENT ta
+          INNER JOIN SUBJECT_OFFERING so ON so.subject_offering_id = ta.subject_offering_id
+          INNER JOIN SUBJECT s ON s.subject_id = so.subject_id
+          INNER JOIN DEPARTMENT d ON d.department_id = s.department_id
+          LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = so.school_year_id
+          WHERE ta.user_id = u.user_id AND sy.status IN ('ACTIVE', 'ONGOING')
+        )
+        ELSE NULL
+      END AS department_name,
+      (
+        SELECT gl.grade_level_name
+        FROM SECTION_ADVISER_ASSIGNMENT saa
+        INNER JOIN SECTION sec ON sec.section_id = saa.section_id
+        INNER JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
+        LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = saa.school_year_id
+        WHERE saa.user_id = u.user_id AND sy.status IN ('ACTIVE', 'ONGOING')
+        ORDER BY saa.adviser_assignment_id DESC LIMIT 1
+      ) AS gradeLevel,
+      (
+        SELECT sec.section_name
+        FROM SECTION_ADVISER_ASSIGNMENT saa
+        INNER JOIN SECTION sec ON sec.section_id = saa.section_id
+        LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = saa.school_year_id
+        WHERE saa.user_id = u.user_id AND sy.status IN ('ACTIVE', 'ONGOING')
+        ORDER BY saa.adviser_assignment_id DESC LIMIT 1
+      ) AS section,
+      (
+        SELECT sec.section_name
+        FROM SECTION_ADVISER_ASSIGNMENT saa
+        INNER JOIN SECTION sec ON sec.section_id = saa.section_id
+        LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = saa.school_year_id
+        WHERE saa.user_id = u.user_id AND sy.status IN ('ACTIVE', 'ONGOING')
+        ORDER BY saa.adviser_assignment_id DESC LIMIT 1
+      ) AS adviser_section_name,
+      (
+        SELECT gl.grade_level_name
+        FROM SECTION_ADVISER_ASSIGNMENT saa
+        INNER JOIN SECTION sec ON sec.section_id = saa.section_id
+        INNER JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
+        LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = saa.school_year_id
+        WHERE saa.user_id = u.user_id AND sy.status IN ('ACTIVE', 'ONGOING')
+        ORDER BY saa.adviser_assignment_id DESC LIMIT 1
+      ) AS adviser_grade_level_name,
+      (
+        SELECT saa.section_id
+        FROM SECTION_ADVISER_ASSIGNMENT saa
+        LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = saa.school_year_id
+        WHERE saa.user_id = u.user_id AND sy.status IN ('ACTIVE', 'ONGOING')
+        ORDER BY saa.adviser_assignment_id DESC LIMIT 1
+      ) AS adviser_section_id,
+      (
+        SELECT sec.grade_level_id
+        FROM SECTION_ADVISER_ASSIGNMENT saa
+        INNER JOIN SECTION sec ON sec.section_id = saa.section_id
+        LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = saa.school_year_id
+        WHERE saa.user_id = u.user_id AND sy.status IN ('ACTIVE', 'ONGOING')
+        ORDER BY saa.adviser_assignment_id DESC LIMIT 1
+      ) AS adviser_grade_level_id
+    FROM USER u
+    WHERE u.role <> 'system_admin'
+    ORDER BY u.last_name ASC, u.first_name ASC
+  `);
+
+  for (let user of rows) {
+    const [assignments] = await db.execute(
+      `
+      SELECT 
+        ta.teacher_assignment_id,
+        ta.subject_offering_id,
+        so.subject_id,
+        so.section_id,
+        sec.grade_level_id,
+        s.subject_name,
+        s.subject_code,
+        sec.section_name,
+        gl.grade_level_name
+      FROM TEACHER_ASSIGNMENT ta
+      INNER JOIN SUBJECT_OFFERING so ON so.subject_offering_id = ta.subject_offering_id
+      INNER JOIN SECTION sec ON sec.section_id = so.section_id
+      INNER JOIN SUBJECT s ON s.subject_id = so.subject_id
+      INNER JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
+      LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = so.school_year_id
+      WHERE ta.user_id = ? AND sy.status IN ('ACTIVE', 'ONGOING')
+      ORDER BY gl.grade_level_id ASC, sec.section_name ASC, s.subject_name ASC
+      `,
+      [user.user_id]
+    );
+    user.teaching_assignments = assignments;
+  }
+
+  return rows;
+};
+
+const { uploadProfilePicture } = require("../services/profilePictureStorage");
+
+// 1. STATIC ROUTES FIRST
+
+// POST /api/users/login
+router.post("/login", async (req, res) => {
   try {
-    const user = await User.findByEmail(email);
-    if (!user || user.password !== password) {
-      return res.status(401).json({ error: 'Invalid email or password' });
-    }
-    const safeUser = await User.updateLastLogin(user.user_id);
+    const { email, password } = req.body;
 
-    // Check if the user is assigned as an adviser in SECTION_ADVISER_ASSIGNMENT or SECTION table
-    const adviserAssignments = await SectionAdviserAssignment.findByUserId(safeUser.user_id);
-    if (adviserAssignments && adviserAssignments.length > 0) {
-      safeUser.is_adviser = true;
-      safeUser.adviser_assignment = adviserAssignments[0];
-      safeUser.role = 'adviser';
+    if (!email || !password) {
+      return res.status(400).json({ error: "Email and password are required." });
     }
 
-    res.json({ message: 'Login successful', user: safeUser });
+    const [users] = await db.execute(
+      "SELECT * FROM `USER` WHERE LOWER(email) = LOWER(?) LIMIT 1",
+      [String(email).trim()]
+    );
+
+    if (users.length === 0) {
+      return res.status(401).json({ error: "Invalid email or password." });
+    }
+
+    const user = users[0];
+
+    // Password check (plain text password in capstone system)
+    if (user.password !== password) {
+      return res.status(401).json({ error: "Invalid email or password." });
+    }
+
+    if (String(user.account_status).toLowerCase() === "inactive") {
+      return res.status(403).json({ error: "Your account is inactive. Please contact the administrator." });
+    }
+
+    // Check active advisory section assignment
+    const [advisoryRows] = await db.execute(
+      `
+      SELECT 
+        saa.adviser_assignment_id,
+        saa.section_id,
+        sec.section_name,
+        gl.grade_level_id,
+        gl.grade_level_name
+      FROM SECTION_ADVISER_ASSIGNMENT saa
+      INNER JOIN SECTION sec ON sec.section_id = saa.section_id
+      INNER JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
+      LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = saa.school_year_id
+      WHERE saa.user_id = ? AND (sy.status IN ('ACTIVE', 'ONGOING') OR sy.school_year_id IS NULL)
+      ORDER BY saa.adviser_assignment_id DESC
+      LIMIT 1
+      `,
+      [user.user_id]
+    );
+
+    const isAdviser = advisoryRows.length > 0;
+    const advisoryAssignment = isAdviser ? advisoryRows[0] : null;
+
+    // Fetch department name if applicable
+    let departmentName = "";
+    if (user.department_id) {
+      const [deptRows] = await db.execute(
+        "SELECT department_name FROM DEPARTMENT WHERE department_id = ? LIMIT 1",
+        [user.department_id]
+      );
+      if (deptRows.length > 0) {
+        departmentName = deptRows[0].department_name;
+      }
+    }
+
+    // Determine normalized / display role
+    let displayRole = user.role;
+    let canonicalRole = user.role;
+
+    const rawRole = (user.role || "").toLowerCase().trim();
+    if (rawRole === "admin" || rawRole === "system_admin") {
+      displayRole = "System Administrator";
+      canonicalRole = "admin";
+    } else if (rawRole === "principal") {
+      displayRole = "Principal";
+      canonicalRole = "principal";
+      departmentName = "School Administration";
+    } else if (rawRole === "department_head" || rawRole === "department head") {
+      displayRole = "Department Head";
+      canonicalRole = "department head";
+    } else if (isAdviser) {
+      displayRole = "Adviser";
+      canonicalRole = "adviser";
+    } else {
+      displayRole = "Subject Teacher";
+      canonicalRole = "subject teacher";
+    }
+
+    // Update last login timestamp
+    await db.execute(
+      "UPDATE `USER` SET last_login_at = NOW() WHERE user_id = ?",
+      [user.user_id]
+    );
+
+    res.json({
+      message: "Login successful.",
+      user: {
+        user_id: user.user_id,
+        first_name: user.first_name,
+        middle_name: user.middle_name,
+        last_name: user.last_name,
+        extension_name: user.extension_name,
+        email: user.email,
+        role: canonicalRole,
+        display_role: displayRole,
+        is_adviser: isAdviser,
+        department_id: user.department_id,
+        department_name: departmentName,
+        pfp_url: user.pfp_url,
+        account_status: user.account_status,
+        last_login_at: new Date().toISOString(),
+        adviser_assignment: advisoryAssignment,
+      },
+    });
   } catch (err) {
+    console.error("LOGIN ERROR:", err);
+    res.status(500).json({ error: err.message || "An error occurred during login." });
+  }
+});
+
+router.get("/management-options", async (req, res) => {
+  try {
+    const schoolYear = await UserManagementOptions.getActiveSchoolYear();
+    const [gradeLevels] = await db.execute("SELECT grade_level_id, grade_level_name FROM GRADE_LEVEL ORDER BY grade_level_id ASC");
+    const [departments] = await db.execute("SELECT department_id, department_name FROM DEPARTMENT ORDER BY department_name ASC");
+    const [sections] = await db.execute("SELECT section_id, section_name, grade_level_id FROM SECTION ORDER BY section_name ASC");
+    
+    // Unrestricted query across all departments and grade levels
+    const [subjectOfferings] = await db.execute(`
+      SELECT 
+        so.subject_offering_id, 
+        so.subject_id, 
+        so.section_id, 
+        sec.grade_level_id, 
+        s.subject_name,
+        s.subject_code,
+        sec.section_name,
+        gl.grade_level_name
+      FROM SUBJECT_OFFERING so
+      INNER JOIN SECTION sec ON sec.section_id = so.section_id
+      INNER JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
+      INNER JOIN SUBJECT s ON s.subject_id = so.subject_id
+      INNER JOIN SCHOOL_YEAR sy ON sy.school_year_id = so.school_year_id
+      WHERE sy.status IN ('ACTIVE', 'ONGOING')
+      ORDER BY gl.grade_level_id ASC, sec.section_name ASC, s.subject_name ASC
+    `);
+
+    res.json({ gradeLevels, sections, departments, subjectOfferings, schoolYear });
+  } catch (err) {
+    console.error("GET MANAGEMENT OPTIONS ERROR:", err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// Return only profile-safe account fields. Passwords are never returned.
-router.get('/:id/profile', async (req, res) => {
+// GET /api/users/:id/profile
+router.get("/:id/profile", async (req, res) => {
   if (!isValidUserId(req.params.id)) {
-    return res.status(400).json({ error: 'Invalid user ID.' });
+    return res.status(400).json({ error: "Invalid user ID." });
   }
-
   try {
-    const user = await User.findById(req.params.id);
-    if (!user) return res.status(404).json({ error: 'User not found' });
+    const user = await User.findById(Number(req.params.id));
+    if (!user) {
+      return res.status(404).json({ error: "User not found." });
+    }
     res.json(user);
   } catch (err) {
     sendDatabaseError(res, err);
   }
 });
 
-// Profile users may update personal information, but never role, status, or password.
-router.put('/:id/profile', async (req, res) => {
+// PUT /api/users/:id/profile
+router.put("/:id/profile", async (req, res) => {
   if (!isValidUserId(req.params.id)) {
-    return res.status(400).json({ error: 'Invalid user ID.' });
+    return res.status(400).json({ error: "Invalid user ID." });
   }
-
-  const {
-    first_name,
-    middle_name,
-    last_name,
-    extension_name,
-    email,
-  } = req.body;
-
-  if (!first_name?.trim() || !last_name?.trim() || !email?.trim()) {
-    return res.status(400).json({
-      error: 'First name, last name, and email are required.',
-    });
-  }
-
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-    return res.status(400).json({ error: 'Enter a valid email address.' });
-  }
-
-  if (extension_name && extension_name.trim().length > 20) {
-    return res.status(400).json({
-      error: 'Extension name must be 20 characters or fewer.',
-    });
-  }
-
   try {
-    const existingUser = await User.findById(req.params.id);
-    if (!existingUser) return res.status(404).json({ error: 'User not found' });
-
-    const updatedUser = await User.updateProfile(req.params.id, {
+    const userId = Number(req.params.id);
+    const { first_name, middle_name, last_name, extension_name, email } = req.body;
+    if (!first_name?.trim() || !last_name?.trim() || !email?.trim()) {
+      return res.status(400).json({ error: "Required fields missing." });
+    }
+    const updated = await User.updateProfile(userId, {
       first_name: first_name.trim(),
-      middle_name: middle_name?.trim() || null,
+      middle_name: toNullable(middle_name),
       last_name: last_name.trim(),
-      extension_name: extension_name?.trim() || null,
+      extension_name: toNullable(extension_name),
       email: email.trim().toLowerCase(),
     });
-    res.json(updatedUser);
+    res.json({ message: "Profile updated successfully.", user: updated });
   } catch (err) {
     sendDatabaseError(res, err);
   }
 });
 
-// Upload a validated profile image to shared storage and save its HTTPS URL.
-router.put('/:id/profile-picture', async (req, res) => {
+// PUT /api/users/:id/profile-picture
+router.put("/:id/profile-picture", async (req, res) => {
   if (!isValidUserId(req.params.id)) {
-    return res.status(400).json({ error: 'Invalid user ID.' });
+    return res.status(400).json({ error: "Invalid user ID." });
   }
-
-  const { imageData } = req.body;
-  const match = typeof imageData === 'string'
-    ? imageData.match(/^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/)
-    : null;
-
-  if (!match || !imageExtensions[match[1]]) {
-    return res.status(400).json({ error: 'Choose a valid JPG, PNG, or WebP image.' });
-  }
-
-  const imageBuffer = Buffer.from(match[2], 'base64');
-  if (!imageBuffer.length || imageBuffer.length > 5 * 1024 * 1024) {
-    return res.status(400).json({ error: 'The image must be 5 MB or smaller.' });
-  }
-
   try {
-    const existingUser = await User.findById(req.params.id);
-    if (!existingUser) return res.status(404).json({ error: 'User not found' });
+    const userId = Number(req.params.id);
+    const { imageData } = req.body;
+    if (!imageData) {
+      return res.status(400).json({ error: "No image data provided." });
+    }
 
-    const uploadedPicture = await uploadProfilePicture(
-      imageBuffer,
-      req.params.id
-    );
-    const updatedUser = await User.updateProfilePicture(
-      req.params.id,
-      uploadedPicture.secureUrl
-    );
-    res.json(updatedUser);
+    let buffer;
+    if (typeof imageData === "string" && imageData.startsWith("data:")) {
+      const base64Data = imageData.split(",")[1];
+      buffer = Buffer.from(base64Data, "base64");
+    } else {
+      buffer = Buffer.from(imageData, "base64");
+    }
+
+    const uploadResult = await uploadProfilePicture(buffer, userId);
+    await db.execute("UPDATE `USER` SET pfp_url = ? WHERE user_id = ?", [
+      uploadResult.secureUrl,
+      userId,
+    ]);
+
+    const updatedUser = await User.findById(userId);
+    res.json({
+      message: "Profile picture updated successfully.",
+      pfp_url: uploadResult.secureUrl,
+      user: updatedUser,
+    });
   } catch (err) {
-    sendProfilePictureError(res, err);
+    console.error("PROFILE PICTURE UPLOAD ERROR:", err);
+    res.status(500).json({ error: err.message || "Failed to update profile picture." });
   }
 });
 
-router.get('/', async (req, res) => {
+// 2. LIST ROUTE SECOND
+router.get("/", async (req, res) => {
   try {
-    const users = await User.findAll();
+    const users = await getManagementUsers();
     res.json(users);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendDatabaseError(res, err);
   }
 });
 
-router.post('/', async (req, res) => {
-  try {
-    const id = await User.create(req.body);
-    res.status(201).json({ message: 'User created successfully', user_id: id });
-  } catch (err) {
-    if (err.message.includes('Invalid role')) {
-      return res.status(400).json({ error: err.message });
-    }
-    res.status(500).json({ error: err.message });
+// 3. PARAMETER ROUTE LAST
+router.get("/:id", async (req, res) => {
+  if (!isValidUserId(req.params.id)) {
+    return res.status(400).json({ error: "Invalid user ID." });
   }
-});
-
-router.get('/:id', async (req, res) => {
   try {
-    const user = await User.findById(req.params.id);
-    if (!user) return res.status(404).json({ message: 'User not found' });
-
-    const adviserAssignments = await SectionAdviserAssignment.findByUserId(user.user_id);
-    if (adviserAssignments && adviserAssignments.length > 0) {
-      user.is_adviser = true;
-      user.adviser_assignment = adviserAssignments[0];
-      user.role = 'adviser';
+    const users = await getManagementUsers();
+    const user = users.find((item) => Number(item.user_id) === Number(req.params.id));
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
     }
-
     res.json(user);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendDatabaseError(res, err);
   }
 });
 
-router.put('/:id', async (req, res) => {
-  try {
-    const updated = await User.update(req.params.id, req.body);
-    res.json(updated);
-  } catch (err) {
-    if (err.message.includes('Invalid role')) {
-      return res.status(400).json({ error: err.message });
+const validateSingleDepartmentHead = async (connection, departmentId, userId, schoolYear) => {
+  if (!departmentId) return;
+  const [existing] = await connection.execute(
+    `
+    SELECT 
+      dh.user_id,
+      CONCAT(COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, '')) AS head_name,
+      d.department_name
+    FROM DEPARTMENT_HEAD dh
+    INNER JOIN USER u ON u.user_id = dh.user_id
+    INNER JOIN DEPARTMENT d ON d.department_id = dh.department_id
+    LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = dh.school_year_id
+    WHERE dh.department_id = ?
+      AND dh.user_id <> ?
+      AND (sy.status IN ('ACTIVE', 'ONGOING') OR sy.school_year_id = ?)
+    LIMIT 1
+    `,
+    [departmentId, userId || 0, schoolYear?.school_year_id || 0]
+  );
+
+  if (existing.length > 0) {
+    const head = existing[0];
+    const name = head.head_name.trim() || `User #${head.user_id}`;
+    throw new Error(
+      `The ${head.department_name} department already has an assigned Department Head (${name}). Each department can only have 1 Department Head.`
+    );
+  }
+};
+
+const saveRoleAssignments = async (connection, userId, body, schoolYear) => {
+  const { assignedFrom, assignedUntil } = getAssignmentDates(body, schoolYear);
+  const role = normalizeRole(body.role);
+
+  if (role === "department head" && body.department_id) {
+    await connection.execute(
+      `INSERT INTO DEPARTMENT_HEAD (department_id, user_id, school_year_id, appointed_from, appointed_until) VALUES (?, ?, ?, ?, ?)`,
+      [body.department_id, userId, schoolYear.school_year_id, assignedFrom, assignedUntil]
+    );
+  }
+
+  if ((role === "subject teacher" || body.is_adviser) && body.adviser_section_id) {
+    await connection.execute(
+      `INSERT INTO SECTION_ADVISER_ASSIGNMENT (section_id, school_year_id, user_id, assigned_from, assigned_until) VALUES (?, ?, ?, ?, ?)`,
+      [body.adviser_section_id, schoolYear.school_year_id, userId, assignedFrom, assignedUntil]
+    );
+  }
+
+  if (Array.isArray(body.teaching_assignments)) {
+    for (const assign of body.teaching_assignments) {
+      if (assign.subject_offering_id) {
+        await connection.execute(
+          `INSERT INTO TEACHER_ASSIGNMENT (user_id, subject_offering_id, assigned_from, assigned_until) VALUES (?, ?, ?, ?)`,
+          [userId, assign.subject_offering_id, assignedFrom, assignedUntil]
+        );
+      }
     }
-    res.status(500).json({ error: err.message });
+  }
+};
+
+const deleteRoleAssignments = async (connection, userId) => {
+  await connection.execute(`DELETE FROM SECTION_ADVISER_ASSIGNMENT WHERE user_id = ?`, [userId]);
+  await connection.execute(`DELETE FROM TEACHER_ASSIGNMENT WHERE user_id = ?`, [userId]);
+  await connection.execute(`DELETE FROM DEPARTMENT_HEAD WHERE user_id = ?`, [userId]);
+};
+
+router.post("/", async (req, res) => {
+  let connection;
+  try {
+    const { first_name, middle_name, last_name, extension_name, email, password, role: requestedRole, department_id, account_status, status } = req.body;
+
+    if (!first_name?.trim() || !last_name?.trim() || !email?.trim() || !password) {
+      return res.status(400).json({ error: "Required fields missing." });
+    }
+
+    const role = normalizeRole(requestedRole);
+    if (!role) {
+      return res.status(400).json({ error: "Invalid role specified." });
+    }
+
+    connection = await db.getConnection();
+    await connection.beginTransaction();
+
+    const schoolYear = await getCurrentSchoolYear(connection);
+    if (!schoolYear) throw new Error("No active school year found.");
+
+    const effectiveDepartmentId = role === "principal" ? null : (department_id ? Number(department_id) : null);
+
+    // Enforce 1 Department Head per department
+    if (role === "department head" && effectiveDepartmentId) {
+      await validateSingleDepartmentHead(connection, effectiveDepartmentId, 0, schoolYear);
+    }
+
+    const [result] = await connection.execute(
+      `INSERT INTO USER (role, department_id, first_name, middle_name, last_name, extension_name, email, password, account_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [role, effectiveDepartmentId, first_name.trim(), toNullable(middle_name), last_name.trim(), toNullable(extension_name), email.trim().toLowerCase(), password, account_status || status || "active"]
+    );
+
+    const userId = result.insertId;
+    await saveRoleAssignments(connection, userId, req.body, schoolYear);
+    await connection.commit();
+
+    const users = await getManagementUsers();
+    const createdUser = users.find((u) => Number(u.user_id) === Number(userId));
+
+    res.status(201).json({ message: "User created successfully.", user_id: userId, user: createdUser });
+  } catch (err) {
+    if (connection) await connection.rollback();
+    sendDatabaseError(res, err);
+  } finally {
+    if (connection) connection.release();
   }
 });
 
-router.delete('/:id', async (req, res) => {
+router.put("/:id", async (req, res) => {
+  if (!isValidUserId(req.params.id)) {
+    return res.status(400).json({ error: "Invalid user ID." });
+  }
+
+  let connection;
   try {
-    const success = await User.delete(req.params.id);
-    if (!success) return res.status(404).json({ message: 'User not found' });
-    res.json({ message: 'User deleted successfully' });
+    const userId = Number(req.params.id);
+    const { first_name, middle_name, last_name, extension_name, email, password, role: requestedRole, department_id, account_status, status } = req.body;
+
+    const existingUser = await User.findById(userId);
+    if (!existingUser) return res.status(404).json({ error: "User not found." });
+
+    const role = normalizeRole(requestedRole);
+    if (!role) return res.status(400).json({ error: "Invalid role." });
+
+    connection = await db.getConnection();
+    await connection.beginTransaction();
+
+    const schoolYear = await getCurrentSchoolYear(connection);
+    if (!schoolYear) throw new Error("No active school year found.");
+
+    const effectiveDepartmentId = role === "principal" ? null : (department_id ? Number(department_id) : null);
+
+    // Enforce 1 Department Head per department
+    if (role === "department head" && effectiveDepartmentId) {
+      await validateSingleDepartmentHead(connection, effectiveDepartmentId, userId, schoolYear);
+    }
+
+    if (password && password.trim()) {
+      await connection.execute(
+        `UPDATE USER SET role = ?, department_id = ?, first_name = ?, middle_name = ?, last_name = ?, extension_name = ?, email = ?, password = ?, account_status = ? WHERE user_id = ?`,
+        [role, effectiveDepartmentId, first_name.trim(), toNullable(middle_name), last_name.trim(), toNullable(extension_name), email.trim().toLowerCase(), password, account_status || status || "active", userId]
+      );
+    } else {
+      await connection.execute(
+        `UPDATE USER SET role = ?, department_id = ?, first_name = ?, middle_name = ?, last_name = ?, extension_name = ?, email = ?, account_status = ? WHERE user_id = ?`,
+        [role, effectiveDepartmentId, first_name.trim(), toNullable(middle_name), last_name.trim(), toNullable(extension_name), email.trim().toLowerCase(), account_status || status || "active", userId]
+      );
+    }
+
+    await deleteRoleAssignments(connection, userId);
+    await saveRoleAssignments(connection, userId, req.body, schoolYear);
+    await connection.commit();
+
+    const users = await getManagementUsers();
+    const updatedUser = users.find((u) => Number(u.user_id) === Number(userId));
+
+    res.json({ message: "User updated successfully.", user: updatedUser });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    if (connection) await connection.rollback();
+    sendDatabaseError(res, err);
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
+router.delete("/:id", async (req, res) => {
+  if (!isValidUserId(req.params.id)) {
+    return res.status(400).json({ error: "Invalid user ID." });
+  }
+
+  let connection;
+  try {
+    const userId = Number(req.params.id);
+    connection = await db.getConnection();
+    await connection.beginTransaction();
+
+    await deleteRoleAssignments(connection, userId);
+    await connection.execute(`DELETE FROM USER WHERE user_id = ?`, [userId]);
+    await connection.commit();
+
+    res.json({ message: "User deleted successfully." });
+  } catch (err) {
+    if (connection) await connection.rollback();
+    sendDatabaseError(res, err);
+  } finally {
+    if (connection) connection.release();
   }
 });
 
