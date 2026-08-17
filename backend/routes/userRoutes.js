@@ -213,8 +213,6 @@ const getManagementUsers = async () => {
 
 const { uploadProfilePicture } = require("../services/profilePictureStorage");
 
-// 1. STATIC ROUTES FIRST
-
 // POST /api/users/login
 router.post("/login", async (req, res) => {
   try {
@@ -235,7 +233,6 @@ router.post("/login", async (req, res) => {
 
     const user = users[0];
 
-    // Password check (plain text password in capstone system)
     if (user.password !== password) {
       return res.status(401).json({ error: "Invalid email or password." });
     }
@@ -244,7 +241,6 @@ router.post("/login", async (req, res) => {
       return res.status(403).json({ error: "Your account is inactive. Please contact the administrator." });
     }
 
-    // Check active advisory section assignment
     const [advisoryRows] = await db.execute(
       `
       SELECT 
@@ -267,7 +263,6 @@ router.post("/login", async (req, res) => {
     const isAdviser = advisoryRows.length > 0;
     const advisoryAssignment = isAdviser ? advisoryRows[0] : null;
 
-    // Fetch department name if applicable
     let departmentName = "";
     if (user.department_id) {
       const [deptRows] = await db.execute(
@@ -279,7 +274,6 @@ router.post("/login", async (req, res) => {
       }
     }
 
-    // Determine normalized / display role
     let displayRole = user.role;
     let canonicalRole = user.role;
 
@@ -302,7 +296,6 @@ router.post("/login", async (req, res) => {
       canonicalRole = "subject teacher";
     }
 
-    // Update last login timestamp
     await db.execute(
       "UPDATE `USER` SET last_login_at = NOW() WHERE user_id = ?",
       [user.user_id]
@@ -341,7 +334,6 @@ router.get("/management-options", async (req, res) => {
     const [departments] = await db.execute("SELECT department_id, department_name FROM DEPARTMENT ORDER BY department_name ASC");
     const [sections] = await db.execute("SELECT section_id, section_name, grade_level_id FROM SECTION ORDER BY section_name ASC");
     
-    // Unrestricted query across all departments and grade levels
     const [subjectOfferings] = await db.execute(`
       SELECT 
         so.subject_offering_id, 
@@ -446,7 +438,6 @@ router.put("/:id/profile-picture", async (req, res) => {
   }
 });
 
-// 2. LIST ROUTE SECOND
 router.get("/", async (req, res) => {
   try {
     const users = await getManagementUsers();
@@ -456,7 +447,6 @@ router.get("/", async (req, res) => {
   }
 });
 
-// 3. PARAMETER ROUTE LAST
 router.get("/:id", async (req, res) => {
   if (!isValidUserId(req.params.id)) {
     return res.status(400).json({ error: "Invalid user ID." });
@@ -560,7 +550,6 @@ router.post("/", async (req, res) => {
 
     const effectiveDepartmentId = role === "principal" ? null : (department_id ? Number(department_id) : null);
 
-    // Enforce 1 Department Head per department
     if (role === "department head" && effectiveDepartmentId) {
       await validateSingleDepartmentHead(connection, effectiveDepartmentId, 0, schoolYear);
     }
@@ -610,7 +599,7 @@ router.put("/:id", async (req, res) => {
 
     const effectiveDepartmentId = role === "principal" ? null : (department_id ? Number(department_id) : null);
 
-    // Enforce 1 Department Head per department
+    // 1 Department Head per department
     if (role === "department head" && effectiveDepartmentId) {
       await validateSingleDepartmentHead(connection, effectiveDepartmentId, userId, schoolYear);
     }
