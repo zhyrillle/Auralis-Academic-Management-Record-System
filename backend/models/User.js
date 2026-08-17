@@ -22,9 +22,7 @@ const PUBLIC_USER_COLUMNS = `
 `;
 
 class User {
-  // =========================================================
   // GET ALL USERS EXCEPT SYSTEM ADMIN
-  // =========================================================
 
   static async findAll() {
     const [rows] = await db.execute(`
@@ -130,10 +128,6 @@ class User {
       ORDER BY u.last_name, u.first_name
     `);
 
-    /*
-      Convert database roles into the roles shown by the UI.
-    */
-
     return rows.map((user) => {
       let displayRole = user.role;
 
@@ -157,16 +151,9 @@ class User {
       return {
         ...user,
 
-        // UI username/name
         username: `${user.first_name} ${user.last_name}`.trim(),
-
-        // UI role
         display_role: displayRole,
-
-        // Department
         department: departmentDisplay,
-
-        // Adviser information
         is_adviser: !!user.adviser_assignment_id,
 
         adviser_assignment: user.adviser_assignment_id
@@ -182,10 +169,7 @@ class User {
     });
   }
 
-  // =========================================================
   // FIND USER
-  // =========================================================
-
   static async findById(id) {
     const [rows] = await db.execute(
       `
@@ -210,9 +194,7 @@ class User {
     return rows[0];
   }
 
-  // =========================================================
   // FIND BY EMAIL
-  // =========================================================
 
   static async findByEmail(email) {
     const [rows] = await db.execute(
@@ -223,9 +205,7 @@ class User {
     return rows[0];
   }
 
-  // =========================================================
   // CREATE
-  // =========================================================
 
   static async create(data, connection = db) {
     const {
@@ -279,9 +259,7 @@ class User {
     return result.insertId;
   }
 
-  // =========================================================
   // UPDATE
-  // =========================================================
 
   static async update(id, data, connection = db) {
     if (data.role && !DB_ROLES.includes(data.role)) {
@@ -327,9 +305,7 @@ class User {
     return this.findById(id);
   }
 
-  // =========================================================
   // DELETE
-  // =========================================================
 
   static async delete(id, connection = db) {
     const [result] = await connection.execute(
@@ -340,9 +316,7 @@ class User {
     return result.affectedRows > 0;
   }
 
-  // =========================================================
   // PROFILE
-  // =========================================================
 
   static async updateProfile(id, data) {
     const {

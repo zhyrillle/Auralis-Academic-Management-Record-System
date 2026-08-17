@@ -1,9 +1,6 @@
 const db = require("../config/db");
 
 class UserManagementOptions {
-  // =========================================================
-  // GRADE LEVELS
-  // =========================================================
 
   static async getGradeLevels() {
     const [rows] = await db.execute(`
@@ -16,10 +13,6 @@ class UserManagementOptions {
 
     return rows;
   }
-
-  // =========================================================
-  // SECTIONS
-  // =========================================================
 
   static async getSections(gradeLevelId) {
     const [rows] = await db.execute(
@@ -38,10 +31,6 @@ class UserManagementOptions {
     return rows;
   }
 
-  // =========================================================
-  // DEPARTMENTS
-  // =========================================================
-
   static async getDepartments() {
     const [rows] = await db.execute(`
       SELECT
@@ -54,10 +43,6 @@ class UserManagementOptions {
 
     return rows;
   }
-
-  // =========================================================
-  // SUBJECTS
-  // =========================================================
 
   static async getSubjects() {
     const [rows] = await db.execute(`
@@ -73,10 +58,6 @@ class UserManagementOptions {
 
     return rows;
   }
-
-  // =========================================================
-  // ACTIVE SCHOOL YEAR
-  // =========================================================
 
   static async getActiveSchoolYear() {
     const [rows] = await db.execute(`
@@ -94,10 +75,6 @@ class UserManagementOptions {
 
     return rows[0] || null;
   }
-
-  // =========================================================
-  // SUBJECT OFFERINGS
-  // =========================================================
 
   static async getSubjectOfferings(sectionId) {
     const [rows] = await db.execute(

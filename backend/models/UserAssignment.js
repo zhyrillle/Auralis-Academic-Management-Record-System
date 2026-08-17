@@ -1,9 +1,6 @@
 const db = require("../config/db");
 
 class UserAssignment {
-  // =========================================================
-  // DELETE EXISTING ASSIGNMENTS
-  // =========================================================
 
   static async deleteTeacherAssignments(userId, connection = db) {
     await connection.execute(
@@ -38,19 +35,11 @@ class UserAssignment {
     );
   }
 
-  // =========================================================
-  // DELETE ALL ASSIGNMENTS
-  // =========================================================
-
   static async deleteAllAssignments(userId, connection = db) {
     await this.deleteTeacherAssignments(userId, connection);
     await this.deleteAdviserAssignments(userId, connection);
     await this.deleteDepartmentHeadAssignments(userId, connection);
   }
-
-  // =========================================================
-  // TEACHER ASSIGNMENT
-  // =========================================================
 
   static async createTeacherAssignment(
     data,
@@ -84,10 +73,6 @@ class UserAssignment {
 
     return result.insertId;
   }
-
-  // =========================================================
-  // ADVISER ASSIGNMENT
-  // =========================================================
 
   static async createAdviserAssignment(
     data,
@@ -125,10 +110,6 @@ class UserAssignment {
     return result.insertId;
   }
 
-  // =========================================================
-  // DEPARTMENT HEAD
-  // =========================================================
-
   static async createDepartmentHead(
     data,
     connection = db
@@ -164,10 +145,6 @@ class UserAssignment {
 
     return result.insertId;
   }
-
-  // =========================================================
-  // GET ADVISER ASSIGNMENTS
-  // =========================================================
 
   static async getAdviserAssignments(
     userId,
@@ -212,10 +189,6 @@ class UserAssignment {
 
     return rows;
   }
-
-  // =========================================================
-  // GET TEACHER ASSIGNMENTS
-  // =========================================================
 
   static async getTeacherAssignments(
     userId,
@@ -278,10 +251,6 @@ class UserAssignment {
     return rows;
   }
 
-  // =========================================================
-  // GET DEPARTMENT HEAD ASSIGNMENTS
-  // =========================================================
-
   static async getDepartmentHeadAssignments(
     userId,
     connection = db
@@ -320,10 +289,6 @@ class UserAssignment {
 
     return rows;
   }
-
-  // =========================================================
-  // GET ALL ASSIGNMENTS FOR A USER
-  // =========================================================
 
   static async getAllAssignments(
     userId,

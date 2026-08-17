@@ -234,7 +234,6 @@ export default function UserManagement() {
     });
   }, []);
 
-  // Department Display Logic with accurate user.department_id priority
   const getUserDepartment = (user) => {
     if (!user) return "-";
     const role = getDisplayRole(user);
@@ -242,7 +241,6 @@ export default function UserManagement() {
       return "School Administration";
     }
 
-    // Lookup using department_id if present
     if (user.department_id && departments.length > 0) {
       const matchedDept = departments.find(
         (d) => String(d.department_id) === String(user.department_id)
@@ -250,7 +248,6 @@ export default function UserManagement() {
       if (matchedDept) return matchedDept.department_name;
     }
 
-    // Check direct user properties returned from SQL JOIN
     if (user.department_name) return user.department_name;
     if (user.dept_name) return user.dept_name;
     if (user.department) return user.department;
@@ -309,7 +306,6 @@ export default function UserManagement() {
 
       const currentDisplayRole = getDisplayRole(fullUser);
 
-      // Format teaching assignments
       let formattedAssignments = [];
       if (Array.isArray(fullUser.teaching_assignments)) {
         formattedAssignments = fullUser.teaching_assignments.map((ta) => {
@@ -339,7 +335,6 @@ export default function UserManagement() {
         });
       }
 
-      // Resolve grade level for advisory section
       let resolvedGradeLevelId = fullUser.adviser_grade_level_id ? String(fullUser.adviser_grade_level_id) : "";
       if (!resolvedGradeLevelId && fullUser.adviser_section_id) {
         const matchedSec = sections.find(
@@ -348,7 +343,6 @@ export default function UserManagement() {
         if (matchedSec) resolvedGradeLevelId = String(matchedSec.grade_level_id);
       }
 
-      // Resolve department_id
       let resolvedDeptId = fullUser.department_id ? String(fullUser.department_id) : "";
       if (!resolvedDeptId && fullUser.department_name && departments.length > 0) {
         const matched = departments.find((d) => d.department_name === fullUser.department_name);
