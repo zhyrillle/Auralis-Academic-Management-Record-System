@@ -1,0 +1,356 @@
+/* REVIEW REQUEST DRAWER */
+.review-details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 16px;
+  row-gap: 14px;
+}
+
+.review-details div {
+  min-width: 0;
+  padding: 12px;
+  background: #f8fafc;
+  border: 1px solid #edf2f7;
+  border-radius: 9px;
+}
+
+.review-details__wide {
+  grid-column: 1 / -1;
+}
+
+.review-details dt,
+.term-details-list dt {
+  margin-bottom: 5px;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
+
+.review-details dd,
+.term-details-list dd {
+  color: #273449;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.5;
+}
+
+.review-details__wide dd {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #1d4ed8;
+}
+
+.review-policy-reference {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 11px 12px;
+  color: #365f8d;
+  background: #f3f7fc;
+  border: 1px solid #cddced;
+  border-radius: 9px;
+}
+
+.review-policy-reference svg {
+  flex: 0 0 auto;
+}
+
+.review-policy-reference:focus-visible,
+.grade-lock-info-box:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.2);
+  outline-offset: 2px;
+}
+
+.review-policy-reference strong {
+  display: block;
+  color: #274568;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.review-policy-reference p {
+  margin-top: 3px !important;
+  color: #455f7d;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.review-duration-field > span {
+  font-size: 12.5px;
+}
+
+.review-duration-field + .review-duration-field {
+  margin-top: 16px;
+}
+
+.review-duration-dropdown,
+.review-duration-unit-dropdown {
+  width: 100%;
+}
+
+.review-duration-dropdown .dropdown-select__trigger,
+.review-duration-unit-dropdown .dropdown-select__trigger {
+  min-height: 42px;
+  color: #273449;
+  border-color: #cbd5e1;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.review-duration-dropdown .dropdown-select__menu,
+.review-duration-unit-dropdown .dropdown-select__menu {
+  z-index: 180;
+}
+
+.review-duration-unit-dropdown .dropdown-select__menu {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+}
+
+.review-duration-dropdown .dropdown-select__menu button,
+.review-duration-unit-dropdown .dropdown-select__menu button {
+  min-height: 38px;
+  font-size: 13px;
+}
+
+.custom-duration-control .dropdown-select {
+  width: 100%;
+  min-width: 0;
+}
+
+.grade-lock-info-box,
+.deadline-reminder-preview {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 12px;
+  color: #1e4f83;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+}
+
+.grade-lock-info-box svg,
+.deadline-reminder-preview svg {
+  flex: 0 0 auto;
+}
+
+.grade-lock-info-box strong,
+.deadline-reminder-preview strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.grade-lock-info-box p,
+.deadline-reminder-preview p {
+  color: #45688f;
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.grade-lock-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 7px;
+}
+
+.grade-lock-label-row label span,
+.grade-lock-label-row > span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.grade-lock-drawer:not(.grade-lock-drawer--compact)
+  .grade-lock-surface__header
+  h2 {
+  font-size: 21px;
+  line-height: 1.3;
+}
+
+.grade-lock-drawer:not(.grade-lock-drawer--compact) .grade-lock-form-title {
+  color: #273449;
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.grade-lock-drawer:not(.grade-lock-drawer--compact) textarea {
+  color: #273449;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.grade-lock-drawer--review > .grade-lock-surface__header,
+.grade-lock-drawer--review > .grade-lock-drawer__body,
+.grade-lock-drawer--review > .grade-lock-surface__footer {
+  padding-right: 24px;
+  padding-left: 24px;
+}
+
+.grade-lock-drawer--review > .grade-lock-surface__footer {
+  gap: 12px;
+}
+
+@media (max-height: 820px) and (min-width: 561px) {
+  .grade-lock-drawer--review .grade-lock-drawer__body {
+    gap: 30px;
+    padding: 18px 24px;
+  }
+
+  .grade-lock-drawer--review .grade-lock-form-title {
+    margin-bottom: 13px !important;
+  }
+
+  .grade-lock-drawer--review .review-details {
+    column-gap: 16px;
+    row-gap: 14px;
+  }
+
+  .grade-lock-drawer--review .review-details div {
+    padding: 12px;
+  }
+
+  .grade-lock-drawer--review .review-policy-reference,
+  .grade-lock-drawer--review .grade-lock-info-box {
+    position: relative;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    margin-top: 14px;
+    padding: 0;
+    overflow: visible;
+  }
+
+  .grade-lock-drawer--review .review-duration-section {
+    position: relative;
+  }
+
+  .grade-lock-drawer--review .review-duration-section > .grade-lock-form-title {
+    display: flex;
+    align-items: center;
+    min-height: 38px;
+    padding-right: 52px;
+  }
+
+  .grade-lock-drawer--review .review-duration-section > .grade-lock-info-box {
+    position: absolute;
+    top: 0;
+    right: 0;
+    margin-top: 0;
+  }
+
+  .grade-lock-drawer--review .review-policy-reference > div,
+  .grade-lock-drawer--review .grade-lock-info-box > div {
+    position: absolute;
+    top: calc(100% + 9px);
+    left: 0;
+    z-index: 20;
+    width: min(340px, calc(100vw - 88px));
+    padding: 12px 14px;
+    visibility: hidden;
+    background: #f8fbff;
+    border: 1px solid #cddced;
+    border-radius: 9px;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.14);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-4px);
+    transition:
+      opacity 0.16s ease,
+      transform 0.16s ease,
+      visibility 0.16s ease;
+  }
+
+  .grade-lock-drawer--review .review-policy-reference > div::before,
+  .grade-lock-drawer--review .grade-lock-info-box > div::before {
+    position: absolute;
+    bottom: 100%;
+    left: 11px;
+    width: 9px;
+    height: 9px;
+    background: #f8fbff;
+    border-top: 1px solid #cddced;
+    border-left: 1px solid #cddced;
+    content: "";
+    transform: translateY(5px) rotate(45deg);
+  }
+
+  .grade-lock-drawer--review
+    .review-duration-section
+    > .grade-lock-info-box
+    > div {
+    right: 0;
+    left: auto;
+  }
+
+  .grade-lock-drawer--review
+    .review-duration-section
+    > .grade-lock-info-box
+    > div::before {
+    right: 11px;
+    left: auto;
+  }
+
+  .grade-lock-drawer--review .review-policy-reference:hover > div,
+  .grade-lock-drawer--review .review-policy-reference:focus > div,
+  .grade-lock-drawer--review .review-policy-reference:focus-within > div,
+  .grade-lock-drawer--review .grade-lock-info-box:hover > div,
+  .grade-lock-drawer--review .grade-lock-info-box:focus > div,
+  .grade-lock-drawer--review .grade-lock-info-box:focus-within > div {
+    visibility: visible;
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .grade-lock-drawer--review .review-duration-field + .review-duration-field {
+    margin-top: 16px;
+  }
+
+  .grade-lock-drawer--review textarea {
+    min-height: 96px;
+  }
+
+  .grade-lock-drawer--review .grade-lock-label-row {
+    margin-bottom: 10px;
+  }
+}
+
+@media (max-width: 560px) {
+  .grade-lock-drawer--review .grade-lock-drawer__body {
+    gap: 22px;
+    padding-right: 20px;
+    padding-left: 20px;
+  }
+
+  .grade-lock-drawer--review > .grade-lock-surface__header,
+  .grade-lock-drawer--review > .grade-lock-surface__footer {
+    padding-right: 20px;
+    padding-left: 20px;
+  }
+
+  .grade-lock-drawer--review .review-details,
+  .grade-lock-drawer--review .custom-duration-control {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 390px) {
+  .grade-lock-drawer--review > .grade-lock-surface__header,
+  .grade-lock-drawer--review > .grade-lock-drawer__body,
+  .grade-lock-drawer--review > .grade-lock-surface__footer {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+}

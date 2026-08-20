@@ -9,12 +9,10 @@ import {
   Inbox,
   FolderOpen,
   AlertTriangle,
-  TrendingUp,
-  PieChart,
-  LineChart,
   FileText,
   BookOpen,
   Copy,
+  CalendarClock,
 } from "lucide-react";
 
 export const sidebarConfig = {
@@ -30,9 +28,9 @@ export const sidebarConfig = {
       icon: Users,
     },
     {
-      title: "Grade Lock",
-      path: "/system-admin/grade-lock",
-      icon: Bell,
+      title: "Grading Periods",
+      path: "/system-admin/grading-periods",
+      icon: CalendarClock,
     },
     {
       title: "WS Config",
@@ -53,9 +51,9 @@ export const sidebarConfig = {
       icon: Users,
     },
     {
-      title: "Grade Lock",
-      path: "/system-admin/grade-lock",
-      icon: Bell,
+      title: "Grading Periods",
+      path: "/system-admin/grading-periods",
+      icon: CalendarClock,
     },
     {
       title: "WS Config",
