@@ -1,4 +1,5 @@
 const db = require("../config/db");
+const { hashPassword } = require("../utils/passwordUtils");
 
 const DB_ROLES = [
   "system_admin",
@@ -225,6 +226,8 @@ class User {
       throw new Error(`Invalid database role '${role}'.`);
     }
 
+    const hashedPassword = await hashPassword(password);
+
     const [result] = await connection.execute(
       `
       INSERT INTO \`USER\`
@@ -250,7 +253,7 @@ class User {
         last_name,
         extension_name || null,
         email,
-        password,
+        hashedPassword,
         pfp_url || null,
         account_status || "active",
       ]
@@ -279,7 +282,12 @@ class User {
       "account_status",
     ];
 
-    const entries = Object.entries(data).filter(([key]) =>
+    const dataToUpdate = { ...data };
+    if (dataToUpdate.password) {
+      dataToUpdate.password = await hashPassword(dataToUpdate.password);
+    }
+
+    const entries = Object.entries(dataToUpdate).filter(([key]) =>
       allowedFields.includes(key)
     );
 

@@ -1,10 +1,18 @@
 const express = require("express");
 const router = express.Router();
+const crypto = require("crypto");
 
 const db = require("../config/db");
 
 const User = require("../models/User");
 const UserManagementOptions = require("../models/UserManagementOptions");
+const OtpStore = require("../services/otpStore");
+const { sendPasswordResetOtpEmail } = require("../services/emailService");
+const {
+  hashPassword,
+  verifyPassword,
+  isBcryptHash,
+} = require("../utils/passwordUtils");
 
 const isValidUserId = (id) => /^\d+$/.test(String(id));
 
@@ -233,8 +241,18 @@ router.post("/login", async (req, res) => {
 
     const user = users[0];
 
-    if (user.password !== password) {
+    const isPasswordValid = await verifyPassword(password, user.password);
+    if (!isPasswordValid) {
       return res.status(401).json({ error: "Invalid email or password." });
+    }
+
+    // If password was stored in plaintext, upgrade it to bcrypt hash transparently
+    if (!isBcryptHash(user.password)) {
+      const rehashed = await hashPassword(password);
+      await db.execute("UPDATE `USER` SET password = ? WHERE user_id = ?", [
+        rehashed,
+        user.user_id,
+      ]);
     }
 
     if (String(user.account_status).toLowerCase() === "inactive") {
@@ -324,6 +342,170 @@ router.post("/login", async (req, res) => {
   } catch (err) {
     console.error("LOGIN ERROR:", err);
     res.status(500).json({ error: err.message || "An error occurred during login." });
+  }
+});
+
+// POST /api/users/forgot-password
+router.post("/forgot-password", async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email || !String(email).trim()) {
+      return res.status(400).json({ error: "Email is required." });
+    }
+
+    const cleanEmail = String(email).trim().toLowerCase();
+
+    // Verify if account exists
+    const [users] = await db.execute(
+      "SELECT user_id, first_name, last_name, email, account_status FROM `USER` WHERE LOWER(email) = LOWER(?) LIMIT 1",
+      [cleanEmail]
+    );
+
+    if (users.length === 0) {
+      return res.status(404).json({ error: "No registered account found with this email address." });
+    }
+
+    const user = users[0];
+    if (String(user.account_status).toLowerCase() === "inactive") {
+      return res.status(403).json({ error: "This account is inactive. Please contact your system administrator." });
+    }
+
+    // Generate 4-digit numeric OTP
+    const otpCode = Math.floor(1000 + Math.random() * 9000).toString();
+    OtpStore.createOtp(cleanEmail, otpCode, 10);
+
+    const userName = `${user.first_name || ""} ${user.last_name || ""}`.trim();
+    await sendPasswordResetOtpEmail(cleanEmail, otpCode, userName);
+
+    res.json({
+      success: true,
+      message: "A 4-digit verification code has been sent to your registered email.",
+      email: cleanEmail,
+    });
+  } catch (err) {
+    console.error("FORGOT PASSWORD ERROR:", err);
+    res.status(500).json({ error: err.message || "Failed to process forgot password request." });
+  }
+});
+
+// POST /api/users/verify-otp
+router.post("/verify-otp", async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+    if (!email || !otp) {
+      return res.status(400).json({ error: "Email and verification code are required." });
+    }
+
+    const cleanEmail = String(email).trim().toLowerCase();
+    const cleanOtp = String(otp).trim();
+
+    if (!/^\d{4}$/.test(cleanOtp)) {
+      return res.status(400).json({ error: "Verification code must be 4 digits." });
+    }
+
+    const otpRecord = OtpStore.findValidOtp(cleanEmail, cleanOtp);
+    if (!otpRecord) {
+      return res.status(400).json({ error: "Invalid or expired verification code. Please request a new one." });
+    }
+
+    // Generate a secure reset token
+    const resetToken = crypto.randomBytes(32).toString("hex");
+    OtpStore.markVerified(cleanEmail, resetToken);
+
+    res.json({
+      success: true,
+      message: "Code verified successfully.",
+      resetToken,
+      email: cleanEmail,
+    });
+  } catch (err) {
+    console.error("VERIFY OTP ERROR:", err);
+    res.status(500).json({ error: err.message || "Failed to verify code." });
+  }
+});
+
+// POST /api/users/resend-otp
+router.post("/resend-otp", async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email || !String(email).trim()) {
+      return res.status(400).json({ error: "Email is required." });
+    }
+
+    const cleanEmail = String(email).trim().toLowerCase();
+
+    const [users] = await db.execute(
+      "SELECT user_id, first_name, last_name, email, account_status FROM `USER` WHERE LOWER(email) = LOWER(?) LIMIT 1",
+      [cleanEmail]
+    );
+
+    if (users.length === 0) {
+      return res.status(404).json({ error: "No registered account found with this email address." });
+    }
+
+    const user = users[0];
+    if (String(user.account_status).toLowerCase() === "inactive") {
+      return res.status(403).json({ error: "This account is inactive. Please contact your system administrator." });
+    }
+
+    const otpCode = Math.floor(1000 + Math.random() * 9000).toString();
+    OtpStore.createOtp(cleanEmail, otpCode, 10);
+
+    const userName = `${user.first_name || ""} ${user.last_name || ""}`.trim();
+    await sendPasswordResetOtpEmail(cleanEmail, otpCode, userName);
+
+    res.json({
+      success: true,
+      message: "A new 4-digit verification code has been sent to your email.",
+      email: cleanEmail,
+    });
+  } catch (err) {
+    console.error("RESEND OTP ERROR:", err);
+    res.status(500).json({ error: err.message || "Failed to resend verification code." });
+  }
+});
+
+// POST /api/users/reset-password
+router.post("/reset-password", async (req, res) => {
+  try {
+    const { email, resetToken, newPassword } = req.body;
+
+    if (!email || !resetToken || !newPassword) {
+      return res.status(400).json({ error: "Email, reset token, and new password are required." });
+    }
+
+    const cleanEmail = String(email).trim().toLowerCase();
+    const cleanPassword = String(newPassword).trim();
+
+    if (cleanPassword.length < 6) {
+      return res.status(400).json({ error: "Password must be at least 6 characters long." });
+    }
+
+    const tokenRecord = OtpStore.findValidResetToken(cleanEmail, resetToken);
+    if (!tokenRecord) {
+      return res.status(400).json({ error: "Invalid or expired reset session. Please request a new code." });
+    }
+
+    const hashedPassword = await hashPassword(cleanPassword);
+
+    const [result] = await db.execute(
+      "UPDATE `USER` SET password = ? WHERE LOWER(email) = LOWER(?)",
+      [hashedPassword, cleanEmail]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "User account not found." });
+    }
+
+    OtpStore.invalidate(cleanEmail);
+
+    res.json({
+      success: true,
+      message: "Your password has been successfully reset. You can now login with your new password.",
+    });
+  } catch (err) {
+    console.error("RESET PASSWORD ERROR:", err);
+    res.status(500).json({ error: err.message || "Failed to reset password." });
   }
 });
 
@@ -554,9 +736,11 @@ router.post("/", async (req, res) => {
       await validateSingleDepartmentHead(connection, effectiveDepartmentId, 0, schoolYear);
     }
 
+    const hashedPassword = await hashPassword(password);
+
     const [result] = await connection.execute(
       `INSERT INTO USER (role, department_id, first_name, middle_name, last_name, extension_name, email, password, account_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [role, effectiveDepartmentId, first_name.trim(), toNullable(middle_name), last_name.trim(), toNullable(extension_name), email.trim().toLowerCase(), password, account_status || status || "active"]
+      [role, effectiveDepartmentId, first_name.trim(), toNullable(middle_name), last_name.trim(), toNullable(extension_name), email.trim().toLowerCase(), hashedPassword, account_status || status || "active"]
     );
 
     const userId = result.insertId;
@@ -605,9 +789,10 @@ router.put("/:id", async (req, res) => {
     }
 
     if (password && password.trim()) {
+      const hashedPassword = await hashPassword(password);
       await connection.execute(
         `UPDATE USER SET role = ?, department_id = ?, first_name = ?, middle_name = ?, last_name = ?, extension_name = ?, email = ?, password = ?, account_status = ? WHERE user_id = ?`,
-        [role, effectiveDepartmentId, first_name.trim(), toNullable(middle_name), last_name.trim(), toNullable(extension_name), email.trim().toLowerCase(), password, account_status || status || "active", userId]
+        [role, effectiveDepartmentId, first_name.trim(), toNullable(middle_name), last_name.trim(), toNullable(extension_name), email.trim().toLowerCase(), hashedPassword, account_status || status || "active", userId]
       );
     } else {
       await connection.execute(
