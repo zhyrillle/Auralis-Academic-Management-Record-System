@@ -72,6 +72,16 @@ app.get('/', (req, res) => {
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
+
+const { migratePlaintextPasswords } = require('./utils/passwordUtils');
+const { logEmailServiceStatus } = require('./services/emailService');
+
+app.listen(PORT, async () => {
   console.log(`API Server running on http://localhost:${PORT}`);
+  try {
+    await migratePlaintextPasswords();
+    logEmailServiceStatus();
+  } catch (initErr) {
+    console.error("Startup initialization warning:", initErr.message);
+  }
 });
