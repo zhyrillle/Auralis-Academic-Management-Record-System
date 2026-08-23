@@ -5,7 +5,7 @@ import { Check, FileSpreadsheet, X, ArrowDownNarrowWide } from "lucide-react";
 import SelectFilter from "../../components/common/SelectFilter.jsx";
 import ClassCard from "../../components/sections/ClassCard";
 import GradingSheet from "./GradingSheet"; // Imported the separated component
-import AttendanceSheet from "./AttendanceSheet";
+import ClassRecord from "./ClassRecord.jsx";
 import SectionDetails from "./SectionDetails.jsx";
 
 // Style
@@ -275,14 +275,15 @@ export default function AdviserSections() {
                   key={cls.id} cls={cls}
                   onView={(c) => { setactiveSelectedClass(c); setCurrentView("section-details"); }}
                   onGradingSheet={(c) => { setactiveSelectedClass(c); setCurrentView("grading-sheet"); }}
-                  onEdit={(c) => { setactiveSelectedClass(c); setCurrentView("attendance-sheet"); }}
+                  onEdit={(c) => { setactiveSelectedClass(c); setCurrentView("class-record"); }}
                 />
               ))}
             </div>
           )}
         </>
-      ) : currentView === "attendance-sheet" ? (
-        <AttendanceSheet
+      ) : currentView === "class-record" ? (
+        <ClassRecord
+          activeClass={activeSelectedClass}
           onBack={() => setCurrentView("dashboard")}
         />
       ) : currentView === "section-details" ? (
