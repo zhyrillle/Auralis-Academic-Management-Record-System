@@ -1,13 +1,19 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { Eye, Download, FileText, Sparkles } from "lucide-react";
 import "../../styles/studentSF9.css";
 
 import depedLogo from "../../assets/deped_logo.png";
 import gccnhsLogo from "../../assets/gccnhs_logo.png";
 import backIconUrl from "../../assets/backButton.svg";
+import { getStoredUser, normalizeRole } from "../../utils/auth";
 
-export default function StudentSF9Page({ student, onBack }) {
-  const [activeTab, setActiveTab] = useState("sf9");
+export default function StudentSF9Page({ student, onBack, userRole: propUserRole }) {
+  const storedUser = useMemo(() => getStoredUser(), []);
+  const normRole = useMemo(() => normalizeRole(storedUser?.role, storedUser), [storedUser]);
+  const userRole = propUserRole || (normRole === "adviser" ? "adviser" : "teacher");
+  const isAdviser = userRole === "adviser";
+
+  const [activeTab, setActiveTab] = useState(isAdviser ? "sf9" : "personal");
 
   // Mock student detailed records matching mockups exactly
   const studentProfile = {
@@ -159,20 +165,28 @@ export default function StudentSF9Page({ student, onBack }) {
       </div>
 
       {/* Tabs Row Selector */}
-      <div className="sf9-tabs-outer">
-        <button
-          className={`sf9-tab-button ${activeTab === "sf9" ? "active" : ""}`}
-          onClick={() => setActiveTab("sf9")}
-        >
-          SF9
-        </button>
-        <button
-          className={`sf9-tab-button ${activeTab === "personal" ? "active" : ""}`}
-          onClick={() => setActiveTab("personal")}
-        >
-          Personal Info
-        </button>
-      </div>
+      {isAdviser ? (
+        <div className="sf9-tabs-outer">
+          <button
+            className={`sf9-tab-button ${activeTab === "sf9" ? "active" : ""}`}
+            onClick={() => setActiveTab("sf9")}
+          >
+            SF9
+          </button>
+          <button
+            className={`sf9-tab-button ${activeTab === "personal" ? "active" : ""}`}
+            onClick={() => setActiveTab("personal")}
+          >
+            Personal Info
+          </button>
+        </div>
+      ) : (
+        <div className="sf9-tabs-outer">
+          <button className="sf9-tab-button active">
+            Personal Info
+          </button>
+        </div>
+      )}
 
       {/* Tab Contents */}
       {activeTab === "sf9" ? (
@@ -502,11 +516,11 @@ export default function StudentSF9Page({ student, onBack }) {
 
         </div>
       ) : (
-        /* Personal Info Tab Layout (Dual Column) */
-        <div className="personal-info-grid">
+        /* Personal Info Tab Layout */
+        <div className="personal-info-grid" style={!isAdviser ? { gridTemplateColumns: "1fr" } : undefined}>
 
-          {/* Left Column (1 span): Student Profile Information Card */}
-          <div className="profile-info-column">
+          {/* Left Column: Student Profile Information Card */}
+          <div className="profile-info-column" style={!isAdviser ? { gridColumn: "1 / -1" } : undefined}>
             {/* Section heading – outside the card */}
             <div className="profile-info-header">
               <h3 className="profile-info-title">Student Profile</h3>
@@ -545,82 +559,84 @@ export default function StudentSF9Page({ student, onBack }) {
             </div>
           </div>
 
-          {/* Right Column (2 spans): Documents Section */}
-          <div className="documents-section">
-            {/* Section heading – outside the cards */}
-            <h3 className="documents-section-title">Documents</h3>
+          {/* Right Column (2 spans): Documents Section (Adviser ONLY) */}
+          {isAdviser && (
+            <div className="documents-section">
+              {/* Section heading – outside the cards */}
+              <h3 className="documents-section-title">Documents</h3>
 
-            {/* Document Cards Grid (2-column card grid) */}
-            <div className="documents-grid">
-              {/* Form 10 - Permanent Record Card */}
-              <div className="doc-card">
-                <div className="doc-card-top">
-                  <div className="doc-icon-box">
-                    <FileText size={20} />
-                  </div>
-                  <div className="doc-details">
-                    <h4 className="doc-title">Form 10 - Permanent Record</h4>
-                    <p className="doc-subtitle">Official cumulative student record</p>
-                    <span className="doc-status-badge">Available</span>
-                    <div className="doc-actions">
-                      <button className="btn-doc-action preview" title="Preview Document">
-                        <Eye size={14} />
-                        <span>Preview</span>
-                      </button>
-                      <button className="btn-doc-action download" title="Download Document">
-                        <Download size={14} />
-                        <span>Download</span>
-                      </button>
+              {/* Document Cards Grid (2-column card grid) */}
+              <div className="documents-grid">
+                {/* Form 10 - Permanent Record Card */}
+                <div className="doc-card">
+                  <div className="doc-card-top">
+                    <div className="doc-icon-box">
+                      <FileText size={20} />
+                    </div>
+                    <div className="doc-details">
+                      <h4 className="doc-title">Form 10 - Permanent Record</h4>
+                      <p className="doc-subtitle">Official cumulative student record</p>
+                      <span className="doc-status-badge">Available</span>
+                      <div className="doc-actions">
+                        <button className="btn-doc-action preview" title="Preview Document">
+                          <Eye size={14} />
+                          <span>Preview</span>
+                        </button>
+                        <button className="btn-doc-action download" title="Download Document">
+                          <Download size={14} />
+                          <span>Download</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Form 9 - Report Card Card */}
-              <div className="doc-card">
-                <div className="doc-card-top">
-                  <div className="doc-icon-box">
-                    <FileText size={20} />
-                  </div>
-                  <div className="doc-details">
-                    <h4 className="doc-title">Form 9 - Report Card</h4>
-                    <p className="doc-subtitle">Per term performance report</p>
-                    <span className="doc-status-badge">Available</span>
-                    <div className="doc-actions">
-                      <button className="btn-doc-action preview" title="Preview Document">
-                        <Eye size={14} />
-                        <span>Preview</span>
-                      </button>
-                      <button className="btn-doc-action download" title="Download Document">
-                        <Download size={14} />
-                        <span>Download</span>
-                      </button>
+                {/* Form 9 - Report Card Card */}
+                <div className="doc-card">
+                  <div className="doc-card-top">
+                    <div className="doc-icon-box">
+                      <FileText size={20} />
+                    </div>
+                    <div className="doc-details">
+                      <h4 className="doc-title">Form 9 - Report Card</h4>
+                      <p className="doc-subtitle">Per term performance report</p>
+                      <span className="doc-status-badge">Available</span>
+                      <div className="doc-actions">
+                        <button className="btn-doc-action preview" title="Preview Document">
+                          <Eye size={14} />
+                          <span>Preview</span>
+                        </button>
+                        <button className="btn-doc-action download" title="Download Document">
+                          <Download size={14} />
+                          <span>Download</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Bulk Actions Card */}
-              <div className="doc-card">
-                <div className="doc-card-top">
-                  <div className="doc-icon-box">
-                    <FileText size={20} />
-                  </div>
-                  <div className="doc-details">
-                    <h4 className="doc-title">Bulk Actions</h4>
-                    <p className="doc-subtitle">Perform actions on multiple documents</p>
-                    <span className="doc-status-badge">Available</span>
-                    <div className="doc-actions">
-                      <button className="btn-doc-action zip-download" title="Download All Documents (ZIP)">
-                        <Download size={14} />
-                        <span>Download All Documents (ZIP)</span>
-                      </button>
+                {/* Bulk Actions Card */}
+                <div className="doc-card">
+                  <div className="doc-card-top">
+                    <div className="doc-icon-box">
+                      <FileText size={20} />
+                    </div>
+                    <div className="doc-details">
+                      <h4 className="doc-title">Bulk Actions</h4>
+                      <p className="doc-subtitle">Perform actions on multiple documents</p>
+                      <span className="doc-status-badge">Available</span>
+                      <div className="doc-actions">
+                        <button className="btn-doc-action zip-download" title="Download All Documents (ZIP)">
+                          <Download size={14} />
+                          <span>Download All Documents (ZIP)</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
+          )}
 
         </div>
       )}

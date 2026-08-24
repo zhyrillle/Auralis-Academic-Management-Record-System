@@ -148,19 +148,19 @@ export default function App() {
           <Route path="/teacher/dashboard" element={<TeacherDashboard />} />
           <Route
             path="/teacher/sections"
-            element={<PlaceholderPage />}
+            element={<AdviserSections userRole="teacher" />}
           />
           <Route
             path="/teacher/notifications"
-            element={<PlaceholderPage />}
+            element={<AdviserNotifications userRole="teacher" />}
           />
           <Route
             path="/teacher/performance"
-            element={<PlaceholderPage />}
+            element={<PerformanceReport userRole="teacher" />}
           />
           <Route
             path="/teacher/feedback"
-            element={<PlaceholderPage />}
+            element={<AdviserFeedback userRole="teacher" />}
           />
           <Route
             path="/teacher/request"

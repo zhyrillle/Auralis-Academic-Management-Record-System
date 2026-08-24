@@ -1,5 +1,5 @@
-import { useState, useMemo } from "react";
-import { Check, FileSpreadsheet, X, ArrowDownNarrowWide } from "lucide-react";
+import { useState, useMemo, useEffect } from "react";
+import { Check, FileSpreadsheet, X, ArrowDownNarrowWide, Loader2 } from "lucide-react";
 
 // Components
 import SelectFilter from "../../components/common/SelectFilter.jsx";
@@ -8,12 +8,16 @@ import GradingSheet from "./GradingSheet"; // Imported the separated component
 import ClassRecord from "./ClassRecord.jsx";
 import SectionDetails from "./SectionDetails.jsx";
 
+// Auth & Services
+import { getStoredUser } from "../../utils/auth";
+import { getAdviserSections, getStudentsBySection } from "../../services/sectionService";
+
 // Style
 import "../../styles/sections.css";
 import "../../styles/attendanceSheet.css";
 
 // -------------------------------------------------------------
-// INITIAL MOCK DATA
+// INITIAL MOCK DATA (FALLBACK)
 // -------------------------------------------------------------
 const INITIAL_CLASSES = [
   {
@@ -77,13 +81,81 @@ const generateMockStudents = () => ({
   ],
 });
 
-export default function AdviserSections() {
-  const [classes, setClasses] = useState(INITIAL_CLASSES);
-  const [studentsBySection] = useState(generateMockStudents());
+import { normalizeRole } from "../../utils/auth";
+
+export default function AdviserSections({ userRole: propUserRole }) {
+  const storedUser = useMemo(() => getStoredUser(), []);
+  const normRole = useMemo(() => normalizeRole(storedUser?.role, storedUser), [storedUser]);
+  const userRole = propUserRole || (normRole === "adviser" ? "adviser" : "teacher");
+
+  const [classes, setClasses] = useState([]);
+  const [studentsBySection, setStudentsBySection] = useState(generateMockStudents());
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // Fetch sections from backend
+  useEffect(() => {
+    async function fetchAdviserClasses() {
+      setLoading(true);
+      setError(null);
+      try {
+        const user = getStoredUser();
+        const userId = user?.user_id || user?.id || 1;
+        const fetched = await getAdviserSections(userId);
+
+        if (fetched && Array.isArray(fetched) && fetched.length > 0) {
+          setClasses(fetched);
+        } else {
+          setClasses(INITIAL_CLASSES);
+        }
+      } catch (err) {
+        console.error("Error fetching adviser sections:", err);
+        setError("Unable to connect to backend. Showing default assigned classes.");
+        setClasses(INITIAL_CLASSES);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchAdviserClasses();
+  }, []);
 
   // Navigation View State
   const [currentView, setCurrentView] = useState("dashboard");
   const [activeSelectedClass, setactiveSelectedClass] = useState(null);
+
+  // Fetch students when a section is opened
+  useEffect(() => {
+    async function fetchSectionStudents() {
+      if (!activeSelectedClass || !activeSelectedClass.section_id) return;
+      const classKey = activeSelectedClass.id;
+      if (studentsBySection[classKey] && studentsBySection[classKey].length > 0) return;
+
+      try {
+        const studentList = await getStudentsBySection(activeSelectedClass.section_id);
+        if (studentList && Array.isArray(studentList) && studentList.length > 0) {
+          setStudentsBySection((prev) => ({
+            ...prev,
+            [classKey]: studentList.map((s) => ({
+              id: s.id,
+              lrn: s.lrn,
+              firstName: s.firstName || s.first_name,
+              lastName: s.lastName || s.last_name,
+              middleName: s.middleName || s.middle_name || "",
+              sex: s.sex || "M",
+              term1: s.term1 || 85,
+              term2: s.term2 || 88,
+              term3: s.term3 || 90,
+            })),
+          }));
+        }
+      } catch (err) {
+        console.error("Error fetching students for section:", err);
+      }
+    }
+
+    fetchSectionStudents();
+  }, [activeSelectedClass]);
 
   // Controls Filters and Sorting
   const [filterSubject, setFilterSubject] = useState("All");
@@ -263,7 +335,13 @@ export default function AdviserSections() {
             </div>
           </div>
 
-          {filteredAndSortedClasses.length === 0 ? (
+          {loading ? (
+            <div style={{ textAlign: "center", padding: "60px 20px", color: "#64748b" }}>
+              <style>{`@keyframes spinLoader { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+              <Loader2 size={32} style={{ animation: "spinLoader 1s linear infinite", marginBottom: "12px", color: "#C9A227" }} />
+              <p style={{ fontWeight: 500, fontSize: "15px" }}>Loading assigned classes...</p>
+            </div>
+          ) : filteredAndSortedClasses.length === 0 ? (
             <div style={{ textAlign: "center", padding: "40px", backgroundColor: "#ffffff", borderRadius: "16px", color: "#64748b", border: "1px solid #eef2f6" }}>
               <p style={{ fontWeight: 600, fontSize: "16px", marginBottom: "4px" }}>No assigned classes found</p>
               <p style={{ fontSize: "14px" }}>Try adjusting your search filters above.</p>
@@ -289,6 +367,7 @@ export default function AdviserSections() {
       ) : currentView === "section-details" ? (
         <SectionDetails
           student={activeSelectedClass}
+          userRole={userRole}
           onBack={() => setCurrentView("dashboard")}
         />
       ) : (
