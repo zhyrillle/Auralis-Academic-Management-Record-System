@@ -178,9 +178,9 @@
 /*  Middle Row  */
 .fb-middle-row {
   display: grid;
-  grid-template-columns: 1fr 280px;
+  grid-template-columns: 1fr 340px;
   gap: 16px;
-  align-items: start;
+  align-items: stretch;
 }
 
 /*  Give Feedback Section  */
@@ -331,7 +331,7 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
-  align-items: start;
+  align-items: stretch;
 }
 
 /*  Pending Feedbacks  */
@@ -505,4 +505,315 @@
   .fb-dist-inner {
     flex-direction: column;
   }
+}
+
+/*  Pending Feedbacks Floating Modal  */
+.fb-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999999;
+  padding: 20px;
+  animation: fbModalBackdropIn 0.25s ease-out both;
+}
+
+@keyframes fbModalBackdropIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.fb-modal-card {
+  background: #ffffff;
+  border-radius: 20px;
+  width: 100%;
+  max-width: 640px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.18);
+  border: 1px solid #e2e8f0;
+  overflow: hidden;
+  animation: fbModalCardIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes fbModalCardIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.fb-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid #f1f5f9;
+  background: #fafbfc;
+}
+
+.fb-modal-header-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.fb-modal-header-title h2 {
+  font-size: 18px;
+  font-weight: 700;
+  color: #112d61;
+  margin: 0;
+}
+
+.fb-modal-badge {
+  background: #eef2fb;
+  color: #112d61;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 99px;
+  border: 1px solid #cbd5e1;
+}
+
+.fb-modal-close-btn {
+  background: #f1f5f9;
+  border: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+
+.fb-modal-close-btn:hover {
+  background: #e2e8f0;
+  color: #1e293b;
+}
+
+.fb-modal-search-wrapper {
+  position: relative;
+  padding: 16px 24px 12px;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+}
+
+.fb-modal-search-icon {
+  position: absolute;
+  left: 36px;
+  color: #94a3b8;
+}
+
+.fb-modal-search-input {
+  width: 100%;
+  padding: 10px 36px 10px 38px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  font-size: 13px;
+  color: #1e293b;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.fb-modal-search-input:focus {
+  border-color: #112d61;
+  box-shadow: 0 0 0 3px rgba(17, 45, 97, 0.08);
+}
+
+.fb-modal-clear-search {
+  position: absolute;
+  right: 36px;
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 2px;
+}
+
+.fb-modal-clear-search:hover {
+  color: #475569;
+}
+
+.fb-modal-list {
+  padding: 0 24px 20px;
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.fb-modal-peer-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 16px;
+  background: #fafbfc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  transition: background 0.2s, transform 0.15s, box-shadow 0.2s;
+}
+
+.fb-modal-peer-row:hover {
+  background: #ffffff;
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 14px rgba(17, 45, 97, 0.06);
+  transform: translateY(-1px);
+}
+
+.fb-modal-peer-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #eef2fb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.fb-modal-peer-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.fb-modal-peer-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fb-modal-peer-meta {
+  font-size: 12px;
+  color: #64748b;
+  margin: 3px 0 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fb-role-pill {
+  font-size: 11px;
+  font-weight: 600;
+  color: #112d61;
+  background: #eef2fb;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.fb-evaluate-now-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: #c9a227;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.2s, transform 0.15s;
+}
+
+.fb-evaluate-now-btn:hover {
+  background: #b8941f;
+  transform: scale(1.03);
+}
+
+.fb-modal-empty {
+  padding: 40px 20px;
+  text-align: center;
+  color: #64748b;
+  font-size: 13.5px;
+}
+
+/* Comments Modal Rows */
+.fb-modal-comment-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  background: #fafbfc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
+}
+
+.fb-modal-comment-row:hover {
+  background: #ffffff;
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 14px rgba(17, 45, 97, 0.06);
+}
+
+.fb-modal-comment-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.fb-modal-comment-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+
+.fb-comment-category-tag {
+  font-size: 11px;
+  font-weight: 700;
+  color: #112d61;
+  background: #eef2fb;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.fb-comment-author {
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.fb-comment-dot {
+  font-size: 12px;
+  color: #cbd5e1;
+}
+
+.fb-modal-comment-date {
+  font-size: 11.5px;
+  color: #94a3b8;
+}
+
+.fb-modal-comment-text {
+  font-size: 13.5px;
+  color: #1e293b;
+  line-height: 1.5;
+  margin: 0;
+  font-style: italic;
 }

@@ -58,14 +58,82 @@ class Feedback {
       [userId]
     );
 
+    // 3. Count total eligible peers in system (excluding current user & system_admin)
+    const [peerRows] = await db.execute(
+      "SELECT COUNT(*) AS total_peers FROM `USER` WHERE user_id != ? AND role != 'system_admin'",
+      [userId]
+    );
+
+    // 4. Query unsubmitted peers grouped by role to calculate category pending counts
+    const [pendingPeers] = await db.execute(
+      `SELECT u.user_id, u.role
+       FROM \`USER\` u
+       WHERE u.user_id != ? 
+         AND u.role != 'system_admin' 
+         AND u.user_id NOT IN (
+           SELECT evaluee_id FROM FEEDBACK WHERE evaluator_id = ?
+         )`,
+      [userId, userId]
+    );
+
+    let pendingTeachers = 0;
+    let pendingDeptHeads = 0;
+    let pendingPrincipals = 0;
+
+    pendingPeers.forEach((u) => {
+      const r = (u.role || "").toLowerCase();
+      if (r.includes("principal")) {
+        pendingPrincipals++;
+      } else if (r.includes("head") || r.includes("department")) {
+        pendingDeptHeads++;
+      } else {
+        pendingTeachers++;
+      }
+    });
+
+    // 5. Calculate score distribution for ratings received by this user
+    const [receivedRatings] = await db.execute(
+      `SELECT ((COALESCE(q1_rate, 0) + COALESCE(q2_rate, 0) + COALESCE(q3_rate, 0) + COALESCE(q4_rate, 0) + 
+               COALESCE(q5_rate, 0) + COALESCE(q6_rate, 0) + COALESCE(q7_rate, 0) + COALESCE(q8_rate, 0)) / 8.0) AS score
+       FROM FEEDBACK
+       WHERE evaluee_id = ?`,
+      [userId]
+    );
+
+    let excellent = 0, good = 0, average = 0, needsImprovement = 0;
+    receivedRatings.forEach((row) => {
+      const s = parseFloat(row.score);
+      if (s >= 4.5) excellent++;
+      else if (s >= 3.5) good++;
+      else if (s >= 2.5) average++;
+      else needsImprovement++;
+    });
+
     const totalReceived = ratingRows[0]?.total_received || 0;
     const avgRating = ratingRows[0]?.avg_rating ? parseFloat(ratingRows[0].avg_rating).toFixed(1) : "0.0";
     const totalSubmitted = submittedRows[0]?.total_submitted || 0;
+    const totalPeers = peerRows[0]?.total_peers || 0;
+    const pendingCount = pendingPeers.length;
+    const completionRate = totalPeers > 0 ? Math.min(100, Math.round((totalSubmitted / totalPeers) * 100)) : 100;
 
     return {
       total_submitted: totalSubmitted,
       total_received: totalReceived,
-      avg_rating: avgRating
+      avg_rating: avgRating,
+      total_peers: totalPeers,
+      pending_count: pendingCount,
+      completion_rate: completionRate,
+      pending_breakdown: {
+        teachers: pendingTeachers,
+        dept_heads: pendingDeptHeads,
+        principals: pendingPrincipals,
+      },
+      rating_distribution: {
+        excellent,
+        good,
+        average,
+        needs_improvement: needsImprovement,
+      },
     };
   }
 
