@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { Calendar, CheckCircle, AlertTriangle, Info, X } from "lucide-react";
+import { useLocation, useNavigate } from "react-router-dom";
 import "../../styles/attendanceSheet.css";
 import backIconUrl from "../../assets/backButton.svg";
 
@@ -40,6 +41,15 @@ const JULY_2026_DAYS = [
 const TODAY_DATE = "2026-07-29"; // Mock today's local date
 
 export default function AttendanceSheet({ onBack }) {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const handleBack = onBack || (() => navigate("/adviser/sections", {
+    state: {
+      currentView: "class-record",
+      activeSelectedClass: location.state?.activeClass,
+    },
+  }));
+
   const [selectedDate, setSelectedDate] = useState(TODAY_DATE);
   
   // Create state for all students' 20-day attendance status
@@ -219,7 +229,7 @@ export default function AttendanceSheet({ onBack }) {
       {/* Header Area */}
       <div className="att-header-bar">
         <div className="att-title-area">
-          <button className="back-btn" onClick={onBack} title="Back to Sections">
+          <button className="back-btn" onClick={handleBack} title="Back to Class Record">
             <img src={backIconUrl} alt="Back" width={17} height={17} />
           </button>
           <h1 className="att-title">Class Record</h1>

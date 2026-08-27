@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { Check, FileSpreadsheet, X, ArrowDownNarrowWide, Loader2 } from "lucide-react";
+import { useLocation } from "react-router-dom";
 
 // Components
 import SelectFilter from "../../components/common/SelectFilter.jsx";
@@ -84,6 +85,7 @@ const generateMockStudents = () => ({
 import { normalizeRole } from "../../utils/auth";
 
 export default function AdviserSections({ userRole: propUserRole }) {
+  const location = useLocation();
   const storedUser = useMemo(() => getStoredUser(), []);
   const normRole = useMemo(() => normalizeRole(storedUser?.role, storedUser), [storedUser]);
   const userRole = propUserRole || (normRole === "adviser" ? "adviser" : "teacher");
@@ -121,8 +123,12 @@ export default function AdviserSections({ userRole: propUserRole }) {
   }, []);
 
   // Navigation View State
-  const [currentView, setCurrentView] = useState("dashboard");
-  const [activeSelectedClass, setactiveSelectedClass] = useState(null);
+  const [currentView, setCurrentView] = useState(
+    location.state?.currentView || "dashboard"
+  );
+  const [activeSelectedClass, setactiveSelectedClass] = useState(
+    location.state?.activeSelectedClass || null
+  );
 
   // Fetch students when a section is opened
   useEffect(() => {
