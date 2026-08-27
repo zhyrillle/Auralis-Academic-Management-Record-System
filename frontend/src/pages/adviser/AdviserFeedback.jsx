@@ -12,6 +12,7 @@ import TeacherEvalForm from "./TeacherEvalForm";
 import DeptHeadEvalList from "./DeptHeadEvalList";
 import PrincipalEvalList from "./PrincipalEvalList";
 import RoleEvalForm from "./RoleEvalForm";
+import { getStoredUser } from "../../utils/auth";
 
 // Mock Data 
 
@@ -64,18 +65,7 @@ const GIVE_FEEDBACK_CARDS = [
   },
 ];
 
-const RECENT_COMMENTS = [
-  {
-    id: 1,
-    text: '"Very collaborative during...',
-    date: "April 12, 2026",
-  },
-  {
-    id: 2,
-    text: '"Provides helpful suggesti...',
-    date: "April 9, 2026",
-  },
-];
+const RECENT_COMMENTS = [];
 
 const PENDING_FEEDBACKS = [
   {
@@ -153,6 +143,7 @@ function DonutChart({ data }) {
 // Main Component
 
 export default function AdviserFeedback() {
+  const currentUser = getStoredUser();
   const [progressReady, setProgressReady] = useState(false);
   // currentView: "dashboard" | "teacher-list" | "eval-form" | "dept-head-list" | "dept-head-form" | "principal-list" | "principal-form"
   const [currentView, setCurrentView] = useState("dashboard");
@@ -160,10 +151,93 @@ export default function AdviserFeedback() {
   const [selectedPerson, setSelectedPerson] = useState(null);
   const [roleFormType, setRoleFormType] = useState(null);
 
+  // Dynamic Backend Data State
+  const [userStats, setUserStats] = useState({
+    total_submitted: 0,
+    total_received: 0,
+    avg_rating: "0.0"
+  });
+  const [recentComments, setRecentComments] = useState([]);
+
   useEffect(() => {
     const t = setTimeout(() => setProgressReady(true), 300);
     return () => clearTimeout(t);
   }, []);
+
+  useEffect(() => {
+    if (!currentUser?.user_id) return;
+
+    // 1. Fetch user evaluation stats
+    fetch(`http://localhost:5000/api/feedback/stats/${currentUser.user_id}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data && !data.error) {
+          setUserStats(data);
+        }
+      })
+      .catch((err) => console.error("Error fetching feedback stats:", err));
+
+    // 2. Fetch recent peer comments where currentUser is evaluee
+    fetch(`http://localhost:5000/api/feedback/evaluee/${currentUser.user_id}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (Array.isArray(data)) {
+          const comments = [];
+          data.forEach((item) => {
+            if (item.strengths_comments && item.strengths_comments.trim()) {
+              comments.push({
+                id: `${item.feedback_id}-str`,
+                text: `"${item.strengths_comments}"`,
+                date: item.created_at ? new Date(item.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "Recent",
+                evaluator: item.evaluator_name || "Peer Evaluator"
+              });
+            }
+            if (item.improvements_comment && item.improvements_comment.trim()) {
+              comments.push({
+                id: `${item.feedback_id}-imp`,
+                text: `"${item.improvements_comment}"`,
+                date: item.created_at ? new Date(item.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "Recent",
+                evaluator: item.evaluator_name || "Peer Evaluator"
+              });
+            }
+          });
+          setRecentComments(comments);
+        }
+      })
+      .catch((err) => console.error("Error fetching evaluee comments:", err));
+  }, [currentUser?.user_id]);
+
+  // Compute dynamic stats list
+  const dynamicStats = [
+    {
+      id: "total",
+      label: "Total Peer Feedback Submitted",
+      value: String(userStats.total_submitted),
+      sub: "All time",
+      subType: "success",
+    },
+    {
+      id: "pending",
+      label: "Feedback Received",
+      value: String(userStats.total_received),
+      sub: "Peer reviews",
+      subType: "warning",
+    },
+    {
+      id: "completion",
+      label: "Completion Rate",
+      value: userStats.total_submitted > 0 ? "100%" : "0%",
+      sub: "Feedbacks submitted",
+      subType: "success",
+    },
+    {
+      id: "rating",
+      label: "Average Rating",
+      value: `${userStats.avg_rating || "0.0"}/5`,
+      sub: "Received from peers",
+      subType: "neutral",
+    },
+  ];
 
   // ── Sub-views ──
 
@@ -237,6 +311,8 @@ export default function AdviserFeedback() {
     );
   }
 
+  const displayedComments = recentComments.length > 0 ? recentComments : RECENT_COMMENTS;
+
   return (
     <div className="fb-container">
 
@@ -245,7 +321,7 @@ export default function AdviserFeedback() {
 
       {/* ── Stat Cards ── */}
       <div className="fb-stats-grid">
-        {STATS.map((s) => (
+        {dynamicStats.map((s) => (
           <div key={s.id} className="fb-stat-card">
             <p className="fb-stat-label">{s.label}</p>
             <p className="fb-stat-value">{s.value}</p>
@@ -263,12 +339,12 @@ export default function AdviserFeedback() {
             </span>
             <span className="fb-progress-label">Progress</span>
           </div>
-          <span className="fb-progress-pct">83% Complete</span>
+          <span className="fb-progress-pct">{userStats.total_submitted > 0 ? "100% Complete" : "0% Complete"}</span>
         </div>
         <div className="fb-progress-track">
           <div
             className="fb-progress-fill"
-            style={{ width: progressReady ? "83%" : "0%" }}
+            style={{ width: progressReady ? (userStats.total_submitted > 0 ? "100%" : "15%") : "0%" }}
           />
         </div>
       </div>
@@ -312,15 +388,21 @@ export default function AdviserFeedback() {
             <h2 className="fb-section-title">Recent Peer Comments</h2>
           </div>
           <div className="fb-comments-list">
-            {RECENT_COMMENTS.map((c) => (
-              <div key={c.id} className="fb-comment-row">
-                <Star size={15} fill="#c9a227" color="#c9a227" className="fb-comment-star" />
-                <div className="fb-comment-body">
-                  <p className="fb-comment-text">{c.text}</p>
-                  <p className="fb-comment-date">{c.date}</p>
+            {recentComments.length === 0 ? (
+              <p style={{ padding: "20px 10px", color: "#64748b", fontSize: "13px" }}>
+                No peer comments received yet.
+              </p>
+            ) : (
+              recentComments.map((c) => (
+                <div key={c.id} className="fb-comment-row">
+                  <Star size={15} fill="#c9a227" color="#c9a227" className="fb-comment-star" />
+                  <div className="fb-comment-body">
+                    <p className="fb-comment-text">{c.text}</p>
+                    <p className="fb-comment-date">{c.date}</p>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
           <button className="fb-view-more-btn">View More Comments</button>
         </div>
