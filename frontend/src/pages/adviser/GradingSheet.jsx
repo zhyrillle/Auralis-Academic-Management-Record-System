@@ -6,6 +6,7 @@ import SearchBar from "../../components/common/SearchBar.jsx";
 import SelectFilter from "../../components/common/SelectFilter.jsx";
 import SubmissionFooter from "../../components/common/SubmissionFooter.jsx"; // Integrated here
 import { downloadGradingSheetCSV } from "../../utils/downloadHelper";
+import { getStoredUser } from "../../utils/auth";
 import "../../styles/gradingSheet.css";
 
 export default function GradingSheet({
@@ -20,6 +21,13 @@ export default function GradingSheet({
     const [searchStudentQuery, setSearchStudentQuery] = useState("");
     const [filterDescriptor, setFilterDescriptor] = useState("All");
     const [filterRemark, setFilterRemark] = useState("All");
+
+    const currentUser = useMemo(() => getStoredUser(), []);
+    const teacherName = useMemo(() => {
+        if (!currentUser) return "Teacher";
+        const fullName = `${currentUser.first_name || ""} ${currentUser.last_name || ""}`.trim();
+        return fullName || currentUser.username || "Teacher";
+    }, [currentUser]);
 
     const getDescriptor = (finalGrade) => {
         if (finalGrade === "" || isNaN(finalGrade)) return "";
@@ -191,7 +199,7 @@ export default function GradingSheet({
                                 learners' names
                             </th>
                             <th colSpan="3">
-                                Teacher: <span className="info-cell-title">Harvey Babia</span>
+                                Teacher: <span className="info-cell-title">{teacherName}</span>
                             </th>
                             <th colSpan="3">
                                 Subject: <span className="info-cell-title">{activeSelectedClass.subject}</span>

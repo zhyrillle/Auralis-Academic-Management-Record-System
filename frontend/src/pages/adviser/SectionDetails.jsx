@@ -143,6 +143,7 @@ export default function SectionDetails({ userRole = "adviser", onBack, onViewStu
     return (
       <StudentSF9Page
         student={activeSf9Student}
+        userRole={userRole}
         onBack={() => setActiveSf9Student(null)}
       />
     );
@@ -234,19 +235,21 @@ export default function SectionDetails({ userRole = "adviser", onBack, onViewStu
             ))}
           </div>
 
-          {/* Honor Filter Group (Inline, Rectangular with small corner radius) */}
-          <div className="filter-segmented-group">
-            {["With", "High", "Highest"].map((hKey) => (
-              <button
-                key={hKey}
-                type="button"
-                onClick={() => handleHonorToggle(hKey)}
-                className={`filter-rect-btn ${selectedHonor === hKey ? "active" : ""}`}
-              >
-                {hKey}
-              </button>
-            ))}
-          </div>
+          {/* Honor Filter Group (rendered ONLY if userRole === 'adviser') */}
+          {userRole === "adviser" && (
+            <div className="filter-segmented-group">
+              {["With", "High", "Highest"].map((hKey) => (
+                <button
+                  key={hKey}
+                  type="button"
+                  onClick={() => handleHonorToggle(hKey)}
+                  className={`filter-rect-btn ${selectedHonor === hKey ? "active" : ""}`}
+                >
+                  {hKey}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 

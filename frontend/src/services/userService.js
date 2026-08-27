@@ -41,3 +41,40 @@ export const resolveProfilePictureUrl = (profilePictureUrl) => {
 
   return `http://localhost:5000${profilePictureUrl.startsWith("/") ? "" : "/"}${profilePictureUrl}`;
 };
+
+export const forgotPassword = async (email) => {
+  const response = await fetch(`${API_BASE_URL}/users/forgot-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+  return parseResponse(response);
+};
+
+export const verifyOtp = async (email, otp) => {
+  const response = await fetch(`${API_BASE_URL}/users/verify-otp`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, otp }),
+  });
+  return parseResponse(response);
+};
+
+export const resendOtp = async (email) => {
+  const response = await fetch(`${API_BASE_URL}/users/resend-otp`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+  return parseResponse(response);
+};
+
+export const resetPassword = async (email, resetToken, newPassword) => {
+  const response = await fetch(`${API_BASE_URL}/users/reset-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, resetToken, newPassword }),
+  });
+  return parseResponse(response);
+};
+

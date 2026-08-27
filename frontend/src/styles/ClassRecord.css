@@ -1,0 +1,603 @@
+/* ============================================================
+   CLASS RECORD PAGE
+   ============================================================ */
+
+.class-record-page {
+  width: 100%;
+  min-height: 100vh;
+  background: #ffffff;
+  color: #102c4d;
+  box-sizing: border-box;
+  padding: 26px 28px 40px;
+}
+
+
+/* ============================================================
+   HEADER
+   ============================================================ */
+
+.class-record-header {
+  width: 100%;
+  margin-bottom: 26px;
+}
+
+.class-record-title-area {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.class-record-title-area h1 {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 700;
+  color: #0d2949;
+}
+
+.class-record-back-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.class-record-back-btn img {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+
+
+/* ============================================================
+   SECTION SUBHEADER
+   ============================================================ */
+
+.class-record-subheader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 28px;
+}
+
+.class-record-subheader h2 {
+  margin: 0 0 5px;
+  font-size: 22px;
+  font-weight: 700;
+  color: #0e2d4f;
+}
+
+.class-record-subheader p {
+  margin: 0;
+  font-size: 15px;
+  color: #304b69;
+}
+
+
+/* ============================================================
+   TERM BUTTONS
+   ============================================================ */
+
+.term-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.term-btn {
+  min-width: 48px;
+  height: 38px;
+  padding: 0 13px;
+
+  border: 1px solid #9b9b9b;
+  border-radius: 18px;
+
+  background: #ffffff;
+  color: #555;
+
+  font-size: 15px;
+  font-weight: 500;
+
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.term-btn:hover {
+  border-color: #102f55;
+}
+
+.term-btn.active {
+  background: #102f55;
+  border-color: #102f55;
+  color: #ffffff;
+}
+
+/* ============================================================
+   CLASS RECORD ACTIONS
+   ============================================================ */
+
+.class-record-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+}
+
+.class-record-action-btn {
+  height: 38px;
+  min-width: 150px;
+
+  padding: 0 20px;
+
+  border: none;
+  border-radius: 10px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+
+  font-size: 13px;
+  font-weight: 450;
+
+  cursor: pointer;
+
+  transition: background 0.15s ease,
+              transform 0.15s ease;
+}
+
+.class-record-action-btn:hover {
+  transform: translateY(-1px);
+}
+
+/* Attendance */
+
+.attendance-btn {
+  background: #102f55;
+  color: #ffffff;
+}
+
+.attendance-btn:hover {
+  background: #183e6c;
+}
+
+/* Download */
+
+.download-btn {
+  background: #102f55;
+  color: #ffffff;
+}
+
+.download-btn:hover {
+  background: #183e6c;
+}
+
+/* Icons */
+
+.action-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  font-size: 19px;
+  line-height: 1;
+  color: currentColor;
+}
+
+/* ============================================================
+   UNAVAILABLE STATE
+   ============================================================ */
+
+.unavailable-state {
+  min-height: 560px;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+
+  text-align: center;
+  padding-bottom: 80px;
+}
+
+.unavailable-icon {
+  width: 190px;
+  height: 190px;
+  object-fit: contain;
+  margin-bottom: 20px;
+}
+
+.unavailable-state h3 {
+  margin: 0 0 10px;
+  font-size: 19px;
+  font-weight: 700;
+  color: #112f50;
+}
+
+.unavailable-state p {
+  margin: 0;
+  font-size: 16px;
+  color: #263f5b;
+}
+
+
+/* ============================================================
+   CLASS RECORD CONTENT
+   ============================================================ */
+
+.class-record-content {
+  width: 100%;
+}
+
+.student-count {
+  margin-bottom: 10px;
+
+  font-size: 15px;
+  font-weight: 500;
+  color: #777;
+}
+
+
+/* ============================================================
+   TABLE WRAPPER
+   ============================================================ */
+
+.class-record-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: visible;
+
+  border-top: 1px solid #222;
+  border-left: 1px solid #222;
+}
+
+
+/* ============================================================
+   TABLE
+   ============================================================ */
+
+.class-record-table {
+  width: max-content;
+  min-width: 100%;
+
+  border-collapse: collapse;
+  table-layout: fixed;
+
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 14px;
+
+  color: #666;
+}
+
+.class-record-table th,
+.class-record-table td {
+  border-right: 1px solid #999;
+  border-bottom: 1px solid #aaa;
+
+  box-sizing: border-box;
+}
+
+
+/* ============================================================
+   COLUMN WIDTHS
+   ============================================================ */
+
+.number-header,
+.number-cell {
+  width: 45px;
+  min-width: 45px;
+}
+
+.lrn-header,
+.lrn-cell {
+  width: 115px;
+  min-width: 115px;
+}
+
+.name-header,
+.name-cell {
+  width: 240px;
+  min-width: 240px;
+}
+
+.sub-header {
+  width: 62px;
+  min-width: 62px;
+}
+
+.total-header {
+  width: 65px;
+  min-width: 65px;
+}
+
+.grade-header {
+  width: 95px;
+  min-width: 95px;
+}
+
+
+/* ============================================================
+   MAIN HEADERS
+   ============================================================ */
+
+.category-header {
+  height: 46px;
+
+  background: #ffffff;
+
+  text-align: center;
+  vertical-align: middle;
+
+  font-size: 15px;
+  font-weight: 500;
+  color: #777;
+}
+
+.category-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.category-header > .category-title {
+  width: 100%;
+}
+
+
+/* ============================================================
+   ADD COLUMN BUTTON
+   ============================================================ */
+
+.add-column-btn {
+  border: none;
+  border-radius: 5px;
+
+  background: #102f55;
+  color: #ffffff;
+
+  padding: 4px 8px;
+
+  font-size: 11px;
+  font-weight: 600;
+
+  cursor: pointer;
+}
+
+.add-column-btn:hover {
+  background: #183e6c;
+}
+
+
+/* ============================================================
+   SECOND HEADER
+   ============================================================ */
+
+.sub-header {
+  height: 42px;
+
+  background: #ffffff;
+
+  text-align: center;
+  vertical-align: middle;
+
+  font-size: 13px;
+  font-weight: 500;
+  color: #777;
+}
+
+
+/* ============================================================
+   BASIC CELLS
+   ============================================================ */
+
+.number-cell {
+  text-align: center;
+  vertical-align: middle;
+
+  color: #777;
+}
+
+.lrn-cell {
+  padding: 0 8px;
+
+  text-align: center;
+  white-space: nowrap;
+
+  color: #777;
+}
+
+.name-cell {
+  padding: 0 12px;
+
+  text-align: left;
+  white-space: nowrap;
+
+  color: #777;
+}
+
+
+/* ============================================================
+   GENDER IDENTIFIER ROWS
+   ============================================================ */
+
+.gender-divider-row td {
+  height: 31px;
+
+  padding: 0 42px;
+
+  background: #3b566e;
+
+  color: #ffffff;
+
+  border-top: 1px solid #3b566e;
+  border-bottom: 1px solid #3b566e;
+
+  text-align: left;
+  vertical-align: middle;
+
+  font-size: 14px;
+  font-weight: 700;
+}
+
+
+/* ============================================================
+   STUDENT ROW
+   ============================================================ */
+
+.student-row {
+  height: 42px;
+}
+
+.student-row:hover td {
+  background: #fafbfd;
+}
+
+
+/* ============================================================
+   GRADE INPUT CELLS
+   ============================================================ */
+
+.grade-input-cell {
+  width: 62px;
+  min-width: 62px;
+
+  text-align: center;
+  vertical-align: middle;
+}
+
+.grade-input-cell input {
+  width: 27px;
+  height: 20px;
+
+  padding: 0 2px;
+
+  border: 1px solid #bdbdbd;
+  border-radius: 4px;
+
+  background: #eeeeee;
+
+  text-align: center;
+
+  font-size: 12px;
+  color: #333;
+
+  outline: none;
+
+  box-sizing: border-box;
+}
+
+.grade-input-cell input:focus {
+  border-color: #294d70;
+  background: #ffffff;
+  box-shadow: 0 0 0 2px rgba(41, 77, 112, 0.1);
+}
+
+
+/* Remove number input arrows */
+
+.grade-input-cell input::-webkit-outer-spin-button,
+.grade-input-cell input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.grade-input-cell input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+
+/* ============================================================
+   COMPUTED CELLS
+   ============================================================ */
+
+.computed-cell {
+  width: 62px;
+  min-width: 62px;
+
+  text-align: center;
+  vertical-align: middle;
+
+  color: #777;
+}
+
+
+/* ============================================================
+   FINAL GRADES
+   ============================================================ */
+
+.final-grade-cell {
+  background: #ffffff;
+}
+
+.final-grade-cell input {
+  width: 34px;
+  height: 22px;
+}
+
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+
+@media (max-width: 1100px) {
+  .class-record-page {
+    padding: 22px 18px 35px;
+  }
+
+  .class-record-title-area h1 {
+    font-size: 24px;
+  }
+
+  .class-record-subheader h2 {
+    font-size: 20px;
+  }
+
+.class-record-subheader {
+  align-items: flex-start;
+  flex-direction: column;
+}
+
+.class-record-actions {
+  width: 100%;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+}
+
+@media (max-width: 700px) {
+  .class-record-page {
+    padding: 18px 12px 30px;
+  }
+
+  .class-record-title-area {
+    gap: 12px;
+  }
+
+  .class-record-title-area h1 {
+    font-size: 21px;
+  }
+
+  .class-record-subheader h2 {
+    font-size: 18px;
+  }
+
+  .class-record-subheader p {
+    font-size: 13px;
+  }
+
+  .term-buttons {
+    align-self: flex-start;
+  }
+
+  .unavailable-icon {
+    width: 150px;
+    height: 150px;
+  }
+}

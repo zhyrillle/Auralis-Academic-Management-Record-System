@@ -11,6 +11,24 @@ router.get('/', async (req, res) => {
   }
 });
 
+router.get('/adviser/:userId', async (req, res) => {
+  try {
+    const sections = await Section.findAdviserSections(req.params.userId);
+    res.json(sections);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/:id/students', async (req, res) => {
+  try {
+    const students = await Section.findStudentsBySection(req.params.id);
+    res.json(students);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/:id', async (req, res) => {
   try {
     const section = await Section.findById(req.params.id);

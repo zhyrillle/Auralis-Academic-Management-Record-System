@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Pencil, X } from "lucide-react";
 import backIconUrl from "../../assets/backButton.svg";
 import "../../styles/teacherEvalForm.css";
@@ -96,7 +97,7 @@ export default function RoleEvalForm({ formType, person, onBack, onCancel }) {
     return errs;
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const errs = validate();
     if (Object.keys(errs).length > 0) {
       setErrors(errs);
@@ -104,14 +105,47 @@ export default function RoleEvalForm({ formType, person, onBack, onCancel }) {
       if (first) first.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
-    setSubmitted(true);
+
+    const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
+    const payload = {
+      evaluator_id: currentUser.user_id,
+      evaluee_id: person?.id || person?.user_id,
+      q1_rate: ratings[0],
+      q2_rate: ratings[1],
+      q3_rate: ratings[2],
+      q4_rate: ratings[3],
+      q5_rate: ratings[4],
+      q6_rate: ratings[5],
+      q7_rate: ratings[6],
+      q8_rate: ratings[7],
+      strengths_comments: answers[0] || null,
+      improvements_comment: answers[1] || null,
+      status: "OPEN"
+    };
+
+    try {
+      const res = await fetch("http://localhost:5000/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Failed to submit feedback.");
+        return;
+      }
+      setSubmitted(true);
+    } catch (err) {
+      console.error("Feedback submit error:", err);
+      alert("Error connecting to server. Please try again.");
+    }
   };
 
   return (
     <div className="tef-container">
 
       {/* ── Success Modal Overlay ── */}
-      {submitted && (
+      {submitted && createPortal(
         <div className="tef-modal-backdrop">
           <div className="tef-modal-card">
             <div className="tef-modal-icon">
@@ -122,7 +156,8 @@ export default function RoleEvalForm({ formType, person, onBack, onCancel }) {
             </div>
             <p className="tef-modal-text">Feedback submitted<br />successfully</p>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ── Header ── */}

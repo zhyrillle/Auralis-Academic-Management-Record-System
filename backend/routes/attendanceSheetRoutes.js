@@ -11,6 +11,30 @@ router.get('/', async (req, res) => {
   }
 });
 
+// GET all sheets for a specific adviser assignment (for building the date grid)
+router.get('/adviser/:adviserAssignmentId', async (req, res) => {
+  try {
+    const sheets = await AttendanceSheet.findByAdviserAssignmentId(req.params.adviserAssignmentId);
+    res.json(sheets);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST find or create a sheet for a given date + adviser assignment
+router.post('/find-or-create', async (req, res) => {
+  try {
+    const { adviser_assignment_id, attendance_scope, attendance_date } = req.body;
+    if (!adviser_assignment_id || !attendance_scope || !attendance_date) {
+      return res.status(400).json({ error: 'adviser_assignment_id, attendance_scope, and attendance_date are required' });
+    }
+    const result = await AttendanceSheet.findOrCreate({ adviser_assignment_id, attendance_scope, attendance_date });
+    res.status(result.created ? 201 : 200).json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/:id', async (req, res) => {
   try {
     const sheet = await AttendanceSheet.findById(req.params.id);

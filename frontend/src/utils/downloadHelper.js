@@ -12,14 +12,15 @@ export function downloadGradingSheetCSV(
   students,
   calculateFinalGrade,
   getDescriptor,
-  getRemark
+  getRemark,
+  teacherName = "Teacher"
 ) {
   if (!activeSelectedClass || !students) return;
 
   // Construct CSV string
   let csvContent = "data:text/csv;charset=utf-8,";
   csvContent += `Grade & Section: ${activeSelectedClass.gradeLevel} - ${activeSelectedClass.sectionName},School Year: 2026-2027\r\n`;
-  csvContent += `Teacher: Harvey Babia,Subject: ${activeSelectedClass.subject}\r\n\r\n`;
+  csvContent += `Teacher: ${teacherName},Subject: ${activeSelectedClass.subject}\r\n\r\n`;
   csvContent += "Learner's Name,Sex,LRN,Term 1,Term 2,Term 3,Final Grade,Descriptor,Remark\r\n";
 
   // Add males

@@ -24,6 +24,7 @@ import AtRiskPrediction from "./pages/principal/AtRiskPrediction";
 import GradeReopeningRequest from "./pages/adviser/GradeReopeningRequest";
 import SectionDetails from "./pages/adviser/SectionDetails";
 import AdviserNotifications from "./pages/adviser/AdviserNotifications";
+import AttendanceSheet from "./pages/adviser/AttendanceSheet";
 import { getStoredUser, setStoredUser } from "./utils/auth";
 
 export default function App() {
@@ -139,6 +140,10 @@ export default function App() {
           <Route path="/adviser/dashboard" element={<AdviserDashboard />} />
           <Route path="/adviser/sections" element={<AdviserSections />} />
           <Route path="/adviser/sections/details" element={<SectionDetails />} />
+          <Route
+            path="/adviser/attendance"
+            element={<AttendanceSheet />}
+          />
           <Route path="/adviser/notifications" element={<AdviserNotifications />} />
           <Route path="/adviser/master-sheet" element={<MasterSheet />} />
           <Route path="/adviser/performance" element={<PerformanceReport />} />
@@ -149,19 +154,19 @@ export default function App() {
           <Route path="/teacher/dashboard" element={<TeacherDashboard />} />
           <Route
             path="/teacher/sections"
-            element={<PlaceholderPage />}
+            element={<AdviserSections userRole="teacher" />}
           />
           <Route
             path="/teacher/notifications"
-            element={<PlaceholderPage />}
+            element={<AdviserNotifications userRole="teacher" />}
           />
           <Route
             path="/teacher/performance"
-            element={<PlaceholderPage />}
+            element={<PerformanceReport userRole="teacher" />}
           />
           <Route
             path="/teacher/feedback"
-            element={<PlaceholderPage />}
+            element={<AdviserFeedback userRole="teacher" />}
           />
           <Route
             path="/teacher/request"

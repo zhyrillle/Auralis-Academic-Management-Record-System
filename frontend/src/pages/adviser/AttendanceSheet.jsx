@@ -1,214 +1,406 @@
-import React, { useState, useMemo } from "react";
-import { Calendar, CheckCircle, AlertTriangle, Info, X } from "lucide-react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { Calendar, CheckCircle, AlertTriangle, Info, X, Save } from "lucide-react";
+import { useLocation, useNavigate } from "react-router-dom";
 import "../../styles/attendanceSheet.css";
 import backIconUrl from "../../assets/backButton.svg";
+import { getStoredUser } from "../../utils/auth";
 
-// Student names roster matching the 28 students in the mockup image
-const STUDENTS_ROSTER = [
-  "John Doe", "Jane Smith", "Peter Jones", "Alice Brown", "Bob White",
-  "Charlie Green", "Ola Nordmann", "Jan Modaal", "Han Meimei", "Yamada Taro",
-  "Ivan Ivanov", "Jean Dupont", "Erika Mustermann", "Max Mustermann", "Fulano de Tal",
-  "Juan Pérez", "Robin Banks", "Anita Job", "Justin Case", "Ima Hogg",
-  "Frank Foster", "David Davis", "Betty Baker", "Arthur Adams", "Diana Prince",
-  "Wade Wilson", "Lois Lane", "Clark Kent"
-];
+const BASE_URL = "http://localhost:5000/api";
 
-// Map 20 columns to the weekdays of July 2026
-const JULY_2026_DAYS = [
-  { label: "M", dateStr: "2026-07-06", display: "Mon, Jul 6" },
-  { label: "T", dateStr: "2026-07-07", display: "Tue, Jul 7" },
-  { label: "W", dateStr: "2026-07-08", display: "Wed, Jul 8" },
-  { label: "TH", dateStr: "2026-07-09", display: "Thu, Jul 9" },
-  { label: "F", dateStr: "2026-07-10", display: "Fri, Jul 10" },
-  { label: "M", dateStr: "2026-07-13", display: "Mon, Jul 13" },
-  { label: "T", dateStr: "2026-07-14", display: "Tue, Jul 14" },
-  { label: "W", dateStr: "2026-07-15", display: "Wed, Jul 15" },
-  { label: "TH", dateStr: "2026-07-16", display: "Thu, Jul 16" },
-  { label: "F", dateStr: "2026-07-17", display: "Fri, Jul 17" },
-  { label: "M", dateStr: "2026-07-20", display: "Mon, Jul 20" },
-  { label: "T", dateStr: "2026-07-21", display: "Tue, Jul 21" },
-  { label: "W", dateStr: "2026-07-22", display: "Wed, Jul 22" },
-  { label: "TH", dateStr: "2026-07-23", display: "Thu, Jul 23" },
-  { label: "F", dateStr: "2026-07-24", display: "Fri, Jul 24" },
-  { label: "M", dateStr: "2026-07-27", display: "Mon, Jul 27" },
-  { label: "T", dateStr: "2026-07-28", display: "Tue, Jul 28" },
-  { label: "W", dateStr: "2026-07-29", display: "Wed, Jul 29" }, // Today (Column 18)
-  { label: "TH", dateStr: "2026-07-30", display: "Thu, Jul 30" },
-  { label: "F", dateStr: "2026-07-31", display: "Fri, Jul 31" }
-];
+const DAY_LABELS = ["SU", "M", "T", "W", "TH", "F", "SA"];
 
-const TODAY_DATE = "2026-07-29"; // Mock today's local date
+function getTodayISO() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+// Generate all weekdays (Monday through Friday) for the month of dateStr
+function getMonthSchoolDays(dateStr) {
+  const parts = dateStr.split("-");
+  const year = parseInt(parts[0], 10);
+  const month = parseInt(parts[1], 10) - 1;
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const schoolDays = [];
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const d = new Date(year, month, day);
+    const dow = d.getDay();
+    if (dow >= 1 && dow <= 5) {
+      const mFormatted = String(month + 1).padStart(2, "0");
+      const dFormatted = String(day).padStart(2, "0");
+      schoolDays.push({
+        dateStr: `${year}-${mFormatted}-${dFormatted}`,
+        dayNumber: day,
+        dayOfWeek: dow,
+        dayLabel: DAY_LABELS[dow],
+        fullDate: d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+      });
+    }
+  }
+
+  // Group into calendar weeks (starting fresh on Mondays or 1st school day)
+  const weeks = [];
+  let currentWeek = [];
+  let weekNum = 1;
+
+  schoolDays.forEach(sd => {
+    if (sd.dayOfWeek === 1 && currentWeek.length > 0) {
+      weeks.push({ weekNum, days: currentWeek });
+      weekNum++;
+      currentWeek = [];
+    }
+    currentWeek.push(sd);
+  });
+  if (currentWeek.length > 0) {
+    weeks.push({ weekNum, days: currentWeek });
+  }
+
+  return { schoolDays, weeks };
+}
 
 export default function AttendanceSheet({ onBack }) {
-  const [selectedDate, setSelectedDate] = useState(TODAY_DATE);
-  
-  // Create state for all students' 20-day attendance status
-  const [attendance, setAttendance] = useState(() => {
-    const initial = {};
-    STUDENTS_ROSTER.forEach((student, index) => {
-      initial[student] = JULY_2026_DAYS.map((d, colIdx) => {
-        // Special case seed data to match the visual mockups
-        if (student === "John Doe") {
-          if (colIdx === 2) return "A"; // 1st week Wed
-          if (colIdx === 10) return "L"; // 3rd week Mon
-          if (colIdx === 15) return "A"; // 4th week Mon
-        }
-        if (student === "Peter Jones") {
-          if (colIdx === 5) return "A"; // 2nd week Mon
-          if (colIdx === 9) return "L"; // 2nd week Fri
-          if (colIdx === 13) return "A"; // 3rd week Thu
-        }
-        if (student === "Bob White") {
-          if (colIdx === 4) return "A"; // 1st week Fri
-        }
-        if (student === "Charlie Green") {
-          if (colIdx === 1) return "A"; // 1st week Tue
-        }
-        if (student === "Han Meimei") {
-          // Continuous Late streak
-          if (colIdx >= 2 && colIdx <= 9) return "L";
-          if (colIdx === 10) return "A";
-        }
-        if (student === "Yamada Taro") {
-          if (colIdx === 8) return "A";
-        }
-        if (student === "Ivan Ivanov") {
-          if (colIdx === 3 || colIdx === 5) return "A";
-        }
-        if (student === "Max Mustermann") {
-          if (colIdx === 14) return "A";
-        }
-        if (student === "Fulano de Tal") {
-          if (colIdx === 2 || colIdx === 3 || colIdx === 4) return "A";
-        }
-        if (student === "Robin Banks") {
-          if (colIdx === 9) return "A";
-        }
-        if (student === "Justin Case") {
-          if (colIdx === 14) return "A";
-        }
-        if (student === "Ima Hogg") {
-          if (colIdx === 10) return "A";
-        }
-        if (student === "David Davis") {
-          if (colIdx === 4) return "A";
-        }
-        if (student === "Arthur Adams") {
-          if (colIdx === 3) return "A";
-        }
-        if (student === "Diana Prince") {
-          if (colIdx === 6) return "A";
-        }
-        if (student === "Clark Kent") {
-          if (colIdx === 18) return "A";
-        }
+  const location = useLocation();
+  const navigate = useNavigate();
+  const currentUser = getStoredUser();
 
-        // Default to P (Present) for all other cells
-        return "P";
-      });
-    });
-    return initial;
-  });
+  const handleBack = onBack || (() => navigate("/adviser/sections", {
+    state: {
+      currentView: "class-record",
+      activeSelectedClass: location.state?.activeClass,
+    },
+  }));
 
+  const TODAY = getTodayISO();
+  const [selectedDate, setSelectedDate] = useState(TODAY);
+
+  // Data states
+  const [adviserAssignment, setAdviserAssignment] = useState(null);
+  const [students, setStudents] = useState([]); // { student_id, student_section_id, first_name, last_name, sex }
+  const [sheetsByDate, setSheetsByDate] = useState({}); // { "YYYY-MM-DD": attendance_sheet_id }
+  const [attendanceMap, setAttendanceMap] = useState({}); // { "student_section_id-dateStr": status }
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [toasts, setToasts] = useState([]);
 
-  const triggerToast = (message, type = "error") => {
+  const triggerToast = useCallback((message, type = "error") => {
     const id = Date.now();
-    setToasts((prev) => [...prev, { id, message, type }]);
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 4000);
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
+  }, []);
+
+  // ── Load all data on mount ──
+  useEffect(() => {
+    const userId = currentUser?.user_id || currentUser?.id;
+    if (!userId && !location.state?.activeClass?.section_id) return;
+    loadAll();
+  }, [currentUser?.user_id, currentUser?.id]);
+
+  const loadAll = async () => {
+    setLoading(true);
+    try {
+      const userId = currentUser?.user_id || currentUser?.id;
+      let assignment = null;
+
+      // 1. Get adviser assignment by user ID
+      if (userId) {
+        const assignRes = await fetch(`${BASE_URL}/section-adviser-assignments/user/${userId}`);
+        const assignments = assignRes.ok ? await assignRes.json() : [];
+        if (assignments.length > 0) {
+          assignment = assignments[0];
+        }
+      }
+
+      // Fallback: If not found by user, check if section is passed in navigation state
+      if (!assignment && location.state?.activeClass?.section_id) {
+        const secId = location.state.activeClass.section_id;
+        const allAssignRes = await fetch(`${BASE_URL}/section-adviser-assignments`);
+        const allAssignments = allAssignRes.ok ? await allAssignRes.json() : [];
+        assignment = allAssignments.find(a => Number(a.section_id) === Number(secId));
+      }
+
+      // Fallback: Default to first available assignment if in dev/demo
+      if (!assignment) {
+        const allAssignRes = await fetch(`${BASE_URL}/section-adviser-assignments`);
+        const allAssignments = allAssignRes.ok ? await allAssignRes.json() : [];
+        if (allAssignments.length > 0) {
+          assignment = allAssignments[0];
+        }
+      }
+
+      if (!assignment) {
+        triggerToast("No adviser assignment found for your section.", "error");
+        setLoading(false);
+        return;
+      }
+      setAdviserAssignment(assignment);
+
+      const sectionId = assignment.section_id;
+      const adviserAssignmentId = assignment.adviser_assignment_id;
+
+      // 2. Get enrolled students in the section
+      const ssRes = await fetch(`${BASE_URL}/student-sections`);
+      const allStudentSections = ssRes.ok ? await ssRes.json() : [];
+      const sectionStudentSections = allStudentSections.filter(ss => Number(ss.section_id) === Number(sectionId));
+
+      // 3. Get student details
+      const stuRes = await fetch(`${BASE_URL}/students`);
+      const allStudents = stuRes.ok ? await stuRes.json() : [];
+
+      const enrichedStudents = sectionStudentSections.map(ss => {
+        const stu = allStudents.find(s => Number(s.student_id) === Number(ss.student_id));
+        return {
+          student_section_id: ss.student_section_id,
+          student_id: ss.student_id,
+          first_name: stu?.first_name || "Unknown",
+          last_name: stu?.last_name || "",
+          sex: stu?.sex || "M",
+        };
+      }).sort((a, b) => a.last_name.localeCompare(b.last_name) || a.first_name.localeCompare(b.first_name));
+
+      setStudents(enrichedStudents);
+
+      // 4. Get all attendance sheets for this adviser assignment
+      const sheetsRes = await fetch(`${BASE_URL}/attendance-sheets/adviser/${adviserAssignmentId}`);
+      const sheets = sheetsRes.ok ? await sheetsRes.json() : [];
+
+      // Build sheetsByDate map
+      const byDate = {};
+      sheets.forEach(sh => {
+        const d = sh.attendance_date?.split("T")[0] || sh.attendance_date;
+        byDate[d] = sh.attendance_sheet_id;
+      });
+      setSheetsByDate(byDate);
+
+      // 5. Load attendance records for each sheet
+      const attMap = {};
+      await Promise.all(
+        sheets.map(async sh => {
+          const dateStr = sh.attendance_date?.split("T")[0] || sh.attendance_date;
+          const attRes = await fetch(`${BASE_URL}/attendance/sheet/${sh.attendance_sheet_id}`);
+          const attRows = attRes.ok ? await attRes.json() : [];
+          attRows.forEach(row => {
+            const key = `${row.student_section_id}-${dateStr}`;
+            attMap[key] = row.status;
+          });
+        })
+      );
+      setAttendanceMap(attMap);
+
+    } catch (err) {
+      console.error("Error loading attendance data:", err);
+      triggerToast("Failed to load attendance data.", "error");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Determine if the selected date is the current mock today's date
-  const isEditableDate = selectedDate === TODAY_DATE;
+  // ── Compute all school days (Monday to Friday) and week groups for selected month ──
+  const { schoolDays, weeks } = useMemo(() => {
+    return getMonthSchoolDays(selectedDate || TODAY);
+  }, [selectedDate, TODAY]);
 
-  // Find the column index of the selected date in our grid
   const activeColIndex = useMemo(() => {
-    return JULY_2026_DAYS.findIndex(d => d.dateStr === selectedDate);
-  }, [selectedDate]);
+    return schoolDays.findIndex(sd => sd.dateStr === selectedDate);
+  }, [schoolDays, selectedDate]);
 
-  const handleCellClick = (student, colIdx) => {
-    // 1. Check if the cell being clicked is for the currently selected date
+  const isEditableDate = selectedDate === TODAY;
+
+  const currentMonthName = useMemo(() => {
+    const parts = (selectedDate || TODAY).split("-");
+    const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, 1);
+    return d.toLocaleDateString("en-US", { month: "long" });
+  }, [selectedDate, TODAY]);
+
+  // ── Handle cell click: toggle P → L → A → P ──
+  const handleCellClick = async (studentSectionId, dateStr, colIdx) => {
     if (colIdx !== activeColIndex) {
       triggerToast("You can only edit attendance for the selected date on the calendar.");
       return;
     }
-
-    // 2. Check if the selected date is current date (Today)
     if (!isEditableDate) {
-      triggerToast("Past/Future dates are locked. Attendance can only be modified for the current date (July 29, 2026).");
+      triggerToast("Past/Future dates are locked. Attendance can only be modified for today.");
+      return;
+    }
+    if (!adviserAssignment?.adviser_assignment_id) {
+      triggerToast("No adviser assignment configured for this section.");
       return;
     }
 
-    // 3. Toggles status: P -> L -> A -> P
-    setAttendance((prev) => {
-      const currentStudentDays = [...prev[student]];
-      const oldStatus = currentStudentDays[colIdx];
-      let newStatus = "P";
-      if (oldStatus === "P") newStatus = "L";
-      else if (oldStatus === "L") newStatus = "A";
-      
-      currentStudentDays[colIdx] = newStatus;
-      return {
-        ...prev,
-        [student]: currentStudentDays
-      };
-    });
-  };
+    const key = `${studentSectionId}-${dateStr}`;
+    const oldStatus = attendanceMap[key] || "P";
+    let newStatus = "P";
+    if (oldStatus === "P") newStatus = "L";
+    else if (oldStatus === "L") newStatus = "A";
 
-  // Process rows statistics (total present, absent, tardy)
-  const studentStats = useMemo(() => {
-    const stats = {};
-    STUDENTS_ROSTER.forEach((student) => {
-      const record = attendance[student] || [];
-      const absents = record.filter(status => status === "A").length;
-      const tardy = record.filter(status => status === "L").length;
-      
-      let remark = "";
-      if (absents === 0 && tardy === 0) {
-        remark = "Perfect attendance";
-      } else if (absents > 1 || tardy > 4) {
-        remark = "Needs Improvement";
+    // Optimistic update
+    setAttendanceMap(prev => ({ ...prev, [key]: newStatus }));
+
+    // Save to backend
+    try {
+      setSaving(true);
+      let sheetId = sheetsByDate[TODAY];
+      if (!sheetId) {
+        const sheetRes = await fetch(`${BASE_URL}/attendance-sheets/find-or-create`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            adviser_assignment_id: adviserAssignment.adviser_assignment_id,
+            attendance_scope: "SECTION",
+            attendance_date: TODAY,
+          }),
+        });
+        if (!sheetRes.ok) {
+          const errData = await sheetRes.json().catch(() => ({}));
+          throw new Error(errData.error || "Failed to create attendance sheet");
+        }
+        const sheetData = await sheetRes.json();
+        sheetId = sheetData.attendance_sheet_id;
+        setSheetsByDate(prev => ({ ...prev, [TODAY]: sheetId }));
       }
 
-      stats[student] = { absents, tardy, remark };
+      const saveRes = await fetch(`${BASE_URL}/attendance/bulk-save`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          records: [{
+            attendance_sheet_id: sheetId,
+            student_section_id: studentSectionId,
+            status: newStatus,
+            remarks: null,
+          }],
+        }),
+      });
+
+      if (!saveRes.ok) {
+        const errData = await saveRes.json().catch(() => ({}));
+        throw new Error(errData.error || "Failed to save attendance");
+      }
+    } catch (err) {
+      console.error("Error saving attendance:", err);
+      triggerToast(`Failed to save attendance: ${err.message}`, "error");
+      // Rollback
+      setAttendanceMap(prev => ({ ...prev, [key]: oldStatus }));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ── Save all today's attendance at once ──
+  const handleSaveAll = async () => {
+    if (!isEditableDate || !adviserAssignment) return;
+    try {
+      setSaving(true);
+      let sheetId = sheetsByDate[TODAY];
+      if (!sheetId) {
+        const sheetRes = await fetch(`${BASE_URL}/attendance-sheets/find-or-create`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            adviser_assignment_id: adviserAssignment.adviser_assignment_id,
+            attendance_scope: "SECTION",
+            attendance_date: TODAY,
+          }),
+        });
+        if (!sheetRes.ok) {
+          const errData = await sheetRes.json().catch(() => ({}));
+          throw new Error(errData.error || "Failed to create attendance sheet");
+        }
+        const sheetData = await sheetRes.json();
+        sheetId = sheetData.attendance_sheet_id;
+        setSheetsByDate(prev => ({ ...prev, [TODAY]: sheetId }));
+      }
+
+      const records = students.map(stu => ({
+        attendance_sheet_id: sheetId,
+        student_section_id: stu.student_section_id,
+        status: attendanceMap[`${stu.student_section_id}-${TODAY}`] || "P",
+        remarks: null,
+      }));
+
+      const saveRes = await fetch(`${BASE_URL}/attendance/bulk-save`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ records }),
+      });
+
+      if (!saveRes.ok) {
+        const errData = await saveRes.json().catch(() => ({}));
+        throw new Error(errData.error || "Failed to save attendance");
+      }
+
+      triggerToast("Attendance saved successfully!", "success");
+    } catch (err) {
+      console.error("Error saving all attendance:", err);
+      triggerToast(`Failed to save attendance: ${err.message}`, "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ── Per-student stats for the current displayed month ──
+  const studentStats = useMemo(() => {
+    const stats = {};
+    students.forEach(stu => {
+      let absents = 0;
+      let tardy = 0;
+      schoolDays.forEach(sd => {
+        const status = attendanceMap[`${stu.student_section_id}-${sd.dateStr}`] || "P";
+        if (status === "A") absents++;
+        else if (status === "L") tardy++;
+      });
+      let remark = "";
+      if (absents === 0 && tardy === 0) remark = "Perfect attendance";
+      else if (absents > 1 || tardy > 4) remark = "Needs Improvement";
+      stats[stu.student_section_id] = { absents, tardy, remark };
     });
     return stats;
-  }, [attendance]);
+  }, [students, attendanceMap, schoolDays]);
 
-  // Gender demographics matching summary (13 Males, 15 Females = 28 Total)
-  const malesCount = 13;
-  const femalesCount = 15;
+  // ── Gender summary ──
+  const malesCount = useMemo(() => students.filter(s => s.sex === "M").length, [students]);
+  const femalesCount = useMemo(() => students.filter(s => s.sex === "F").length, [students]);
+
+  const sectionName = adviserAssignment?.section_name || "–";
+
+  if (loading) {
+    return (
+      <div className="attendance-sheet-container" style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "60vh" }}>
+        <p style={{ color: "#64748b", fontSize: "15px" }}>Loading attendance data…</p>
+      </div>
+    );
+  }
 
   return (
     <div className="attendance-sheet-container">
-      {/* Toast Warnings */}
+      {/* Toast Notifications */}
       <div style={{ position: "fixed", top: "24px", right: "24px", zIndex: 9999, display: "flex", flexDirection: "column", gap: "10px" }}>
-        {toasts.map((t) => (
-          <div 
-            key={t.id} 
-            style={{ 
-              backgroundColor: "#fee2e2", 
-              border: "1px solid #fecaca", 
-              borderRadius: "10px", 
-              padding: "12px 18px", 
-              color: "#991b1b", 
-              boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1)", 
-              display: "flex", 
-              alignItems: "center", 
+        {toasts.map(t => (
+          <div
+            key={t.id}
+            style={{
+              backgroundColor: t.type === "success" ? "#dcfce7" : "#fee2e2",
+              border: `1px solid ${t.type === "success" ? "#bbf7d0" : "#fecaca"}`,
+              borderRadius: "10px",
+              padding: "12px 18px",
+              color: t.type === "success" ? "#166534" : "#991b1b",
+              boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1)",
+              display: "flex",
+              alignItems: "center",
               gap: "8px",
               fontFamily: "var(--font-dm-sans)",
               fontSize: "13px",
               fontWeight: "600",
-              animation: "fadeIn 0.2s ease-out"
+              animation: "fadeIn 0.2s ease-out",
             }}
           >
             <AlertTriangle size={16} />
             <span>{t.message}</span>
-            <button 
+            <button
               onClick={() => setToasts(prev => prev.filter(x => x.id !== t.id))}
-              style={{ background: "transparent", border: "none", color: "#991b1b", cursor: "pointer", marginLeft: "8px", display: "flex", padding: 0 }}
+              style={{ background: "transparent", border: "none", color: "inherit", cursor: "pointer", marginLeft: "8px", display: "flex", padding: 0 }}
             >
               <X size={14} />
             </button>
@@ -219,33 +411,60 @@ export default function AttendanceSheet({ onBack }) {
       {/* Header Area */}
       <div className="att-header-bar">
         <div className="att-title-area">
-          <button className="back-btn" onClick={onBack} title="Back to Sections">
+          <button className="back-btn" onClick={handleBack} title="Back to Class Record">
             <img src={backIconUrl} alt="Back" width={17} height={17} />
           </button>
-          <h1 className="att-title">Class Record</h1>
+          <h1 className="att-title">Attendance Sheet</h1>
         </div>
 
-        {/* Date Selector input */}
-        <div className="att-calendar-wrapper">
-          <div className="att-calendar-icon-btn">
-            <Calendar size={18} />
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          {/* Save All button */}
+          {isEditableDate && students.length > 0 && (
+            <button
+              onClick={handleSaveAll}
+              disabled={saving}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                padding: "8px 16px",
+                background: saving ? "#94a3b8" : "#112d61",
+                color: "#fff",
+                border: "none",
+                borderRadius: "8px",
+                fontSize: "13px",
+                fontWeight: "700",
+                cursor: saving ? "not-allowed" : "pointer",
+                transition: "background 0.2s",
+              }}
+            >
+              <Save size={14} />
+              {saving ? "Saving…" : "Save All"}
+            </button>
+          )}
+
+          {/* Date Selector */}
+          <div className="att-calendar-wrapper">
+            <div className="att-calendar-icon-btn">
+              <Calendar size={18} />
+            </div>
+            <input
+              type="date"
+              className="att-date-input"
+              value={selectedDate}
+              onChange={e => setSelectedDate(e.target.value)}
+            />
           </div>
-          <input 
-            type="date" 
-            className="att-date-input" 
-            value={selectedDate} 
-            onChange={(e) => setSelectedDate(e.target.value)}
-          />
         </div>
       </div>
 
-      {/* Subheader and locking indicator */}
+      {/* Subheader and mode indicator */}
       <div className="att-mode-row">
-        <span className="att-section-label">Section: Mahogany</span>
+        <span className="att-section-label">Section: {sectionName}</span>
         {isEditableDate ? (
           <span className="att-mode-badge editable">
             <CheckCircle size={14} />
-            <span>Editable Mode (Current Date Selected)</span>
+            <span>Editable Mode (Today's Date Selected)</span>
           </span>
         ) : (
           <span className="att-mode-badge readonly">
@@ -255,118 +474,139 @@ export default function AttendanceSheet({ onBack }) {
         )}
       </div>
 
-      {/* Roster Spreadsheet Grid Table */}
-      <div className="att-table-wrapper">
-        <table className="att-table">
-          <thead>
-            {/* Main Header Weeks Row */}
-            <tr>
-              <th className="name-header" rowSpan={2}>Names</th>
-              <th colSpan={5}>Week 1</th>
-              <th colSpan={5}>Week 2</th>
-              <th colSpan={5}>Week 3</th>
-              <th colSpan={5}>Week 4</th>
-              <th rowSpan={2} style={{ width: "80px" }}>Total Absent</th>
-              <th rowSpan={2} style={{ width: "80px" }}>Total Tardy</th>
-              <th rowSpan={2} style={{ width: "150px" }}>Remarks</th>
-            </tr>
-            {/* Days Header Row */}
-            <tr>
-              {JULY_2026_DAYS.map((d, colIdx) => (
-                <th 
-                  key={colIdx} 
-                  className={colIdx === activeColIndex ? "active-date-header" : ""}
-                  title={d.display}
-                  style={{ width: "30px", fontSize: "11px" }}
-                >
-                  {d.label}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {STUDENTS_ROSTER.map((student) => {
-              const stats = studentStats[student] || { absents: 0, tardy: 0, remark: "" };
-              return (
-                <tr key={student}>
-                  {/* Sticky student name */}
-                  <td className="student-name-cell">{student}</td>
-                  {/* 20-day grid cells */}
-                  {attendance[student].map((status, colIdx) => {
-                    const isActive = colIdx === activeColIndex;
-                    return (
-                      <td 
-                        key={colIdx} 
-                        className={`${isActive ? "active-date-cell" : ""} ${isActive && isEditableDate ? "editable-cell" : ""}`}
-                        onClick={() => handleCellClick(student, colIdx)}
-                        title={JULY_2026_DAYS[colIdx].display}
-                      >
-                        <span className={`att-status-badge ${status.toLowerCase()}`}>
-                          {status}
-                        </span>
-                      </td>
-                    );
-                  })}
-                  {/* Stats columns */}
-                  <td className="summary-stat-cell">{stats.absents}</td>
-                  <td className="summary-stat-cell">{stats.tardy}</td>
-                  <td className="remarks-cell">{stats.remark}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Bottom Summary & Legend panels */}
-      <div className="att-bottom-grid">
-        {/* Attendance Summary */}
-        <div className="att-summary-card">
-          <h3 className="att-card-header">Attendance Summary</h3>
-          <p style={{ color: "#64748b", margin: "0 0 12px 0", fontSize: "14px", fontWeight: 500 }}>
-            Total Students: {STUDENTS_ROSTER.length}
-          </p>
-          <table className="att-summary-table">
-            <thead>
-              <tr>
-                <th style={{ textAlign: "center" }}>Month</th>
-                <th>No.of Days of Classes</th>
-                <th>M</th>
-                <th>F</th>
-                <th>TOTAL</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td className="row-month">July</td>
-                <td>20</td>
-                <td>{malesCount}</td>
-                <td>{femalesCount}</td>
-                <td>{STUDENTS_ROSTER.length}</td>
-              </tr>
-            </tbody>
-          </table>
+      {/* No students enrolled message */}
+      {students.length === 0 ? (
+        <div style={{ padding: "60px 20px", textAlign: "center", color: "#64748b" }}>
+          <p style={{ fontSize: "15px" }}>No students enrolled in this section yet.</p>
         </div>
+      ) : (
+        <>
+          {/* Roster Spreadsheet Grid Table */}
+          <div className="att-table-wrapper">
+            <table className="att-table">
+              <thead>
+                <tr>
+                  <th className="name-header" rowSpan={2}>#</th>
+                  <th className="name-header" rowSpan={2}>Student Name</th>
+                  {weeks.map(week => (
+                    <th
+                      key={`week-${week.weekNum}`}
+                      colSpan={week.days.length}
+                    >
+                      Week {week.weekNum}
+                    </th>
+                  ))}
+                  <th rowSpan={2} style={{ width: "80px" }}>Total Absent</th>
+                  <th rowSpan={2} style={{ width: "80px" }}>Total Tardy</th>
+                  <th rowSpan={2} style={{ width: "150px" }}>Remarks</th>
+                </tr>
+                <tr>
+                  {schoolDays.map((sd, colIdx) => (
+                    <th
+                      key={sd.dateStr}
+                      className={colIdx === activeColIndex ? "active-date-header" : ""}
+                      title={sd.fullDate}
+                      style={{ width: "30px", fontSize: "11px" }}
+                    >
+                      {sd.dayLabel}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {students.map((stu, rowIdx) => {
+                  const stats = studentStats[stu.student_section_id] || { absents: 0, tardy: 0, remark: "" };
+                  return (
+                    <tr key={stu.student_section_id}>
+                      <td className="student-name-cell" style={{ width: "36px", textAlign: "center", color: "#94a3b8", fontSize: "12px" }}>
+                        {rowIdx + 1}
+                      </td>
+                      <td className="student-name-cell">
+                        {stu.last_name}, {stu.first_name}
+                      </td>
+                      {schoolDays.map((sd, colIdx) => {
+                        const key = `${stu.student_section_id}-${sd.dateStr}`;
+                        const status = attendanceMap[key] || "P";
+                        const isActive = colIdx === activeColIndex;
+                        return (
+                          <td
+                            key={sd.dateStr}
+                            className={`${isActive ? "active-date-cell" : ""} ${isActive && isEditableDate ? "editable-cell" : ""}`}
+                            onClick={() => handleCellClick(stu.student_section_id, sd.dateStr, colIdx)}
+                            title={sd.fullDate}
+                            style={{ cursor: isActive && isEditableDate ? "pointer" : "default" }}
+                          >
+                            <span className={`att-status-badge ${status.toLowerCase()}`}>
+                              {status}
+                            </span>
+                          </td>
+                        );
+                      })}
+                      <td className="summary-stat-cell">{stats.absents}</td>
+                      <td className="summary-stat-cell">{stats.tardy}</td>
+                      <td className="remarks-cell">{stats.remark}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
 
-        {/* Legend */}
-        <div className="att-legend-card">
-          <h3 className="att-card-header">Attendance Indicator</h3>
-          <div className="att-legend-list">
-            <div className="att-legend-item">
-              <span className="legend-badge-box p">P</span>
-              <span className="att-legend-text">Present</span>
+          {/* Bottom Summary & Legend */}
+          <div className="att-bottom-grid">
+            {/* Attendance Summary */}
+            <div className="att-summary-card">
+              <h3 className="att-card-header">Attendance Summary</h3>
+              <p style={{ color: "#64748b", margin: "0 0 12px 0", fontSize: "14px", fontWeight: 500 }}>
+                Total Students: {students.length}
+              </p>
+              <table className="att-summary-table">
+                <thead>
+                  <tr>
+                    <th style={{ textAlign: "center" }}>Month</th>
+                    <th>No. of Days of Classes</th>
+                    <th>M</th>
+                    <th>F</th>
+                    <th>TOTAL</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td className="row-month">{currentMonthName}</td>
+                    <td>{schoolDays.length}</td>
+                    <td>{malesCount}</td>
+                    <td>{femalesCount}</td>
+                    <td>{students.length}</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
-            <div className="att-legend-item">
-              <span className="legend-badge-box l">L</span>
-              <span className="att-legend-text">Late / Tardy</span>
-            </div>
-            <div className="att-legend-item">
-              <span className="legend-badge-box a">A</span>
-              <span className="att-legend-text">Absent</span>
+
+            {/* Legend */}
+            <div className="att-legend-card">
+              <h3 className="att-card-header">Attendance Indicator</h3>
+              <div className="att-legend-list">
+                <div className="att-legend-item">
+                  <span className="legend-badge-box p">P</span>
+                  <span className="att-legend-text">Present</span>
+                </div>
+                <div className="att-legend-item">
+                  <span className="legend-badge-box l">L</span>
+                  <span className="att-legend-text">Late / Tardy</span>
+                </div>
+                <div className="att-legend-item">
+                  <span className="legend-badge-box a">A</span>
+                  <span className="att-legend-text">Absent</span>
+                </div>
+              </div>
+              <p style={{ fontSize: "12px", color: "#64748b", marginTop: "12px" }}>
+                Click a cell on today's date to toggle status.
+              </p>
             </div>
           </div>
-        </div>
-      </div>
+        </>
+      )}
     </div>
   );
 }
+

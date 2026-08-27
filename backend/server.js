@@ -73,8 +73,12 @@ app.get('/', (req, res) => {
 });
 
 const PORT = process.env.PORT || 5000;
+
+const { logEmailServiceStatus } = require('./services/emailService');
+
 app.listen(PORT, () => {
   console.log(`API Server running on http://localhost:${PORT}`);
+  logEmailServiceStatus();
 
   // Lifecycle enforcement is intentionally server-side. A page does not need
   // to be open for expired temporary access to be closed.
