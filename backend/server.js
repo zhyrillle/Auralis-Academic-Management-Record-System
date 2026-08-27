@@ -28,7 +28,6 @@ const subjectComponentWeightRoutes = require('./routes/subjectComponentWeightRou
 const gradeSheetRoutes = require('./routes/gradeSheetRoutes');
 const gradeActivityRoutes = require('./routes/gradeActivityRoutes');
 const scoreRoutes = require('./routes/scoreRoutes');
-const gradeSheetReviewRoutes = require('./routes/gradeSheetReviewRoutes');
 const gradeReopenRequestRoutes = require('./routes/gradeReopenRequestRoutes');
 const temporaryReopeningRoutes = require('./routes/temporaryReopeningRoutes');
 const attendanceSheetRoutes = require('./routes/attendanceSheetRoutes');
@@ -37,6 +36,8 @@ const auditEventRoutes = require('./routes/auditEventRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const feedbackRoutes = require('./routes/feedbackRoutes');
 const departmentHeadDashboardRoutes = require('./routes/departmentHeadDashboard.routes');
+const gradingPeriodRoutes = require('./routes/gradingPeriodRoutes');
+const GradingPeriodService = require('./services/GradingPeriodService');
 
 app.use('/api/schools', schoolRoutes);
 app.use('/api/school-years', schoolYearRoutes);
@@ -57,7 +58,6 @@ app.use('/api/subject-component-weights', subjectComponentWeightRoutes);
 app.use('/api/grade-sheets', gradeSheetRoutes);
 app.use('/api/grade-activities', gradeActivityRoutes);
 app.use('/api/scores', scoreRoutes);
-app.use('/api/grade-sheet-reviews', gradeSheetReviewRoutes);
 app.use('/api/reopen-requests', gradeReopenRequestRoutes);
 app.use('/api/temporary-reopenings', temporaryReopeningRoutes);
 app.use('/api/attendance-sheets', attendanceSheetRoutes);
@@ -66,6 +66,7 @@ app.use('/api/audit-logs', auditEventRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/feedback', feedbackRoutes);
 app.use('/api/department-head', departmentHeadDashboardRoutes);
+app.use('/api/grading-periods', gradingPeriodRoutes);
 
 app.get('/', (req, res) => {
   res.json({ status: 'Backend API is running' });
@@ -74,4 +75,20 @@ app.get('/', (req, res) => {
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`API Server running on http://localhost:${PORT}`);
+
+  // Lifecycle enforcement is intentionally server-side. A page does not need
+  // to be open for expired temporary access to be closed.
+  GradingPeriodService.runLifecycleGuard().catch((error) => {
+    console.error('Initial Grading Period lifecycle check failed:', error.message);
+  });
+  GradingPeriodService.ensureUpcomingSchoolYear().catch((error) => {
+    console.error('Upcoming school year preparation failed:', error.message);
+  });
+
+  const lifecycleTimer = setInterval(() => {
+    GradingPeriodService.runLifecycleGuard().catch((error) => {
+      console.error('Grading Period lifecycle check failed:', error.message);
+    });
+  }, 60 * 1000);
+  lifecycleTimer.unref();
 });

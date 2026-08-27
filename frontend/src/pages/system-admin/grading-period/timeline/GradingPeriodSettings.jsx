@@ -4,6 +4,7 @@ import "../../../../styles/GradingPeriodSettings.css";
 
 export default function GradingPeriodSettings({
   schoolYearLabel,
+  isReadOnly = false,
   periods,
   selectedPeriod,
   periodDraft,
@@ -14,7 +15,7 @@ export default function GradingPeriodSettings({
   onCancelPeriodEdit,
   upcomingSchoolYear,
   upcomingPeriods,
-  inheritedUpcomingPeriods,
+  suggestedUpcomingPeriods,
   onSaveUpcomingPeriods,
 }) {
   return (
@@ -31,6 +32,7 @@ export default function GradingPeriodSettings({
       </div>
 
       <AcademicTimeline
+        isReadOnly={isReadOnly}
         periods={periods}
         selectedPeriod={selectedPeriod}
         draft={periodDraft}
@@ -41,12 +43,14 @@ export default function GradingPeriodSettings({
         onCancel={onCancelPeriodEdit}
       />
 
-      <UpcomingSchoolYear
-        schoolYear={upcomingSchoolYear}
-        periods={upcomingPeriods}
-        inheritedPeriods={inheritedUpcomingPeriods}
-        onSave={onSaveUpcomingPeriods}
-      />
+      {upcomingSchoolYear && (
+        <UpcomingSchoolYear
+          schoolYear={upcomingSchoolYear}
+          periods={upcomingPeriods}
+          suggestedPeriods={suggestedUpcomingPeriods}
+          onSave={onSaveUpcomingPeriods}
+        />
+      )}
     </div>
   );
 }

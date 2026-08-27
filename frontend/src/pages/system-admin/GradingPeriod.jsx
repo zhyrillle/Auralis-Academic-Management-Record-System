@@ -3,18 +3,28 @@ import {
   CalendarRange,
   Check,
   ChevronDown,
+  CircleAlert,
   LayoutDashboard,
+  LoaderCircle,
+  RefreshCw,
   Settings2,
 } from "lucide-react";
 import Toast from "../../components/common/Toast";
 import GradingPeriodOverview from "./grading-period/overview/GradingPeriodOverview";
-import GradingPeriodSettings from "./grading-period/settings/GradingPeriodSettings";
+import GradingPeriodOverviewSkeleton from "./grading-period/overview/GradingPeriodOverviewSkeleton";
+import GradingPeriodSettings from "./grading-period/timeline/GradingPeriodSettings";
+import GradingPeriodTimelineSkeleton from "./grading-period/timeline/GradingPeriodTimelineSkeleton";
 import ReopeningActivityDrawer from "./grading-period/ReopeningActivityDrawer";
 import ReviewRequestDrawer from "./grading-period/ReviewRequestDrawer";
 import {
-  gradeLockData,
+  approveReopeningRequest,
+  createTermTimeline,
+  denyReopeningRequest,
+  getGradingPeriodContext,
+  getReopeningActivity,
   temporaryDurationOptions,
-} from "../../data/gradeLockData";
+  updateTermTimeline,
+} from "../../services/gradingPeriodService";
 import "../../styles/GradingPeriod.css";
 
 const MANILA_TIMEZONE = "Asia/Manila";
@@ -40,31 +50,6 @@ function isTimestampExpired(timestamp, now = Date.now()) {
   return Number.isFinite(timestampMs) && timestampMs <= now;
 }
 
-const formatDateLabel = (dateValue) => {
-  if (!dateValue) {
-    return "";
-  }
-
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(`${dateValue}T00:00:00Z`));
-};
-
-const formatTimeLabel = (timeValue) => {
-  if (!timeValue) {
-    return "";
-  }
-
-  const [hours, minutes] = timeValue.split(":").map(Number);
-  return new Intl.DateTimeFormat("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(2025, 0, 1, hours, minutes));
-};
-
 const formatPeriodRange = (startDate, endDate) => {
   if (!startDate || !endDate) {
     return "Schedule not set";
@@ -80,53 +65,17 @@ const formatPeriodRange = (startDate, endDate) => {
   return `${formatShortDate(startDate)} – ${formatShortDate(endDate)}`;
 };
 
-const shiftDateByOneYear = (dateValue) => {
-  if (!dateValue) return "";
-
-  const [year, month, day] = dateValue.split("-").map(Number);
-  const lastDayOfTargetMonth = new Date(
-    Date.UTC(year + 1, month, 0),
-  ).getUTCDate();
-  const safeDay = Math.min(day, lastDayOfTargetMonth);
-
-  return `${year + 1}-${String(month).padStart(2, "0")}-${String(
-    safeDay,
-  ).padStart(2, "0")}`;
-};
-
-const createInheritedUpcomingPeriods = (periods) =>
-  periods.map((period) => {
-    const startDate = shiftDateByOneYear(period.startDate);
-    const endDate = shiftDateByOneYear(period.endDate);
-    const deadlineDate = shiftDateByOneYear(period.deadlineDate);
-
-    return {
-      ...period,
-      id: `upcoming-${period.id}`,
-      sourcePeriodId: period.id,
-      status: "upcoming",
-      statusLabel: "Upcoming",
-      progress: 0,
-      startDate,
-      startDateLabel: formatDateLabel(startDate),
-      endDate,
-      endDateLabel: formatDateLabel(endDate),
-      deadlineDate,
-      deadlineDateLabel: formatDateLabel(deadlineDate),
-      periodLabel: formatPeriodRange(startDate, endDate),
-      hasGradeSheets: false,
-      canEditStructure: true,
-      canEditDeadline: true,
-    };
-  });
-
 const createPeriodDraft = (period) => ({
+  periodLabel: formatPeriodRange(period?.startDate, period?.endDate),
   label: period?.label || "",
   startDate: period?.startDate || "",
   endDate: period?.endDate || "",
   deadlineDate: period?.deadlineDate || "",
   deadlineTime: period?.deadlineTime || "23:59",
 });
+
+const toManilaTimestamp = (date, time = "00:00") =>
+  date ? new Date(`${date}T${time}:00+08:00`).toISOString() : null;
 
 const getDurationDetails = (
   durationValue,
@@ -163,56 +112,65 @@ const getDurationDetails = (
   };
 };
 
-export default function GradingPeriod() {
+function ContentLoadingFrame({ loadingMode, pendingLabel, children }) {
+  const isYearChanging = loadingMode === "year-change";
+  const isBackgroundLoading = loadingMode === "background";
+  const isBusy = isYearChanging || isBackgroundLoading;
+
+  return (
+    <div
+      className={`grade-lock-content-frame ${
+        isYearChanging ? "grade-lock-content-frame--year-change" : ""
+      } ${
+        isBackgroundLoading ? "grade-lock-content-frame--background" : ""
+      }`}
+      aria-busy={isBusy}
+    >
+      {isYearChanging && (
+        <div className="grade-lock-year-change-overlay" role="status">
+          <LoaderCircle size={20} aria-hidden="true" />
+          <span>Loading {pendingLabel || "school year"}</span>
+        </div>
+      )}
+      {isBackgroundLoading && (
+        <span className="grade-lock-sr-only" role="status" aria-live="polite">
+          Refreshing grading period data.
+        </span>
+      )}
+      {children}
+    </div>
+  );
+}
+
+export default function GradingPeriod({ user }) {
 
   // Page view, grading-period, and automation state
 
   const [activeView, setActiveView] = useState("overview");
   const [operationsView, setOperationsView] = useState("submissions");
   const [reopeningView, setReopeningView] = useState("pending");
-  const [selectedSchoolYearId, setSelectedSchoolYearId] = useState(
-    gradeLockData.schoolYears[0].id,
-  );
+  const [schoolYears, setSchoolYears] = useState([]);
+  const [selectedSchoolYearId, setSelectedSchoolYearId] = useState("");
   const [isSchoolYearMenuOpen, setIsSchoolYearMenuOpen] = useState(false);
-  const [selectedTermId, setSelectedTermId] = useState(
-    () => gradeLockData.terms[0]?.id || null,
-  );
-  const [terms, setTerms] = useState(() =>
-    gradeLockData.terms.map((term) => ({ ...term })),
-  );
-  const [settingsPeriodId, setSettingsPeriodId] = useState(
-    () => gradeLockData.terms[0]?.id || null,
-  );
-  const [periodDraft, setPeriodDraft] = useState(() =>
-    createPeriodDraft(gradeLockData.terms[0]),
-  );
+  const [selectedTermId, setSelectedTermId] = useState(null);
+  const [terms, setTerms] = useState([]);
+  const [settingsPeriodId, setSettingsPeriodId] = useState(null);
+  const [periodDraft, setPeriodDraft] = useState(() => createPeriodDraft());
   const [periodValidationMessage, setPeriodValidationMessage] = useState("");
-  const [inheritedUpcomingPeriods] = useState(() =>
-    createInheritedUpcomingPeriods(gradeLockData.terms),
-  );
-  const [upcomingPeriods, setUpcomingPeriods] = useState(() =>
-    createInheritedUpcomingPeriods(gradeLockData.terms),
-  );
+  const [suggestedUpcomingPeriods, setSuggestedUpcomingPeriods] = useState([]);
+  const [upcomingPeriods, setUpcomingPeriods] = useState([]);
+  const [upcomingSchoolYear, setUpcomingSchoolYear] = useState(null);
+  const [departmentsByTerm, setDepartmentsByTerm] = useState({});
+  const [loadingMode, setLoadingMode] = useState("initial");
+  const [pendingSchoolYearLabel, setPendingSchoolYearLabel] = useState("");
+  const [pageError, setPageError] = useState("");
 
   // Reopening request and activity state
 
-  const [reopeningRequests, setReopeningRequests] = useState(() =>
-    gradeLockData.reopeningRequests.map((request) => ({ ...request })),
-  );
-  const [activeReopenings, setActiveReopenings] = useState(() =>
-    gradeLockData.activeReopenings.map((reopening) => ({ ...reopening })),
-  );
-  const [reopeningHistory, setReopeningHistory] = useState(() =>
-    Object.fromEntries(
-      Object.entries(gradeLockData.reopeningHistory).map(([id, events]) => [
-        id,
-        events.map((event) => ({ ...event })),
-      ]),
-    ),
-  );
-  const [durationValue, setDurationValue] = useState(
-    () => gradeLockData.automation.defaultReopeningDurationMinutes,
-  );
+  const [reopeningRequests, setReopeningRequests] = useState([]);
+  const [activeReopenings, setActiveReopenings] = useState([]);
+  const [reopeningHistory, setReopeningHistory] = useState({});
+  const [durationValue, setDurationValue] = useState("1440");
   const [customDurationMinutes, setCustomDurationMinutes] = useState("90");
   const [customDurationUnit, setCustomDurationUnit] = useState("minutes");
   const [adminNote, setAdminNote] = useState("");
@@ -227,11 +185,77 @@ export default function GradingPeriod() {
   const reopeningSectionRef = useRef(null);
   const dialogSurfaceRef = useRef(null);
   const schoolYearMenuRef = useRef(null);
+  const selectedTermIdRef = useRef(null);
 
+  const loadContext = useCallback(async (
+    schoolYearId,
+    { mode = "background", pendingLabel = "" } = {},
+  ) => {
+    if (!user?.user_id) {
+      setPageError("A signed-in user is required to load Grading Period data.");
+      setLoadingMode("idle");
+      return;
+    }
+
+    setLoadingMode(mode);
+    setPendingSchoolYearLabel(mode === "year-change" ? pendingLabel : "");
+    setPageError("");
+    try {
+      const context = await getGradingPeriodContext(user.user_id, schoolYearId);
+      setSchoolYears(context.schoolYears);
+      setSelectedSchoolYearId(context.selectedSchoolYearId);
+      setTerms(context.terms);
+      setDepartmentsByTerm(context.departmentsByTerm);
+      setReopeningRequests(context.reopeningRequests);
+      setActiveReopenings(context.activeReopenings);
+      setUpcomingSchoolYear(context.upcomingSchoolYear);
+      setUpcomingPeriods(context.upcomingPeriods);
+      setSuggestedUpcomingPeriods(context.suggestedUpcomingPeriods);
+
+      const currentTermId = context.terms.some((term) => term.id === selectedTermIdRef.current)
+        ? selectedTermIdRef.current
+        : context.terms[0]?.id || null;
+      selectedTermIdRef.current = currentTermId;
+      setSelectedTermId(currentTermId);
+      setSettingsPeriodId((currentId) =>
+        context.terms.some((term) => term.id === currentId)
+          ? currentId
+          : context.terms[0]?.id || null,
+      );
+      const settingsTerm = context.terms.find((term) => term.id === currentTermId)
+        || context.terms[0];
+      setPeriodDraft(createPeriodDraft(settingsTerm));
+    } catch (error) {
+      const message =
+        error.message ||
+        "Unable to load grading period data. Check the backend connection and try again.";
+      if (mode === "initial") {
+        setPageError(message);
+      } else {
+        setToastMessage(message);
+      }
+    } finally {
+      setLoadingMode("idle");
+      setPendingSchoolYearLabel("");
+    }
+  }, [user]);
+
+  useEffect(() => {
+    // The initial API synchronization intentionally populates page state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadContext(undefined, { mode: "initial" });
+  }, [loadContext]);
+
+  const selectableSchoolYears = schoolYears.filter(
+    (schoolYear) => schoolYear.status !== "upcoming",
+  );
   const selectedSchoolYear =
-    gradeLockData.schoolYears.find(
+    selectableSchoolYears.find(
       (schoolYear) => schoolYear.id === selectedSchoolYearId,
-    ) || gradeLockData.schoolYears[0];
+    ) || selectableSchoolYears[0] || { id: "", label: "" };
+  const isSelectedSchoolYearActive = ["active", "ongoing"].includes(
+    selectedSchoolYear.status,
+  );
   const selectedTerm =
     terms.find((term) => term.id === selectedTermId) || terms[0];
   const selectedTermRequests = reopeningRequests.filter(
@@ -249,8 +273,7 @@ export default function GradingPeriod() {
   const selectedTermReopenings = currentActiveReopenings.filter(
     (reopening) => reopening.termId === selectedTermId,
   );
-  const selectedDepartments =
-    gradeLockData.departmentSubmissionStatus[selectedTermId] || [];
+  const selectedDepartments = departmentsByTerm[selectedTermId] || [];
   const reviewedRequest = reopeningRequests.find(
     (request) => request.id === reviewRequestId,
   );
@@ -354,6 +377,7 @@ export default function GradingPeriod() {
 
   // Updates the currently selected academic term
   const handleSelectTerm = (termId) => {
+    selectedTermIdRef.current = termId;
     setSelectedTermId(termId);
     setReopeningView("pending");
   };
@@ -390,7 +414,7 @@ export default function GradingPeriod() {
 
   // Opens the selected reopening request for review
   const handleReviewRequest = (requestId) => {
-    setDurationValue(gradeLockData.automation.defaultReopeningDurationMinutes);
+    setDurationValue("1440");
     setCustomDurationMinutes("90");
     setCustomDurationUnit("minutes");
     setAdminNote("");
@@ -398,7 +422,7 @@ export default function GradingPeriod() {
   };
 
   // Approves temporary editing access for one grade submission
-  const handleApproveReopening = (requestId, duration) => {
+  const handleApproveReopening = async (requestId, duration) => {
     const request = reopeningRequests.find((item) => item.id === requestId);
 
     if (!request) {
@@ -410,83 +434,41 @@ export default function GradingPeriod() {
       customDurationMinutes,
       customDurationUnit,
     );
-    const reopeningId = `reopening-${Date.now()}`;
-    const approvalTime = new Date().toLocaleTimeString("en-US", {
-      hour: "numeric",
-      minute: "2-digit",
-    });
-
-    setReopeningRequests((currentRequests) =>
-      currentRequests.map((item) =>
-        item.id === requestId ? { ...item, status: "approved" } : item,
-      ),
-    );
-    setActiveReopenings((currentReopenings) => [
-      {
-        id: reopeningId,
-        requestId: request.id,
-        termId: request.termId,
-        teacherId: request.teacherId,
-        teacherName: request.teacherName,
-        subjectId: request.subjectId,
-        subject: request.subject,
-        gradeLevel: request.gradeLevel,
-        sectionId: request.sectionId,
-        section: request.section,
-        reason: request.reason,
-        reopenUntil: durationDetails.reopenUntil,
-        status: "temporarily-unlocked",
-        approvedBy: "Admin User",
-        durationLabel: durationDetails.durationLabel,
-        adminNote: adminNote.trim(),
-      },
-      ...currentReopenings,
-    ]);
-    setReopeningHistory((currentHistory) => ({
-      ...currentHistory,
-      [reopeningId]: [
-        {
-          id: `${reopeningId}-started`,
-          time: approvalTime,
-          label: "Temporary access started",
-          state: "complete",
-        },
-        {
-          id: `${reopeningId}-editing`,
-          time: "Current Stage",
-          label: "Correction in progress",
-          state: "current",
-        },
-        {
-          id: `${reopeningId}-adviser-review`,
-          time: "Not submitted",
-          label: "Waiting for adviser approval",
-          state: "upcoming",
-        },
-        {
-          id: `${reopeningId}-locked`,
-          time: "Pending",
-          label: "Correction approved and locked",
-          state: "upcoming",
-        },
-      ],
-    }));
-    setReviewRequestId(null);
-    setToastMessage("Temporary reopening approved.");
+    try {
+      await approveReopeningRequest(user.user_id, requestId, {
+        duration_minutes: durationDetails.minutes,
+        admin_note: adminNote.trim() || null,
+      });
+      setReviewRequestId(null);
+      setToastMessage("Temporary reopening approved.");
+      await loadContext(selectedSchoolYearId);
+    } catch (error) {
+      setToastMessage(error.message);
+    }
   };
 
-  const handleDenyRequest = (requestId) => {
-    setReopeningRequests((currentRequests) =>
-      currentRequests.map((request) =>
-        request.id === requestId ? { ...request, status: "denied" } : request,
-      ),
-    );
-    setReviewRequestId(null);
-    setToastMessage("Reopening request denied.");
+  const handleDenyRequest = async (requestId) => {
+    try {
+      await denyReopeningRequest(user.user_id, requestId, {
+        admin_note: adminNote.trim() || null,
+      });
+      setReviewRequestId(null);
+      setToastMessage("Reopening request denied.");
+      await loadContext(selectedSchoolYearId);
+    } catch (error) {
+      setToastMessage(error.message);
+    }
   };
 
-  const handleViewActivity = (reopeningId) => {
+  const handleViewActivity = async (reopeningId) => {
     setActivityReopeningId(reopeningId);
+    if (reopeningHistory[reopeningId]) return;
+    try {
+      const events = await getReopeningActivity(user.user_id, reopeningId);
+      setReopeningHistory((history) => ({ ...history, [reopeningId]: events }));
+    } catch (error) {
+      setToastMessage(error.message);
+    }
   };
 
   // Page-state and academic timeline handlers
@@ -529,7 +511,12 @@ export default function GradingPeriod() {
     setPeriodValidationMessage("");
   };
 
-  const handleSavePeriod = () => {
+  const handleSavePeriod = async () => {
+    if (!isSelectedSchoolYearActive) {
+      setToastMessage("Completed school-year timelines are read-only.");
+      return;
+    }
+
     const trimmedLabel = periodDraft.label.trim();
     const requiredFields = [
       trimmedLabel,
@@ -556,52 +543,69 @@ export default function GradingPeriod() {
       return;
     }
 
-    const formattedPeriod = {
-      label: trimmedLabel,
-      periodLabel: formatPeriodRange(
-        periodDraft.startDate,
-        periodDraft.endDate,
-      ),
-      startDate: periodDraft.startDate,
-      startDateLabel: formatDateLabel(periodDraft.startDate),
-      endDate: periodDraft.endDate,
-      endDateLabel: formatDateLabel(periodDraft.endDate),
-      deadlineDate: periodDraft.deadlineDate,
-      deadlineDateLabel: formatDateLabel(periodDraft.deadlineDate),
-      deadlineTime: periodDraft.deadlineTime,
-      deadlineTimeLabel: formatTimeLabel(periodDraft.deadlineTime),
-    };
-
     const periodToUpdate = terms.find(
       (period) => period.id === settingsPeriodId,
     );
     if (!periodToUpdate || periodToUpdate.status === "finalized") return;
 
-    setTerms((currentPeriods) =>
-      currentPeriods.map((period) =>
-        period.id === settingsPeriodId
-          ? {
-              ...period,
-              ...formattedPeriod,
-            }
-          : period,
-      ),
-    );
-    setToastMessage("Grading period updated.");
+    try {
+      const timelinePayload = {
+        term_name: trimmedLabel,
+        starts_at: toManilaTimestamp(periodDraft.startDate),
+        ends_at: toManilaTimestamp(periodDraft.endDate, "23:59"),
+        grade_submission_deadline_at: toManilaTimestamp(
+          periodDraft.deadlineDate,
+          periodDraft.deadlineTime,
+        ),
+      };
+      if (periodToUpdate.isConfigured) {
+        await updateTermTimeline(user.user_id, settingsPeriodId, timelinePayload);
+      } else {
+        await createTermTimeline(user.user_id, {
+          ...timelinePayload,
+          school_year_id: selectedSchoolYearId,
+        });
+      }
+      setToastMessage("Grading period updated.");
+      await loadContext(selectedSchoolYearId);
+    } catch (error) {
+      setPeriodValidationMessage(error.message);
+    }
   };
 
-  const handleSaveUpcomingPeriods = (nextPeriods) => {
-    setUpcomingPeriods(
-      nextPeriods.map((period) => ({
-        ...period,
-        startDateLabel: formatDateLabel(period.startDate),
-        endDateLabel: formatDateLabel(period.endDate),
-        deadlineDateLabel: formatDateLabel(period.deadlineDate),
-        deadlineTimeLabel: formatTimeLabel(period.deadlineTime),
-        periodLabel: formatPeriodRange(period.startDate, period.endDate),
-      })),
-    );
-    setToastMessage("Upcoming school year timeline updated.");
+  const handleSaveUpcomingPeriods = async (nextPeriods) => {
+    if (!isSelectedSchoolYearActive) {
+      setToastMessage(
+        "Upcoming timelines can only be edited from the current school year.",
+      );
+      return;
+    }
+
+    if (!upcomingSchoolYear) {
+      setToastMessage("No upcoming school year is available to configure.");
+      return;
+    }
+
+    try {
+      await Promise.all(nextPeriods.map((period) => {
+        const timelinePayload = {
+          term_name: period.label,
+          starts_at: toManilaTimestamp(period.startDate),
+          ends_at: toManilaTimestamp(period.endDate, "23:59"),
+          grade_submission_deadline_at: toManilaTimestamp(period.deadlineDate, period.deadlineTime),
+        };
+        return period.isConfigured
+          ? updateTermTimeline(user.user_id, period.id, timelinePayload)
+          : createTermTimeline(user.user_id, {
+              ...timelinePayload,
+              school_year_id: upcomingSchoolYear.id,
+            });
+      }));
+      setToastMessage("Upcoming school year timeline updated.");
+      await loadContext(selectedSchoolYearId);
+    } catch (error) {
+      setToastMessage(error.message);
+    }
   };
 
   return (
@@ -622,12 +626,15 @@ export default function GradingPeriod() {
 
         <div className="grade-lock-header__controls" aria-label="Page controls">
           <span className="grade-lock-header__filter-label">School year</span>
-          <div
-            className={`grade-lock-school-year ${
-              isSchoolYearMenuOpen ? "grade-lock-school-year--open" : ""
-            }`}
-            ref={schoolYearMenuRef}
-          >
+          {loadingMode === "initial" ? (
+            <div className="grade-lock-school-year-skeleton" aria-hidden="true" />
+          ) : (
+            <div
+              className={`grade-lock-school-year ${
+                isSchoolYearMenuOpen ? "grade-lock-school-year--open" : ""
+              }`}
+              ref={schoolYearMenuRef}
+            >
             <button
               type="button"
               className="grade-lock-school-year__trigger"
@@ -635,6 +642,7 @@ export default function GradingPeriod() {
               aria-haspopup="listbox"
               aria-expanded={isSchoolYearMenuOpen}
               aria-controls="grade-lock-school-year-options"
+              disabled={loadingMode === "year-change"}
               onClick={() =>
                 setIsSchoolYearMenuOpen((isMenuOpen) => !isMenuOpen)
               }
@@ -654,7 +662,7 @@ export default function GradingPeriod() {
               aria-label="School year options"
               aria-hidden={!isSchoolYearMenuOpen}
             >
-              {gradeLockData.schoolYears.map((schoolYear) => (
+              {selectableSchoolYears.map((schoolYear) => (
                 <button
                   type="button"
                   className="grade-lock-school-year__option"
@@ -663,8 +671,12 @@ export default function GradingPeriod() {
                   aria-selected={schoolYear.id === selectedSchoolYearId}
                   tabIndex={isSchoolYearMenuOpen ? 0 : -1}
                   onClick={() => {
-                    setSelectedSchoolYearId(schoolYear.id);
                     setIsSchoolYearMenuOpen(false);
+                    if (schoolYear.id === selectedSchoolYearId) return;
+                    loadContext(schoolYear.id, {
+                      mode: "year-change",
+                      pendingLabel: schoolYear.label,
+                    });
                   }}
                 >
                   <span>{schoolYear.label}</span>
@@ -674,7 +686,8 @@ export default function GradingPeriod() {
                 </button>
               ))}
             </div>
-          </div>
+            </div>
+          )}
 
         </div>
       </header>
@@ -707,50 +720,102 @@ export default function GradingPeriod() {
 
       </div>
 
-      {activeView === "overview" ? (
-        <GradingPeriodOverview
-          terms={terms}
-          selectedTermId={selectedTermId}
-          selectedTerm={selectedTerm}
-          schoolYearLabel={selectedSchoolYear.label}
-          reopeningRequests={reopeningRequests}
-          activeReopenings={currentActiveReopenings}
-          selectedDepartments={selectedDepartments}
-          selectedTermRequests={selectedTermRequests}
-          selectedTermReopenings={selectedTermReopenings}
-          now={now}
-          reopeningView={reopeningView}
-          operationsView={operationsView}
-          reopeningSectionRef={reopeningSectionRef}
-          nextActiveAccessEndLabel={
-            nextActiveReopening
-              ? formatClockTime(nextActiveReopening.reopenUntil)
-              : null
-          }
-          onSelectTerm={handleSelectTerm}
-          onManageReopenings={handleManageReopenings}
-          onOpenActiveAccess={handleOpenActiveAccess}
-          onReviewRequest={handleReviewRequest}
-          onViewActivity={handleViewActivity}
-          onChangeReopeningView={setReopeningView}
-          onChangeOperationsView={setOperationsView}
-        />
+      {loadingMode === "initial" ? (
+        activeView === "settings" ? (
+          <GradingPeriodTimelineSkeleton />
+        ) : (
+          <GradingPeriodOverviewSkeleton />
+        )
+      ) : pageError ? (
+        <section className="grade-lock-feedback grade-lock-feedback--error" role="alert">
+          <CircleAlert size={24} aria-hidden="true" />
+          <div>
+            <h2>Grading periods are temporarily unavailable</h2>
+            <p>{pageError}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() =>
+              loadContext(selectedSchoolYearId || undefined, { mode: "initial" })
+            }
+          >
+            <RefreshCw size={16} aria-hidden="true" />
+            Retry
+          </button>
+        </section>
       ) : (
-        <GradingPeriodSettings
-          schoolYearLabel={selectedSchoolYear.label}
-          periods={terms}
-          selectedPeriod={settingsPeriod}
-          periodDraft={periodDraft}
-          validationMessage={periodValidationMessage}
-          onSelectPeriod={handleSelectSettingsPeriod}
-          onPeriodDraftChange={handlePeriodDraftChange}
-          onSavePeriod={handleSavePeriod}
-          onCancelPeriodEdit={handleCancelPeriodEdit}
-          upcomingSchoolYear={gradeLockData.upcomingSchoolYear}
-          upcomingPeriods={upcomingPeriods}
-          inheritedUpcomingPeriods={inheritedUpcomingPeriods}
-          onSaveUpcomingPeriods={handleSaveUpcomingPeriods}
-        />
+        <ContentLoadingFrame
+          loadingMode={loadingMode}
+          pendingLabel={pendingSchoolYearLabel}
+        >
+          {terms.length === 0 ? (
+            <section className="grade-lock-feedback grade-lock-feedback--empty">
+              <CalendarRange size={28} aria-hidden="true" />
+              <div>
+                <h2>No grading periods configured yet</h2>
+                <p>
+                  Configure the Term 1–3 dates and submission deadlines for this
+                  school year in Timeline &amp; Settings.
+                </p>
+              </div>
+              <button type="button" onClick={() => handleChangeView("settings")}>
+                <Settings2 size={16} aria-hidden="true" />
+                Open Timeline &amp; Settings
+              </button>
+            </section>
+          ) : activeView === "overview" && selectedTerm ? (
+            <GradingPeriodOverview
+              terms={terms}
+              selectedTermId={selectedTermId}
+              selectedTerm={selectedTerm}
+              schoolYearLabel={selectedSchoolYear.label}
+              reopeningRequests={reopeningRequests}
+              activeReopenings={currentActiveReopenings}
+              selectedDepartments={selectedDepartments}
+              selectedTermRequests={selectedTermRequests}
+              selectedTermReopenings={selectedTermReopenings}
+              now={now}
+              reopeningView={reopeningView}
+              operationsView={operationsView}
+              reopeningSectionRef={reopeningSectionRef}
+              nextActiveAccessEndLabel={
+                nextActiveReopening
+                  ? formatClockTime(nextActiveReopening.reopenUntil)
+                  : null
+              }
+              onSelectTerm={handleSelectTerm}
+              onManageReopenings={handleManageReopenings}
+              onOpenActiveAccess={handleOpenActiveAccess}
+              onReviewRequest={handleReviewRequest}
+              onViewActivity={handleViewActivity}
+              onChangeReopeningView={setReopeningView}
+              onChangeOperationsView={setOperationsView}
+            />
+          ) : settingsPeriod ? (
+            <GradingPeriodSettings
+              schoolYearLabel={selectedSchoolYear.label}
+              isReadOnly={!isSelectedSchoolYearActive}
+              periods={terms}
+              selectedPeriod={settingsPeriod}
+              periodDraft={periodDraft}
+              validationMessage={periodValidationMessage}
+              onSelectPeriod={handleSelectSettingsPeriod}
+              onPeriodDraftChange={handlePeriodDraftChange}
+              onSavePeriod={handleSavePeriod}
+              onCancelPeriodEdit={handleCancelPeriodEdit}
+              upcomingSchoolYear={
+                isSelectedSchoolYearActive ? upcomingSchoolYear : null
+              }
+              upcomingPeriods={
+                isSelectedSchoolYearActive ? upcomingPeriods : []
+              }
+              suggestedUpcomingPeriods={
+                isSelectedSchoolYearActive ? suggestedUpcomingPeriods : []
+              }
+              onSaveUpcomingPeriods={handleSaveUpcomingPeriods}
+            />
+          ) : null}
+        </ContentLoadingFrame>
       )}
 
       {/* REVIEW REQUEST DRAWER */}

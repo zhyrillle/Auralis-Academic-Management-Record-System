@@ -1,8 +1,8 @@
 import {
   AlertTriangle,
-  CheckCircle2,
-  Clock3,
-  RotateCcw,
+  FilePenLine,
+  LockKeyhole,
+  Send,
 } from "lucide-react";
 import Badge from "../../../../components/common/Badge";
 import ProgressBar from "../../../../components/common/ProgressBar";
@@ -46,8 +46,6 @@ export default function SubmissionStatus({ term, departments }) {
     ? Math.round((totals.submitted / totals.expected) * 100)
     : 0;
   const readiness = term.readiness || {};
-  const approvedCount =
-    (readiness.approved || 0) + (readiness.finalized || 0);
 
   return (
     <section
@@ -81,24 +79,24 @@ export default function SubmissionStatus({ term, departments }) {
         <dl className="submission-status__workflow-summary">
           <div>
             <dt>
-              <Clock3 size={15} aria-hidden="true" />
-              Adviser review
+              <FilePenLine size={15} aria-hidden="true" />
+              Draft
             </dt>
-            <dd>{readiness.awaitingReview || 0}</dd>
+            <dd>{readiness.draft || 0}</dd>
           </div>
           <div>
             <dt>
-              <RotateCcw size={15} aria-hidden="true" />
-              Returned
+              <Send size={15} aria-hidden="true" />
+              Submitted
             </dt>
-            <dd>{readiness.returned || 0}</dd>
+            <dd>{readiness.submitted || 0}</dd>
           </div>
           <div>
             <dt>
-              <CheckCircle2 size={15} aria-hidden="true" />
-              Approved / finalized
+              <LockKeyhole size={15} aria-hidden="true" />
+              Term locked
             </dt>
-            <dd>{approvedCount}</dd>
+            <dd>{readiness.locked || 0}</dd>
           </div>
         </dl>
       </div>

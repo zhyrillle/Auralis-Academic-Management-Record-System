@@ -101,8 +101,8 @@ export default function ReviewRequestDrawer({
               <div id="correction-policy-description">
                 <strong>Correction policy</strong>
                 <p>
-                  Before grade release, this is a standard reopening. After
-                  release, the correction is retained as a formal late change.
+                  Requests are accepted for seven days after the submission
+                  deadline. Approved access applies only to this grade sheet.
                 </p>
               </div>
             </div>

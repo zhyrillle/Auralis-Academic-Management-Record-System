@@ -80,7 +80,7 @@ export default function App() {
           />
           <Route
             path="/system-admin/grading-periods"
-            element={<GradingPeriod />}
+            element={<GradingPeriod user={user} />}
           />
           <Route path="/system-admin/ws-config" element={<WSConfig />} />
 

@@ -24,6 +24,7 @@ const getStatusExplanation = (period) => {
 };
 
 export default function AcademicTimeline({
+  isReadOnly = false,
   periods,
   selectedPeriod,
   draft,
@@ -34,6 +35,7 @@ export default function AcademicTimeline({
   onCancel,
 }) {
   const isCompleted = selectedPeriod?.status === "finalized";
+  const isTimelineReadOnly = isReadOnly || isCompleted;
   const canEditStructure = selectedPeriod?.canEditStructure;
   const canEditDeadline = selectedPeriod?.canEditDeadline;
   const periodImpact = selectedPeriod?.impactSummary;
@@ -88,7 +90,7 @@ export default function AcademicTimeline({
             </div>
             {selectedPeriod && (
               <div className="academic-period-editor__status">
-                {isCompleted && (
+                {isTimelineReadOnly && (
                   <span className="academic-period-editor__readonly">
                     <LockKeyhole size={13} aria-hidden="true" />
                     Read-only
@@ -104,22 +106,26 @@ export default function AcademicTimeline({
           {selectedPeriod && (
             <div
               className={`academic-period-policy-note ${
-                isCompleted ? "academic-period-policy-note--locked" : ""
+                isTimelineReadOnly ? "academic-period-policy-note--locked" : ""
               }`}
             >
-              {isCompleted ? (
+              {isTimelineReadOnly ? (
                 <CheckCircle2 size={18} aria-hidden="true" />
               ) : (
                 <AlertTriangle size={18} aria-hidden="true" />
               )}
-              <p>{getStatusExplanation(selectedPeriod)}</p>
+              <p>
+                {isReadOnly
+                  ? "This completed school year's timeline is preserved and read-only."
+                  : getStatusExplanation(selectedPeriod)}
+              </p>
             </div>
           )}
 
           <div className="academic-period-editor__form">
             <label
               className={`grade-lock-field ${
-                !canEditStructure || isCompleted
+                !canEditStructure || isTimelineReadOnly
                   ? "grade-lock-field--locked"
                   : ""
               }`}
@@ -128,7 +134,7 @@ export default function AcademicTimeline({
               <input
                 type="text"
                 value={draft.label}
-                disabled={!canEditStructure || isCompleted}
+                disabled={!canEditStructure || isTimelineReadOnly}
                 maxLength={80}
                 onChange={(event) => onDraftChange("label", event.target.value)}
                 placeholder="e.g. Term 1"
@@ -137,7 +143,7 @@ export default function AcademicTimeline({
 
             <label
               className={`grade-lock-field ${
-                !canEditStructure || isCompleted
+                !canEditStructure || isTimelineReadOnly
                   ? "grade-lock-field--locked"
                   : ""
               }`}
@@ -146,7 +152,7 @@ export default function AcademicTimeline({
               <input
                 type="date"
                 value={draft.startDate}
-                disabled={!canEditStructure || isCompleted}
+                disabled={!canEditStructure || isTimelineReadOnly}
                 onChange={(event) =>
                   onDraftChange("startDate", event.target.value)
                 }
@@ -155,7 +161,7 @@ export default function AcademicTimeline({
 
             <label
               className={`grade-lock-field ${
-                !canEditStructure || isCompleted
+                !canEditStructure || isTimelineReadOnly
                   ? "grade-lock-field--locked"
                   : ""
               }`}
@@ -164,7 +170,7 @@ export default function AcademicTimeline({
               <input
                 type="date"
                 value={draft.endDate}
-                disabled={!canEditStructure || isCompleted}
+                disabled={!canEditStructure || isTimelineReadOnly}
                 onChange={(event) =>
                   onDraftChange("endDate", event.target.value)
                 }
@@ -173,7 +179,7 @@ export default function AcademicTimeline({
 
             <label
               className={`grade-lock-field ${
-                !canEditDeadline || isCompleted
+                !canEditDeadline || isTimelineReadOnly
                   ? "grade-lock-field--locked"
                   : ""
               }`}
@@ -182,7 +188,7 @@ export default function AcademicTimeline({
               <input
                 type="date"
                 value={draft.deadlineDate}
-                disabled={!canEditDeadline || isCompleted}
+                disabled={!canEditDeadline || isTimelineReadOnly}
                 onChange={(event) =>
                   onDraftChange("deadlineDate", event.target.value)
                 }
@@ -191,7 +197,7 @@ export default function AcademicTimeline({
 
             <label
               className={`grade-lock-field ${
-                !canEditDeadline || isCompleted
+                !canEditDeadline || isTimelineReadOnly
                   ? "grade-lock-field--locked"
                   : ""
               }`}
@@ -200,12 +206,23 @@ export default function AcademicTimeline({
               <input
                 type="time"
                 value={draft.deadlineTime}
-                disabled={!canEditDeadline || isCompleted}
+                disabled={!canEditDeadline || isTimelineReadOnly}
                 onChange={(event) =>
                   onDraftChange("deadlineTime", event.target.value)
                 }
               />
             </label>
+
+            <div className="academic-period-reopening-policy">
+              <CheckCircle2 size={18} aria-hidden="true" />
+              <div>
+                <strong>Seven-day reopening policy</strong>
+                <p>
+                  Requests open at the submission deadline and close seven
+                  days later. These dates are calculated by the system.
+                </p>
+              </div>
+            </div>
           </div>
 
           {validationMessage && (
@@ -215,7 +232,7 @@ export default function AcademicTimeline({
             </div>
           )}
 
-          {periodImpact && !isCompleted && (
+          {periodImpact && !isTimelineReadOnly && (
             <div className="academic-period-impact">
               <div>
                 <AlertTriangle size={18} aria-hidden="true" />
@@ -240,7 +257,7 @@ export default function AcademicTimeline({
             </div>
           )}
 
-          {!isCompleted && (
+          {!isTimelineReadOnly && (
             <div className="academic-period-editor__actions">
               <button
                 type="button"

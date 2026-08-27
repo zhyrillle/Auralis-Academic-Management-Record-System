@@ -11,23 +11,23 @@ const EDITABLE_FIELDS = [
 
 const clonePeriods = (periods) => periods.map((period) => ({ ...period }));
 
-const isPeriodModified = (period, inheritedPeriod) =>
-  EDITABLE_FIELDS.some((field) => period[field] !== inheritedPeriod?.[field]);
+const isPeriodAdjusted = (period, suggestedPeriod) =>
+  EDITABLE_FIELDS.some((field) => period[field] !== suggestedPeriod?.[field]);
 
 export default function UpcomingSchoolYear({
   schoolYear,
   periods,
-  inheritedPeriods,
+  suggestedPeriods,
   onSave,
 }) {
   const [isReviewing, setIsReviewing] = useState(false);
   const [draftPeriods, setDraftPeriods] = useState(() => clonePeriods(periods));
   const [validationMessage, setValidationMessage] = useState("");
 
-  const modifiedCount = draftPeriods.filter((period) =>
-    isPeriodModified(
+  const adjustedCount = draftPeriods.filter((period) =>
+    isPeriodAdjusted(
       period,
-      inheritedPeriods.find((item) => item.id === period.id),
+      suggestedPeriods.find((item) => item.id === period.id),
     ),
   ).length;
 
@@ -53,21 +53,21 @@ export default function UpcomingSchoolYear({
   };
 
   const handleResetPeriod = (periodId) => {
-    const inheritedPeriod = inheritedPeriods.find(
+    const suggestedPeriod = suggestedPeriods.find(
       (period) => period.id === periodId,
     );
-    if (!inheritedPeriod) return;
+    if (!suggestedPeriod) return;
 
     setDraftPeriods((currentPeriods) =>
       currentPeriods.map((period) =>
-        period.id === periodId ? { ...inheritedPeriod } : period,
+        period.id === periodId ? { ...suggestedPeriod } : period,
       ),
     );
     setValidationMessage("");
   };
 
   const handleResetAll = () => {
-    setDraftPeriods(clonePeriods(inheritedPeriods));
+    setDraftPeriods(clonePeriods(suggestedPeriods));
     setValidationMessage("");
   };
 
@@ -113,14 +113,10 @@ export default function UpcomingSchoolYear({
           <div>
             <div className="upcoming-school-year__title-row">
               <h2 id="upcoming-school-year-title">Upcoming School Year</h2>
-              <span className="upcoming-school-year__badge">
-                <Sparkles size={12} aria-hidden="true" />
-                Auto-generated
-              </span>
             </div>
             <p>
-              A draft timeline is prepared from the most recent school year,
-              then reviewed before it becomes active.
+              A calendar-based draft is prepared automatically, then reviewed
+              against the official DepEd calendar before confirmation.
             </p>
           </div>
         </div>
@@ -143,27 +139,41 @@ export default function UpcomingSchoolYear({
         </div>
         <div>
           <span>Timeline source</span>
-          <strong>Inherited from {schoolYear.inheritedFrom}</strong>
+          <strong>{schoolYear.calendarRule?.label || "Calendar-based suggestion"}</strong>
         </div>
         <div>
           <span>Configuration state</span>
-          <strong>{isReviewing ? `${modifiedCount} modified` : "Draft"}</strong>
+          <strong>{isReviewing ? `${adjustedCount} adjusted` : "Draft"}</strong>
         </div>
       </div>
 
       {isReviewing && (
         <div className="upcoming-school-year__editor">
           <div className="upcoming-school-year__notice">
-            Inherited dates are a starting point. Adjust only the terms affected
-            by the next academic calendar.
+            These dates are system suggestions, not an official DepEd calendar.
+            Review and adjust them before saving.
           </div>
+
+          {schoolYear.calendarRule?.summary?.length > 0 && (
+            <div className="upcoming-school-year__rules">
+              <div>
+                <Sparkles size={16} aria-hidden="true" />
+                <strong>Suggestion rules</strong>
+              </div>
+              <ul>
+                {schoolYear.calendarRule.summary.map((rule) => (
+                  <li key={rule}>{rule}</li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           <div className="upcoming-school-year__periods">
             {draftPeriods.map((period) => {
-              const inheritedPeriod = inheritedPeriods.find(
+              const suggestedPeriod = suggestedPeriods.find(
                 (item) => item.id === period.id,
               );
-              const isModified = isPeriodModified(period, inheritedPeriod);
+              const isAdjusted = isPeriodAdjusted(period, suggestedPeriod);
 
               return (
                 <article className="upcoming-period" key={period.id}>
@@ -172,18 +182,18 @@ export default function UpcomingSchoolYear({
                       <h3>{period.label}</h3>
                       <span
                         className={`upcoming-period__state ${
-                          isModified ? "is-modified" : ""
+                          isAdjusted ? "is-modified" : ""
                         }`}
                       >
-                        {isModified ? "Modified" : "Inherited"}
+                        {isAdjusted ? "Adjusted" : "System suggested"}
                       </span>
                     </div>
                     <button
                       type="button"
                       className="upcoming-period__reset"
                       onClick={() => handleResetPeriod(period.id)}
-                      disabled={!isModified}
-                      aria-label={`Reset ${period.label} to inherited dates`}
+                      disabled={!isAdjusted}
+                      aria-label={`Reset ${period.label} to calendar suggestions`}
                     >
                       <RotateCcw size={15} aria-hidden="true" />
                       Reset
@@ -247,6 +257,10 @@ export default function UpcomingSchoolYear({
                         }
                       />
                     </label>
+                    <div className="upcoming-period-editor__policy">
+                      Reopening requests open at the submission deadline and
+                      close seven days later.
+                    </div>
                   </div>
                 </article>
               );
@@ -264,10 +278,10 @@ export default function UpcomingSchoolYear({
               type="button"
               className="upcoming-school-year__reset-all"
               onClick={handleResetAll}
-              disabled={modifiedCount === 0}
+              disabled={adjustedCount === 0}
             >
               <RotateCcw size={15} aria-hidden="true" />
-              Reset to inherited dates
+              Use calendar suggestions
             </button>
             <div>
               <button type="button" onClick={handleCancel}>
@@ -276,7 +290,7 @@ export default function UpcomingSchoolYear({
               </button>
               <button type="button" onClick={handleSave}>
                 <Save size={15} aria-hidden="true" />
-                Save Changes
+                Save Confirmed Timeline
               </button>
             </div>
           </footer>
