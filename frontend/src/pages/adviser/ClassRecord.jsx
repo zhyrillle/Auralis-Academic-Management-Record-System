@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import backIconUrl from "../../assets/backButton.svg";
 import unavailableIconUrl from "../../assets/adviser-assets/unavailableicon.png";
 import "../../styles/ClassRecord.css";
@@ -164,6 +165,8 @@ const createGradeState = (students) => {
 };
 
 export default function ClassRecord({ activeClass, onBack }) {
+  const navigate = useNavigate();
+
   // ============================================================
   // TERM
   // ============================================================
@@ -332,10 +335,11 @@ export default function ClassRecord({ activeClass, onBack }) {
   <button
     type="button"
     className="class-record-action-btn attendance-btn"
-    onClick={() => {
-      // UI only for now
-      alert("Attendance page coming soon by the one and only nekaneks.");
-    }}
+    onClick={() =>
+      navigate("/adviser/attendance", {
+        state: { activeClass },
+      })
+    }
   >
     <span className="action-icon">▰</span>
     Attendance
