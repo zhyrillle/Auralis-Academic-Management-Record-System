@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Pencil, X } from "lucide-react";
 import backIconUrl from "../../assets/backButton.svg";
 import "../../styles/teacherEvalForm.css";
@@ -106,7 +107,7 @@ export default function TeacherEvalForm({ teacher, onBack, onCancel }) {
     <div className="tef-container">
 
       {/* ── Success Modal Overlay ── */}
-      {submitted && (
+      {submitted && createPortal(
         <div className="tef-modal-backdrop">
           <div className="tef-modal-card">
             <div className="tef-modal-icon">
@@ -117,7 +118,8 @@ export default function TeacherEvalForm({ teacher, onBack, onCancel }) {
             </div>
             <p className="tef-modal-text">Feedback submitted<br />successfully</p>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ── Header ── */}
