@@ -7,6 +7,7 @@ import ResetPassword from "./pages/ResetPassword";
 import AdminDashboard from "./pages/system-admin/AdminDashboard";
 import WSConfig from "./pages/system-admin/WSConfig";
 import ManageUsers from "./pages/system-admin/ManageUsers";
+import AcademicPeriod from "./pages/system-admin/AcademicPeriod";
 import AdviserDashboard from "./pages/adviser/AdviserDashboard";
 import DeptDashboard from "./pages/department-head/DeptDashboard";
 import PrincipalDashboard from "./pages/principal/PrincipalDashboard";
@@ -79,8 +80,8 @@ export default function App() {
             element={<ManageUsers />}
           />
           <Route
-            path="/system-admin/grade-lock"
-            element={<PlaceholderPage />}
+            path="/system-admin/grading-periods"
+            element={<AcademicPeriod user={user} />}
           />
           <Route path="/system-admin/ws-config" element={<WSConfig />} />
 

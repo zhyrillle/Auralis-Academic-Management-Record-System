@@ -6,8 +6,8 @@ class GradeSheet {
     return rows;
   }
 
-  static async findById(id) {
-    const [rows] = await db.execute('SELECT * FROM GRADE_SHEET WHERE grade_sheet_id = ?', [id]);
+  static async findById(id, connection = db) {
+    const [rows] = await connection.execute('SELECT * FROM GRADE_SHEET WHERE grade_sheet_id = ?', [id]);
     return rows[0];
   }
 
@@ -21,12 +21,28 @@ class GradeSheet {
     return result.insertId;
   }
 
-  static async update(id, data) {
-    const keys = Object.keys(data);
-    const values = Object.values(data);
+  static async update(id, data, connection = db) {
+    const allowedFields = [
+      'workflow_status', 'lock_status', 'submitted_at', 'approved_at', 'locked_at'
+    ];
+    const entries = Object.entries(data).filter(([key]) => allowedFields.includes(key));
+    if (!entries.length) return this.findById(id, connection);
+    const keys = entries.map(([key]) => key);
+    const values = entries.map(([, value]) => value);
     const setClause = keys.map(key => `${key} = ?`).join(', ');
-    await db.execute(`UPDATE GRADE_SHEET SET ${setClause}, updated_at = NOW(6) WHERE grade_sheet_id = ?`, [...values, id]);
-    return this.findById(id);
+    await connection.execute(`UPDATE GRADE_SHEET SET ${setClause}, updated_at = UTC_TIMESTAMP(6) WHERE grade_sheet_id = ?`, [...values, id]);
+    return this.findById(id, connection);
+  }
+
+  static async openTemporaryCorrection(id, connection = db) {
+    return this.update(id, {
+      workflow_status: 'DRAFT',
+      lock_status: 'TEMPORARILY_REOPENED',
+    }, connection);
+  }
+
+  static async restoreTermLock(id, connection = db) {
+    return this.update(id, { lock_status: 'TERM_LOCKED' }, connection);
   }
 
   static async delete(id) {

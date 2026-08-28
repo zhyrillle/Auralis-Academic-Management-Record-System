@@ -11,14 +11,9 @@ class GradeReopenRequest {
     }
   }
 
-  static async findById(id) {
-    try {
-      const [rows] = await db.execute('SELECT * FROM GRADE_REOPEN_REQUEST WHERE request_id = ?', [id]);
-      return rows[0];
-    } catch (err) {
-      console.error(`DEBUG [GradeReopenRequest.findById] Error for id ${id}:`, err.message);
-      return null;
-    }
+  static async findById(id, connection = db) {
+    const [rows] = await connection.execute('SELECT * FROM GRADE_REOPEN_REQUEST WHERE request_id = ?', [id]);
+    return rows[0];
   }
 
   static async findByUserId(userId) {
@@ -67,7 +62,7 @@ class GradeReopenRequest {
     }
   }
 
-  static async create(data) {
+  static async create(data, connection = db) {
     try {
       const allowedKeys = [
         'grade_sheet_id',
@@ -105,11 +100,7 @@ class GradeReopenRequest {
       VALUES (${placeholders.join(', ')})
     `;
 
-      console.log("DEBUG CREATE DATA:", data);
-      console.log("DEBUG INSERT QUERY:", query);
-      console.log("DEBUG INSERT VALUES:", values);
-
-      const [result] = await db.execute(query, values);
+       const [result] = await connection.execute(query, values);
 
       return result.insertId;
 
@@ -123,19 +114,30 @@ class GradeReopenRequest {
     }
   }
 
-  static async update(id, data) {
-    const keys = Object.keys(data);
-    const values = Object.values(data);
+  static async update(id, data, connection = db) {
+    const allowedKeys = [
+      'reviewed_by_user_id',
+      'reason',
+      'status',
+      'file_name',
+      'file_path',
+      'file_type',
+      'file_size',
+      'requested_at',
+      'reviewed_at'
+    ];
+    const entries = Object.entries(data).filter(([key]) => allowedKeys.includes(key));
+    if (entries.length === 0) return this.findById(id, connection);
 
-    if (keys.length === 0) return this.findById(id);
-
+    const keys = entries.map(([key]) => key);
+    const values = entries.map(([, value]) => value);
     const setClause = keys.map(key => `${key} = ?`).join(', ');
-    await db.execute(
+    await connection.execute(
       `UPDATE GRADE_REOPEN_REQUEST SET ${setClause} WHERE request_id = ?`,
       [...values, id]
     );
 
-    return this.findById(id);
+    return this.findById(id, connection);
   }
 
   static async delete(id) {

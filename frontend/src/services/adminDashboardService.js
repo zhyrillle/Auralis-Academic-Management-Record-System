@@ -5,6 +5,15 @@ const API_BASE_URL =
 
 let usersRequest = null;
 
+const normalizeNetworkError = (error) => {
+  if (error instanceof TypeError || /failed to fetch/i.test(error?.message || "")) {
+    return new Error(
+      "Unable to load account summary. Check the backend connection and try again.",
+    );
+  }
+  return error;
+};
+
 const parseResponse = async (response) => {
   const data = await response.json().catch(() => ({}));
 
@@ -21,6 +30,9 @@ const getUsers = () => {
   if (!usersRequest) {
     usersRequest = fetch(`${API_BASE_URL}/users`)
       .then(parseResponse)
+      .catch((error) => {
+        throw normalizeNetworkError(error);
+      })
       .finally(() => {
         usersRequest = null;
       });

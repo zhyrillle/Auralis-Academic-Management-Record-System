@@ -1,0 +1,278 @@
+.academic-timeline__workspace {
+  display: grid;
+  grid-template-columns: minmax(250px, 0.72fr) minmax(520px, 1.55fr);
+  min-width: 0;
+}
+
+.academic-period-list {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+  padding: 16px;
+  background: #f8fafc;
+  border-right: 1px solid #e5ebf2;
+  border-radius: 0 0 0 15px;
+}
+
+.academic-period-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  padding: 12px;
+  color: #334155;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 11px;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
+}
+
+.academic-period-item:hover {
+  border-color: #aebdce;
+  transform: translateY(-1px);
+}
+
+.academic-period-item--selected {
+  border-color: #315b91;
+  box-shadow: 0 0 0 2px rgba(49, 91, 145, 0.09);
+}
+
+.academic-period-item__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  color: #315b91;
+  background: #edf4fc;
+  border-radius: 9px;
+}
+
+.academic-period-item__copy {
+  min-width: 0;
+}
+
+.academic-period-item__copy strong,
+.academic-period-item__copy small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.academic-period-item__copy strong {
+  color: #24344c;
+  font-size: 13px;
+}
+
+.academic-period-item__copy small {
+  margin-top: 3px;
+  color: #718096;
+  font-size: 11px;
+}
+
+.academic-period-item .badge {
+  padding: 4px 7px;
+  font-size: 9px;
+}
+
+.academic-period-editor {
+  min-width: 0;
+  padding: 20px 22px 22px;
+}
+
+.academic-period-editor__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 15px;
+}
+
+.academic-period-editor__heading span {
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.academic-period-editor__heading h3 {
+  margin-top: 3px;
+  color: #24344c;
+  font-size: 18px;
+}
+
+.academic-period-editor__status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.academic-period-editor__readonly {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 8px;
+  color: #475569;
+  background: #e2e8f0;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.academic-period-editor .grade-lock-field--locked > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #64748b;
+}
+
+.academic-period-editor .grade-lock-field--locked input:disabled {
+  color: #475569;
+  opacity: 1;
+  background: #e9eef4;
+  border-color: #bdcad8;
+}
+
+.academic-period-policy-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-bottom: 16px;
+  padding: 11px 12px;
+  color: #7c570d;
+  background: #fff9e8;
+  border: 1px solid #f1dfae;
+  border-radius: 10px;
+}
+
+.academic-period-policy-note--locked {
+  color: #475569;
+  background: #f1f5f9;
+  border-color: #dce4ed;
+}
+
+.academic-period-policy-note svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.academic-period-policy-note p {
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.academic-period-editor__form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.grade-lock-field__date-time {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(7rem, 0.55fr);
+  gap: 0.5rem;
+}
+
+@media (max-width: 640px) {
+  .grade-lock-field__date-time {
+    grid-template-columns: 1fr;
+  }
+}
+
+.academic-period-editor .dropdown-select__trigger {
+  min-height: 42px;
+  font-size: 13px;
+}
+
+.academic-period-editor__error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  padding: 10px 12px;
+  color: #b42318;
+  background: #fff3f2;
+  border: 1px solid #fecaca;
+  border-radius: 9px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.academic-period-impact {
+  margin-top: 16px;
+  padding: 14px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 11px;
+}
+
+.academic-period-impact > div {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  color: #8a5a0a;
+}
+
+.academic-period-impact > div span,
+.academic-period-impact > div strong,
+.academic-period-impact > div small {
+  display: block;
+}
+
+.academic-period-impact > div strong {
+  color: #475569;
+  font-size: 12px;
+}
+
+.academic-period-impact > div small {
+  margin-top: 2px;
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+.academic-period-impact dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.academic-period-impact dl div {
+  padding: 9px 10px;
+  background: #ffffff;
+  border: 1px solid #e7edf4;
+  border-radius: 8px;
+}
+
+.academic-period-impact dt {
+  color: #94a3b8;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.academic-period-impact dd {
+  margin-top: 3px;
+  color: #24344c;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.academic-period-editor__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+  margin-top: 17px;
+}

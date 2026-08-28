@@ -50,7 +50,27 @@ const createStatistics = (summary) => [
   },
 ];
 
-export default function AccountSummary({ summary, isLoading, error, onRetry }) {
+const AccountSummarySkeleton = () => (
+  <article className="summary-stat-card summary-stat-card--skeleton" aria-hidden="true">
+    <div className="summary-stat-card__content">
+      <span className="summary-skeleton summary-skeleton--label" />
+      <span className="summary-skeleton summary-skeleton--value" />
+      <span className="summary-skeleton summary-skeleton--description" />
+    </div>
+    <span className="summary-skeleton summary-skeleton--icon" />
+  </article>
+);
+
+export default function AccountSummary({
+  summary,
+  isLoading,
+  error,
+  hasLoadedData,
+  onRetry,
+}) {
+  const showInitialSkeleton = isLoading && !hasLoadedData;
+  const showBlockingError = error && !hasLoadedData && !isLoading;
+
   return (
     <section
       className="dashboard-summary"
@@ -63,25 +83,42 @@ export default function AccountSummary({ summary, isLoading, error, onRetry }) {
         </div>
       </div>
 
-      {error ? (
+      {showBlockingError ? (
         <div className="admin-dashboard-state admin-dashboard-state--error">
-          <span>{error}</span>
+          <div>
+            <strong>Account summary is temporarily unavailable</strong>
+            <span>{error}</span>
+          </div>
           <button type="button" onClick={onRetry}>Try Again</button>
         </div>
       ) : (
-        <div className="dashboard-summary__grid" aria-busy={isLoading}>
-          {isLoading
+        <>
+          {error && hasLoadedData && (
+            <div className="dashboard-summary__refresh-error" role="alert">
+              <span>{error}</span>
+              <button type="button" onClick={onRetry}>Retry</button>
+            </div>
+          )}
+          <div
+            className={`dashboard-summary__grid ${
+              isLoading && hasLoadedData ? "is-refreshing" : ""
+            }`}
+            aria-busy={isLoading}
+          >
+          {showInitialSkeleton
             ? Array.from({ length: 5 }, (_, index) => (
-                <div
-                  key={index}
-                  className="summary-stat-card summary-stat-card--skeleton"
-                  aria-hidden="true"
-                />
+                <AccountSummarySkeleton key={index} />
               ))
             : createStatistics(summary).map((statistic) => (
                 <StatCard key={statistic.id} {...statistic} />
               ))}
-        </div>
+          </div>
+          {showInitialSkeleton && (
+            <span className="admin-dashboard-sr-only" role="status" aria-live="polite">
+              Loading account summary.
+            </span>
+          )}
+        </>
       )}
     </section>
   );

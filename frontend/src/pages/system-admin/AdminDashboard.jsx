@@ -28,6 +28,7 @@ export default function AdminDashboard() {
   const [summary, setSummary] = useState(emptySummary);
   const [auditEvents, setAuditEvents] = useState([]);
   const [isSummaryLoading, setIsSummaryLoading] = useState(true);
+  const [hasLoadedSummary, setHasLoadedSummary] = useState(false);
   const [isAuditLoading, setIsAuditLoading] = useState(true);
   const [summaryError, setSummaryError] = useState("");
   const [auditError, setAuditError] = useState("");
@@ -48,6 +49,7 @@ export default function AdminDashboard() {
 
     try {
       setSummary(await getAccountSummary());
+      setHasLoadedSummary(true);
       setLastUpdatedAt(new Date());
     } catch (error) {
       setSummaryError(error.message || "Account summary could not be loaded.");
@@ -77,6 +79,7 @@ export default function AdminDashboard() {
       .then((nextSummary) => {
         if (!isCurrent) return;
         setSummary(nextSummary);
+        setHasLoadedSummary(true);
         setLastUpdatedAt(new Date());
       })
       .catch((error) => {
@@ -276,6 +279,7 @@ export default function AdminDashboard() {
         summary={summary}
         isLoading={isSummaryLoading}
         error={summaryError}
+        hasLoadedData={hasLoadedSummary}
         onRetry={loadSummary}
       />
 

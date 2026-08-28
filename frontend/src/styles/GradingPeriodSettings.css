@@ -1,0 +1,110 @@
+/* TIMELINE AND SETTINGS VIEW */
+.grade-lock-view--settings {
+  display: grid;
+  gap: 18px;
+}
+
+.grade-lock-settings-intro {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 13px 16px;
+  background: #f8fafc;
+  border: 1px solid #dfe7f1;
+  border-radius: 11px;
+}
+
+.grade-lock-settings-intro > div:first-child > span,
+.grade-lock-settings-panel__eyebrow {
+  display: block;
+  margin-bottom: 5px;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.075em;
+  text-transform: uppercase;
+}
+
+.grade-lock-settings-intro strong {
+  display: block;
+  color: var(--grade-lock-navy);
+  font-size: 15px;
+}
+
+.grade-lock-settings-intro__scope {
+  flex: 0 0 auto;
+}
+
+.grade-lock-settings-intro p {
+  max-width: 620px;
+  margin-left: auto;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.grade-lock-settings-intro__note {
+  max-width: 320px;
+  padding: 11px 13px;
+  color: #f8fafc;
+  background: rgba(255, 255, 255, 0.09);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.grade-lock-settings-panel {
+  overflow: visible;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 15px;
+  box-shadow: 0 7px 22px rgba(15, 23, 42, 0.04);
+}
+
+.grade-lock-settings-panel__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 20px 22px;
+  border-bottom: 1px solid #edf2f7;
+}
+
+.grade-lock-settings-panel__heading h2 {
+  color: var(--grade-lock-navy);
+  font-size: 19px;
+}
+
+.grade-lock-settings-panel__heading p {
+  max-width: 690px;
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.grade-lock-settings-panel__eyebrow {
+  color: #b7791f;
+}
+
+.grade-lock-settings-panel {
+  border-color: #cfd9e5;
+  box-shadow: 0 9px 24px rgba(15, 23, 42, 0.065);
+}
+
+@media (max-width: 760px) {
+  .grade-lock-settings-intro {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .grade-lock-settings-intro p {
+    max-width: none;
+    margin-left: 0;
+  }
+
+}
