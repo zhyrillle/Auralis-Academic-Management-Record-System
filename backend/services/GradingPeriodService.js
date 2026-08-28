@@ -22,7 +22,7 @@ function deriveReopeningWindow(deadlineValue) {
 }
 
 function isSubmittedWorkflow(status) {
-  return ['SUBMITTED', 'SUBMITTED_FOR_REVIEW', 'ADVISER_APPROVED'].includes(status);
+  return status === 'SUBMITTED';
 }
 
 function serviceError(status, code, message) {
@@ -238,9 +238,9 @@ async function getTerms(schoolYearId) {
     `SELECT
       at.*,
       COUNT(gs.grade_sheet_id) AS total_grade_sheets,
-      SUM(gs.workflow_status <> 'DRAFT') AS submitted_grade_sheets,
+      SUM(gs.workflow_status = 'SUBMITTED') AS submitted_grade_sheets,
       SUM(gs.workflow_status = 'DRAFT') AS draft_count,
-      SUM(gs.workflow_status IN ('SUBMITTED', 'SUBMITTED_FOR_REVIEW', 'ADVISER_APPROVED')) AS submitted_count,
+      SUM(gs.workflow_status = 'SUBMITTED') AS submitted_count,
       SUM(gs.lock_status = 'TERM_LOCKED') AS locked_count
     FROM ACADEMIC_TERM at
     LEFT JOIN GRADE_SHEET gs ON gs.term_id = at.term_id
@@ -274,7 +274,7 @@ async function getDepartmentStatus(termId) {
       d.department_id,
       d.department_name,
       COUNT(gs.grade_sheet_id) AS total,
-      SUM(gs.workflow_status <> 'DRAFT') AS submitted,
+      SUM(gs.workflow_status = 'SUBMITTED') AS submitted,
       SUM(gs.workflow_status = 'DRAFT') AS overdue
     FROM SUBJECT_OFFERING so
     INNER JOIN SUBJECT s ON s.subject_id = so.subject_id
