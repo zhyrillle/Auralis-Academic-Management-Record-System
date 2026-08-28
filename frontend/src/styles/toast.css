@@ -29,6 +29,10 @@
   color: var(--sidebar-bg, #112d61);
 }
 
+.app-toast--error > svg {
+  color: #dc2626;
+}
+
 .app-toast__message {
   min-width: 0;
   flex: 1;

@@ -1,4 +1,9 @@
-import { ChevronRight, Clock3, FileClock, KeyRound } from "lucide-react";
+import {
+  ChevronRight,
+  Clock3,
+  FileClock,
+  KeyRound,
+} from "lucide-react";
 import Badge from "../../../../components/common/Badge";
 import ProgressBar from "../../../../components/common/ProgressBar";
 
@@ -8,6 +13,7 @@ function TermCard({
   requestCount,
   activeCount,
   onSelect,
+  onViewDetails,
   onManageReopenings,
 }) {
   const handleCardClick = (event) => {
@@ -112,6 +118,23 @@ function TermCard({
         </div>
       )}
 
+      {term.status !== "finalized" && (
+        <div className="term-card__actions">
+          <button
+            type="button"
+            className={`grade-lock-button term-card__view-details ${
+              term.status === "open"
+                ? "grade-lock-button--primary"
+                : "grade-lock-button--secondary"
+            }`}
+            onClick={() => onViewDetails(term.id)}
+          >
+            View Details
+            <ChevronRight size={16} aria-hidden="true" />
+          </button>
+        </div>
+      )}
+
       {term.status === "finalized" && (
         <div className="term-card__actions">
           <button
@@ -135,6 +158,7 @@ export default function TermCardsSection({
   activeReopenings,
   nextActiveAccessEndLabel,
   onSelectTerm,
+  onViewTermTimeline,
   onManageReopenings,
   onOpenActiveAccess,
 }) {
@@ -144,7 +168,7 @@ export default function TermCardsSection({
     <section className="grade-lock-section" aria-labelledby="terms-title">
       <div className="grade-lock-section__heading">
         <div>
-          <h2 id="terms-title">Grading Periods</h2>
+          <h2 id="terms-title">Academic Periods</h2>
           <p>Select a period to view its submission and activity.</p>
         </div>
         <div className="grade-lock-section__heading-actions">
@@ -192,6 +216,7 @@ export default function TermCardsSection({
               requestCount={requestCount}
               activeCount={activeCount}
               onSelect={onSelectTerm}
+              onViewDetails={onViewTermTimeline}
               onManageReopenings={onManageReopenings}
             />
           );

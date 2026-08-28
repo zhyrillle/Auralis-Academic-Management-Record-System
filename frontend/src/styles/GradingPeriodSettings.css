@@ -32,8 +32,13 @@
   font-size: 15px;
 }
 
+.grade-lock-settings-intro__scope {
+  flex: 0 0 auto;
+}
+
 .grade-lock-settings-intro p {
   max-width: 620px;
+  margin-left: auto;
   color: #64748b;
   font-size: 12px;
   line-height: 1.5;
@@ -99,6 +104,7 @@
 
   .grade-lock-settings-intro p {
     max-width: none;
+    margin-left: 0;
   }
 
 }

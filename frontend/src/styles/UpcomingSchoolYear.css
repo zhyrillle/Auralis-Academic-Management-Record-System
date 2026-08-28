@@ -259,18 +259,6 @@
   outline-offset: 2px;
 }
 
-.upcoming-period-editor__policy {
-  grid-column: 1 / -1;
-  padding: 10px 12px;
-  color: #475569;
-  background: #f8fafc;
-  border: 1px solid #dbe4ee;
-  border-radius: 9px;
-  font-size: 12px;
-  font-weight: 650;
-  line-height: 1.45;
-}
-
 .upcoming-school-year__validation {
   margin-top: 12px;
   color: #b42318;
@@ -286,7 +274,11 @@
   border-top: 1px solid #e4ebf3;
 }
 
-.upcoming-school-year__actions > div {
+.upcoming-school-year__utility-actions,
+.upcoming-school-year__commit-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 9px;
 }
 
@@ -304,10 +296,22 @@
   cursor: pointer;
 }
 
-.upcoming-school-year__actions > div button:last-child {
+.upcoming-school-year__commit-actions button:last-child {
   color: #ffffff;
   background: var(--grade-lock-navy);
   border-color: var(--grade-lock-navy);
+}
+
+.upcoming-school-year__actions .upcoming-school-year__reset-changes {
+  color: #8a5200;
+  background: #fff7e6;
+  border-color: #e8b85d;
+}
+
+.upcoming-school-year__actions .upcoming-school-year__reset-changes:hover:not(:disabled) {
+  color: #6f4300;
+  background: #ffedc7;
+  border-color: #d69a2d;
 }
 
 .upcoming-school-year__actions button:disabled {
@@ -348,7 +352,8 @@
     grid-template-columns: 1fr;
   }
 
-  .upcoming-school-year__actions > div {
+  .upcoming-school-year__utility-actions,
+  .upcoming-school-year__commit-actions {
     display: grid;
     grid-template-columns: 1fr 1fr;
   }

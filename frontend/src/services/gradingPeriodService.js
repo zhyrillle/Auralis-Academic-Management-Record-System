@@ -1,6 +1,7 @@
 const API_BASE_URL = (
   import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api"
 ).replace(/\/$/, "");
+const API_ORIGIN = new URL(API_BASE_URL, window.location.origin).origin;
 
 export const temporaryDurationOptions = [
   { value: "1440", label: "24 hours" },
@@ -30,7 +31,7 @@ async function request(path, { userId, method = "GET", body } = {}) {
   } catch (error) {
     if (error instanceof TypeError || /failed to fetch/i.test(error?.message || "")) {
       throw new Error(
-        "Unable to load grading period data. Check the backend connection and try again.",
+        "Unable to load academic period data. Check the backend connection and try again.",
         { cause: error },
       );
     }
@@ -38,7 +39,7 @@ async function request(path, { userId, method = "GET", body } = {}) {
   }
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const error = new Error(payload.message || "The Grading Period request could not be completed.");
+    const error = new Error(payload.message || "The Academic Period request could not be completed.");
     error.code = payload.code;
     throw error;
   }
@@ -206,7 +207,31 @@ function initials(name) {
     .toUpperCase();
 }
 
+function resolveAttachmentUrl(value) {
+  if (!value) return null;
+
+  const normalized = String(value).trim().replace(/\\/g, "/");
+  if (!normalized) return null;
+  if (/^(https?:|blob:|data:)/i.test(normalized)) return normalized;
+
+  return `${API_ORIGIN}/${normalized.replace(/^\/+/, "")}`;
+}
+
 function mapRequest(row) {
+  const attachmentName = row.file_name || null;
+  const attachmentUrl = resolveAttachmentUrl(
+    row.attachment_url || row.file_path || null,
+  );
+  const attachmentType = row.file_type || null;
+  const hasAttachmentSize = ![null, undefined, ""].includes(row.file_size);
+  const attachmentSize = hasAttachmentSize ? Number(row.file_size) : null;
+  const hasAttachmentMetadata = Boolean(
+    attachmentName ||
+      attachmentUrl ||
+      attachmentType ||
+      (hasAttachmentSize && Number.isFinite(attachmentSize)),
+  );
+
   return {
     id: String(row.request_id),
     gradeSheetId: String(row.grade_sheet_id),
@@ -221,6 +246,12 @@ function mapRequest(row) {
     sectionId: String(row.section_id),
     section: row.section_name,
     reason: row.reason,
+    attachment: hasAttachmentMetadata ? {
+      name: attachmentName,
+      url: attachmentUrl,
+      type: attachmentType,
+      size: Number.isFinite(attachmentSize) ? attachmentSize : null,
+    } : null,
     requestedAt: new Intl.DateTimeFormat("en-US", {
       month: "short", day: "numeric", year: "numeric",
       hour: "numeric", minute: "2-digit", timeZone: MANILA_TIMEZONE,

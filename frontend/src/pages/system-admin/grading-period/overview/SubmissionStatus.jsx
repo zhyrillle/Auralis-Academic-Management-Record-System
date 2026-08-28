@@ -1,5 +1,4 @@
 import {
-  AlertTriangle,
   FilePenLine,
   LockKeyhole,
   Send,
@@ -12,12 +11,6 @@ function DepartmentRow({ department }) {
     <div className="submission-status__department-row">
       <div>
         <strong>{department.name}</strong>
-        {department.overdue > 0 && (
-          <span>
-            <AlertTriangle size={12} aria-hidden="true" />
-            {department.overdue} overdue
-          </span>
-        )}
       </div>
       <strong>
         {department.submitted} / {department.total}
@@ -114,7 +107,7 @@ export default function SubmissionStatus({ term, departments }) {
           ))
         ) : (
           <p className="submission-status__empty">
-            No subject offerings have been prepared for this grading period.
+            No subject offerings have been prepared for this academic period.
           </p>
         )}
       </div>

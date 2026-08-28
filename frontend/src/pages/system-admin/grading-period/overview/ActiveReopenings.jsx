@@ -120,7 +120,7 @@ export default function ActiveReopenings({
           className="grade-lock-empty-state"
           icon={Lock}
           title="No active temporary access"
-          description="Approved correction access for this grading period will appear here."
+          description="Approved correction access for this academic period will appear here."
         />
       )}
     </section>

@@ -1,4 +1,13 @@
-import { AlarmClock, Info, RotateCcwKey, X } from "lucide-react";
+import {
+  AlarmClock,
+  Eye,
+  FileText,
+  Image as ImageIcon,
+  Info,
+  Paperclip,
+  RotateCcwKey,
+  X,
+} from "lucide-react";
 import DropdownSelect from "../../../components/common/DropdownSelect";
 import "../../../styles/ReviewRequestDrawer.css";
 
@@ -7,6 +16,26 @@ const customDurationUnitOptions = [
   { value: "hours", label: "Hours" },
   { value: "days", label: "Days" },
 ];
+
+function formatAttachmentSize(value) {
+  const bytes = Number(value);
+  if (!Number.isFinite(bytes) || bytes < 0) return "Size unavailable";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+}
+
+function attachmentIsImage(attachment) {
+  const type = String(attachment?.type || "").toLowerCase();
+  const extension = String(attachment?.name || "").split(".").pop()?.toLowerCase();
+  return type.startsWith("image/") || ["jpg", "jpeg", "png", "webp", "gif"].includes(extension);
+}
+
+function attachmentTypeLabel(attachment) {
+  if (attachment?.type) return attachment.type;
+  const extension = String(attachment?.name || "").split(".").pop();
+  return extension ? `${extension.toUpperCase()} file` : "File type unavailable";
+}
 
 export default function ReviewRequestDrawer({
   request,
@@ -23,6 +52,7 @@ export default function ReviewRequestDrawer({
   onClose,
   onDeny,
   onApprove,
+  onPreviewAttachment,
 }) {
   if (!request) {
     return null;
@@ -90,6 +120,47 @@ export default function ReviewRequestDrawer({
                 <dd>{request.reason}</dd>
               </div>
             </dl>
+
+            <div className="review-attachment" aria-labelledby="request-attachment-title">
+              <div className="review-attachment__heading">
+                <Paperclip size={16} aria-hidden="true" />
+                <h4 id="request-attachment-title">Attachment</h4>
+              </div>
+
+              {request.attachment ? (
+                <div className="review-attachment__card">
+                  <span className="review-attachment__preview" aria-hidden="true">
+                    {attachmentIsImage(request.attachment) && request.attachment.url ? (
+                      <img src={request.attachment.url} alt="" />
+                    ) : attachmentIsImage(request.attachment) ? (
+                      <ImageIcon size={20} />
+                    ) : (
+                      <FileText size={20} />
+                    )}
+                  </span>
+                  <div className="review-attachment__details">
+                    <strong>{request.attachment.name || "Request attachment"}</strong>
+                    <span>
+                      {attachmentTypeLabel(request.attachment)} • {formatAttachmentSize(request.attachment.size)}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className="review-attachment__action"
+                    onClick={() => onPreviewAttachment(request.attachment)}
+                    disabled={!request.attachment.url}
+                    title={request.attachment.url ? "Preview attachment" : "The attachment file is unavailable"}
+                  >
+                    <Eye size={16} aria-hidden="true" />
+                    <span>{request.attachment.url ? "View attachment" : "File unavailable"}</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="review-attachment__empty">
+                  No attachment provided.
+                </div>
+              )}
+            </div>
 
             <div
               className="review-policy-reference"

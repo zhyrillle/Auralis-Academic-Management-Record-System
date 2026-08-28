@@ -28,7 +28,7 @@ export const sidebarConfig = {
       icon: Users,
     },
     {
-      title: "Grading Periods",
+      title: "Academic Periods",
       path: "/system-admin/grading-periods",
       icon: CalendarClock,
     },
@@ -51,7 +51,7 @@ export const sidebarConfig = {
       icon: Users,
     },
     {
-      title: "Grading Periods",
+      title: "Academic Periods",
       path: "/system-admin/grading-periods",
       icon: CalendarClock,
     },

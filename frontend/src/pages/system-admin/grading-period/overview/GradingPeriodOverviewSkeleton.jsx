@@ -9,7 +9,7 @@ export default function GradingPeriodOverviewSkeleton() {
       aria-busy="true"
     >
       <span className="grade-lock-sr-only" role="status" aria-live="polite">
-        Loading the grading period overview.
+        Loading the academic period overview.
       </span>
 
       <div className="grading-period-skeleton__section-heading" aria-hidden="true">

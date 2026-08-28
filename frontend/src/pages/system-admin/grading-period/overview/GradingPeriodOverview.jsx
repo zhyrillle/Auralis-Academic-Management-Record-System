@@ -19,6 +19,7 @@ export default function GradingPeriodOverview({
   reopeningSectionRef,
   nextActiveAccessEndLabel,
   onSelectTerm,
+  onViewTermTimeline,
   onManageReopenings,
   onOpenActiveAccess,
   onReviewRequest,
@@ -37,6 +38,7 @@ export default function GradingPeriodOverview({
         activeReopenings={activeReopenings}
         nextActiveAccessEndLabel={nextActiveAccessEndLabel}
         onSelectTerm={onSelectTerm}
+        onViewTermTimeline={onViewTermTimeline}
         onManageReopenings={onManageReopenings}
         onOpenActiveAccess={onOpenActiveAccess}
       />

@@ -16,8 +16,14 @@ export default function Toast({
     .filter(Boolean)
     .join(" ");
 
+  const isError = variant === "error";
+
   return (
-    <div className={classes} role="status" aria-live="polite">
+    <div
+      className={classes}
+      role={isError ? "alert" : "status"}
+      aria-live={isError ? "assertive" : "polite"}
+    >
       {Icon && <Icon size={18} aria-hidden="true" />}
       <span className="app-toast__message">{message}</span>
       {onDismiss && (
@@ -33,4 +39,3 @@ export default function Toast({
     </div>
   );
 }
-

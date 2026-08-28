@@ -1651,6 +1651,10 @@
   padding-top: 14px;
 }
 
+.term-card__view-details {
+  margin-left: auto;
+}
+
 
 
 /* REOPENING REQUESTS */

@@ -30,6 +30,12 @@ export default function UpcomingSchoolYear({
       suggestedPeriods.find((item) => item.id === period.id),
     ),
   ).length;
+  const unsavedCount = draftPeriods.filter((period) =>
+    isPeriodAdjusted(
+      period,
+      periods.find((item) => item.id === period.id),
+    ),
+  ).length;
 
   const handleOpenReview = () => {
     setDraftPeriods(clonePeriods(periods));
@@ -66,8 +72,13 @@ export default function UpcomingSchoolYear({
     setValidationMessage("");
   };
 
-  const handleResetAll = () => {
+  const handleUseCalendarSuggestions = () => {
     setDraftPeriods(clonePeriods(suggestedPeriods));
+    setValidationMessage("");
+  };
+
+  const handleResetChanges = () => {
+    setDraftPeriods(clonePeriods(periods));
     setValidationMessage("");
   };
 
@@ -154,19 +165,21 @@ export default function UpcomingSchoolYear({
             Review and adjust them before saving.
           </div>
 
-          {schoolYear.calendarRule?.summary?.length > 0 && (
-            <div className="upcoming-school-year__rules">
-              <div>
-                <Sparkles size={16} aria-hidden="true" />
-                <strong>Suggestion rules</strong>
-              </div>
-              <ul>
-                {schoolYear.calendarRule.summary.map((rule) => (
-                  <li key={rule}>{rule}</li>
-                ))}
-              </ul>
+          <div className="upcoming-school-year__rules">
+            <div>
+              <Sparkles size={16} aria-hidden="true" />
+              <strong>Suggestion rules</strong>
             </div>
-          )}
+            <ul>
+              {schoolYear.calendarRule?.summary?.map((rule) => (
+                <li key={rule}>{rule}</li>
+              ))}
+              <li>
+                <strong>Seven-day reopening policy:</strong> Reopening requests
+                open at the submission deadline and close seven days later.
+              </li>
+            </ul>
+          </div>
 
           <div className="upcoming-school-year__periods">
             {draftPeriods.map((period) => {
@@ -257,10 +270,6 @@ export default function UpcomingSchoolYear({
                         }
                       />
                     </label>
-                    <div className="upcoming-period-editor__policy">
-                      Reopening requests open at the submission deadline and
-                      close seven days later.
-                    </div>
                   </div>
                 </article>
               );
@@ -274,16 +283,26 @@ export default function UpcomingSchoolYear({
           )}
 
           <footer className="upcoming-school-year__actions">
-            <button
-              type="button"
-              className="upcoming-school-year__reset-all"
-              onClick={handleResetAll}
-              disabled={adjustedCount === 0}
-            >
-              <RotateCcw size={15} aria-hidden="true" />
-              Use calendar suggestions
-            </button>
-            <div>
+            <div className="upcoming-school-year__utility-actions">
+              <button
+                type="button"
+                onClick={handleUseCalendarSuggestions}
+                disabled={adjustedCount === 0}
+              >
+                <Sparkles size={15} aria-hidden="true" />
+                Use calendar suggestions
+              </button>
+              <button
+                type="button"
+                className="upcoming-school-year__reset-changes"
+                onClick={handleResetChanges}
+                disabled={unsavedCount === 0}
+              >
+                <RotateCcw size={15} aria-hidden="true" />
+                Reset changes
+              </button>
+            </div>
+            <div className="upcoming-school-year__commit-actions">
               <button type="button" onClick={handleCancel}>
                 <X size={15} aria-hidden="true" />
                 Cancel

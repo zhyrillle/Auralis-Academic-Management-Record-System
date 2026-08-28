@@ -21,7 +21,7 @@ export default function GradingPeriodSettings({
   return (
     <div className="grade-lock-view grade-lock-view--settings">
       <div className="grade-lock-settings-intro">
-        <div>
+        <div className="grade-lock-settings-intro__scope">
           <span>School year scope</span>
           <strong>{schoolYearLabel}</strong>
         </div>

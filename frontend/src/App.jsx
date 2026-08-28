@@ -7,7 +7,7 @@ import ResetPassword from "./pages/ResetPassword";
 import AdminDashboard from "./pages/system-admin/AdminDashboard";
 import WSConfig from "./pages/system-admin/WSConfig";
 import ManageUsers from "./pages/system-admin/ManageUsers";
-import GradingPeriod from "./pages/system-admin/GradingPeriod";
+import AcademicPeriod from "./pages/system-admin/AcademicPeriod";
 import AdviserDashboard from "./pages/adviser/AdviserDashboard";
 import DeptDashboard from "./pages/department-head/DeptDashboard";
 import PrincipalDashboard from "./pages/principal/PrincipalDashboard";
@@ -81,7 +81,7 @@ export default function App() {
           />
           <Route
             path="/system-admin/grading-periods"
-            element={<GradingPeriod user={user} />}
+            element={<AcademicPeriod user={user} />}
           />
           <Route path="/system-admin/ws-config" element={<WSConfig />} />
 

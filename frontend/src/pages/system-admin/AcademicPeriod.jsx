@@ -14,6 +14,7 @@ import GradingPeriodOverview from "./grading-period/overview/GradingPeriodOvervi
 import GradingPeriodOverviewSkeleton from "./grading-period/overview/GradingPeriodOverviewSkeleton";
 import GradingPeriodSettings from "./grading-period/timeline/GradingPeriodSettings";
 import GradingPeriodTimelineSkeleton from "./grading-period/timeline/GradingPeriodTimelineSkeleton";
+import AttachmentPreviewModal from "./grading-period/AttachmentPreviewModal";
 import ReopeningActivityDrawer from "./grading-period/ReopeningActivityDrawer";
 import ReviewRequestDrawer from "./grading-period/ReviewRequestDrawer";
 import {
@@ -134,7 +135,7 @@ function ContentLoadingFrame({ loadingMode, pendingLabel, children }) {
       )}
       {isBackgroundLoading && (
         <span className="grade-lock-sr-only" role="status" aria-live="polite">
-          Refreshing grading period data.
+          Refreshing academic period data.
         </span>
       )}
       {children}
@@ -142,7 +143,7 @@ function ContentLoadingFrame({ loadingMode, pendingLabel, children }) {
   );
 }
 
-export default function GradingPeriod({ user }) {
+export default function AcademicPeriod({ user }) {
 
   // Page view, grading-period, and automation state
 
@@ -179,20 +180,28 @@ export default function GradingPeriod({ user }) {
 
   const [reviewRequestId, setReviewRequestId] = useState(null);
   const [activityReopeningId, setActivityReopeningId] = useState(null);
+  const [previewAttachment, setPreviewAttachment] = useState(null);
   const [toastMessage, setToastMessage] = useState("");
+  const [toastVariant, setToastVariant] = useState("success");
   const [now, setNow] = useState(() => Date.now());
 
   const reopeningSectionRef = useRef(null);
   const dialogSurfaceRef = useRef(null);
   const schoolYearMenuRef = useRef(null);
   const selectedTermIdRef = useRef(null);
+  const attachmentPreviewOpenRef = useRef(false);
+
+  const showToast = useCallback((message, variant = "success") => {
+    setToastVariant(variant);
+    setToastMessage(message || "The request could not be completed.");
+  }, []);
 
   const loadContext = useCallback(async (
     schoolYearId,
     { mode = "background", pendingLabel = "" } = {},
   ) => {
     if (!user?.user_id) {
-      setPageError("A signed-in user is required to load Grading Period data.");
+      setPageError("A signed-in user is required to load Academic Period data.");
       setLoadingMode("idle");
       return;
     }
@@ -228,17 +237,17 @@ export default function GradingPeriod({ user }) {
     } catch (error) {
       const message =
         error.message ||
-        "Unable to load grading period data. Check the backend connection and try again.";
+        "Unable to load academic period data. Check the backend connection and try again.";
       if (mode === "initial") {
         setPageError(message);
       } else {
-        setToastMessage(message);
+        showToast(message, "error");
       }
     } finally {
       setLoadingMode("idle");
       setPendingSchoolYearLabel("");
     }
-  }, [user]);
+  }, [showToast, user]);
 
   useEffect(() => {
     // The initial API synchronization intentionally populates page state.
@@ -287,9 +296,14 @@ export default function GradingPeriod({ user }) {
   );
 
   const closeAllSurfaces = useCallback(() => {
+    setPreviewAttachment(null);
     setReviewRequestId(null);
     setActivityReopeningId(null);
   }, []);
+
+  useEffect(() => {
+    attachmentPreviewOpenRef.current = Boolean(previewAttachment);
+  }, [previewAttachment]);
 
   // Keeps modal and drawer interactions keyboard accessible
   useEffect(() => {
@@ -310,7 +324,7 @@ export default function GradingPeriod({ user }) {
     }, 0);
 
     const handleEscape = (event) => {
-      if (event.key === "Escape") {
+      if (event.key === "Escape" && !attachmentPreviewOpenRef.current) {
         closeAllSurfaces();
       }
     };
@@ -440,10 +454,10 @@ export default function GradingPeriod({ user }) {
         admin_note: adminNote.trim() || null,
       });
       setReviewRequestId(null);
-      setToastMessage("Temporary reopening approved.");
+      showToast("Temporary reopening approved.");
       await loadContext(selectedSchoolYearId);
     } catch (error) {
-      setToastMessage(error.message);
+      showToast(error.message, "error");
     }
   };
 
@@ -453,10 +467,10 @@ export default function GradingPeriod({ user }) {
         admin_note: adminNote.trim() || null,
       });
       setReviewRequestId(null);
-      setToastMessage("Reopening request denied.");
+      showToast("Reopening request denied.");
       await loadContext(selectedSchoolYearId);
     } catch (error) {
-      setToastMessage(error.message);
+      showToast(error.message, "error");
     }
   };
 
@@ -467,7 +481,7 @@ export default function GradingPeriod({ user }) {
       const events = await getReopeningActivity(user.user_id, reopeningId);
       setReopeningHistory((history) => ({ ...history, [reopeningId]: events }));
     } catch (error) {
-      setToastMessage(error.message);
+      showToast(error.message, "error");
     }
   };
 
@@ -495,6 +509,22 @@ export default function GradingPeriod({ user }) {
     setPeriodValidationMessage("");
   };
 
+  const handleViewTermTimeline = (periodId) => {
+    const period = terms.find((item) => item.id === periodId);
+    if (!period) return;
+
+    selectedTermIdRef.current = period.id;
+    setSelectedTermId(period.id);
+    setSettingsPeriodId(period.id);
+    setPeriodDraft(createPeriodDraft(period));
+    setPeriodValidationMessage("");
+    setIsSchoolYearMenuOpen(false);
+    setActiveView("settings");
+    window.requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+  };
+
   const handlePeriodDraftChange = (field, value) => {
     setPeriodDraft((currentDraft) => ({
       ...currentDraft,
@@ -513,7 +543,7 @@ export default function GradingPeriod({ user }) {
 
   const handleSavePeriod = async () => {
     if (!isSelectedSchoolYearActive) {
-      setToastMessage("Completed school-year timelines are read-only.");
+      showToast("Completed school-year timelines are read-only.", "error");
       return;
     }
 
@@ -566,23 +596,24 @@ export default function GradingPeriod({ user }) {
           school_year_id: selectedSchoolYearId,
         });
       }
-      setToastMessage("Grading period updated.");
+      showToast("Academic period updated.");
       await loadContext(selectedSchoolYearId);
     } catch (error) {
-      setPeriodValidationMessage(error.message);
+      showToast(error.message, "error");
     }
   };
 
   const handleSaveUpcomingPeriods = async (nextPeriods) => {
     if (!isSelectedSchoolYearActive) {
-      setToastMessage(
+      showToast(
         "Upcoming timelines can only be edited from the current school year.",
+        "error",
       );
       return;
     }
 
     if (!upcomingSchoolYear) {
-      setToastMessage("No upcoming school year is available to configure.");
+      showToast("No upcoming school year is available to configure.", "error");
       return;
     }
 
@@ -601,23 +632,23 @@ export default function GradingPeriod({ user }) {
               school_year_id: upcomingSchoolYear.id,
             });
       }));
-      setToastMessage("Upcoming school year timeline updated.");
+      showToast("Upcoming school year timeline updated.");
       await loadContext(selectedSchoolYearId);
     } catch (error) {
-      setToastMessage(error.message);
+      showToast(error.message, "error");
     }
   };
 
   return (
     <div className="grade-lock-page">
-      {/* GRADING PERIOD PAGE HEADER */}
+      {/* ACADEMIC PERIOD PAGE HEADER */}
       <header className="grade-lock-header">
         <div className="grade-lock-header__copy">
           <div className="grade-lock-eyebrow">
             <CalendarRange size={14} aria-hidden="true" />
             Academic timeline and submission governance
           </div>
-          <h1>Grading Periods &amp; Deadlines</h1>
+          <h1>Academic Periods &amp; Deadlines</h1>
           <p>
             Configure the academic timeline, monitor submissions, and manage
             post-deadline corrections.
@@ -696,7 +727,7 @@ export default function GradingPeriod({ user }) {
       <div className="grade-lock-view-toolbar">
         <nav
           className="grade-lock-view-switcher"
-          aria-label="Grading period page sections"
+          aria-label="Academic period page sections"
         >
           <button
             type="button"
@@ -730,7 +761,7 @@ export default function GradingPeriod({ user }) {
         <section className="grade-lock-feedback grade-lock-feedback--error" role="alert">
           <CircleAlert size={24} aria-hidden="true" />
           <div>
-            <h2>Grading periods are temporarily unavailable</h2>
+            <h2>Academic periods are temporarily unavailable</h2>
             <p>{pageError}</p>
           </div>
           <button
@@ -752,7 +783,7 @@ export default function GradingPeriod({ user }) {
             <section className="grade-lock-feedback grade-lock-feedback--empty">
               <CalendarRange size={28} aria-hidden="true" />
               <div>
-                <h2>No grading periods configured yet</h2>
+                <h2>No academic periods configured yet</h2>
                 <p>
                   Configure the Term 1–3 dates and submission deadlines for this
                   school year in Timeline &amp; Settings.
@@ -784,6 +815,7 @@ export default function GradingPeriod({ user }) {
                   : null
               }
               onSelectTerm={handleSelectTerm}
+              onViewTermTimeline={handleViewTermTimeline}
               onManageReopenings={handleManageReopenings}
               onOpenActiveAccess={handleOpenActiveAccess}
               onReviewRequest={handleReviewRequest}
@@ -839,6 +871,14 @@ export default function GradingPeriod({ user }) {
         onClose={() => setReviewRequestId(null)}
         onDeny={handleDenyRequest}
         onApprove={handleApproveReopening}
+        onPreviewAttachment={setPreviewAttachment}
+      />
+
+      {/* ATTACHMENT PREVIEW MODAL */}
+      <AttachmentPreviewModal
+        key={previewAttachment?.url || previewAttachment?.name || "no-attachment-preview"}
+        attachment={previewAttachment}
+        onClose={() => setPreviewAttachment(null)}
       />
 
       {/* REOPENING ACTIVITY DRAWER */}
@@ -851,9 +891,11 @@ export default function GradingPeriod({ user }) {
         onClose={() => setActivityReopeningId(null)}
       />
 
-      {/* SUCCESS TOAST */}
+      {/* PAGE FEEDBACK TOAST */}
       <Toast
         message={toastMessage}
+        variant={toastVariant}
+        icon={toastVariant === "error" ? CircleAlert : undefined}
         onDismiss={() => setToastMessage("")}
       />
     </div>

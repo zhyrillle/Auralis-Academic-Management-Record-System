@@ -9,7 +9,7 @@ export default function GradingPeriodTimelineSkeleton() {
       aria-busy="true"
     >
       <span className="grade-lock-sr-only" role="status" aria-live="polite">
-        Loading the grading period timeline and settings.
+        Loading the academic period timeline and settings.
       </span>
 
       <div className="timeline-skeleton__scope" aria-hidden="true">

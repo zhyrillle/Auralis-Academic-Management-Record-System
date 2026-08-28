@@ -57,7 +57,7 @@ export default function AcademicTimeline({
 
       <div className="academic-timeline__workspace">
         {/* PERIOD LIST */}
-        <div className="academic-period-list" aria-label="Grading periods">
+        <div className="academic-period-list" aria-label="Academic periods">
           {periods.map((period) => (
             <button
               type="button"
@@ -213,16 +213,6 @@ export default function AcademicTimeline({
               />
             </label>
 
-            <div className="academic-period-reopening-policy">
-              <CheckCircle2 size={18} aria-hidden="true" />
-              <div>
-                <strong>Seven-day reopening policy</strong>
-                <p>
-                  Requests open at the submission deadline and close seven
-                  days later. These dates are calculated by the system.
-                </p>
-              </div>
-            </div>
           </div>
 
           {validationMessage && (
