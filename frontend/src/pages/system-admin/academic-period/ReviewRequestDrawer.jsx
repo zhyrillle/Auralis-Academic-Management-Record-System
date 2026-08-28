@@ -8,7 +8,10 @@ import {
   RotateCcwKey,
   X,
 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import DropdownSelect from "../../../components/common/DropdownSelect";
+import { temporaryDurationOptions } from "../../../services/gradingPeriodService";
+import AttachmentPreviewModal from "./AttachmentPreviewModal";
 import "../../../styles/ReviewRequestDrawer.css";
 
 const customDurationUnitOptions = [
@@ -37,23 +40,69 @@ function attachmentTypeLabel(attachment) {
   return extension ? `${extension.toUpperCase()} file` : "File type unavailable";
 }
 
+function getDurationMinutes(durationValue, customDuration, customDurationUnit) {
+  const multipliers = { minutes: 1, hours: 60, days: 1440 };
+  const customValue = Number(customDuration);
+  const minutes =
+    durationValue === "custom"
+      ? customValue * (multipliers[customDurationUnit] || 1)
+      : Number(durationValue);
+
+  return Number.isFinite(minutes) && minutes > 0 ? minutes : 1440;
+}
+
 export default function ReviewRequestDrawer({
   request,
-  durationOptions,
-  durationValue,
-  customDurationMinutes,
-  customDurationUnit,
-  adminNote,
-  surfaceRef,
-  onDurationChange,
-  onCustomDurationChange,
-  onCustomDurationUnitChange,
-  onAdminNoteChange,
   onClose,
   onDeny,
   onApprove,
-  onPreviewAttachment,
 }) {
+  const [durationValue, setDurationValue] = useState("1440");
+  const [customDurationMinutes, setCustomDurationMinutes] = useState("90");
+  const [customDurationUnit, setCustomDurationUnit] = useState("minutes");
+  const [adminNote, setAdminNote] = useState("");
+  const [previewAttachment, setPreviewAttachment] = useState(null);
+  const surfaceRef = useRef(null);
+  const previewOpenRef = useRef(false);
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    previewOpenRef.current = Boolean(previewAttachment);
+  }, [previewAttachment]);
+
+  useEffect(() => {
+    if (!request) return undefined;
+
+    const previouslyFocusedElement = document.activeElement;
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    const focusTimer = window.setTimeout(() => {
+      surfaceRef.current
+        ?.querySelector(
+          "button:not([disabled]), select:not([disabled]), input:not([disabled]), textarea:not([disabled])",
+        )
+        ?.focus();
+    }, 0);
+    const handleEscape = (event) => {
+      if (event.key === "Escape" && !previewOpenRef.current) {
+        onCloseRef.current();
+      }
+    };
+
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      window.clearTimeout(focusTimer);
+      document.body.style.overflow = originalOverflow;
+      document.removeEventListener("keydown", handleEscape);
+      previouslyFocusedElement?.focus?.();
+    };
+  }, [request]);
+
   if (!request) {
     return null;
   }
@@ -72,15 +121,38 @@ export default function ReviewRequestDrawer({
       customDurationNumber < selectedLimits.min ||
       customDurationNumber > selectedLimits.max);
 
+  const handleCustomDurationUnitChange = (unit) => {
+    setCustomDurationUnit(unit);
+    setCustomDurationMinutes(
+      unit === "minutes" ? "90" : unit === "hours" ? "2" : "1",
+    );
+  };
+
+  const handleApprove = () => {
+    onApprove(request.id, {
+      duration_minutes: getDurationMinutes(
+        durationValue,
+        customDurationMinutes,
+        customDurationUnit,
+      ),
+      admin_note: adminNote.trim() || null,
+    });
+  };
+
+  const handleDeny = () => {
+    onDeny(request.id, { admin_note: adminNote.trim() || null });
+  };
+
   return (
-    <div className="grade-lock-overlay" role="presentation">
-      <aside
-        className="grade-lock-drawer grade-lock-drawer--review"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="review-request-drawer-title"
-        ref={surfaceRef}
-      >
+    <>
+      <div className="grade-lock-overlay" role="presentation">
+        <aside
+          className="grade-lock-drawer grade-lock-drawer--review"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="review-request-drawer-title"
+          ref={surfaceRef}
+        >
         <div className="grade-lock-surface__header">
           <div>
             <h2 id="review-request-drawer-title">Review Reopening Request</h2>
@@ -147,7 +219,7 @@ export default function ReviewRequestDrawer({
                   <button
                     type="button"
                     className="review-attachment__action"
-                    onClick={() => onPreviewAttachment(request.attachment)}
+                    onClick={() => setPreviewAttachment(request.attachment)}
                     disabled={!request.attachment.url}
                     title={request.attachment.url ? "Preview attachment" : "The attachment file is unavailable"}
                   >
@@ -192,8 +264,8 @@ export default function ReviewRequestDrawer({
                 className="review-duration-dropdown"
                 label="Temporary access duration"
                 value={durationValue}
-                options={durationOptions}
-                onChange={onDurationChange}
+                options={temporaryDurationOptions}
+                onChange={setDurationValue}
               />
             </div>
 
@@ -209,7 +281,7 @@ export default function ReviewRequestDrawer({
                     value={customDurationMinutes}
                     aria-label="Custom duration value"
                     onChange={(event) =>
-                      onCustomDurationChange(event.target.value)
+                      setCustomDurationMinutes(event.target.value)
                     }
                   />
                   <DropdownSelect
@@ -217,7 +289,7 @@ export default function ReviewRequestDrawer({
                     label="Custom duration unit"
                     value={customDurationUnit}
                     options={customDurationUnitOptions}
-                    onChange={onCustomDurationUnitChange}
+                    onChange={handleCustomDurationUnitChange}
                   />
                 </div>
               </div>
@@ -250,7 +322,7 @@ export default function ReviewRequestDrawer({
               maxLength="500"
               rows="4"
               placeholder="Add a note for this reopening..."
-              onChange={(event) => onAdminNoteChange(event.target.value)}
+              onChange={(event) => setAdminNote(event.target.value)}
             />
           </section>
         </div>
@@ -259,21 +331,31 @@ export default function ReviewRequestDrawer({
           <button
             type="button"
             className="grade-lock-button grade-lock-button--danger-outline"
-            onClick={() => onDeny(request.id)}
+            onClick={handleDeny}
           >
             Deny Request
           </button>
           <button
             type="button"
             className="grade-lock-button grade-lock-button--primary"
-            onClick={() => onApprove(request.id, durationValue)}
+            onClick={handleApprove}
             disabled={hasInvalidCustomDuration}
           >
             <RotateCcwKey size={16} aria-hidden="true" />
             Approve Reopening
           </button>
         </div>
-      </aside>
-    </div>
+        </aside>
+      </div>
+      <AttachmentPreviewModal
+        key={
+          previewAttachment?.url ||
+          previewAttachment?.name ||
+          "no-attachment-preview"
+        }
+        attachment={previewAttachment}
+        onClose={() => setPreviewAttachment(null)}
+      />
+    </>
   );
 }

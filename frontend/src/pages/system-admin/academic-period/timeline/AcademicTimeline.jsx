@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   AlertTriangle,
   CalendarDays,
@@ -7,7 +8,38 @@ import {
   Save,
 } from "lucide-react";
 import Badge from "../../../../components/common/Badge";
+import {
+  createTermTimeline,
+  updateTermTimeline,
+} from "../../../../services/gradingPeriodService";
 import "../../../../styles/AcademicTimeline.css";
+
+function formatPeriodRange(startDate, endDate) {
+  if (!startDate || !endDate) return "Schedule not set";
+
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+  return `${formatter.format(new Date(`${startDate}T00:00:00Z`))} – ${formatter.format(
+    new Date(`${endDate}T00:00:00Z`),
+  )}`;
+}
+
+function createPeriodDraft(period) {
+  return {
+    periodLabel: formatPeriodRange(period?.startDate, period?.endDate),
+    label: period?.label || "",
+    startDate: period?.startDate || "",
+    endDate: period?.endDate || "",
+    deadlineDate: period?.deadlineDate || "",
+    deadlineTime: period?.deadlineTime || "23:59",
+  };
+}
+
+const toManilaTimestamp = (date, time = "00:00") =>
+  date ? new Date(`${date}T${time}:00+08:00`).toISOString() : null;
 
 const getStatusExplanation = (period) => {
   if (!period) return "";
@@ -24,16 +56,105 @@ const getStatusExplanation = (period) => {
 };
 
 export default function AcademicTimeline({
+  userId,
+  schoolYearId,
   isReadOnly = false,
   periods,
-  selectedPeriod,
-  draft,
-  validationMessage,
-  onSelectPeriod,
-  onDraftChange,
-  onSave,
-  onCancel,
+  initialSelectedPeriodId,
+  onSelectedPeriodChange,
+  onRefresh,
+  onToast,
 }) {
+  const initialPeriod =
+    periods.find((period) => period.id === initialSelectedPeriodId) ||
+    periods[0];
+  const [selectedPeriodId, setSelectedPeriodId] = useState(
+    initialPeriod?.id || null,
+  );
+  const [draft, setDraft] = useState(() => createPeriodDraft(initialPeriod));
+  const [validationMessage, setValidationMessage] = useState("");
+
+  const selectedPeriod =
+    periods.find((period) => period.id === selectedPeriodId) || periods[0];
+
+  const handleSelectPeriod = (periodId) => {
+    const period = periods.find((item) => item.id === periodId);
+    if (!period) return;
+
+    setSelectedPeriodId(period.id);
+    onSelectedPeriodChange(period.id);
+    setDraft(createPeriodDraft(period));
+    setValidationMessage("");
+  };
+
+  const handleDraftChange = (field, value) => {
+    setDraft((currentDraft) => ({ ...currentDraft, [field]: value }));
+    setValidationMessage("");
+  };
+
+  const handleReset = () => {
+    setDraft(createPeriodDraft(selectedPeriod));
+    setValidationMessage("");
+  };
+
+  const handleSave = async () => {
+    if (isReadOnly) {
+      onToast("Completed school-year timelines are read-only.", "error");
+      return;
+    }
+
+    const trimmedLabel = draft.label.trim();
+    const requiredFields = [
+      trimmedLabel,
+      draft.startDate,
+      draft.endDate,
+      draft.deadlineDate,
+      draft.deadlineTime,
+    ];
+
+    if (requiredFields.some((value) => !value)) {
+      setValidationMessage("Complete every period and deadline field.");
+      return;
+    }
+    if (draft.startDate > draft.endDate) {
+      setValidationMessage("The end date must be after the start date.");
+      return;
+    }
+    if (draft.deadlineDate < draft.startDate) {
+      setValidationMessage(
+        "The submission deadline cannot be before the period starts.",
+      );
+      return;
+    }
+    if (!selectedPeriod || selectedPeriod.status === "finalized") return;
+
+    const timelinePayload = {
+      term_name: trimmedLabel,
+      starts_at: toManilaTimestamp(draft.startDate),
+      ends_at: toManilaTimestamp(draft.endDate, "23:59"),
+      grade_submission_deadline_at: toManilaTimestamp(
+        draft.deadlineDate,
+        draft.deadlineTime,
+      ),
+    };
+
+    try {
+      if (selectedPeriod.isConfigured) {
+        await updateTermTimeline(userId, selectedPeriod.id, timelinePayload);
+      } else {
+        await createTermTimeline(userId, {
+          ...timelinePayload,
+          school_year_id: schoolYearId,
+        });
+      }
+
+      onToast("Academic period updated.");
+      await onRefresh();
+    } catch (error) {
+      onToast(error.message, "error");
+    }
+  };
+
   const isCompleted = selectedPeriod?.status === "finalized";
   const isTimelineReadOnly = isReadOnly || isCompleted;
   const canEditStructure = selectedPeriod?.canEditStructure;
@@ -56,7 +177,7 @@ export default function AcademicTimeline({
       </div>
 
       <div className="academic-timeline__workspace">
-        {/* PERIOD LIST */}
+        {/* Period list */}
         <div className="academic-period-list" aria-label="Academic periods">
           {periods.map((period) => (
             <button
@@ -67,7 +188,7 @@ export default function AcademicTimeline({
                   ? "academic-period-item--selected"
                   : ""
               }`}
-              onClick={() => onSelectPeriod(period.id)}
+              onClick={() => handleSelectPeriod(period.id)}
             >
               <span className="academic-period-item__icon" aria-hidden="true">
                 <CalendarDays size={18} />
@@ -81,7 +202,7 @@ export default function AcademicTimeline({
           ))}
         </div>
 
-        {/* SELECTED PERIOD EDITOR */}
+        {/* Selected period editor */}
         <div className="academic-period-editor">
           <div className="academic-period-editor__heading">
             <div>
@@ -136,7 +257,9 @@ export default function AcademicTimeline({
                 value={draft.label}
                 disabled={!canEditStructure || isTimelineReadOnly}
                 maxLength={80}
-                onChange={(event) => onDraftChange("label", event.target.value)}
+                onChange={(event) =>
+                  handleDraftChange("label", event.target.value)
+                }
                 placeholder="e.g. Term 1"
               />
             </label>
@@ -154,7 +277,7 @@ export default function AcademicTimeline({
                 value={draft.startDate}
                 disabled={!canEditStructure || isTimelineReadOnly}
                 onChange={(event) =>
-                  onDraftChange("startDate", event.target.value)
+                  handleDraftChange("startDate", event.target.value)
                 }
               />
             </label>
@@ -172,7 +295,7 @@ export default function AcademicTimeline({
                 value={draft.endDate}
                 disabled={!canEditStructure || isTimelineReadOnly}
                 onChange={(event) =>
-                  onDraftChange("endDate", event.target.value)
+                  handleDraftChange("endDate", event.target.value)
                 }
               />
             </label>
@@ -190,7 +313,7 @@ export default function AcademicTimeline({
                 value={draft.deadlineDate}
                 disabled={!canEditDeadline || isTimelineReadOnly}
                 onChange={(event) =>
-                  onDraftChange("deadlineDate", event.target.value)
+                  handleDraftChange("deadlineDate", event.target.value)
                 }
               />
             </label>
@@ -208,11 +331,10 @@ export default function AcademicTimeline({
                 value={draft.deadlineTime}
                 disabled={!canEditDeadline || isTimelineReadOnly}
                 onChange={(event) =>
-                  onDraftChange("deadlineTime", event.target.value)
+                  handleDraftChange("deadlineTime", event.target.value)
                 }
               />
             </label>
-
           </div>
 
           {validationMessage && (
@@ -252,7 +374,7 @@ export default function AcademicTimeline({
               <button
                 type="button"
                 className="grade-lock-button grade-lock-button--secondary"
-                onClick={onCancel}
+                onClick={handleReset}
               >
                 <RotateCcw size={15} aria-hidden="true" />
                 Reset
@@ -260,7 +382,7 @@ export default function AcademicTimeline({
               <button
                 type="button"
                 className="grade-lock-button grade-lock-button--primary"
-                onClick={onSave}
+                onClick={handleSave}
               >
                 <Save size={15} aria-hidden="true" />
                 Save Term

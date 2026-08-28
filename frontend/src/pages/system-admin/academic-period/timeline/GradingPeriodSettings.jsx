@@ -1,23 +1,31 @@
+import { useState } from "react";
 import AcademicTimeline from "./AcademicTimeline";
 import UpcomingSchoolYear from "./UpcomingSchoolYear";
 import "../../../../styles/GradingPeriodSettings.css";
 
 export default function GradingPeriodSettings({
+  userId,
+  schoolYearId,
   schoolYearLabel,
   isReadOnly = false,
   periods,
-  selectedPeriod,
-  periodDraft,
-  validationMessage,
-  onSelectPeriod,
-  onPeriodDraftChange,
-  onSavePeriod,
-  onCancelPeriodEdit,
+  initialSelectedPeriodId,
   upcomingSchoolYear,
   upcomingPeriods,
   suggestedUpcomingPeriods,
-  onSaveUpcomingPeriods,
+  onRefresh,
+  onToast,
 }) {
+  const [selectedPeriodId, setSelectedPeriodId] = useState(
+    initialSelectedPeriodId,
+  );
+  const timelineVersion = periods
+    .map(
+      (period) =>
+        `${period.id}:${period.status}:${period.startDate}:${period.endDate}:${period.deadlineDate}:${period.deadlineTime}`,
+    )
+    .join("|");
+
   return (
     <div className="grade-lock-view grade-lock-view--settings">
       <div className="grade-lock-settings-intro">
@@ -32,23 +40,26 @@ export default function GradingPeriodSettings({
       </div>
 
       <AcademicTimeline
+        key={timelineVersion}
+        userId={userId}
+        schoolYearId={schoolYearId}
         isReadOnly={isReadOnly}
         periods={periods}
-        selectedPeriod={selectedPeriod}
-        draft={periodDraft}
-        validationMessage={validationMessage}
-        onSelectPeriod={onSelectPeriod}
-        onDraftChange={onPeriodDraftChange}
-        onSave={onSavePeriod}
-        onCancel={onCancelPeriodEdit}
+        initialSelectedPeriodId={selectedPeriodId}
+        onSelectedPeriodChange={setSelectedPeriodId}
+        onRefresh={onRefresh}
+        onToast={onToast}
       />
 
       {upcomingSchoolYear && (
         <UpcomingSchoolYear
+          userId={userId}
+          activeSchoolYearId={schoolYearId}
           schoolYear={upcomingSchoolYear}
           periods={upcomingPeriods}
           suggestedPeriods={suggestedUpcomingPeriods}
-          onSave={onSaveUpcomingPeriods}
+          onRefresh={onRefresh}
+          onToast={onToast}
         />
       )}
     </div>

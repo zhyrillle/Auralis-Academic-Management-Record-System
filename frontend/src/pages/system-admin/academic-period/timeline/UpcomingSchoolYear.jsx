@@ -1,5 +1,9 @@
 import { CalendarPlus2, RotateCcw, Save, Sparkles, X } from "lucide-react";
 import { useState } from "react";
+import {
+  createTermTimeline,
+  updateTermTimeline,
+} from "../../../../services/gradingPeriodService";
 import "../../../../styles/UpcomingSchoolYear.css";
 
 const EDITABLE_FIELDS = [
@@ -14,11 +18,17 @@ const clonePeriods = (periods) => periods.map((period) => ({ ...period }));
 const isPeriodAdjusted = (period, suggestedPeriod) =>
   EDITABLE_FIELDS.some((field) => period[field] !== suggestedPeriod?.[field]);
 
+const toManilaTimestamp = (date, time = "00:00") =>
+  date ? new Date(`${date}T${time}:00+08:00`).toISOString() : null;
+
 export default function UpcomingSchoolYear({
+  userId,
+  activeSchoolYearId,
   schoolYear,
   periods,
   suggestedPeriods,
-  onSave,
+  onRefresh,
+  onToast,
 }) {
   const [isReviewing, setIsReviewing] = useState(false);
   const [draftPeriods, setDraftPeriods] = useState(() => clonePeriods(periods));
@@ -82,7 +92,7 @@ export default function UpcomingSchoolYear({
     setValidationMessage("");
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const hasEmptyField = draftPeriods.some((period) =>
       EDITABLE_FIELDS.some((field) => !period[field]),
     );
@@ -105,8 +115,42 @@ export default function UpcomingSchoolYear({
       return;
     }
 
-    onSave(clonePeriods(draftPeriods));
-    setIsReviewing(false);
+    if (!activeSchoolYearId) {
+      onToast(
+        "Upcoming timelines can only be edited from the current school year.",
+        "error",
+      );
+      return;
+    }
+
+    try {
+      await Promise.all(
+        draftPeriods.map((period) => {
+          const timelinePayload = {
+            term_name: period.label,
+            starts_at: toManilaTimestamp(period.startDate),
+            ends_at: toManilaTimestamp(period.endDate, "23:59"),
+            grade_submission_deadline_at: toManilaTimestamp(
+              period.deadlineDate,
+              period.deadlineTime,
+            ),
+          };
+
+          return period.isConfigured
+            ? updateTermTimeline(userId, period.id, timelinePayload)
+            : createTermTimeline(userId, {
+                ...timelinePayload,
+                school_year_id: schoolYear.id,
+              });
+        }),
+      );
+
+      onToast("Upcoming school year timeline updated.");
+      setIsReviewing(false);
+      await onRefresh();
+    } catch (error) {
+      onToast(error.message, "error");
+    }
   };
 
   return (
