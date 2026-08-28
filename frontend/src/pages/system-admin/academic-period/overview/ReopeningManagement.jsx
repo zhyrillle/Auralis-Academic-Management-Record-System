@@ -1,4 +1,5 @@
 import { Clock3, Inbox } from "lucide-react";
+import { useState } from "react";
 import Badge from "../../../../components/common/Badge";
 import ActiveReopenings from "./ActiveReopenings";
 import ReopeningRequests from "./ReopeningRequests";
@@ -7,12 +8,13 @@ export default function ReopeningManagement({
   term,
   requests,
   reopenings,
-  activeTab,
+  initialTab = "pending",
   now,
-  onTabChange,
   onReviewRequest,
   onViewActivity,
 }) {
+  const [activeTab, setActiveTab] = useState(initialTab);
+
   return (
     <section
       className="grade-lock-panel reopening-management"
@@ -39,7 +41,7 @@ export default function ReopeningManagement({
           aria-selected={activeTab === "pending"}
           aria-controls="pending-reopening-requests"
           className={activeTab === "pending" ? "is-active" : ""}
-          onClick={() => onTabChange("pending")}
+          onClick={() => setActiveTab("pending")}
         >
           <Inbox size={16} aria-hidden="true" />
           Pending Requests
@@ -51,7 +53,7 @@ export default function ReopeningManagement({
           aria-selected={activeTab === "active"}
           aria-controls="active-reopening-access"
           className={activeTab === "active" ? "is-active" : ""}
-          onClick={() => onTabChange("active")}
+          onClick={() => setActiveTab("active")}
         >
           <Clock3 size={16} aria-hidden="true" />
           Active Access

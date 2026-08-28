@@ -108,3 +108,255 @@
   }
 
 }
+
+/* TIMELINE LOADING STATE */
+.timeline-skeleton__scope,
+.timeline-skeleton__panel,
+.timeline-skeleton__upcoming {
+  border: 1px solid #dce4ee;
+  border-radius: 1rem;
+  background: #fff;
+}
+
+.timeline-skeleton__scope {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2rem;
+  min-height: 4.2rem;
+  padding: 1rem;
+}
+
+.timeline-skeleton__scope > div {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.timeline-skeleton__scope-label { width: 7rem; height: 0.55rem; }
+.timeline-skeleton__scope-year { width: 8.5rem; height: 1rem; }
+.timeline-skeleton__scope-copy { width: min(34rem, 52%); }
+
+.timeline-skeleton__panel { overflow: hidden; }
+
+.timeline-skeleton__heading {
+  display: grid;
+  gap: 0.55rem;
+  padding: 1.25rem;
+  border-bottom: 1px solid #e5eaf1;
+}
+
+.timeline-skeleton__eyebrow { width: 9rem; height: 0.55rem; }
+
+.timeline-skeleton__workspace {
+  display: grid;
+  grid-template-columns: minmax(15rem, 0.75fr) minmax(0, 1.6fr);
+  min-height: 27rem;
+}
+
+.timeline-skeleton__periods {
+  display: grid;
+  align-content: start;
+  gap: 0.75rem;
+  padding: 1rem;
+  border-right: 1px solid #e5eaf1;
+  background: #f7f9fc;
+}
+
+.timeline-skeleton__period {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 4.6rem;
+  padding: 0.85rem;
+  border: 1px solid #e0e7f0;
+  border-radius: 0.75rem;
+  background: #fff;
+}
+
+.timeline-skeleton__period > div {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.timeline-skeleton__period-icon,
+.timeline-skeleton__upcoming-icon {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 0.65rem;
+}
+
+.timeline-skeleton__period-name { width: 5rem; height: 0.8rem; }
+.timeline-skeleton__period-date { width: 7.5rem; height: 0.6rem; }
+.timeline-skeleton__period-badge { width: 4.4rem; height: 1.4rem; }
+
+.timeline-skeleton__editor { padding: 1.25rem; }
+
+.timeline-skeleton__editor-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.timeline-skeleton__editor-heading > div {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.timeline-skeleton__editor-label { width: 6.5rem; height: 0.55rem; }
+.timeline-skeleton__editor-title { width: 5.5rem; height: 1.3rem; }
+.timeline-skeleton__notice { width: 100%; height: 3.25rem; margin: 1rem 0; border-radius: 0.75rem; }
+
+.timeline-skeleton__fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.timeline-skeleton__field {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.timeline-skeleton__field-label { width: 7rem; height: 0.55rem; }
+.timeline-skeleton__field-input { width: 100%; height: 2.7rem; border-radius: 0.65rem; }
+
+.timeline-skeleton__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+}
+
+.timeline-skeleton__actions > span { width: 7rem; height: 2.6rem; border-radius: 0.65rem; }
+
+.timeline-skeleton__upcoming {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1rem;
+  min-height: 6.5rem;
+  padding: 1rem 1.25rem;
+}
+
+.timeline-skeleton__upcoming > div {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.timeline-skeleton__upcoming-button { width: 9rem; height: 2.6rem; border-radius: 0.65rem; }
+
+/* TIMELINE RESPONSIVE LAYOUT */
+@media (max-width: 900px) {
+  .timeline-skeleton__workspace { grid-template-columns: 1fr; }
+  .timeline-skeleton__periods { border-right: 0; border-bottom: 1px solid #e5eaf1; }
+}
+
+@media (max-width: 640px) {
+  .timeline-skeleton__scope,
+  .timeline-skeleton__upcoming { align-items: flex-start; grid-template-columns: 1fr; }
+  .timeline-skeleton__scope-copy { width: 100%; }
+  .timeline-skeleton__fields { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 1120px) {
+  .academic-timeline__workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .academic-period-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    border-right: 0;
+    border-bottom: 1px solid #e5ebf2;
+    border-radius: 0;
+  }
+}
+
+@media (max-width: 980px) {
+  .grade-lock-settings-intro {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .grade-lock-settings-intro__note {
+    max-width: none;
+  }
+
+  .automation-policy-grid,
+  .automation-settings-grid,
+  .automation-defaults-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .grade-lock-settings-panel__heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .grade-lock-settings-panel__heading .grade-lock-button {
+    width: 100%;
+  }
+
+  .academic-period-list,
+  .academic-period-editor__form {
+    grid-template-columns: 1fr;
+  }
+
+  .academic-period-impact dl {
+    grid-template-columns: 1fr;
+  }
+
+  .reopening-rules__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .reopening-policy-settings__footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .reopening-policy-settings__footer .automation-timezone {
+    max-width: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .reopening-rules__grid {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+  .grade-lock-settings-intro,
+  .grade-lock-settings-panel__heading,
+  .academic-period-editor {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  .academic-period-list {
+    padding: 12px;
+  }
+
+  .academic-period-item {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .academic-period-item .badge {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .reopening-policy-settings .automation-policy-grid,
+  .reopening-policy-settings .automation-settings-grid,
+  .reopening-policy-settings .automation-defaults-grid {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  .reopening-policy-settings__footer {
+    margin-right: 16px;
+    margin-left: 16px;
+  }
+}

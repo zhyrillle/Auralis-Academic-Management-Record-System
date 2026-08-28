@@ -1,5 +1,7 @@
 import { Check, Clock3, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import Badge from "../../../components/common/Badge";
+import { getReopeningActivity } from "../../../services/gradingPeriodService";
 import "../../../styles/ReopeningActivityDrawer.css";
 
 const MANILA_TIMEZONE = "Asia/Manila";
@@ -24,11 +26,70 @@ function formatAccessExpiration(timestamp) {
 }
 
 export default function ReopeningActivityDrawer({
+  userId,
   reopening,
-  events,
-  surfaceRef,
+  onError,
   onClose,
 }) {
+  const [events, setEvents] = useState([]);
+  const [isLoading, setIsLoading] = useState(Boolean(reopening));
+  const surfaceRef = useRef(null);
+  const onCloseRef = useRef(onClose);
+  const onErrorRef = useRef(onError);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    onErrorRef.current = onError;
+  }, [onError]);
+
+  useEffect(() => {
+    if (!reopening) return undefined;
+
+    let isCurrent = true;
+    getReopeningActivity(userId, reopening.id)
+      .then((activityEvents) => {
+        if (isCurrent) setEvents(activityEvents);
+      })
+      .catch((error) => {
+        if (isCurrent) {
+          setEvents([]);
+          onErrorRef.current(error.message);
+        }
+      })
+      .finally(() => {
+        if (isCurrent) setIsLoading(false);
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [reopening, userId]);
+
+  useEffect(() => {
+    if (!reopening) return undefined;
+
+    const previouslyFocusedElement = document.activeElement;
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const focusTimer = window.setTimeout(() => {
+      surfaceRef.current?.querySelector("button:not([disabled])")?.focus();
+    }, 0);
+    const handleEscape = (event) => {
+      if (event.key === "Escape") onCloseRef.current();
+    };
+
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      window.clearTimeout(focusTimer);
+      document.body.style.overflow = originalOverflow;
+      document.removeEventListener("keydown", handleEscape);
+      previouslyFocusedElement?.focus?.();
+    };
+  }, [reopening]);
+
   if (!reopening) {
     return null;
   }
@@ -87,8 +148,17 @@ export default function ReopeningActivityDrawer({
               <h3 id="correction-progress-title">Progress</h3>
             </div>
 
-            <ol className="reopening-timeline">
-              {events.map((event, index) => (
+            {isLoading ? (
+              <p className="reopening-timeline__status" role="status">
+                Loading activity…
+              </p>
+            ) : events.length === 0 ? (
+              <p className="reopening-timeline__status">
+                No activity has been recorded yet.
+              </p>
+            ) : (
+              <ol className="reopening-timeline">
+                {events.map((event, index) => (
                 <li
                   key={event.id}
                   className={`reopening-timeline__item reopening-timeline__item--${event.state}`}
@@ -104,8 +174,9 @@ export default function ReopeningActivityDrawer({
                     </div>
                   </div>
                 </li>
-              ))}
-            </ol>
+                ))}
+              </ol>
+            )}
           </section>
 
           <div className="reopening-access-deadline">

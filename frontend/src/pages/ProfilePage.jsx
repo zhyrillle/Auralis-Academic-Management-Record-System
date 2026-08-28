@@ -69,17 +69,20 @@ const getAccountStatusTone = (status) => {
   return "neutral";
 };
 
-const mapApiUserToProfile = (user) => ({
-  userId: user.user_id,
-  firstName: user.first_name || "",
-  middleName: user.middle_name || "",
-  lastName: user.last_name || "",
-  extensionName: user.extension_name || "",
-  email: user.email || "",
-  role: getRoleLabel(user.role),
-  accountStatus: user.account_status || "active",
-  lastLoginAt: user.last_login_at || null,
-  avatar: resolveProfilePictureUrl(user.pfp_url),
+const mapApiUserToProfile = (user, fallback = emptyProfile) => ({
+  userId: user.user_id ?? fallback.userId,
+  firstName: user.first_name ?? fallback.firstName,
+  middleName: user.middle_name ?? fallback.middleName,
+  lastName: user.last_name ?? fallback.lastName,
+  extensionName: user.extension_name ?? fallback.extensionName,
+  email: user.email ?? fallback.email,
+  role: getRoleLabel(user.role ?? fallback.role),
+  accountStatus: user.account_status ?? fallback.accountStatus ?? "active",
+  lastLoginAt: user.last_login_at ?? fallback.lastLoginAt,
+  avatar:
+    user.pfp_url === undefined
+      ? fallback.avatar
+      : resolveProfilePictureUrl(user.pfp_url),
 });
 
 const validateProfile = (profile) => {
@@ -260,7 +263,7 @@ export default function ProfilePage({ user, onUserUpdated }) {
         extension_name: draftProfile.extensionName.trim() || null,
         email: draftProfile.email.trim(),
       });
-      const updatedProfile = mapApiUserToProfile(updatedUser);
+      const updatedProfile = mapApiUserToProfile(updatedUser, savedProfile);
       setSavedProfile(updatedProfile);
       setDraftProfile(updatedProfile);
       setIsEditing(false);
@@ -437,7 +440,7 @@ export default function ProfilePage({ user, onUserUpdated }) {
       setAvatarError("");
       const imageData = createCroppedAvatar();
       const updatedUser = await updateUserProfilePicture(userId, imageData);
-      const updatedProfile = mapApiUserToProfile(updatedUser);
+      const updatedProfile = mapApiUserToProfile(updatedUser, savedProfile);
       setSavedProfile(updatedProfile);
       setDraftProfile(updatedProfile);
       syncAuthenticatedUser(updatedUser);
