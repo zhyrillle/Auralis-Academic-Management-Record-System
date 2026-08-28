@@ -10,6 +10,7 @@ import ManageUsers from "./pages/system-admin/ManageUsers";
 import AcademicPeriod from "./pages/system-admin/AcademicPeriod";
 import AdviserDashboard from "./pages/adviser/AdviserDashboard";
 import DeptDashboard from "./pages/department-head/DeptDashboard";
+import DeptClassRecord from "./pages/department-head/DeptClassRecord";
 import PrincipalDashboard from "./pages/principal/PrincipalDashboard";
 import TeacherDashboard from "./pages/teacher/TeacherDashboard";
 import PerformanceReport from "./pages/adviser/PerformanceReport";
@@ -21,6 +22,7 @@ import AdviserFeedback from "./pages/adviser/AdviserFeedback";
 import ProfilePage from "./pages/ProfilePage";
 import AtRiskBreakdown from "./pages/principal/AtRiskBreakdown";
 import AtRiskPrediction from "./pages/principal/AtRiskPrediction";
+import TeacherFeedback from "./pages/principal/TeacherFeedback";
 import GradeReopeningRequest from "./pages/adviser/GradeReopeningRequest";
 import SectionDetails from "./pages/adviser/SectionDetails";
 import AdviserNotifications from "./pages/adviser/AdviserNotifications";
@@ -124,7 +126,7 @@ export default function App() {
             element={<PlaceholderPage />}
           />
           <Route path="/principal/reports" element={<PlaceholderPage />} />
-          <Route path="/principal/feedback" element={<PlaceholderPage />} />
+          <Route path="/principal/feedback" element={<TeacherFeedback />} />
 
           {/* 3. Department Head */}
           <Route
@@ -133,7 +135,7 @@ export default function App() {
           />
           <Route
             path="/department-head/class-records"
-            element={<PlaceholderPage />}
+            element={<DeptClassRecord />}
           />
 
           {/* 4. Adviser */}

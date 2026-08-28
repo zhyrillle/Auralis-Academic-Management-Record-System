@@ -1,0 +1,1145 @@
+/* ==========================================================================
+   ADVISER DASHBOARD STYLES
+   Scoped with .adviser-dashboard__* to prevent style leaks.
+   ========================================================================== */
+
+.adviser-dashboard__container {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 24px 32px 48px;
+  background-color: #F8FAFC;
+  min-height: 100%;
+  color: #1E293B;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+/* --------------------------------------------------------------------------
+   Header & Action Utility Icons
+   -------------------------------------------------------------------------- */
+.adviser-dashboard__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.adviser-dashboard__title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #183256;
+  margin: 0;
+}
+
+.adviser-dashboard__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.adviser-dashboard__icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-color: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  color: #183256;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.adviser-dashboard__icon-btn:hover {
+  background-color: #F1F5F9;
+  border-color: #CBD5E1;
+  transform: translateY(-1px);
+}
+
+/* --------------------------------------------------------------------------
+   Top Hero Grid (Banner & Quick Actions)
+   -------------------------------------------------------------------------- */
+.adviser-dashboard__top-grid {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 24px;
+  align-items: start;
+}
+
+.adviser-dashboard__top-left-col {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.adviser-dashboard__top-right-col {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Welcome Banner */
+.adviser-dashboard__welcome-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(135deg, #FDE68A 0%, #F5CE58 100%);
+  border-radius: 16px;
+  padding: 24px 32px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(245, 206, 88, 0.2);
+}
+
+.adviser-dashboard__banner-content {
+  max-width: 65%;
+  z-index: 2;
+}
+
+.adviser-dashboard__greeting {
+  font-size: 1.85rem;
+  font-weight: 800;
+  color: #78350F;
+  margin: 0 0 8px 0;
+  letter-spacing: -0.02em;
+}
+
+.adviser-dashboard__greeting-sub {
+  font-size: 0.95rem;
+  color: #92400E;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.adviser-dashboard__banner-art-wrap {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  height: 130px;
+}
+
+.adviser-dashboard__banner-img {
+  height: 145px;
+  width: auto;
+  object-fit: contain;
+  margin-bottom: -15px;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.08));
+}
+
+/* Stat Cards Row */
+.adviser-dashboard__stat-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.adviser-dashboard__stat-card {
+  background: #FFFFFF;
+  border-radius: 14px;
+  padding: 16px 20px;
+  border: 1px solid #E2E8F0;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.adviser-dashboard__stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+.adviser-dashboard__stat-label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #64748B;
+}
+
+.adviser-dashboard__stat-value {
+  font-size: 1.65rem;
+  font-weight: 700;
+  color: #183256;
+  letter-spacing: -0.02em;
+}
+
+.adviser-dashboard__stat-subtitle {
+  font-size: 0.78rem;
+  font-weight: 500;
+}
+
+.adviser-dashboard__stat-subtitle--positive {
+  color: #10B981;
+}
+
+.adviser-dashboard__stat-subtitle--warning {
+  color: #D97706;
+}
+
+.adviser-dashboard__stat-subtitle--danger {
+  color: #EF4444;
+}
+
+.adviser-dashboard__stat-subtitle--default {
+  color: #94A3B8;
+}
+
+/* Quick Actions Card */
+.adviser-dashboard__quick-actions-card {
+  background: #FFFFFF;
+  border-radius: 16px;
+  padding: 20px 24px;
+  border: 1px solid #E2E8F0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.adviser-dashboard__quick-actions-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #183256;
+  margin: 0 0 4px 0;
+}
+
+.adviser-dashboard__quick-actions-desc {
+  font-size: 0.8rem;
+  color: #64748B;
+  margin: 0 0 16px 0;
+}
+
+.adviser-dashboard__quick-action-items {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.adviser-dashboard__doc-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background-color: #EDF1F7;
+  border-radius: 10px;
+  transition: background-color 0.2s ease;
+}
+
+.adviser-dashboard__doc-item:hover {
+  background-color: #E2E8F0;
+}
+
+.adviser-dashboard__doc-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.adviser-dashboard__doc-icon {
+  color: #64748B;
+}
+
+.adviser-dashboard__doc-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #334155;
+}
+
+.adviser-dashboard__doc-download-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background-color: #183256;
+  color: #FFFFFF;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.adviser-dashboard__doc-download-btn:hover {
+  background-color: #0F233D;
+  transform: scale(1.05);
+}
+
+.adviser-dashboard__bulk-download-btn {
+  width: 100%;
+  padding: 12px;
+  border-radius: 10px;
+  background-color: #183256;
+  color: #FFFFFF;
+  font-size: 0.9rem;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+}
+
+.adviser-dashboard__bulk-download-btn:hover {
+  background-color: #0F233D;
+}
+
+.adviser-dashboard__bulk-download-btn:active {
+  transform: scale(0.98);
+}
+
+/* Entry Progress Gauge Card */
+.adviser-dashboard__entry-gauge-card {
+  background: linear-gradient(145deg, #FFF6DA 0%, #FEE8A2 100%);
+  border-radius: 16px;
+  padding: 24px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 3px 10px rgba(254, 232, 162, 0.3);
+}
+
+.adviser-dashboard__gauge-wrapper {
+  position: relative;
+  width: 190px;
+  height: 110px;
+  display: flex;
+  justify-content: center;
+}
+
+.adviser-dashboard__gauge-svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.adviser-dashboard__gauge-center-text {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.adviser-dashboard__gauge-percent {
+  font-size: 2rem;
+  font-weight: 800;
+  color: #DE9B10;
+  letter-spacing: -0.03em;
+}
+
+.adviser-dashboard__gauge-label {
+  margin-top: 12px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #D29410;
+  letter-spacing: -0.01em;
+}
+
+/* --------------------------------------------------------------------------
+   Assigned Classes Section
+   -------------------------------------------------------------------------- */
+.adviser-dashboard__section-heading {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: #183256;
+  margin: 8px 0 16px 0;
+}
+
+.adviser-dashboard__assigned-classes-grid {
+  display: grid;
+  grid-template-columns: 1fr 280px;
+  gap: 20px;
+  align-items: start;
+}
+
+.adviser-dashboard__class-cards-track {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.adviser-dashboard__class-card {
+  background: #FFFFFF;
+  border-radius: 14px;
+  padding: 18px 20px;
+  border: 1px solid #E2E8F0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.adviser-dashboard__class-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.adviser-dashboard__class-card-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #0F172A;
+  margin: 0;
+}
+
+.adviser-dashboard__class-status-badge {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background-color: #F59E0B;
+  color: #FFFFFF;
+}
+
+.adviser-dashboard__class-subject {
+  font-size: 0.88rem;
+  color: #64748B;
+  font-weight: 500;
+  margin-top: -4px;
+}
+
+.adviser-dashboard__class-students {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: #475569;
+}
+
+.adviser-dashboard__class-icon {
+  color: #64748B;
+}
+
+.adviser-dashboard__class-progress-wrap {
+  margin-top: 4px;
+}
+
+.adviser-dashboard__class-progress-label {
+  font-size: 0.8rem;
+  color: #0F172A;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.adviser-dashboard__class-progress-bar-bg {
+  width: 100%;
+  height: 6px;
+  background-color: #E2E8F0;
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+.adviser-dashboard__class-progress-bar-fill {
+  height: 100%;
+  background-color: #183256;
+  border-radius: 9999px;
+  transition: width 0.6s ease;
+}
+
+.adviser-dashboard__class-cta-btn {
+  margin-top: 6px;
+  width: 100%;
+  padding: 10px;
+  border-radius: 10px;
+  background-color: #C69524;
+  color: #FFFFFF;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+}
+
+.adviser-dashboard__class-cta-btn:hover {
+  background-color: #B2841B;
+}
+
+.adviser-dashboard__class-cta-btn:active {
+  transform: scale(0.98);
+}
+
+.adviser-dashboard__no-classes-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background-color: #FFFFFF;
+  border: 1px dashed #CBD5E1;
+  border-radius: 14px;
+  padding: 32px 24px;
+  color: #64748B;
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+.adviser-dashboard__no-classes-icon {
+  color: #94A3B8;
+  flex-shrink: 0;
+}
+
+.adviser-dashboard__assigned-stats-col {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* --------------------------------------------------------------------------
+   Middle Row: Grade Range Distribution & Attendance Trend
+   -------------------------------------------------------------------------- */
+.adviser-dashboard__mid-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.25fr;
+  gap: 24px;
+  align-items: start;
+}
+
+.adviser-dashboard__mid-right-col {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.adviser-dashboard__totals-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+/* Radar Card */
+.adviser-dashboard__radar-card {
+  background: linear-gradient(145deg, #FFF6DA 0%, #FEEDBA 100%);
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 3px 12px rgba(254, 237, 186, 0.3);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.adviser-dashboard__radar-heading {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #183256;
+  margin: 0;
+}
+
+.adviser-dashboard__radar-controls-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 4px;
+}
+
+.adviser-dashboard__radar-dropdown-wrap {
+  position: relative;
+}
+
+.adviser-dashboard__radar-dropdown-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: #E2B23E;
+  color: #FFFFFF;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.adviser-dashboard__radar-dropdown-btn:hover {
+  background-color: #D3A12C;
+}
+
+.adviser-dashboard__radar-dropdown-menu {
+  position: absolute;
+  top: 110%;
+  left: 0;
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  min-width: 130px;
+  z-index: 10;
+  overflow: hidden;
+}
+
+.adviser-dashboard__radar-dropdown-item {
+  padding: 8px 14px;
+  font-size: 0.82rem;
+  color: #334155;
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.adviser-dashboard__radar-dropdown-item:hover,
+.adviser-dashboard__radar-dropdown-item.active {
+  background-color: #FEF3C7;
+  color: #78350F;
+  font-weight: 600;
+}
+
+.adviser-dashboard__term-pills-gold {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.adviser-dashboard__term-pill-gold {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1.5px solid #D8A62A;
+  background: transparent;
+  color: #B58414;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.adviser-dashboard__term-pill-gold:hover,
+.adviser-dashboard__term-pill-gold.active {
+  background-color: #D8A62A;
+  color: #FFFFFF;
+}
+
+.adviser-dashboard__radar-body {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 8px 0;
+}
+
+.adviser-dashboard__radar-svg {
+  width: 100%;
+  max-width: 320px;
+  height: auto;
+  overflow: visible;
+}
+
+.adviser-dashboard__radar-label {
+  font-size: 11px;
+  font-weight: 700;
+  fill: #B58414;
+}
+
+/* --------------------------------------------------------------------------
+   Shared Chart Cards & Term Selectors
+   -------------------------------------------------------------------------- */
+.adviser-dashboard__chart-card {
+  background: #FFFFFF;
+  border-radius: 16px;
+  padding: 20px 24px;
+  border: 1px solid #E2E8F0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.adviser-dashboard__chart-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.adviser-dashboard__chart-title {
+  font-size: 1.12rem;
+  font-weight: 700;
+  color: #183256;
+  margin: 0;
+}
+
+.adviser-dashboard__term-pills {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.adviser-dashboard__term-pill {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid #CBD5E1;
+  background: #FFFFFF;
+  color: #64748B;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.adviser-dashboard__term-pill:hover,
+.adviser-dashboard__term-pill.active {
+  background-color: #183256;
+  border-color: #183256;
+  color: #FFFFFF;
+}
+
+.adviser-dashboard__chart-axis-label {
+  font-size: 11px;
+  fill: #94A3B8;
+  font-weight: 500;
+}
+
+.adviser-dashboard__chart-x-label {
+  font-size: 11px;
+  fill: #64748B;
+  font-weight: 600;
+}
+
+.adviser-dashboard__bar-pill {
+  transition: fill 0.2s ease, opacity 0.2s ease;
+}
+
+.adviser-dashboard__bar-pill:hover {
+  opacity: 0.9;
+}
+
+.adviser-dashboard__vbar-svg,
+.adviser-dashboard__wave-svg,
+.adviser-dashboard__hbar-svg {
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+/* --------------------------------------------------------------------------
+   Test / Exam Result Analysis
+   -------------------------------------------------------------------------- */
+.adviser-dashboard__test-exam-card {
+  background: #FFFFFF;
+  border-radius: 16px;
+  border: 1px solid #E2E8F0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  overflow: hidden;
+}
+
+.adviser-dashboard__test-exam-left {
+  padding: 24px;
+  display: flex;
+  gap: 20px;
+}
+
+.adviser-dashboard__test-term-col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.adviser-dashboard__term-pill-simple {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid #CBD5E1;
+  background: #FFFFFF;
+  color: #64748B;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.adviser-dashboard__term-pill-simple:hover,
+.adviser-dashboard__term-pill-simple.active {
+  background-color: #183256;
+  border-color: #183256;
+  color: #FFFFFF;
+}
+
+.adviser-dashboard__test-visuals-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.adviser-dashboard__test-legend {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+}
+
+.adviser-dashboard__test-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #475569;
+}
+
+.adviser-dashboard__test-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.adviser-dashboard__test-charts-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  gap: 24px;
+  margin-top: 10px;
+}
+
+.adviser-dashboard__test-chart-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.adviser-dashboard__polar-svg {
+  width: 150px;
+  height: 150px;
+}
+
+.adviser-dashboard__test-chart-caption {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #1E293B;
+}
+
+/* Right Panel for Test/Exam */
+.adviser-dashboard__test-exam-right {
+  background-color: #C3C7CE;
+  border-top-left-radius: 40px;
+  padding: 24px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.adviser-dashboard__test-right-header {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.adviser-dashboard__test-dropdown-wrap {
+  position: relative;
+}
+
+.adviser-dashboard__test-section-select-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background-color: #183256;
+  color: #FFFFFF;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+}
+
+.adviser-dashboard__test-dropdown-menu {
+  position: absolute;
+  top: 110%;
+  right: 0;
+  background: #FFFFFF;
+  border: 1px solid #CBD5E1;
+  border-radius: 6px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+  display: flex;
+  flex-direction: column;
+  min-width: 120px;
+  z-index: 10;
+  overflow: hidden;
+}
+
+.adviser-dashboard__test-dropdown-item {
+  padding: 7px 12px;
+  font-size: 0.8rem;
+  color: #334155;
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.adviser-dashboard__test-dropdown-item:hover,
+.adviser-dashboard__test-dropdown-item.active {
+  background-color: #EDF2F7;
+  color: #183256;
+  font-weight: 600;
+}
+
+.adviser-dashboard__test-scores-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.adviser-dashboard__test-score-col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.adviser-dashboard__test-col-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #183256;
+  text-align: center;
+}
+
+.adviser-dashboard__test-pill-row {
+  display: flex;
+  align-items: center;
+  background: #FFFFFF;
+  border-radius: 9999px;
+  padding: 3px 12px 3px 4px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  justify-content: space-between;
+}
+
+.adviser-dashboard__test-badge {
+  color: #FFFFFF;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 9999px;
+}
+
+.adviser-dashboard__test-score-num {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #183256;
+  margin-right: 8px;
+}
+
+/* --------------------------------------------------------------------------
+   Bottom Row: Subject Area Performance & Core Values Donut
+   -------------------------------------------------------------------------- */
+.adviser-dashboard__bottom-grid {
+  display: grid;
+  grid-template-columns: 1.35fr 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+.adviser-dashboard__hbar-label {
+  font-size: 11px;
+  fill: #64748B;
+  font-weight: 500;
+}
+
+.adviser-dashboard__hbar-pill {
+  transition: fill 0.2s ease;
+}
+
+/* Core Values Donut Card */
+.adviser-dashboard__core-values-card {
+  background: linear-gradient(145deg, #FFF6DA 0%, #FEEDBA 100%);
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 3px 12px rgba(254, 237, 186, 0.3);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.adviser-dashboard__core-values-heading {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #183256;
+  margin: 0;
+  align-self: flex-start;
+}
+
+.adviser-dashboard__core-legend {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 16px;
+  align-self: flex-start;
+  margin-top: 4px;
+}
+
+.adviser-dashboard__core-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #64748B;
+}
+
+.adviser-dashboard__core-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.adviser-dashboard__core-donut-wrap {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 10px 0;
+}
+
+.adviser-dashboard__core-donut-inner {
+  position: relative;
+  width: 180px;
+  height: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.adviser-dashboard__core-donut-svg {
+  width: 100%;
+  height: 100%;
+}
+
+.adviser-dashboard__core-donut-center {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.adviser-dashboard__core-center-term {
+  font-size: 1.8rem;
+  font-weight: 800;
+  color: #0F172A;
+}
+
+.adviser-dashboard__core-center-sub {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #854D0E;
+}
+
+.adviser-dashboard__core-term-pills {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* --------------------------------------------------------------------------
+   Skeleton Loading Placeholders
+   -------------------------------------------------------------------------- */
+.adviser-dashboard__skeleton-line {
+  height: 14px;
+  background: #E2E8F0;
+  border-radius: 4px;
+  animation: pulse 1.5s infinite;
+}
+
+.adviser-dashboard__skeleton-line--short {
+  width: 40%;
+}
+
+.adviser-dashboard__skeleton-line--title {
+  width: 70%;
+  height: 24px;
+}
+
+.adviser-dashboard__skeleton-chart {
+  height: 180px;
+  background: #F1F5F9;
+  border-radius: 8px;
+  animation: pulse 1.5s infinite;
+}
+
+.adviser-dashboard__skeleton-circle {
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  background: #F1F5F9;
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.6;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Responsive Breakpoints
+   -------------------------------------------------------------------------- */
+@media (max-width: 1200px) {
+  .adviser-dashboard__top-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .adviser-dashboard__mid-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .adviser-dashboard__test-exam-card {
+    grid-template-columns: 1fr;
+  }
+
+  .adviser-dashboard__test-exam-right {
+    border-top-left-radius: 0;
+  }
+
+  .adviser-dashboard__bottom-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .adviser-dashboard__container {
+    padding: 16px;
+  }
+
+  .adviser-dashboard__stat-row {
+    grid-template-columns: 1fr;
+  }
+
+  .adviser-dashboard__assigned-classes-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .adviser-dashboard__test-exam-left {
+    flex-direction: column;
+  }
+
+  .adviser-dashboard__test-charts-row {
+    flex-direction: column;
+  }
+
+  .adviser-dashboard__banner-art-wrap {
+    display: none;
+  }
+
+  .adviser-dashboard__banner-content {
+    max-width: 100%;
+  }
+}
+
