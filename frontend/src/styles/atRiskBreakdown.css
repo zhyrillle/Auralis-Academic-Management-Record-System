@@ -292,16 +292,31 @@
 .ar-legend-dot-item {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   font-size: 12px;
   font-weight: 600;
-  color: #334155;
+  color: #64748b;
+  padding: 3px 8px;
+  border-radius: 12px;
+  transition: all 0.2s ease;
+}
+
+.ar-legend-dot-item:hover,
+.ar-legend-dot-item.active-legend {
+  color: #0f172a;
+  background-color: #f1f5f9;
 }
 
 .ar-legend-dot-circle {
-  width: 8px;
-  height: 8px;
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
+  transition: transform 0.2s ease;
+}
+
+.ar-legend-dot-item:hover .ar-legend-dot-circle,
+.ar-legend-dot-item.active-legend .ar-legend-dot-circle {
+  transform: scale(1.25);
 }
 
 /* Donut Chart Container */
@@ -311,18 +326,25 @@
   align-items: center;
   justify-content: center;
   flex: 1;
-  min-height: 250px;
+  min-height: 260px;
   padding: 10px 0;
 }
 
 .ar-overall-donut-svg {
-  width: 210px;
-  height: 210px;
-  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.06));
+  width: 220px;
+  height: 220px;
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.05));
+  overflow: visible;
 }
 
 .ar-donut-path-segment {
-  transition: transform 0.2s ease;
+  transform-origin: center;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.ar-donut-path-segment:hover,
+.ar-donut-path-segment.segment-hovered {
+  transform: scale(1.03);
 }
 
 /* Outer Badges */
@@ -332,25 +354,32 @@
   font-family: var(--font-dm-sans, sans-serif);
   font-size: 12px;
   font-weight: 700;
-  padding: 4px 10px;
+  padding: 4px 11px;
   border-radius: 20px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  pointer-events: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  z-index: 5;
 }
 
 .ar-badge-pos-medium {
-  top: 18px;
-  right: 85px;
-}
-
-.ar-badge-pos-low {
-  bottom: 24px;
+  top: 24px;
   right: 75px;
 }
 
+.ar-badge-pos-low {
+  bottom: 28px;
+  right: 65px;
+}
+
 .ar-badge-pos-high {
-  bottom: 30px;
-  left: 65px;
+  bottom: 34px;
+  left: 60px;
+}
+
+.ar-donut-badge-pill:hover,
+.ar-donut-badge-pill.badge-hovered {
+  transform: scale(1.15) !important;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25) !important;
 }
 
 /* Donut Center text */
@@ -361,6 +390,8 @@
   align-items: center;
   justify-content: center;
   pointer-events: none;
+  text-align: center;
+  transition: all 0.2s ease;
 }
 
 .ar-donut-center-num {
@@ -369,6 +400,7 @@
   font-weight: 800;
   color: #0f172a;
   line-height: 1;
+  transition: color 0.2s ease;
 }
 
 .ar-donut-center-sub {
@@ -376,6 +408,7 @@
   color: #64748b;
   font-weight: 500;
   margin-top: 2px;
+  transition: color 0.2s ease;
 }
 
 /* ============================================================

@@ -15,9 +15,9 @@ const RISK_CONFIG = {
 
 const DEFAULT_LIMIT = 2;
 
-export default function RiskSection({ riskLevel, title, students, totalCount, loading, onSeeAll }) {
+export default function RiskSection({ riskLevel, title, students = [], totalCount = 0, loading, onSeeAll }) {
   const config = RISK_CONFIG[riskLevel] || RISK_CONFIG.low;
-  const displayStudents = students.slice(0, DEFAULT_LIMIT);
+  const displayStudents = (students || []).slice(0, DEFAULT_LIMIT);
   const hasMore = totalCount > DEFAULT_LIMIT;
 
   return (

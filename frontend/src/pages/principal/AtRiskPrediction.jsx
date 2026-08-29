@@ -18,13 +18,44 @@ const EMPTY_STUDENTS = { students: [], totalCount: 0 };
 export default function AtRiskPrediction() {
   const [activeTerm, setActiveTerm] = useState("overall");
   const [gradeLevel, setGradeLevel] = useState("");
-  const [schoolYear, setSchoolYear] = useState("2025-2026");
+  const [schoolYear, setSchoolYear] = useState("2026-2027");
+  const [schoolYearsList, setSchoolYearsList] = useState([
+    { id: "1", value: "2026-2027", label: "SY 2026-2027 (Active)" },
+    { id: "2", value: "2025-2026", label: "SY 2025-2026" },
+    { id: "3", value: "2027-2028", label: "SY 2027-2028" },
+  ]);
   const [summary, setSummary] = useState(EMPTY_SUMMARY);
   const [highStudents, setHighStudents] = useState(EMPTY_STUDENTS);
   const [mediumStudents, setMediumStudents] = useState(EMPTY_STUDENTS);
   const [lowStudents, setLowStudents] = useState(EMPTY_STUDENTS);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  // Load school years from backend on mount
+  useEffect(() => {
+    fetch("http://localhost:5000/api/school-years")
+      .then((res) => (res.ok ? res.json() : []))
+      .then((years) => {
+        if (Array.isArray(years) && years.length > 0) {
+          const formatted = years.map((y) => {
+            const val = `${y.starts_on}-${y.ends_on}`;
+            const isOngoing = (y.status || "").toLowerCase() === "ongoing" || (y.status || "").toLowerCase() === "active";
+            return {
+              id: String(y.school_year_id),
+              value: val,
+              label: `SY ${val}${isOngoing ? " (Active)" : ""}`,
+              isOngoing,
+            };
+          });
+          setSchoolYearsList(formatted);
+          const activeYear = formatted.find((y) => y.isOngoing);
+          if (activeYear) {
+            setSchoolYear(activeYear.value);
+          }
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // "See all" modal state
   const [modalRiskLevel, setModalRiskLevel] = useState(null);
@@ -161,10 +192,11 @@ export default function AtRiskPrediction() {
               onChange={(e) => setSchoolYear(e.target.value)}
               disabled={loading}
             >
-              <option value="2025-2026">School Year</option>
-              <option value="2026-2027">SY 2026-2027</option>
-              <option value="2025-2026">SY 2025-2026</option>
-              <option value="2024-2025">SY 2024-2025</option>
+              {schoolYearsList.map((sy) => (
+                <option key={sy.id} value={sy.value}>
+                  {sy.label}
+                </option>
+              ))}
             </select>
           </div>
         </div>

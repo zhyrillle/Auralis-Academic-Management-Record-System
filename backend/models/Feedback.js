@@ -278,7 +278,8 @@ class Feedback {
         `SELECT 
           SUM(
             (CASE WHEN strengths_comments IS NOT NULL AND TRIM(strengths_comments) != '' THEN 1 ELSE 0 END) +
-            (CASE WHEN improvements_comments IS NOT NULL AND TRIM(improvements_comments) != '' THEN 1 ELSE 0 END)
+            (CASE WHEN improvements_comments IS NOT NULL AND TRIM(improvements_comments) != '' THEN 1 ELSE 0 END) +
+            (CASE WHEN comment IS NOT NULL AND TRIM(comment) != '' THEN 1 ELSE 0 END)
           ) AS total_comments
          FROM FEEDBACK f
          INNER JOIN \`USER\` u ON f.evaluee_id = u.user_id
@@ -379,8 +380,8 @@ class Feedback {
 
       if (query && query.trim()) {
         const q = `%${query.trim()}%`;
-        sql += ` AND (f.strengths_comments LIKE ? OR f.improvements_comments LIKE ?)`;
-        params.push(q, q);
+        sql += ` AND (f.strengths_comments LIKE ? OR f.improvements_comments LIKE ? OR f.comment LIKE ?)`;
+        params.push(q, q, q);
       }
 
       sql += ` ORDER BY f.feedback_id DESC`;
@@ -389,8 +390,9 @@ class Feedback {
 
       const comments = [];
       rows.forEach((row, idx) => {
-        const praiseText = row.strengths_comments;
-        const suggestionText = row.improvements_comments;
+        const praiseText = row.strengths_comments || row.strengths_comment || row.strenghts_comment;
+        const suggestionText = row.improvements_comments || row.improvements_comment;
+        const generalText = row.comment;
 
         if (praiseText && String(praiseText).trim()) {
           comments.push({
@@ -405,6 +407,14 @@ class Feedback {
             id: `imp-${row.feedback_id}-${idx}`,
             category: "Suggestion",
             text: String(suggestionText).trim(),
+            created_at: row.created_at,
+          });
+        }
+        if (generalText && String(generalText).trim()) {
+          comments.push({
+            id: `com-${row.feedback_id}-${idx}`,
+            category: "General",
+            text: String(generalText).trim(),
             created_at: row.created_at,
           });
         }

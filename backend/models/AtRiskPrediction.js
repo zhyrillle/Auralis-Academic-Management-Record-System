@@ -3,9 +3,26 @@ const db = require('../config/db');
 class AtRiskPrediction {
   /**
    * Helper to query live at-risk student records directly from MySQL.
-   * Pulls real registered students, sections, attendance, grades, and scores.
+   * Pulls real registered students (deduplicated by student_id), sections, attendance, grades, and scores.
    */
   static async getAllStudentRiskProfiles({ schoolYear, term, gradeLevel } = {}) {
+    // If future/un-enrolled school year is selected
+    if (schoolYear && schoolYear !== "all" && schoolYear !== "Overall" && schoolYear !== "2026-2027") {
+      return [];
+    }
+
+    // If future/unencoded term is selected
+    let termCode = null;
+    if (term && term !== "overall" && term !== "Overall") {
+      const cleanTerm = String(term).replace(/\D/g, "");
+      termCode = cleanTerm ? `T${cleanTerm}` : String(term).toUpperCase();
+
+      if (termCode !== "T1") {
+        // Terms 2, 3, 4 have not occurred yet / no grades in database
+        return [];
+      }
+    }
+
     let query = `
       SELECT 
         s.student_id,
@@ -16,6 +33,7 @@ class AtRiskPrediction {
         COALESCE(sec.section_name, 'Section 1') AS section_name,
         COALESCE(gl.grade_level_name, 'G7') AS grade_level_name,
         COALESCE(u.adv_name, 'Ms. Bautista') AS adviser_name,
+        '2026-2027' AS school_year,
         COALESCE(att.absences, 0) AS total_absences,
         COALESCE(att.lates, 0) AS total_lates,
         COALESCE(sc.missing_count, 0) AS missing_submissions,
@@ -58,7 +76,7 @@ class AtRiskPrediction {
                MIN(COALESCE(quarterly_grade, initial_grade)) AS min_grade,
                SUM(CASE WHEN COALESCE(quarterly_grade, initial_grade) < 75 THEN 1 ELSE 0 END) AS failing_count
         FROM STUDENT_GRADE
-        ${term && term !== "overall" ? `WHERE term = '${term.toUpperCase().startsWith('T') ? term.toUpperCase() : 'T' + term}'` : ''}
+        ${termCode ? `WHERE term = '${termCode}'` : ''}
         GROUP BY student_id
       ) gr ON s.student_id = gr.student_id
       WHERE 1=1
@@ -84,7 +102,7 @@ class AtRiskPrediction {
       return [];
     }
 
-    // Process real student rows into formatted risk profiles
+    // Process unique real student rows into formatted risk profiles
     const studentList = rows.map((r) => {
       const gNum = parseInt(String(r.grade_level_name || "7").replace(/\D/g, ""), 10) || 7;
       const absences = parseInt(r.total_absences || 0, 10);
@@ -92,7 +110,6 @@ class AtRiskPrediction {
       const missing = parseInt(r.missing_submissions || 0, 10);
       const failing = parseInt(r.failing_count || 0, 10);
       const gpa = r.avg_gpa !== null ? parseFloat(r.avg_gpa) : null;
-      const minG = r.min_grade !== null ? parseFloat(r.min_grade) : null;
 
       // Deterministic risk score calculation directly from database parameters
       let calculatedScore = 40; // Passing baseline
@@ -159,7 +176,7 @@ class AtRiskPrediction {
         grade: gNum,
         section: r.section_name || "Section 1",
         adviser: r.adviser_name || "Ms. Bautista",
-        schoolYear: "2025-2026",
+        schoolYear: "2026-2027",
         term: term || "Overall",
         riskScore: clampedScore,
         riskLevel,
