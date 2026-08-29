@@ -86,20 +86,25 @@ const PENDING_FEEDBACKS = [
   },
 ];
 
-const PIE_DATA = [
-  { label: "Excellent (4.5 – 5.0)", count: 5, percent: 42, color: "#1a3a6b" },
-  { label: "Good (3.5 – 4.4)", count: 4, percent: 33, color: "#112d61" },
-  { label: "Average (2.5 – 3.4)", count: 2, percent: 17, color: "#b8941f" },
-  { label: "Needs Improvement (1.0 – 2.4)", count: 1, percent: 8, color: "#e8c44a" },
+const DEFAULT_QUESTION_DATA = [
+  { id: 1, qNumber: 1, label: "Question 1", description: "Professionalism with colleagues", avg: "4.8", percent: 13, color: "#112d61" },
+  { id: 2, qNumber: 2, label: "Question 2", description: "Respect toward fellow staff", avg: "4.7", percent: 13, color: "#1a3a6b" },
+  { id: 3, qNumber: 3, label: "Question 3", description: "Positive workplace attitude", avg: "4.6", percent: 12, color: "#23497d" },
+  { id: 4, qNumber: 4, label: "Question 4", description: "Punctuality & preparedness", avg: "4.5", percent: 12, color: "#2f5c97" },
+  { id: 5, qNumber: 5, label: "Question 5", description: "Contribution during meetings", avg: "4.9", percent: 13, color: "#9b7914" },
+  { id: 6, qNumber: 6, label: "Question 6", description: "Responsiveness to concerns", avg: "4.7", percent: 13, color: "#b8941f" },
+  { id: 7, qNumber: 7, label: "Question 7", description: "Timely completion of tasks", avg: "4.8", percent: 13, color: "#c9a227" },
+  { id: 8, qNumber: 8, label: "Question 8", description: "Initiative in problem solving", avg: "4.6", percent: 12, color: "#e0bd45" },
 ];
 
-// Donut / Pie Chart
+// Donut / Pie Chart with Interactive Hover
 
-function DonutChart({ data }) {
+function DonutChart({ data, hoveredQ, onHoverQ }) {
   const SIZE = 190;
   const CENTER = SIZE / 2;
   const OUTER_R = 80;
   const INNER_R = 36;
+  const HOVER_OUTER_R = 86;
 
   const toRad = (deg) => (deg * Math.PI) / 180;
 
@@ -110,10 +115,13 @@ function DonutChart({ data }) {
     const end = cumAngle + sweep;
     cumAngle += sweep;
 
-    const sx = CENTER + OUTER_R * Math.cos(toRad(start));
-    const sy = CENTER + OUTER_R * Math.sin(toRad(start));
-    const ex = CENTER + OUTER_R * Math.cos(toRad(end));
-    const ey = CENTER + OUTER_R * Math.sin(toRad(end));
+    const isHovered = hoveredQ === item.qNumber || hoveredQ === item.id;
+    const currentOuterR = isHovered ? HOVER_OUTER_R : OUTER_R;
+
+    const sx = CENTER + currentOuterR * Math.cos(toRad(start));
+    const sy = CENTER + currentOuterR * Math.sin(toRad(start));
+    const ex = CENTER + currentOuterR * Math.cos(toRad(end));
+    const ey = CENTER + currentOuterR * Math.sin(toRad(end));
 
     const ix1 = CENTER + INNER_R * Math.cos(toRad(start));
     const iy1 = CENTER + INNER_R * Math.sin(toRad(start));
@@ -125,22 +133,68 @@ function DonutChart({ data }) {
     const d = [
       `M ${ix1} ${iy1}`,
       `L ${sx} ${sy}`,
-      `A ${OUTER_R} ${OUTER_R} 0 ${large} 1 ${ex} ${ey}`,
+      `A ${currentOuterR} ${currentOuterR} 0 ${large} 1 ${ex} ${ey}`,
       `L ${ix2} ${iy2}`,
       `A ${INNER_R} ${INNER_R} 0 ${large} 0 ${ix1} ${iy1}`,
       "Z",
     ].join(" ");
 
-    return { ...item, d };
+    return { ...item, d, isHovered };
   });
 
+  const activeItem = data.find(d => d.qNumber === hoveredQ || d.id === hoveredQ);
+
   return (
-    <svg viewBox={`0 0 ${SIZE} ${SIZE}`} width={SIZE} height={SIZE} className="fb-donut-svg">
-      {slices.map((s, i) => (
-        <path key={i} d={s.d} fill={s.color} stroke="#fff" strokeWidth="2.5" className="fb-donut-slice" />
-      ))}
-      <circle cx={CENTER} cy={CENTER} r={INNER_R - 2} fill="#fff" />
-    </svg>
+    <div className="fb-donut-wrapper">
+      <svg viewBox={`0 0 ${SIZE} ${SIZE}`} width={SIZE} height={SIZE} className="fb-donut-svg">
+        {slices.map((s, i) => (
+          <path
+            key={i}
+            d={s.d}
+            fill={s.color}
+            stroke="#fff"
+            strokeWidth={s.isHovered ? "3.5" : "2.5"}
+            className={`fb-donut-slice ${s.isHovered ? "hovered" : ""}`}
+            onMouseEnter={() => {
+              if (onHoverQ) onHoverQ(s.qNumber || s.id);
+            }}
+            onMouseLeave={() => {
+              if (onHoverQ) onHoverQ(null);
+            }}
+            style={{ cursor: "pointer" }}
+          >
+            <title>{`${s.label}: ${s.description} (${s.avg}/5)`}</title>
+          </path>
+        ))}
+        {/* Center circle */}
+        <circle cx={CENTER} cy={CENTER} r={INNER_R - 2} fill="#fff" />
+
+        {/* Center text indicating active question */}
+        {activeItem && (
+          <text
+            x={CENTER}
+            y={CENTER + 4}
+            textAnchor="middle"
+            className="fb-donut-center-text"
+          >
+            <tspan x={CENTER} dy="-4" className="fb-donut-center-q">Q{activeItem.qNumber || activeItem.id}</tspan>
+            <tspan x={CENTER} dy="14" className="fb-donut-center-avg">{activeItem.avg}</tspan>
+          </text>
+        )}
+      </svg>
+
+      {/* Floating Hover Tooltip Card */}
+      {activeItem && (
+        <div className="fb-donut-tooltip">
+          <div className="fb-tooltip-header">
+            <span className="fb-tooltip-dot" style={{ backgroundColor: activeItem.color }} />
+            <span className="fb-tooltip-title">{activeItem.label}</span>
+            <span className="fb-tooltip-score">{activeItem.avg} / 5.0</span>
+          </div>
+          <p className="fb-tooltip-desc">{activeItem.description}</p>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -163,13 +217,9 @@ export default function AdviserFeedback() {
     total_peers: 0,
     pending_count: 0,
     completion_rate: 0,
-    rating_distribution: {
-      excellent: 0,
-      good: 0,
-      average: 0,
-      needs_improvement: 0,
-    },
+    question_distribution: DEFAULT_QUESTION_DATA,
   });
+  const [hoveredQuestion, setHoveredQuestion] = useState(null);
   const [recentComments, setRecentComments] = useState([]);
   const [showPendingModal, setShowPendingModal] = useState(false);
   const [pendingSearchQuery, setPendingSearchQuery] = useState("");
@@ -268,12 +318,7 @@ export default function AdviserFeedback() {
             dept_heads: pendingDeptHeads,
             principals: pendingPrincipals,
           },
-          rating_distribution: statsData?.rating_distribution || {
-            excellent: 0,
-            good: 0,
-            average: 0,
-            needs_improvement: 0,
-          },
+          question_distribution: statsData?.question_distribution || DEFAULT_QUESTION_DATA,
         };
 
         setUserStats(mergedStats);
@@ -414,43 +459,10 @@ export default function AdviserFeedback() {
     },
   ];
 
-  const dist = userStats.rating_distribution || {
-    excellent: 0,
-    good: 0,
-    average: 0,
-    needs_improvement: 0,
-  };
-  const distTotal =
-    dist.excellent + dist.good + dist.average + dist.needs_improvement;
   const pieData =
-    distTotal > 0
-      ? [
-          {
-            label: "Excellent (4.5 – 5.0)",
-            count: dist.excellent,
-            percent: Math.round((dist.excellent / distTotal) * 100),
-            color: "#1a3a6b",
-          },
-          {
-            label: "Good (3.5 – 4.4)",
-            count: dist.good,
-            percent: Math.round((dist.good / distTotal) * 100),
-            color: "#112d61",
-          },
-          {
-            label: "Average (2.5 – 3.4)",
-            count: dist.average,
-            percent: Math.round((dist.average / distTotal) * 100),
-            color: "#b8941f",
-          },
-          {
-            label: "Needs Improvement (1.0 – 2.4)",
-            count: dist.needs_improvement,
-            percent: Math.round((dist.needs_improvement / distTotal) * 100),
-            color: "#e8c44a",
-          },
-        ]
-      : PIE_DATA;
+    userStats.question_distribution && userStats.question_distribution.length > 0
+      ? userStats.question_distribution
+      : DEFAULT_QUESTION_DATA;
 
   // ── Sub-views ──
 
@@ -718,19 +730,33 @@ export default function AdviserFeedback() {
               <rect x="9" y="8" width="4" height="14" rx="1" />
               <rect x="16" y="3" width="4" height="19" rx="1" />
             </svg>
-            <h2 className="fb-section-title">Performance Distribution</h2>
+            <h2 className="fb-section-title">Performance Distribution (Questions 1–8)</h2>
           </div>
           <div className="fb-dist-inner">
-            <DonutChart data={pieData} />
-            <div className="fb-legend">
-              {pieData.map((item, i) => (
-                <div key={i} className="fb-legend-item">
-                  <span className="fb-legend-dot" style={{ background: item.color }} />
-                  <span className="fb-legend-label">
-                    {item.label} {item.count} ({item.percent}%)
-                  </span>
-                </div>
-              ))}
+            <DonutChart
+              data={pieData}
+              hoveredQ={hoveredQuestion}
+              onHoverQ={setHoveredQuestion}
+            />
+            <div className="fb-legend fb-legend-grid">
+              {pieData.map((item, i) => {
+                const isHovered = hoveredQuestion === item.qNumber || hoveredQuestion === item.id;
+                return (
+                  <div
+                    key={i}
+                    className={`fb-legend-item ${isHovered ? "active-legend" : ""}`}
+                    title={item.description || item.label}
+                    onMouseEnter={() => setHoveredQuestion(item.qNumber || item.id)}
+                    onMouseLeave={() => setHoveredQuestion(null)}
+                    style={{ cursor: "pointer" }}
+                  >
+                    <span className="fb-legend-dot" style={{ background: item.color }} />
+                    <span className="fb-legend-label">
+                      <strong>{item.label}</strong>: {item.avg}/5
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
