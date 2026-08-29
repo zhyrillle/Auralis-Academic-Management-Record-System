@@ -37,6 +37,7 @@ const notificationRoutes = require('./routes/notificationRoutes');
 const feedbackRoutes = require('./routes/feedbackRoutes');
 const departmentHeadDashboardRoutes = require('./routes/departmentHeadDashboard.routes');
 const gradingPeriodRoutes = require('./routes/gradingPeriodRoutes');
+const masterSheetRoutes = require('./routes/masterSheetRoutes');
 const GradingPeriodService = require('./services/GradingPeriodService');
 
 app.use('/api/schools', schoolRoutes);
@@ -67,6 +68,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/feedback', feedbackRoutes);
 app.use('/api/department-head', departmentHeadDashboardRoutes);
 app.use('/api/grading-periods', gradingPeriodRoutes);
+app.use('/api/master-sheets', masterSheetRoutes);
 
 app.get('/', (req, res) => {
   res.json({ status: 'Backend API is running' });
