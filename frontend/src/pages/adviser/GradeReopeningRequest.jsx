@@ -31,7 +31,7 @@ export default function GradeReopeningRequest() {
   const [subject, setSubject] = useState("");
   const [currentTeacherAssignmentId, setCurrentTeacherAssignmentId] = useState(null);
   const [currentGradeSheetId, setCurrentGradeSheetId] = useState(null);
-  const [term, setTerm] = useState("1st");
+  const [term, setTerm] = useState("1st Term");
   const [termId, setTermId] = useState(1);
   const [requestType, setRequestType] = useState("Grade Reopening");
   const [requestDate, setRequestDate] = useState("2026-05-20T09:30");
@@ -178,23 +178,40 @@ export default function GradeReopeningRequest() {
     console.log("Handled Sections Data:", handledSections);
   };
 
+  const getTermId = (termVal) => {
+    if (!termVal) return 1;
+    if (typeof termVal === "number") return termVal;
+    const str = String(termVal).trim().toLowerCase();
+    if (str.includes("1")) return 1;
+    if (str.includes("2")) return 2;
+    if (str.includes("3")) return 3;
+    if (str.includes("4")) return 4;
+    const parsed = parseInt(str, 10);
+    return isNaN(parsed) ? 1 : parsed;
+  };
+
   // Submit Handler
   const handleSubmit = async (e) => {
     e.preventDefault();
     setFormError("");
 
-    if (!subject || !term || !requestType || !reason.trim()) {
+    // Validation
+    if (!subject || !requestType || !reason.trim()) {
       setFormError("Please fill in all required fields marked with *");
       return;
     }
 
     if (!currentTeacherAssignmentId) {
-      setFormError("Unable to locate teacher assignment details for the selected section.");
+      setFormError(
+        "Unable to locate teacher assignment details for the selected section."
+      );
       return;
     }
 
     if (alreadyRequestedSections.has(subject)) {
-      setFormError("You have already submitted a reopening request for this section.");
+      setFormError(
+        "You have already submitted a reopening request for this section."
+      );
       return;
     }
 
@@ -203,76 +220,87 @@ export default function GradeReopeningRequest() {
       return;
     }
 
-    const reqDateObj = requestDate ? new Date(requestDate) : new Date();
-    const untilDateObj = requestAccessUntil ? new Date(requestAccessUntil) : new Date(Date.now() + 5 * 24 * 60 * 60 * 1000);
-
-    const formattedReqDate = reqDateObj.toLocaleString("en-US", {
-      month: "short",
-      day: "2-digit",
-      year: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: true,
-    });
-
-    const formattedUntilDate = untilDateObj.toLocaleString("en-US", {
-      month: "short",
-      day: "2-digit",
-      year: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: true,
-    });
-
-    const payload = {
-      user_id: currentUser.user_id,
-      section_name: subject,
-      teacher_assignment_id: currentTeacherAssignmentId,
-      grade_sheet_id: currentGradeSheetId, // Can be null; Express backend will resolve it
-      reason: reason,
-      status: "PENDING",
-      file_name: selectedFile ? selectedFile.name : null,
-      file_path: null,
-      file_type: selectedFile ? selectedFile.type : null,
-      file_size: selectedFile ? selectedFile.size : null,
-      term_id: termId,
-      requested_at: new Date().toISOString()
-    };
-
     try {
-      const res = await fetch("http://localhost:5000/api/reopen-requests", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
+      // Create FormData
+      const formData = new FormData();
+
+      formData.append("user_id", currentUser.user_id);
+      formData.append("section_name", subject);
+      formData.append(
+        "teacher_assignment_id",
+        currentTeacherAssignmentId
+      );
+      formData.append("reason", reason);
+      formData.append("status", "PENDING");
+
+      // Only append the file if one was selected
+      if (selectedFile) {
+        formData.append("supporting_file", selectedFile);
+      }
+
+      // IMPORTANT:
+      // Do NOT manually set Content-Type.
+      // Browser automatically sets multipart/form-data boundary.
+      const res = await fetch(
+        "http://localhost:5000/api/reopen-requests",
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
 
       const data = await res.json();
 
       if (!res.ok) {
-        setFormError(data.error || "Failed to submit reopening request.");
+        setFormError(
+          data.error || "Failed to submit reopening request."
+        );
         return;
       }
 
+      console.log("Request submitted:", data);
+
+      // Create the request displayed in the frontend
       const newReq = {
-        id: `#REQ-${String(data.request_id || data.id).padStart(3, "0")}`,
+        id: `#REQ-${String(
+          data.request_id || data.id
+        ).padStart(3, "0")}`,
+
         status: "Pending",
         subject,
         term,
         requestType,
-        requestedDate: formattedReqDate,
-        accessUntil: formattedUntilDate,
+
+        requestedDate: new Date().toLocaleString("en-US"),
+
+        accessUntil: requestAccessUntil,
+
         reason,
-        file: selectedFile ? `${selectedFile.name} (${(selectedFile.size / 1024).toFixed(0)} KB)` : null,
+
+        file: selectedFile
+          ? `${selectedFile.name} (${(
+            selectedFile.size / 1024
+          ).toFixed(0)} KB)`
+          : null,
       };
 
-      setRequests([newReq, ...requests]);
-      setAlreadyRequestedSections(new Set([...alreadyRequestedSections, subject]));
+      setRequests((prev) => [newReq, ...prev]);
+
+      setAlreadyRequestedSections(
+        (prev) => new Set([...prev, subject])
+      );
+
       setLastSubmittedRequest(newReq);
       setIsSuccessModalOpen(true);
+
       handleClear();
+
     } catch (err) {
       console.error("Submit error:", err);
-      setFormError("An error occurred while connecting to the server.");
+
+      setFormError(
+        "An error occurred while connecting to the server."
+      );
     }
   };
 
@@ -471,9 +499,10 @@ export default function GradeReopeningRequest() {
               </div>
             ) : (
               requests.map((item) => {
-                const isPending = item.status === "Pending";
-                const isApproved = item.status === "Approved";
-                const isRejected = item.status === "Rejected";
+                const statusUpper = String(item.status || "").toUpperCase();
+                const isPending = statusUpper === "PENDING";
+                const isApproved = statusUpper === "APPROVED";
+                const isRejected = !isPending && !isApproved;
 
                 return (
                   <div key={item.id} className="grr-timeline-item">
@@ -484,9 +513,24 @@ export default function GradeReopeningRequest() {
                       className={`grr-timeline-icon-circle ${isPending ? "pending" : isApproved ? "approved" : "rejected"
                         }`}
                     >
-                      {isPending && <Clock size={18} />}
-                      {isApproved && <CheckCircle2 size={18} />}
-                      {isRejected && <XCircle size={18} />}
+                      {isPending && (
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="12" cy="12" r="9" />
+                          <polyline points="12 7 12 12 16.2 14.2" />
+                        </svg>
+                      )}
+                      {isApproved && (
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                      )}
+                      {isRejected && (
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="12" cy="12" r="9" />
+                          <line x1="15" y1="9" x2="9" y2="15" />
+                          <line x1="9" y1="9" x2="15" y2="15" />
+                        </svg>
+                      )}
                     </div>
 
                     {/* Content */}
