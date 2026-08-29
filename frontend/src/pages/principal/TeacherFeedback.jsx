@@ -58,9 +58,17 @@ export default function TeacherFeedback() {
         ]);
 
         if (isMounted) {
-          setSummary(sumRes);
-          setLikertResults(likertRes || []);
-          setComments(commentsRes || []);
+          setSummary(sumRes || {});
+          setLikertResults(
+            Array.isArray(likertRes)
+              ? likertRes
+              : likertRes?.results || []
+          );
+          setComments(
+            Array.isArray(commentsRes)
+              ? commentsRes
+              : commentsRes?.comments || []
+          );
         }
       } catch (error) {
         console.error("Error loading teacher feedback:", error);
@@ -202,19 +210,19 @@ export default function TeacherFeedback() {
           </div>
         </div>
 
-        {/* Card 3: Would Recommend */}
+        {/* Card 3: Comments Received */}
         <div className="tf-stat-card">
           <div className="tf-stat-header">
-            <span className="tf-stat-label">Would Recommend</span>
+            <span className="tf-stat-label">Comments Received</span>
             <div className="tf-stat-icon-wrap tf-icon--green">
               <CheckCircle2 size={18} />
             </div>
           </div>
           <div className="tf-stat-body">
             <span className="tf-stat-value">
-              {summary.wouldRecommendPercent ?? 0}%
+              {summary.totalComments ?? comments.length ?? 0}
             </span>
-            <span className="tf-stat-sub">of respondents</span>
+            <span className="tf-stat-sub">Total teacher comments</span>
           </div>
         </div>
 
@@ -230,7 +238,7 @@ export default function TeacherFeedback() {
             <span className="tf-stat-value">
               {summary.belowTargetCount ?? 0}
             </span>
-            <span className="tf-stat-sub">questions under 4.0</span>
+            <span className="tf-stat-sub">questions under 3.0</span>
           </div>
         </div>
       </section>
@@ -254,7 +262,7 @@ export default function TeacherFeedback() {
               </tr>
             </thead>
             <tbody>
-              {likertResults.map((item, idx) => {
+              {(Array.isArray(likertResults) ? likertResults : []).map((item, idx) => {
                 const rate = Number(item.rate) || 0;
                 const percent = Math.min(100, Math.max(0, (rate / 5) * 100));
 
@@ -305,7 +313,7 @@ export default function TeacherFeedback() {
             <input
               type="text"
               className="tf-search-input"
-              placeholder="Search documents"
+              placeholder="Search comments"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
@@ -314,23 +322,11 @@ export default function TeacherFeedback() {
 
         <div className="tf-comments-list">
           {filteredComments.length > 0 ? (
-            filteredComments.map((comment, idx) => {
-              const cat = (comment.category || "").toLowerCase();
-              let tagClass = "tf-comment-tag--suggestion";
-              if (cat === "praise") tagClass = "tf-comment-tag--praise";
-              else if (cat === "concern") tagClass = "tf-comment-tag--concern";
-
-              return (
-                <div key={comment.id || idx} className="tf-comment-card">
-                  {comment.category && (
-                    <span className={`tf-comment-tag ${tagClass}`}>
-                      {comment.category}
-                    </span>
-                  )}
-                  <p className="tf-comment-text">"{comment.text}"</p>
-                </div>
-              );
-            })
+            filteredComments.map((comment, idx) => (
+              <div key={comment.id || idx} className="tf-comment-card">
+                <p className="tf-comment-text">"{comment.text}"</p>
+              </div>
+            ))
           ) : (
             <div className="tf-empty-comments">
               <MessageSquareOff size={32} />

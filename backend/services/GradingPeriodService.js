@@ -118,6 +118,9 @@ async function expireTemporaryReopenings() {
     return expiredRows.length;
   } catch (error) {
     await connection.rollback();
+    if (error.code === 'ER_NO_SUCH_TABLE' || (error.message && error.message.includes("doesn't exist"))) {
+      return 0;
+    }
     throw error;
   } finally {
     connection.release();
