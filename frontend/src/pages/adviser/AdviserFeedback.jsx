@@ -59,7 +59,7 @@ const GIVE_FEEDBACK_CARDS = [
   },
   {
     id: "dept-head",
-    title: "Department Head E...",
+    title: "Department Head Evaluation",
     description: "Provide feedback to your department head",
   },
   {
@@ -344,7 +344,6 @@ export default function AdviserFeedback() {
                       year: "numeric",
                     })
                   : "Recent",
-                evaluator: item.evaluator_name || "Peer Evaluator",
               });
             }
             if (item.improvements_comment && item.improvements_comment.trim()) {
@@ -359,7 +358,6 @@ export default function AdviserFeedback() {
                       year: "numeric",
                     })
                   : "Recent",
-                evaluator: item.evaluator_name || "Peer Evaluator",
               });
             }
           });
@@ -406,9 +404,8 @@ export default function AdviserFeedback() {
     const q = commentsSearchQuery.toLowerCase();
     return (
       c.text.toLowerCase().includes(q) ||
-      c.evaluator.toLowerCase().includes(q) ||
-      (c.category && c.category.toLowerCase().includes(q)) ||
-      c.date.toLowerCase().includes(q)
+      (c.date && c.date.toLowerCase().includes(q)) ||
+      (c.category && c.category.toLowerCase().includes(q))
     );
   });
 
@@ -870,7 +867,7 @@ export default function AdviserFeedback() {
                 <input
                   type="text"
                   className="fb-modal-search-input"
-                  placeholder="Search comments by keyword, evaluator, or date..."
+                  placeholder="Search comments by keyword, category, or date..."
                   value={commentsSearchQuery}
                   onChange={(e) => setCommentsSearchQuery(e.target.value)}
                   autoFocus
@@ -898,8 +895,6 @@ export default function AdviserFeedback() {
                       <div className="fb-modal-comment-body">
                         <div className="fb-modal-comment-header">
                           <span className="fb-comment-category-tag">{c.category || "Peer Review"}</span>
-                          <span className="fb-comment-author">{c.evaluator}</span>
-                          <span className="fb-comment-dot">•</span>
                           <span className="fb-modal-comment-date">{c.date}</span>
                         </div>
                         <p className="fb-modal-comment-text">{c.text}</p>

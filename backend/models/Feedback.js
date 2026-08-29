@@ -21,12 +21,12 @@ class Feedback {
 
   static async findByEvalueeId(evalueeId) {
     const [rows] = await db.execute(
-      `SELECT f.*, 
-              CONCAT(COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, '')) AS evaluator_name
-       FROM FEEDBACK f
-       LEFT JOIN USER u ON u.user_id = f.evaluator_id
-       WHERE f.evaluee_id = ?
-       ORDER BY f.feedback_id DESC`,
+      `SELECT feedback_id, evaluee_id, q1_rate, q2_rate, q3_rate, q4_rate, 
+              q5_rate, q6_rate, q7_rate, q8_rate, strengths_comments, 
+              improvements_comment, status, created_at
+       FROM FEEDBACK
+       WHERE evaluee_id = ?
+       ORDER BY feedback_id DESC`,
       [evalueeId]
     );
     return rows;
