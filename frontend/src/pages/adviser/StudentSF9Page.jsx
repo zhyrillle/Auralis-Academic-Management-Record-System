@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from "react";
-import { Eye, Download, FileText, Sparkles } from "lucide-react";
+import { Eye, Download, FileText, Sparkles, Printer, FileSpreadsheet } from "lucide-react";
 import "../../styles/studentSF9.css";
 
 import depedLogo from "../../assets/deped_logo.png";
@@ -14,114 +14,90 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
   const isAdviser = userRole === "adviser";
 
   const [activeTab, setActiveTab] = useState(isAdviser ? "sf9" : "personal");
+  const [viewMode, setViewMode] = useState("spread"); // "spread", "front", "back"
 
-  // Mock student detailed records matching mockups exactly
+  // Teacher Comments/Remarks state for terms
+  const [comments, setComments] = useState({
+    term1: "Demonstrates consistent academic performance and actively participates in classroom discussions.",
+    term2: "Shows great progress in analytical tasks and exhibits exemplary leadership during group activities.",
+    term3: "Consistently maintains high standards in all learning areas. Promoted with commendable honors."
+  });
+
+  // Dynamic / Mock student records matching official layout
   const studentProfile = {
-    name: "CRUZ, ALEX MATTHEW",
-    lrn: "145783920614",
-    gradeLevel: "Grade 8 Mahogany",
-    section: "Mahogany",
-    sex: "Male",
-    age: 13,
-    schoolYear: "2026-2027",
-    curriculum: "K to 12 Basic Education",
-    dateOfBirth: "January 15, 2010",
-    address: "123 Rizal Street, Brgy. San Isidro, Manila",
-    termGrade: 92,
-    honorStatus: "With Honor",
-    daysPresent: 20,
-    daysAbsent: 2,
-    missingActivities: 2
+    name: student?.name || "CRUZ, ALEX MATTHEW",
+    lrn: student?.lrn || "145783920614",
+    gradeLevel: student?.gradeLevel || "Grade 8 Mahogany",
+    grade: student?.grade || "8",
+    section: student?.section || "Mahogany",
+    program: student?.program || "Junior High School",
+    sex: student?.sex || "Male",
+    age: student?.age || 13,
+    schoolYear: student?.schoolYear || "2026 – 2027",
+    dateOfBirth: student?.dateOfBirth || "January 15, 2010",
+    address: student?.address || "123 Rizal Street, Brgy. San Isidro, Manila",
+    termGrade: student?.grade || 92,
+    honorStatus: student?.honorStatus || "With Honor",
+    daysPresent: student?.daysPresent || 202,
+    daysAbsent: student?.daysAbsent || 3,
+    missingActivities: student?.missingActivities || 2,
+    adviserName: student?.adviserName || "HARVEY BABIA",
+    principalName: student?.principalName || "HELEN C. TANASAS, PhD"
   };
 
-  // Mock Academic Grades for SF9 table
+  // Official SF9 Subjects matching the new template
   const [grades] = useState([
-    { area: "Filipino", t1: 90, t2: 91, t3: 92, final: 91, remark: "PASSED" },
-    { area: "English", t1: 92, t2: 93, t3: 94, final: 93, remark: "PASSED" },
-    { area: "Mathematics", t1: 91, t2: 92, t3: 93, final: 92, remark: "PASSED" },
-    { area: "Science", t1: 93, t2: 94, t3: 95, final: 94, remark: "PASSED" },
-    { area: "Araling Panlipunan", t1: 89, t2: 90, t3: 91, final: 90, remark: "PASSED" },
-    { area: "Values Education", t1: 92, t2: 93, t3: 94, final: 93, remark: "PASSED" },
-    { area: "Technology and Livelihood", t1: 91, t2: 92, t3: 93, final: 92, remark: "PASSED" },
-    { area: "MAPEH", t1: 90, t2: 91, t3: 92, final: 91, remark: "PASSED", isHeader: true },
-    { area: "Music & Arts", t1: 90, t2: 91, t3: 92, final: "", remark: "", isSubSubject: true },
-    { area: "PE & Health", t1: 91, t2: 92, t3: 93, final: "", remark: "", isSubSubject: true },
-    { area: "HGP", t1: 91, t2: 92, t3: 93, final: 92, remark: "PASSED" },
-    { area: "ALIVE", t1: 91, t2: 92, t3: 93, final: 92, remark: "PASSED" },
+    { code: "fil", name: "Filipino", t1: 90, t2: 91, t3: 92, final: 91, remark: "Passed" },
+    { code: "eng", name: "English", t1: 92, t2: 93, t3: 94, final: 93, remark: "Passed" },
+    { code: "math", name: "Mathematics", t1: 91, t2: 92, t3: 93, final: 92, remark: "Passed" },
+    { code: "sci", name: "Science", t1: 93, t2: 94, t3: 95, final: 94, remark: "Passed" },
+    { code: "ap", name: "Araling Panlipunan (AP)", t1: 89, t2: 90, t3: 91, final: 90, remark: "Passed" },
+    { code: "ve", name: "Values Education", t1: 92, t2: 93, t3: 94, final: 93, remark: "Passed" },
+    { code: "tle", name: "TLE", t1: 91, t2: 92, t3: 93, final: 92, remark: "Passed" },
+    { code: "mapeh", name: "MAPEH", t1: 90, t2: 91, t3: 92, final: 91, remark: "Passed", isHeader: true },
+    { code: "music_arts", name: "Music and Arts", t1: 90, t2: 91, t3: 92, final: "", remark: "", isSubSubject: true },
+    { code: "pe_health", name: "Physical Education and Health", t1: 91, t2: 92, t3: 93, final: "", remark: "", isSubSubject: true },
   ]);
 
-  // Mock Attendance Calendar Days
+  // Performance Descriptors matching the official layout
+  const performanceDescriptors = [
+    { scale: "90-100", desc: "Advancing", remarks: "Passed" },
+    { scale: "80-89", desc: "Benchmarking", remarks: "Passed" },
+    { scale: "75-79", desc: "Connecting", remarks: "Passed" },
+    { scale: "65-74", desc: "Developing", remarks: "Passed" },
+    { scale: "0-64", desc: "Emerging", remarks: "Passed" }
+  ];
+
+  // Official Attendance Record Data (11 months: Jun - Apr)
   const attendanceData = {
-    months: ["June", "July", "August", "September", "October", "November", "December", "January", "February", "March"],
-    schoolDays: [3, 21, 22, 19, 10, 21, 21, 19, 21, 22],
-    daysPresent: [3, 21, 22, 19, 10, 21, 21, 19, 21, 21],
-    daysAbsent: [0, 0, 0, 0, 0, 0, 0, 0, 0, 1]
+    months: ["Jun", "Jul", "Aug", "Sept", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr"],
+    classDays: [12, 21, 22, 20, 21, 20, 16, 21, 20, 21, 18],
+    daysPresent: [12, 21, 21, 20, 21, 19, 16, 21, 20, 20, 18],
+    daysAbsent: [0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0]
   };
 
   const getAttendanceTotal = (arr) => arr.reduce((acc, curr) => acc + curr, 0);
 
-  // State for Observed Values ratings (Making Term 3 interactive!)
-  const [observedValues, setObservedValues] = useState([
-    {
-      coreValue: "1. Maka-Diyos",
-      statements: [
-        { id: "md_s1", text: "Expresses one's spiritual beliefs while respecting the spiritual beliefs of others", t1: "AO", t2: "AO", t3: "AO" },
-        { id: "md_s2", text: "Shows adherence to ethical principles by upholding truth in all undertakings", t1: "AO", t2: "AO", t3: "AO" }
-      ]
-    },
-    {
-      coreValue: "2. Maka-tao",
-      statements: [
-        { id: "mt_s1", text: "Is sensitive to individual, social, and cultural differences", t1: "SO", t2: "AO", t3: "AO" },
-        { id: "mt_s2", text: "Demonstrates contributions towards solidarity", t1: "AO", t2: "AO", t3: "AO" }
-      ]
-    },
-    {
-      coreValue: "3. Maka Kalikasan",
-      statements: [
-        { id: "mk_s1", text: "Cares for the environment and utilizes resources wisely, judiciously and economically", t1: "AO", t2: "SO", t3: "SO" }
-      ]
-    },
-    {
-      coreValue: "4. Maka Bansa",
-      statements: [
-        { id: "mb_s1", text: "Demonstrates pride in being a Filipino; exercises the rights and responsibilities of a Filipino citizen", t1: "RO", t2: "SO", t3: "SO" },
-        { id: "mb_s2", text: "Demonstrates appropriate behavior in carrying out activities in school, community, and country", t1: "RO", t2: "RO", t3: "RO" }
-      ]
-    }
-  ]);
-
-  const handleRatingChange = (valId, term, newValue) => {
-    setObservedValues(prev => prev.map(group => ({
-      ...group,
-      statements: group.statements.map(stmt =>
-        stmt.id === valId ? { ...stmt, [term]: newValue } : stmt
-      )
-    })));
+  const handleCommentChange = (term, val) => {
+    setComments(prev => ({ ...prev, [term]: val }));
   };
 
-  const getRatingBadgeClass = (rating) => {
-    switch (rating) {
-      case "AO": return "ao";
-      case "SO": return "so";
-      case "RO": return "ro";
-      case "NO": return "no";
-      default: return "";
-    }
+  const handlePrint = () => {
+    window.print();
   };
 
   return (
     <div className="student-sf9-container">
       {/* Top Navigation / Breadcrumb Area */}
-      <div className="sf9-header-bar">
-        <button className="back-btn" onClick={onBack} title="Back to Mahogany">
+      <div className="sf9-header-bar no-print">
+        <button className="back-btn" onClick={onBack} title="Back to Class List">
           <img src={backIconUrl} alt="Back" width={17} height={17} />
         </button>
         <h1 className="sf9-section-title">{studentProfile.section}</h1>
       </div>
 
-      {/* Student Overview Indicator Header Card */}
-      <div className="student-header-grid">
+      {/* Student Overview Indicator Header Cards */}
+      <div className="student-header-grid no-print">
         {/* Name & Basic Info */}
         <div className="sf9-card student-profile-header-card">
           <div>
@@ -164,355 +140,391 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
         </div>
       </div>
 
-      {/* Tabs Row Selector */}
-      {isAdviser ? (
-        <div className="sf9-tabs-outer">
-          <button
-            className={`sf9-tab-button ${activeTab === "sf9" ? "active" : ""}`}
-            onClick={() => setActiveTab("sf9")}
-          >
-            SF9
-          </button>
-          <button
-            className={`sf9-tab-button ${activeTab === "personal" ? "active" : ""}`}
-            onClick={() => setActiveTab("personal")}
-          >
-            Personal Info
-          </button>
-        </div>
-      ) : (
-        <div className="sf9-tabs-outer">
-          <button className="sf9-tab-button active">
-            Personal Info
-          </button>
-        </div>
-      )}
+      {/* Tabs & Controls Row */}
+      <div className="sf9-controls-row no-print">
+        {/* Tabs Selector */}
+        {isAdviser ? (
+          <div className="sf9-tabs-outer">
+            <button
+              className={`sf9-tab-button ${activeTab === "sf9" ? "active" : ""}`}
+              onClick={() => setActiveTab("sf9")}
+            >
+              Official SF9 Form
+            </button>
+            <button
+              className={`sf9-tab-button ${activeTab === "personal" ? "active" : ""}`}
+              onClick={() => setActiveTab("personal")}
+            >
+              Personal Info
+            </button>
+          </div>
+        ) : (
+          <div className="sf9-tabs-outer">
+            <button className="sf9-tab-button active">
+              Personal Info
+            </button>
+          </div>
+        )}
+
+        {/* View Mode & Print Action Toolbar (Adviser SF9 view) */}
+        {activeTab === "sf9" && isAdviser && (
+          <div className="sf9-actions-toolbar">
+            <div className="sf9-view-modes">
+              <button
+                className={`sf9-view-btn ${viewMode === "spread" ? "active" : ""}`}
+                onClick={() => setViewMode("spread")}
+                title="View Front & Back Spread"
+              >
+                Spread View
+              </button>
+              <button
+                className={`sf9-view-btn ${viewMode === "front" ? "active" : ""}`}
+                onClick={() => setViewMode("front")}
+                title="View Front (Performance Report)"
+              >
+                Front Page
+              </button>
+              <button
+                className={`sf9-view-btn ${viewMode === "back" ? "active" : ""}`}
+                onClick={() => setViewMode("back")}
+                title="View Back (Attendance & Transfer)"
+              >
+                Back Page
+              </button>
+            </div>
+
+            <button className="sf9-print-btn" onClick={handlePrint} title="Print Official SF9 Document">
+              <Printer size={16} />
+              <span>Print SF9</span>
+            </button>
+          </div>
+        )}
+      </div>
 
       {/* Tab Contents */}
       {activeTab === "sf9" ? (
-        /* SF9 Tab Layout (Dual Column) */
-        <div className="sf9-dual-layout">
+        /* Official SF9 Document Spread Layout */
+        <div className={`sf9-document-spread ${viewMode}`}>
 
-          {/* Left Column: School Form 9 Document */}
-          <div className="sf9-document-paper">
+          {/* ============================================================
+              FRONT PAGE (PAGE 1): LEARNER'S PERFORMANCE REPORT
+             ============================================================ */}
+          {(viewMode === "spread" || viewMode === "front") && (
+            <div className="sf9-official-sheet sf9-front-sheet">
 
-            {/* Header info */}
-            <div className="sf9-doc-heading-container">
-              <span className="sf9-doc-form-tag">SF 9-JHS</span>
-              <div className="sf9-header-logos-row">
-                <img src={depedLogo} alt="DepEd Seal" width="55" height="55" style={{ objectFit: "contain" }} />
-                <div style={{ textAlign: "center", flexGrow: 1 }}>
-                  <p className="sf9-doc-heading-text">Republic of the Philippines</p>
-                  <p className="sf9-doc-heading-text" style={{ fontWeight: "bold" }}>Department of Education</p>
-                  <p className="sf9-doc-heading-text" style={{ fontSize: "10px" }}>Region X — Northern Mindanao</p>
-                  <p className="sf9-doc-heading-text" style={{ fontSize: "10px" }}>Division of Gingoog City</p>
-                  <p className="sf9-doc-heading-text" style={{ fontSize: "10px" }}>West 1 District</p>
-                  <h3 className="sf9-doc-school-title">Gingoog City Comprehensive National High School</h3>
-                  <p className="sf9-doc-school-sub">Gingoog City | School ID: 304139</p>
+              {/* Official Header */}
+              <div className="sf9-sheet-header">
+                <div className="sf9-header-grid">
+                  <div className="sf9-header-logo-left">
+                    <img src={depedLogo} alt="DepEd Seal" className="sf9-logo-img" />
+                  </div>
+                  <div className="sf9-header-text-center">
+                    <p className="sf9-hdr-line">Republic of the Philippines</p>
+                    <p className="sf9-hdr-line">Department of Education</p>
+                    <p className="sf9-hdr-line">Region X – Northern Mindanao</p>
+                    <p className="sf9-hdr-line font-bold">SCHOOLS DIVISION OFFICE OF GINGOOG CITY</p>
+                    <p className="sf9-hdr-line">West 1 District</p>
+                    <p className="sf9-hdr-line">Gingoog City, Misamis Oriental</p>
+                    <h3 className="sf9-school-name-title">GINGOOG CITY COMPREHENSIVE NATIONAL HIGH SCHOOL</h3>
+                    <h2 className="sf9-report-doc-title">LEARNER'S PERFORMANCE REPORT</h2>
+                    <p className="sf9-school-year-title">School Year {studentProfile.schoolYear}</p>
+                  </div>
+                  <div className="sf9-header-logo-right">
+                    <img src={gccnhsLogo} alt="GCCNS Seal" className="sf9-logo-img" />
+                  </div>
                 </div>
-                <img src={gccnhsLogo} alt="School Seal" width="55" height="55" style={{ objectFit: "contain" }} />
               </div>
-            </div>
 
-            {/* Student Metadata Table */}
-            <div className="sf9-metadata-grid">
-              <div className="sf9-metadata-item">
-                <span className="sf9-metadata-label">Pangalan (Name):</span>
-                <span className="sf9-metadata-value" style={{ textTransform: "uppercase" }}>{studentProfile.name}</span>
-              </div>
-              <div className="sf9-metadata-item">
-                <span className="sf9-metadata-label">LRN:</span>
-                <span className="sf9-metadata-value">{studentProfile.lrn}</span>
-              </div>
-              <div className="sf9-metadata-item">
-                <span className="sf9-metadata-label">Gulang (Age):</span>
-                <span className="sf9-metadata-value">{studentProfile.age}</span>
-              </div>
-              <div className="sf9-metadata-item">
-                <span className="sf9-metadata-label">Kasarian (Sex):</span>
-                <span className="sf9-metadata-value">{studentProfile.sex === "Male" ? "M" : "F"}</span>
-              </div>
-              <div className="sf9-metadata-item">
-                <span className="sf9-metadata-label">Baitang (Grade):</span>
-                <span className="sf9-metadata-value">8</span>
-              </div>
-              <div className="sf9-metadata-item">
-                <span className="sf9-metadata-label">Pangkat (Section):</span>
-                <span className="sf9-metadata-value">{studentProfile.section}</span>
-              </div>
-              <div className="sf9-metadata-item">
-                <span className="sf9-metadata-label">Kurikulum (Curriculum):</span>
-                <span className="sf9-metadata-value">{studentProfile.curriculum}</span>
-              </div>
-              <div className="sf9-metadata-item">
-                <span className="sf9-metadata-label">Taong Panuruan (School Year):</span>
-                <span className="sf9-metadata-value">{studentProfile.schoolYear}</span>
-              </div>
-            </div>
+              {/* Learner Information Underlined Form Fields */}
+              <div className="sf9-student-info-section">
+                <div className="sf9-info-line-row">
+                  <div className="sf9-info-field grow-name">
+                    <span className="sf9-field-label">Name:</span>
+                    <span className="sf9-field-underline uppercase-val">{studentProfile.name}</span>
+                  </div>
+                  <div className="sf9-info-field age-field">
+                    <span className="sf9-field-label">Age:</span>
+                    <span className="sf9-field-underline text-center">{studentProfile.age}</span>
+                  </div>
+                  <div className="sf9-info-field sex-field">
+                    <span className="sf9-field-label">Sex:</span>
+                    <span className="sf9-field-underline text-center">{studentProfile.sex}</span>
+                  </div>
+                </div>
 
-            {/* Parent letter */}
-            <div className="sf9-dear-parent-text">
-              <strong>Dear Parent:</strong><br />
-              This report card shows the ability and progress your child has made in the different learning areas as well as his/her core values. The school welcomes you should you desire to know more about your child's progress.
-            </div>
+                <div className="sf9-info-line-row">
+                  <div className="sf9-info-field grow-name">
+                    <span className="sf9-field-label">LRN:</span>
+                    <span className="sf9-field-underline">{studentProfile.lrn}</span>
+                  </div>
+                  <div className="sf9-info-field grade-field">
+                    <span className="sf9-field-label">Grade:</span>
+                    <span className="sf9-field-underline text-center">{studentProfile.grade}</span>
+                  </div>
+                  <div className="sf9-info-field section-field">
+                    <span className="sf9-field-label">Section:</span>
+                    <span className="sf9-field-underline text-center">{studentProfile.section}</span>
+                  </div>
+                </div>
 
-            {/* Signatures */}
-            <div className="sf9-signatures-row">
-              <div className="sf9-signature-block">
-                <div style={{ fontWeight: "bold" }}>HELEN C. TANASAS, PhD</div>
-                <div className="sf9-signature-title">Secondary School Principal II</div>
+                <div className="sf9-info-line-row">
+                  <div className="sf9-info-field full-field">
+                    <span className="sf9-field-label">Program:</span>
+                    <span className="sf9-field-underline">{studentProfile.program}</span>
+                  </div>
+                </div>
               </div>
-              <div className="sf9-signature-block">
-                <div style={{ fontWeight: "bold", borderBottom: "1px solid #000000", display: "inline-block", paddingBottom: "2px", width: "150px" }}>HARVEY BABIA</div>
-                <div className="sf9-signature-title" style={{ marginTop: "2px" }}>Adviser</div>
-              </div>
-            </div>
 
-            {/* Report card table grades */}
-            <div className="sf9-table-title">Ulat Tungkol sa Pag-unlad ng Marka (Progress Report)</div>
-            <table className="sf9-progress-table">
-              <thead>
-                <tr>
-                  <th rowspan="2" style={{ width: "40%" }}>LEARNING AREAS</th>
-                  <th colspan="3" style={{ width: "30%" }}>TERM</th>
-                  <th rowspan="2" style={{ width: "15%" }}>FINAL GRADE</th>
-                  <th rowspan="2" style={{ width: "15%" }}>REMARKS</th>
-                </tr>
-                <tr>
-                  <th style={{ width: "10%" }}>1</th>
-                  <th style={{ width: "10%" }}>2</th>
-                  <th style={{ width: "10%" }}>3</th>
-                </tr>
-              </thead>
-              <tbody>
-                {grades.map((item, idx) => (
-                  <tr key={idx} style={item.isHeader ? { fontWeight: "bold", backgroundColor: "#f8fafc" } : {}}>
-                    <td className={item.isSubSubject ? "sub-subject-name" : "subject-name"}>
-                      {item.area}
-                    </td>
-                    <td className="grade-val">{item.t1}</td>
-                    <td className="grade-val">{item.t2}</td>
-                    <td className="grade-val">{item.t3}</td>
-                    <td className="grade-val" style={{ fontWeight: "bold" }}>{item.final}</td>
-                    <td className="remark-val">{item.remark}</td>
+              {/* Dear Parents Note */}
+              <div className="sf9-dear-parents-block">
+                <p className="sf9-dp-salutation">Dear Parents,</p>
+                <p className="sf9-dp-body">
+                  This Performance Report shows the ability and progress your child has made in the different learning areas as well as his/her core values.
+                </p>
+                <p className="sf9-dp-body">
+                  The school welcomes you should you desire to know more about your child's progress.
+                </p>
+              </div>
+
+              {/* Learning Progress & Achievement Table */}
+              <div className="sf9-table-heading">LEARNING PROGRESS AND ACHIEVEMENT</div>
+              <table className="sf9-official-table sf9-grades-table">
+                <thead>
+                  <tr>
+                    <th rowSpan="2" className="col-subjects">Subjects</th>
+                    <th colSpan="3" className="col-term-head">TERM</th>
+                    <th rowSpan="2" className="col-final">Final<br />Grade</th>
+                    <th rowSpan="2" className="col-remarks">Remarks</th>
                   </tr>
-                ))}
+                  <tr>
+                    <th className="col-subterm">1</th>
+                    <th className="col-subterm">2</th>
+                    <th className="col-subterm">3</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {grades.map((row, idx) => (
+                    <tr key={idx} className={row.isHeader ? "subject-header-row" : ""}>
+                      <td className={row.isSubSubject ? "subj-title-sub" : "subj-title-main"}>
+                        {row.name}
+                      </td>
+                      <td className="grade-num">{row.t1 || ""}</td>
+                      <td className="grade-num">{row.t2 || ""}</td>
+                      <td className="grade-num">{row.t3 || ""}</td>
+                      <td className="grade-num font-bold">{row.final || ""}</td>
+                      <td className="grade-remark">{row.remark || ""}</td>
+                    </tr>
+                  ))}
 
-                {/* General Average */}
-                <tr className="average-row">
-                  <td className="avg-label">General Average</td>
-                  <td colSpan="3"></td>
-                  <td className="grade-val">{studentProfile.termGrade}</td>
-                  <td className="remark-val">PASSED</td>
-                </tr>
-              </tbody>
-            </table>
+                  {/* Empty spacer row matching official template */}
+                  <tr className="empty-spacer-row">
+                    <td>&nbsp;</td>
+                    <td>&nbsp;</td>
+                    <td>&nbsp;</td>
+                    <td>&nbsp;</td>
+                    <td>&nbsp;</td>
+                    <td>&nbsp;</td>
+                  </tr>
 
-            {/* Descriptors & Grading scale */}
-            <div className="sf9-descriptors-section">
-              <div>
-                <table className="sf9-descriptors-table">
+                  {/* General Average */}
+                  <tr className="general-average-row">
+                    <td colSpan="4" className="general-avg-label">General Average</td>
+                    <td className="grade-num font-bold">{studentProfile.termGrade}</td>
+                    <td className="grade-remark font-bold">Passed</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              {/* Performance Descriptors Table */}
+              <div className="sf9-descriptors-wrapper">
+                <div className="sf9-descriptors-title">PERFORMANCE DESCRIPTORS</div>
+                <table className="sf9-descriptors-table-clean">
                   <thead>
                     <tr>
-                      <th>Descriptors</th>
-                      <th>Grading Scale</th>
-                      <th>Remarks</th>
+                      <th style={{ width: "35%", textAlign: "center" }}>Grading Scale</th>
+                      <th style={{ width: "35%", textAlign: "center" }}>Description</th>
+                      <th style={{ width: "30%", textAlign: "center" }}>Remarks</th>
                     </tr>
                   </thead>
                   <tbody>
-                    <tr>
-                      <td>Outstanding</td>
-                      <td>90–100</td>
-                      <td style={{ color: "#16a34a", fontWeight: "bold" }}>Passed</td>
-                    </tr>
-                    <tr>
-                      <td>Very Satisfactory</td>
-                      <td>85–89</td>
-                      <td style={{ color: "#16a34a", fontWeight: "bold" }}>Passed</td>
-                    </tr>
-                    <tr>
-                      <td>Satisfactory</td>
-                      <td>80–84</td>
-                      <td style={{ color: "#16a34a", fontWeight: "bold" }}>Passed</td>
-                    </tr>
-                    <tr>
-                      <td>Fairly Satisfactory</td>
-                      <td>75–79</td>
-                      <td style={{ color: "#16a34a", fontWeight: "bold" }}>Passed</td>
-                    </tr>
-                    <tr>
-                      <td>Did Not Meet Expectations</td>
-                      <td>Below 75</td>
-                      <td style={{ color: "#ef4444", fontWeight: "bold" }}>Failed</td>
-                    </tr>
+                    {performanceDescriptors.map((desc, idx) => (
+                      <tr key={idx}>
+                        <td style={{ textAlign: "center" }}>{desc.scale}</td>
+                        <td style={{ textAlign: "center" }}>{desc.desc}</td>
+                        <td style={{ textAlign: "center" }}>{desc.remarks}</td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
 
-              <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", fontSize: "10px", lineHeight: "1.5", paddingLeft: "8px" }}>
-                <div><strong>Marking Code Guidelines:</strong></div>
-                <div>AO — Always Observed (Laging Ginagawa)</div>
-                <div>SO — Sometimes Observed (Paminsang Ginagawa)</div>
-                <div>RO — Rarely Observed (Madalang Ginagawa)</div>
-                <div>NO — Not Observed (Hindi Ginagawa)</div>
-              </div>
             </div>
+          )}
 
-            {/* Attendance table */}
-            <table className="sf9-attendance-table">
-              <thead>
-                <tr>
-                  <th style={{ width: "20%" }}>Months</th>
-                  {attendanceData.months.map((m, idx) => (
-                    <th key={idx}>{m.slice(0, 3)}</th>
-                  ))}
-                  <th>Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td className="row-label">School Days</td>
-                  {attendanceData.schoolDays.map((d, idx) => (
-                    <td key={idx}>{d}</td>
-                  ))}
-                  <td style={{ fontWeight: "bold" }}>{getAttendanceTotal(attendanceData.schoolDays)}</td>
-                </tr>
-                <tr>
-                  <td className="row-label">Days Present</td>
-                  {attendanceData.daysPresent.map((d, idx) => (
-                    <td key={idx}>{d}</td>
-                  ))}
-                  <td style={{ fontWeight: "bold" }}>{getAttendanceTotal(attendanceData.daysPresent)}</td>
-                </tr>
-                <tr>
-                  <td className="row-label">Days Absent</td>
-                  {attendanceData.daysAbsent.map((d, idx) => (
-                    <td key={idx}>{d}</td>
-                  ))}
-                  <td style={{ fontWeight: "bold" }}>{getAttendanceTotal(attendanceData.daysAbsent)}</td>
-                </tr>
-              </tbody>
-            </table>
+          {/* ============================================================
+              BACK PAGE (PAGE 2): ATTENDANCE, REMARKS, & CERTIFICATE OF TRANSFER
+             ============================================================ */}
+          {(viewMode === "spread" || viewMode === "back") && (
+            <div className="sf9-official-sheet sf9-back-sheet">
 
-          </div>
-
-          {/* Right Column: Observed Values & Signatures */}
-          <div className="sf9-observed-values-card">
-            <h3 className="observed-values-title">Report on Learner's Observed Values</h3>
-
-            <table className="observed-values-table">
-              <thead>
-                <tr>
-                  <th>Core Values</th>
-                  <th>Behavior Statements</th>
-                  <th style={{ width: "40px" }}>T1</th>
-                  <th style={{ width: "40px" }}>T2</th>
-                  <th style={{ width: "85px" }}>T3 (Edit)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {observedValues.map((group, groupIdx) => (
-                  <React.Fragment key={groupIdx}>
-                    {group.statements.map((stmt, stmtIdx) => (
-                      <tr key={stmt.id}>
-                        {stmtIdx === 0 && (
-                          <td className="core-value-cell" rowSpan={group.statements.length}>
-                            {group.coreValue}
-                          </td>
-                        )}
-                        <td className="statement-cell">{stmt.text}</td>
-                        <td className="term-rating-cell">
-                          <span className={`rating-badge ${getRatingBadgeClass(stmt.t1)}`}>{stmt.t1}</span>
-                        </td>
-                        <td className="term-rating-cell">
-                          <span className={`rating-badge ${getRatingBadgeClass(stmt.t2)}`}>{stmt.t2}</span>
-                        </td>
-                        {/* Interactive Dropdown Selector for Term 3 */}
-                        <td className="term-rating-cell" style={{ padding: "4px" }}>
-                          <select
-                            className={`observed-value-select ${getRatingBadgeClass(stmt.t3)}`}
-                            value={stmt.t3}
-                            onChange={(e) => handleRatingChange(stmt.id, "t3", e.target.value)}
-                          >
-                            <option value="AO">AO</option>
-                            <option value="SO">SO</option>
-                            <option value="RO">RO</option>
-                            <option value="NO">NO</option>
-                          </select>
-                        </td>
-                      </tr>
+              {/* Section 1: Attendance Record */}
+              <div className="sf9-table-heading">ATTENDANCE RECORD</div>
+              <table className="sf9-official-table sf9-attendance-table-clean">
+                <thead>
+                  <tr>
+                    <th className="col-month-head">Month</th>
+                    {attendanceData.months.map((m, idx) => (
+                      <th key={idx} className="col-month-col">{m}</th>
                     ))}
-                  </React.Fragment>
-                ))}
-              </tbody>
-            </table>
+                    <th className="col-total-col">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td className="row-att-label">No. of Class Days</td>
+                    {attendanceData.classDays.map((d, idx) => (
+                      <td key={idx} className="att-num">{d}</td>
+                    ))}
+                    <td className="att-num font-bold">{getAttendanceTotal(attendanceData.classDays)}</td>
+                  </tr>
+                  <tr>
+                    <td className="row-att-label">No. of Days Present</td>
+                    {attendanceData.daysPresent.map((d, idx) => (
+                      <td key={idx} className="att-num">{d}</td>
+                    ))}
+                    <td className="att-num font-bold">{getAttendanceTotal(attendanceData.daysPresent)}</td>
+                  </tr>
+                  <tr>
+                    <td className="row-att-label">No. of Days Absent</td>
+                    {attendanceData.daysAbsent.map((d, idx) => (
+                      <td key={idx} className="att-num">{d}</td>
+                    ))}
+                    <td className="att-num font-bold">{getAttendanceTotal(attendanceData.daysAbsent)}</td>
+                  </tr>
+                </tbody>
+              </table>
 
-            {/* Parent Signatures Area */}
-            <div className="sf9-right-sign-block">
-              <h4 className="sf9-right-sign-title">Parent/Guardian's Signature</h4>
-              <div className="sf9-signature-lines-vertical">
-                <div className="sf9-sig-line-item">
-                  <span className="sf9-sig-label">1st Term:</span>
-                  <div className="sf9-sig-value-underline"></div>
-                </div>
-                <div className="sf9-sig-line-item">
-                  <span className="sf9-sig-label">2nd Term:</span>
-                  <div className="sf9-sig-value-underline"></div>
-                </div>
-                <div className="sf9-sig-line-item">
-                  <span className="sf9-sig-label">3rd Term:</span>
-                  <div className="sf9-sig-value-underline"></div>
+              {/* Section 2: Teacher's Comments/Remarks */}
+              <div className="sf9-comments-section">
+                <div className="sf9-table-heading" style={{ marginTop: "14px" }}>TEACHER'S COMMENTS/REMARKS</div>
+                <div className="sf9-term-comments-box">
+                  <div className="sf9-comment-term-row">
+                    <span className="sf9-term-label font-bold">Term 1</span>
+                    <div className="sf9-comment-textarea-wrap">
+                      <textarea
+                        className="sf9-comment-input"
+                        rows="2"
+                        value={comments.term1}
+                        onChange={(e) => handleCommentChange("term1", e.target.value)}
+                        placeholder="Enter comments for Term 1..."
+                      />
+                    </div>
+                  </div>
+
+                  <div className="sf9-comment-term-row">
+                    <span className="sf9-term-label font-bold">Term 2</span>
+                    <div className="sf9-comment-textarea-wrap">
+                      <textarea
+                        className="sf9-comment-input"
+                        rows="2"
+                        value={comments.term2}
+                        onChange={(e) => handleCommentChange("term2", e.target.value)}
+                        placeholder="Enter comments for Term 2..."
+                      />
+                    </div>
+                  </div>
+
+                  <div className="sf9-comment-term-row">
+                    <span className="sf9-term-label font-bold">Term 3</span>
+                    <div className="sf9-comment-textarea-wrap">
+                      <textarea
+                        className="sf9-comment-input"
+                        rows="2"
+                        value={comments.term3}
+                        onChange={(e) => handleCommentChange("term3", e.target.value)}
+                        placeholder="Enter comments for Term 3..."
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
+
+              {/* Section 3: Parents/Guardian's Signature */}
+              <div className="sf9-parent-signatures-section">
+                <div className="sf9-table-heading" style={{ marginTop: "14px" }}>PARENTS/GUARDIAN'S SIGNATURE</div>
+                <div className="sf9-parent-sig-lines">
+                  <div className="sf9-parent-sig-row">
+                    <span className="sf9-parent-sig-label font-bold">Term 1</span>
+                    <div className="sf9-parent-sig-underline"></div>
+                  </div>
+                  <div className="sf9-parent-sig-row">
+                    <span className="sf9-parent-sig-label font-bold">Term 2</span>
+                    <div className="sf9-parent-sig-underline"></div>
+                  </div>
+                  <div className="sf9-parent-sig-row">
+                    <span className="sf9-parent-sig-label font-bold">Term 3</span>
+                    <div className="sf9-parent-sig-underline"></div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 4: Certificate of Transfer */}
+              <div className="sf9-certificate-section">
+                <div className="sf9-table-heading" style={{ marginTop: "16px" }}>CERTIFICATE OF TRANSFER</div>
+                <p className="sf9-cert-statement">
+                  This is to certify that the above-named learner has satisfactorily completed the requirements for the grade level indicated.
+                </p>
+
+                <div className="sf9-cert-form-lines">
+                  <div className="sf9-cert-line">
+                    <span className="sf9-cert-label">Admitted to Grade:</span>
+                    <span className="sf9-cert-underline">Grade 9</span>
+                  </div>
+                  <div className="sf9-cert-line">
+                    <span className="sf9-cert-label">Eligible for Admission to Grade:</span>
+                    <span className="sf9-cert-underline">Grade 9</span>
+                  </div>
+                </div>
+
+                <div className="sf9-approved-block">
+                  <div className="sf9-approved-title font-bold">Approved:</div>
+                  <div className="sf9-transfer-signatures-row">
+                    <div className="sf9-sig-signatory-col school-head-sig">
+                      <div className="sf9-signatory-line font-bold">{studentProfile.principalName}</div>
+                      <div className="sf9-signatory-role">School Head</div>
+                    </div>
+                    <div className="sf9-sig-signatory-col adviser-sig">
+                      <div className="sf9-signatory-line font-bold">{studentProfile.adviserName}</div>
+                      <div className="sf9-signatory-role">Adviser</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 5: Cancellation of Eligibility to Transfer */}
+              <div className="sf9-cancellation-section">
+                <div className="sf9-table-heading" style={{ marginTop: "16px" }}>CANCELLATION OF ELIGIBILITY TO TRANSFER</div>
+                <div className="sf9-cancel-row">
+                  <div className="sf9-cancel-field">
+                    <span className="sf9-cert-label">Admitted in:</span>
+                    <span className="sf9-cert-underline"></span>
+                  </div>
+                  <div className="sf9-cancel-field">
+                    <span className="sf9-cert-label">Date:</span>
+                    <span className="sf9-cert-underline"></span>
+                  </div>
+                </div>
+
+                <div className="sf9-cancel-signatory-row">
+                  <div className="sf9-sig-signatory-col school-head-sig">
+                    <div className="sf9-signatory-line font-bold">{studentProfile.principalName}</div>
+                    <div className="sf9-signatory-role">School Head</div>
+                  </div>
+                </div>
+              </div>
+
             </div>
-
-            {/* Certificate of Transfer */}
-            <div className="certificate-transfer-block">
-              <h4 className="certificate-title">Certificate of Transfer</h4>
-              <div className="certificate-row">
-                <span className="certificate-label">Admitted to Grade:</span>
-                <span className="certificate-underline">Grade 9</span>
-                <span className="certificate-label" style={{ marginLeft: "12px" }}>Section:</span>
-                <span className="certificate-underline"></span>
-              </div>
-              <div className="certificate-row" style={{ marginTop: "12px" }}>
-                <span className="certificate-label">Eligibility for Admission to Grade:</span>
-                <span className="certificate-underline">Grade 9</span>
-              </div>
-
-              <div className="sf9-signatures-row" style={{ marginTop: "24px", marginBottom: "0px" }}>
-                <div className="sf9-signature-block" style={{ width: "50%" }}>
-                  <div style={{ fontWeight: "bold", borderBottom: "1px solid #475569", display: "inline-block", paddingBottom: "2px", width: "100%" }}>HELEN C. TANASAS, PhD</div>
-                  <div className="sf9-signature-title">Secondary School Principal II</div>
-                </div>
-                <div className="sf9-signature-block" style={{ width: "45%" }}>
-                  <div style={{ fontWeight: "bold", borderBottom: "1px solid #475569", display: "inline-block", paddingBottom: "2px", width: "100%" }}>HARVEY BABIA</div>
-                  <div className="sf9-signature-title">Adviser</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Cancellation of Transfer */}
-            <div className="certificate-transfer-block" style={{ marginBottom: "0" }}>
-              <h4 className="certificate-title" style={{ fontSize: "11px", marginBottom: "8px" }}>Cancellation of Eligibility to Transfer</h4>
-              <div className="certificate-row">
-                <span className="certificate-label">Admitted in:</span>
-                <span className="certificate-underline"></span>
-              </div>
-              <div className="certificate-row" style={{ marginTop: "8px" }}>
-                <span className="certificate-label">Date:</span>
-                <span className="certificate-underline"></span>
-              </div>
-
-              <div style={{ display: "flex", justifyContent: "center", marginTop: "20px" }}>
-                <div className="sf9-signature-block" style={{ width: "70%" }}>
-                  <div style={{ borderBottom: "1px solid #cbd5e1", height: "18px" }}></div>
-                  <div className="sf9-signature-title" style={{ marginTop: "4px" }}>Secondary School Principal</div>
-                </div>
-              </div>
-            </div>
-
-          </div>
+          )}
 
         </div>
       ) : (
@@ -521,15 +533,12 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
 
           {/* Left Column: Student Profile Information Card */}
           <div className="profile-info-column" style={!isAdviser ? { gridColumn: "1 / -1" } : undefined}>
-            {/* Section heading – outside the card */}
             <div className="profile-info-header">
               <h3 className="profile-info-title">Student Profile</h3>
               <p className="profile-info-subtitle">Student demographic and enrollment details</p>
             </div>
 
-            {/* Card */}
             <div className="profile-info-card sf9-card">
-              {/* Profile Data Fields */}
               <div className="profile-fields-list">
                 <div className="profile-field-group">
                   <span className="profile-field-label">Full Name</span>
@@ -559,15 +568,13 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
             </div>
           </div>
 
-          {/* Right Column (2 spans): Documents Section (Adviser ONLY) */}
+          {/* Right Column: Documents Section (Adviser ONLY) */}
           {isAdviser && (
             <div className="documents-section">
-              {/* Section heading – outside the cards */}
               <h3 className="documents-section-title">Documents</h3>
 
-              {/* Document Cards Grid (2-column card grid) */}
               <div className="documents-grid">
-                {/* Form 10 - Permanent Record Card */}
+                {/* Form 10 Card */}
                 <div className="doc-card">
                   <div className="doc-card-top">
                     <div className="doc-icon-box">
@@ -591,24 +598,24 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
                   </div>
                 </div>
 
-                {/* Form 9 - Report Card Card */}
+                {/* Form 9 Card */}
                 <div className="doc-card">
                   <div className="doc-card-top">
                     <div className="doc-icon-box">
-                      <FileText size={20} />
+                      <FileSpreadsheet size={20} />
                     </div>
                     <div className="doc-details">
-                      <h4 className="doc-title">Form 9 - Report Card</h4>
+                      <h4 className="doc-title">Form 9 - Report Card (Official)</h4>
                       <p className="doc-subtitle">Per term performance report</p>
                       <span className="doc-status-badge">Available</span>
                       <div className="doc-actions">
-                        <button className="btn-doc-action preview" title="Preview Document">
+                        <button className="btn-doc-action preview" onClick={() => setActiveTab("sf9")} title="View Official SF9">
                           <Eye size={14} />
-                          <span>Preview</span>
+                          <span>View SF9</span>
                         </button>
-                        <button className="btn-doc-action download" title="Download Document">
+                        <button className="btn-doc-action download" onClick={handlePrint} title="Print/Export SF9">
                           <Download size={14} />
-                          <span>Download</span>
+                          <span>Print/PDF</span>
                         </button>
                       </div>
                     </div>
