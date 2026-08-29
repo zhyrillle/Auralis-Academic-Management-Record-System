@@ -1,39 +1,54 @@
-/**
- * @typedef {Object} RiskLevelCardProps
- * @property {string} riskLevel - "low" | "medium" | "high"
- * @property {string} label
- * @property {number} count
- * @property {string[]} notes
- * @property {boolean} [loading]
- */
+import React from "react";
 
 const RISK_CONFIG = {
   low: {
     pillClass: "ar-pill-green",
+    label: "Low Risk",
     accent: "#16A34A",
+    defaultBullets: [
+      "Borderline grades (74-76)",
+      "1-2 absences this months",
+      "Early intervention needed",
+    ],
   },
   medium: {
     pillClass: "ar-pill-amber",
-    accent: "#F4B400",
+    label: "Medium Risk",
+    accent: "#d97706",
+    defaultBullets: [
+      "Borderline grades (74-76)",
+      "1-2 absences this months",
+      "Early intervention needed",
+    ],
   },
   high: {
     pillClass: "ar-pill-red",
-    accent: "#EF4444",
+    label: "High Risk",
+    accent: "#dc2626",
+    defaultBullets: [
+      "Borderline grades (74-76)",
+      "1-2 absences this months",
+      "Early intervention needed",
+    ],
   },
 };
 
-export default function RiskLevelCard({ riskLevel, label, count, notes, loading }) {
+export default function RiskLevelCard({ riskLevel = "low", label, count, notes, loading }) {
   const config = RISK_CONFIG[riskLevel] || RISK_CONFIG.low;
+  const bullets = notes && notes.length > 0 ? notes : config.defaultBullets;
 
   return (
-    <div className="ar-card">
-      <div className="ar-risk-header">
-        <span className={`ar-risk-pill ${config.pillClass}`}>{label}</span>
-        <span className="ar-risk-count" style={{ color: config.accent }}>
+    <div className="ar-risk-bottom-card">
+      <div className="ar-risk-card-header">
+        <span className={`ar-risk-pill ${config.pillClass}`}>
+          {label || config.label}
+        </span>
+        <span className="ar-risk-learners-count">
           {loading ? "—" : `${count} learners`}
         </span>
       </div>
-      <div className="ar-risk-body">
+
+      <div className="ar-risk-card-body">
         {loading ? (
           <div className="ar-skeleton-lines">
             <div className="ar-skeleton-line" />
@@ -41,13 +56,13 @@ export default function RiskLevelCard({ riskLevel, label, count, notes, loading 
             <div className="ar-skeleton-line" />
           </div>
         ) : (
-          <ul className="ar-risk-list">
-            {notes.map((note, idx) => (
-              <li key={idx} className="ar-risk-list-item">{note}</li>
+          <ul className="ar-risk-bullets-list">
+            {bullets.map((bullet, idx) => (
+              <li key={idx} className="ar-risk-bullet-item">
+                <span className="ar-risk-bullet-dot">•</span>
+                <span className="ar-risk-bullet-text">{bullet}</span>
+              </li>
             ))}
-            {notes.length === 0 && (
-              <li className="ar-risk-list-item ar-risk-empty">No flagged reasons yet</li>
-            )}
           </ul>
         )}
       </div>
