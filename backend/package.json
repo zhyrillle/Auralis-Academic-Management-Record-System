@@ -1,9 +1,13 @@
 {
+  "scripts": {
+    "test": "node --test test/GradeComputationService.test.js test/MasterSheetWorkbookService.test.js"
+  },
   "dependencies": {
     "bcryptjs": "^3.0.3",
     "cloudinary": "^2.10.0",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
+    "exceljs": "^4.4.0",
     "express": "^5.2.1",
     "multer": "^2.3.0",
     "mysql2": "^3.23.0",
