@@ -76,12 +76,6 @@ export default function AccountSummary({
       className="dashboard-summary"
       aria-labelledby="dashboard-summary-title"
     >
-      <div className="admin-section-heading">
-        <div>
-          <h2 id="dashboard-summary-title">Account Summary</h2>
-          <p>A quick view of registered faculty and system accounts.</p>
-        </div>
-      </div>
 
       {showBlockingError ? (
         <div className="admin-dashboard-state admin-dashboard-state--error">

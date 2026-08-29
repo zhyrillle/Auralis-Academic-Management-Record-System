@@ -6,6 +6,7 @@ const db = require("../config/db");
 
 const User = require("../models/User");
 const UserManagementOptions = require("../models/UserManagementOptions");
+const AuditEvent = require("../models/AuditEvent");
 const OtpStore = require("../services/otpStore");
 const { sendPasswordResetOtpEmail } = require("../services/emailService");
 const {
@@ -499,6 +500,21 @@ router.post("/reset-password", async (req, res) => {
 
     OtpStore.invalidate(cleanEmail);
 
+    await AuditEvent.create({
+      user_id: user.user_id,
+      actor_context: { source: 'user', acting_as: 'User' },
+      event_type: 'USER_PASSWORD_RESET',
+      module_name: 'ACCOUNT_MANAGEMENT',
+      entity_type: 'USER',
+      entity_id: user.user_id,
+      after_data: { email: cleanEmail },
+      metadata: {
+        target: `${user.first_name || ''} ${user.last_name || ''}`.trim() || cleanEmail,
+        summary: `Reset password for ${cleanEmail}.`,
+        impact: 'High',
+      },
+    }).catch((err) => console.error('Failed to log password reset audit:', err.message));
+
     res.json({
       success: true,
       message: "Your password has been successfully reset. You can now login with your new password.",
@@ -506,6 +522,15 @@ router.post("/reset-password", async (req, res) => {
   } catch (err) {
     console.error("RESET PASSWORD ERROR:", err);
     res.status(500).json({ error: err.message || "Failed to reset password." });
+  }
+});
+
+router.get("/summary", async (req, res) => {
+  try {
+    const summary = await AuditEvent.getAccountSummary();
+    res.json(summary);
+  } catch (err) {
+    sendDatabaseError(res, err);
   }
 });
 
@@ -576,6 +601,26 @@ router.put("/:id/profile", async (req, res) => {
       extension_name: toNullable(extension_name),
       email: email.trim().toLowerCase(),
     });
+
+    await AuditEvent.create({
+      user_id: userId,
+      actor_context: { source: 'user', acting_as: 'User' },
+      event_type: 'USER_PROFILE_UPDATED',
+      module_name: 'ACCOUNT_MANAGEMENT',
+      entity_type: 'USER',
+      entity_id: userId,
+      after_data: {
+        first_name: first_name.trim(),
+        last_name: last_name.trim(),
+        email: email.trim().toLowerCase(),
+      },
+      metadata: {
+        target: `${first_name.trim()} ${last_name.trim()}`,
+        summary: `Updated profile details for ${first_name.trim()} ${last_name.trim()}.`,
+        impact: 'Low',
+      },
+    }).catch((err) => console.error('Failed to log profile update audit:', err.message));
+
     res.json({ message: "Profile updated successfully.", user: updated });
   } catch (err) {
     sendDatabaseError(res, err);
@@ -745,6 +790,28 @@ router.post("/", async (req, res) => {
 
     const userId = result.insertId;
     await saveRoleAssignments(connection, userId, req.body, schoolYear);
+
+    await AuditEvent.create({
+      user_id: req.headers['x-auralis-user-id'] ? Number(req.headers['x-auralis-user-id']) : null,
+      actor_context: { source: 'user', acting_as: 'System Administrator' },
+      event_type: 'USER_ACCOUNT_CREATED',
+      module_name: 'ACCOUNT_MANAGEMENT',
+      entity_type: 'USER',
+      entity_id: userId,
+      after_data: {
+        role,
+        email: email.trim().toLowerCase(),
+        first_name: first_name.trim(),
+        last_name: last_name.trim(),
+        account_status: account_status || status || "active",
+      },
+      metadata: {
+        target: `${first_name.trim()} ${last_name.trim()}`,
+        summary: `Created a ${role} account for ${first_name.trim()} ${last_name.trim()}.`,
+        impact: 'Medium',
+      },
+    }, connection);
+
     await connection.commit();
 
     const users = await getManagementUsers();
@@ -803,6 +870,38 @@ router.put("/:id", async (req, res) => {
 
     await deleteRoleAssignments(connection, userId);
     await saveRoleAssignments(connection, userId, req.body, schoolYear);
+
+    const isStatusChanged = existingUser.account_status !== (account_status || status || "active");
+    await AuditEvent.create({
+      user_id: req.headers['x-auralis-user-id'] ? Number(req.headers['x-auralis-user-id']) : null,
+      actor_context: { source: 'user', acting_as: 'System Administrator' },
+      event_type: isStatusChanged ? 'USER_STATUS_UPDATED' : 'USER_ACCOUNT_UPDATED',
+      module_name: 'ACCOUNT_MANAGEMENT',
+      entity_type: 'USER',
+      entity_id: userId,
+      before_data: {
+        role: existingUser.role,
+        email: existingUser.email,
+        first_name: existingUser.first_name,
+        last_name: existingUser.last_name,
+        account_status: existingUser.account_status,
+      },
+      after_data: {
+        role,
+        email: email.trim().toLowerCase(),
+        first_name: first_name.trim(),
+        last_name: last_name.trim(),
+        account_status: account_status || status || "active",
+      },
+      metadata: {
+        target: `${first_name.trim()} ${last_name.trim()}`,
+        summary: isStatusChanged
+          ? `Changed account status to ${account_status || status || 'active'} for ${first_name.trim()} ${last_name.trim()}.`
+          : `Updated account details for ${first_name.trim()} ${last_name.trim()}.`,
+        impact: 'Medium',
+      },
+    }, connection);
+
     await connection.commit();
 
     const users = await getManagementUsers();

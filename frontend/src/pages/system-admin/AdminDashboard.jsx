@@ -8,7 +8,8 @@ import {
   getAccountSummary,
   getAuditEvents,
 } from "../../services/adminDashboardService";
-import { getStoredUser } from "../../utils/auth";
+import { getUserProfile } from "../../services/userService";
+import { getStoredUser, setStoredUser } from "../../utils/auth";
 import "../../styles/adminDashboard.css";
 
 const emptySummary = {
@@ -24,7 +25,7 @@ const emptySummary = {
 };
 
 export default function AdminDashboard() {
-  const currentUser = useMemo(() => getStoredUser(), []);
+  const [adminUser, setAdminUser] = useState(() => getStoredUser());
   const [summary, setSummary] = useState(emptySummary);
   const [auditEvents, setAuditEvents] = useState([]);
   const [isSummaryLoading, setIsSummaryLoading] = useState(true);
@@ -48,6 +49,19 @@ export default function AdminDashboard() {
     setSummaryError("");
 
     try {
+      if (adminUser?.user_id) {
+        getUserProfile(adminUser.user_id)
+          .then((profile) => {
+            if (profile) {
+              setAdminUser((prev) => {
+                const merged = { ...prev, ...profile };
+                setStoredUser(merged);
+                return merged;
+              });
+            }
+          })
+          .catch(() => {});
+      }
       setSummary(await getAccountSummary());
       setHasLoadedSummary(true);
       setLastUpdatedAt(new Date());
@@ -56,7 +70,7 @@ export default function AdminDashboard() {
     } finally {
       setIsSummaryLoading(false);
     }
-  }, []);
+  }, [adminUser?.user_id]);
 
   const loadAuditEvents = useCallback(async () => {
     setIsAuditLoading(true);
@@ -74,6 +88,19 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     let isCurrent = true;
+
+    if (adminUser?.user_id) {
+      getUserProfile(adminUser.user_id)
+        .then((profile) => {
+          if (!isCurrent || !profile) return;
+          setAdminUser((prev) => {
+            const merged = { ...prev, ...profile };
+            setStoredUser(merged);
+            return merged;
+          });
+        })
+        .catch(() => {});
+    }
 
     getAccountSummary()
       .then((nextSummary) => {
@@ -109,7 +136,7 @@ export default function AdminDashboard() {
     return () => {
       isCurrent = false;
     };
-  }, []);
+  }, [adminUser?.user_id]);
 
   useEffect(() => {
     if (!selectedEvent) return undefined;
@@ -239,7 +266,10 @@ export default function AdminDashboard() {
     setDateToFilter(value);
   };
 
-  const firstName = currentUser?.first_name || "Admin";
+  const adminFullName =
+    [adminUser?.first_name, adminUser?.last_name].filter(Boolean).join(" ") ||
+    adminUser?.first_name ||
+    "Admin";
   const isRefreshing = isSummaryLoading || isAuditLoading;
   const lastUpdatedLabel = lastUpdatedAt
     ? `Updated ${new Intl.DateTimeFormat("en-PH", {
@@ -256,7 +286,7 @@ export default function AdminDashboard() {
       ======================================== */}
       <header className="admin-dashboard-intro">
         <div>
-          <h1>Welcome back, {firstName}!</h1>
+          <h1>Welcome back, {adminFullName}!</h1>
           <p>Monitor user accounts and recent activity across Auralis.</p>
         </div>
         <div className="admin-dashboard-refresh">
