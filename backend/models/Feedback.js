@@ -41,12 +41,20 @@ class Feedback {
   }
 
   static async getEvalueeStats(userId) {
-    // 1. Calculate average rating received
+    // 1. Calculate average rating received overall and per question (Q1 to Q8)
     const [ratingRows] = await db.execute(
       `SELECT 
         COUNT(*) AS total_received,
         AVG((COALESCE(q1_rate, 0) + COALESCE(q2_rate, 0) + COALESCE(q3_rate, 0) + COALESCE(q4_rate, 0) + 
-             COALESCE(q5_rate, 0) + COALESCE(q6_rate, 0) + COALESCE(q7_rate, 0) + COALESCE(q8_rate, 0)) / 8.0) AS avg_rating
+             COALESCE(q5_rate, 0) + COALESCE(q6_rate, 0) + COALESCE(q7_rate, 0) + COALESCE(q8_rate, 0)) / 8.0) AS avg_rating,
+        AVG(q1_rate) AS q1_avg,
+        AVG(q2_rate) AS q2_avg,
+        AVG(q3_rate) AS q3_avg,
+        AVG(q4_rate) AS q4_avg,
+        AVG(q5_rate) AS q5_avg,
+        AVG(q6_rate) AS q6_avg,
+        AVG(q7_rate) AS q7_avg,
+        AVG(q8_rate) AS q8_avg
        FROM FEEDBACK
        WHERE evaluee_id = ?`,
       [userId]
@@ -91,30 +99,65 @@ class Feedback {
       }
     });
 
-    // 5. Calculate score distribution for ratings received by this user
-    const [receivedRatings] = await db.execute(
-      `SELECT ((COALESCE(q1_rate, 0) + COALESCE(q2_rate, 0) + COALESCE(q3_rate, 0) + COALESCE(q4_rate, 0) + 
-               COALESCE(q5_rate, 0) + COALESCE(q6_rate, 0) + COALESCE(q7_rate, 0) + COALESCE(q8_rate, 0)) / 8.0) AS score
-       FROM FEEDBACK
-       WHERE evaluee_id = ?`,
-      [userId]
-    );
-
-    let excellent = 0, good = 0, average = 0, needsImprovement = 0;
-    receivedRatings.forEach((row) => {
-      const s = parseFloat(row.score);
-      if (s >= 4.5) excellent++;
-      else if (s >= 3.5) good++;
-      else if (s >= 2.5) average++;
-      else needsImprovement++;
-    });
-
     const totalReceived = ratingRows[0]?.total_received || 0;
     const avgRating = ratingRows[0]?.avg_rating ? parseFloat(ratingRows[0].avg_rating).toFixed(1) : "0.0";
     const totalSubmitted = submittedRows[0]?.total_submitted || 0;
     const totalPeers = peerRows[0]?.total_peers || 0;
     const pendingCount = pendingPeers.length;
     const completionRate = totalPeers > 0 ? Math.min(100, Math.round((totalSubmitted / totalPeers) * 100)) : 100;
+
+    // 5. Build Question 1 to 8 performance breakdown
+    const qAverages = [
+      ratingRows[0]?.q1_avg ? parseFloat(ratingRows[0].q1_avg) : 0,
+      ratingRows[0]?.q2_avg ? parseFloat(ratingRows[0].q2_avg) : 0,
+      ratingRows[0]?.q3_avg ? parseFloat(ratingRows[0].q3_avg) : 0,
+      ratingRows[0]?.q4_avg ? parseFloat(ratingRows[0].q4_avg) : 0,
+      ratingRows[0]?.q5_avg ? parseFloat(ratingRows[0].q5_avg) : 0,
+      ratingRows[0]?.q6_avg ? parseFloat(ratingRows[0].q6_avg) : 0,
+      ratingRows[0]?.q7_avg ? parseFloat(ratingRows[0].q7_avg) : 0,
+      ratingRows[0]?.q8_avg ? parseFloat(ratingRows[0].q8_avg) : 0,
+    ];
+
+    const qDescriptions = [
+      "Professionalism with colleagues",
+      "Respect toward fellow staff",
+      "Positive workplace attitude",
+      "Punctuality & preparedness",
+      "Contribution during meetings",
+      "Responsiveness to concerns",
+      "Timely completion of tasks",
+      "Initiative in problem solving"
+    ];
+
+    const qColors = [
+      "#112d61",
+      "#1a3a6b",
+      "#23497d",
+      "#2f5c97",
+      "#9b7914",
+      "#b8941f",
+      "#c9a227",
+      "#e0bd45"
+    ];
+
+    const totalAvgSum = qAverages.reduce((acc, curr) => acc + curr, 0);
+
+    const questionDistribution = qAverages.map((avgVal, idx) => {
+      const qNum = idx + 1;
+      const formattedAvg = avgVal > 0 ? avgVal.toFixed(1) : (totalReceived > 0 ? "0.0" : "4.5");
+      const slicePct = totalAvgSum > 0 ? Math.round((avgVal / totalAvgSum) * 100) : 12.5;
+
+      return {
+        id: qNum,
+        qNumber: qNum,
+        label: `Question ${qNum}`,
+        description: qDescriptions[idx],
+        avg: formattedAvg,
+        scorePercent: avgVal > 0 ? Math.round((avgVal / 5.0) * 100) : 90,
+        percent: slicePct,
+        color: qColors[idx],
+      };
+    });
 
     return {
       total_submitted: totalSubmitted,
@@ -128,12 +171,7 @@ class Feedback {
         dept_heads: pendingDeptHeads,
         principals: pendingPrincipals,
       },
-      rating_distribution: {
-        excellent,
-        good,
-        average,
-        needs_improvement: needsImprovement,
-      },
+      question_distribution: questionDistribution,
     };
   }
 
