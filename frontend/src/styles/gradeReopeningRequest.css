@@ -258,6 +258,17 @@
   background-color: #f1f5f9;
 }
 
+.grr-dropzone--active {
+  border-color: #112d61;
+  border-style: solid;
+  background-color: #e8eef9;
+  box-shadow: 0 0 0 3px rgba(17, 45, 97, 0.12);
+}
+
+.grr-dropzone--active .grr-dropzone-icon {
+  color: #112d61;
+}
+
 .grr-dropzone-icon {
   width: 32px;
   height: 32px;
@@ -300,6 +311,13 @@
   border-color: #112d61;
 }
 
+.grr-file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
 .grr-file-preview {
   display: flex;
   align-items: center;
@@ -308,7 +326,7 @@
   background: #f1f5f9;
   border: 1px solid #cbd5e1;
   border-radius: 8px;
-  margin-top: 8px;
+  margin-top: 0;
 }
 
 .grr-file-info {
