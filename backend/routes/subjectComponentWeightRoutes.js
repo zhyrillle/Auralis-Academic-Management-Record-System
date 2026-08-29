@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const SubjectComponentWeight = require('../models/SubjectComponentWeight');
 const SchoolYear = require('../models/SchoolYear');
+const AuditEvent = require('../models/AuditEvent');
 
 const isPositiveInteger = (value) => Number.isInteger(Number(value)) && Number(value) > 0;
 
@@ -71,6 +72,22 @@ router.post('/configuration/:schoolYearId/inherit', async (req, res) => {
       Number(req.params.schoolYearId)
     );
 
+    const actorId = req.headers['x-auralis-user-id'] ? Number(req.headers['x-auralis-user-id']) : null;
+    await AuditEvent.create({
+      user_id: actorId,
+      actor_context: { source: actorId ? 'user' : 'system', acting_as: 'System Administrator' },
+      event_type: 'SUBJECT_WEIGHTS_INHERITED',
+      module_name: 'WS_CONFIGURATION',
+      entity_type: 'SUBJECT_COMPONENT_WEIGHT',
+      entity_id: Number(req.params.schoolYearId),
+      after_data: { school_year_id: Number(req.params.schoolYearId), inserted_count: result.inserted_count },
+      metadata: {
+        school_year: `SY ${req.params.schoolYearId}`,
+        summary: 'Inherited component weights from previous school year.',
+        impact: 'Medium',
+      },
+    }).catch((err) => console.error('Failed to log weight inherit audit:', err.message));
+
     res.json({
       message:
         result.inserted_count > 0
@@ -117,6 +134,23 @@ router.put('/configuration/:schoolYearId', async (req, res) => {
         percentage: Number(weight.percentage),
       }))
     );
+
+    const actorId = req.headers['x-auralis-user-id'] ? Number(req.headers['x-auralis-user-id']) : null;
+    await AuditEvent.create({
+      user_id: actorId,
+      actor_context: { source: actorId ? 'user' : 'system', acting_as: 'System Administrator' },
+      event_type: 'SUBJECT_WEIGHTS_UPDATED',
+      module_name: 'WS_CONFIGURATION',
+      entity_type: 'SUBJECT_COMPONENT_WEIGHT',
+      entity_id: Number(req.params.schoolYearId),
+      after_data: { school_year_id: Number(req.params.schoolYearId), count: rows.length },
+      metadata: {
+        school_year: `SY ${req.params.schoolYearId}`,
+        summary: 'Updated subject component weights configuration.',
+        impact: 'Medium',
+      },
+    }).catch((err) => console.error('Failed to log weight update audit:', err.message));
+
     res.json({
       message: 'Component weights saved successfully.',
       school_year_id: Number(req.params.schoolYearId),
