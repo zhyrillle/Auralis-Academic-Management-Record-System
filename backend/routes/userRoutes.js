@@ -125,16 +125,7 @@ const getManagementUsers = async () => {
           WHERE dh.user_id = u.user_id AND sy.status IN ('ACTIVE', 'ONGOING')
           ORDER BY dh.department_head_id DESC LIMIT 1
         )
-        WHEN u.role IN ('subject_teacher', 'subject teacher') THEN (
-          SELECT GROUP_CONCAT(DISTINCT d.department_name ORDER BY d.department_name SEPARATOR ', ')
-          FROM TEACHER_ASSIGNMENT ta
-          INNER JOIN SUBJECT_OFFERING so ON so.subject_offering_id = ta.subject_offering_id
-          INNER JOIN SUBJECT s ON s.subject_id = so.subject_id
-          INNER JOIN DEPARTMENT d ON d.department_id = s.department_id
-          LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = so.school_year_id
-          WHERE ta.user_id = u.user_id AND sy.status IN ('ACTIVE', 'ONGOING')
-        )
-        ELSE NULL
+        ELSE 'General Education'
       END AS department_name,
       (
         SELECT gl.grade_level_name
