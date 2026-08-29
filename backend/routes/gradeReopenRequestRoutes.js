@@ -94,7 +94,7 @@ router.get("/:id", async (req, res) => {
 router.post(
   "/",
   (req, res, next) => {
-    uploadRequestFile.single("supporting_file")(req, res, (err) => {
+    uploadRequestFile.array("supporting_file", 10)(req, res, (err) => {
       if (err) {
         console.error("[ERROR ROUTE] Multer upload error:", err);
         return res.status(400).json({
@@ -106,23 +106,6 @@ router.post(
   },
   async (req, res) => {
     try {
-      console.log(
-        "[DEBUG POST] /api/reopen-requests body:",
-        req.body
-      );
-
-      console.log(
-        "[DEBUG POST] Uploaded file:",
-        req.file
-          ? {
-            originalname: req.file.originalname,
-            mimetype: req.file.mimetype,
-            size: req.file.size,
-          }
-          : "No file"
-      );
-
-
       // --------------------------------------------------------
       // 1. GET VALUES FROM FORM DATA
       // --------------------------------------------------------
@@ -208,7 +191,7 @@ router.post(
       if (gsRows.length === 0) {
         return res.status(400).json({
           error:
-            "No grade sheet found for this teacher assignment and term.",
+            "No grade sheet found for this teacher assignment.",
         });
       }
 
@@ -218,39 +201,32 @@ router.post(
 
 
       // --------------------------------------------------------
-      // 8. UPLOAD FILE TO CLOUDINARY
+      // 6. UPLOAD MULTIPLE FILES TO CLOUDINARY
       // --------------------------------------------------------
 
-      let fileData = {
-        file_name: null,
-        file_path: null,
-        file_type: null,
-        file_size: null,
-      };
+      const filesToProcess = req.files || (req.file ? [req.file] : []);
+      let uploadedFileNames = [];
+      let uploadedFilePaths = [];
+      let uploadedFileTypes = [];
+      let totalFileSize = 0;
 
-
-      if (req.file) {
-        const cloudinaryResult =
-          await uploadToCloudinary(
-            req.file.buffer,
-            req.file.originalname
-          );
-
-        fileData = {
-          file_name: req.file.originalname,
-
-          // Store Cloudinary URL in file_path
-          file_path: cloudinaryResult.secureUrl,
-
-          file_type: req.file.mimetype,
-
-          file_size: req.file.size,
-        };
+      if (filesToProcess.length > 0) {
+        for (const file of filesToProcess) {
+          const cloudinaryResult =
+            await uploadToCloudinary(
+              file.buffer,
+              file.originalname
+            );
+          uploadedFileNames.push(file.originalname);
+          uploadedFilePaths.push(cloudinaryResult.secureUrl);
+          uploadedFileTypes.push(file.mimetype);
+          totalFileSize += file.size;
+        }
       }
 
 
       // --------------------------------------------------------
-      // 9. CREATE DATABASE PAYLOAD
+      // 7. CREATE DATABASE PAYLOAD
       // --------------------------------------------------------
 
       const payload = {
@@ -263,13 +239,13 @@ router.post(
 
         status: status || "PENDING",
 
-        file_name: fileData.file_name,
+        file_name: uploadedFileNames.length > 0 ? uploadedFileNames.join(", ") : null,
 
-        file_path: fileData.file_path,
+        file_path: uploadedFilePaths.length > 0 ? uploadedFilePaths.join(", ") : null,
 
-        file_type: fileData.file_type,
+        file_type: uploadedFileTypes.length > 0 ? uploadedFileTypes.join(", ") : null,
 
-        file_size: fileData.file_size,
+        file_size: totalFileSize > 0 ? totalFileSize : null,
 
         requested_at: new Date()
           .toISOString()
@@ -279,7 +255,7 @@ router.post(
 
 
       // --------------------------------------------------------
-      // 10. INSERT INTO DATABASE
+      // 8. INSERT INTO DATABASE
       // --------------------------------------------------------
 
       const id =
@@ -287,7 +263,7 @@ router.post(
 
 
       // --------------------------------------------------------
-      // 11. RESPONSE
+      // 9. RESPONSE
       // --------------------------------------------------------
 
       res.status(201).json({
@@ -296,12 +272,11 @@ router.post(
 
         request_id: id,
 
-        file: fileData.file_name
+        file: uploadedFileNames.length > 0
           ? {
-            name: fileData.file_name,
-            url: fileData.file_path,
-            type: fileData.file_type,
-            size: fileData.file_size,
+            names: uploadedFileNames,
+            urls: uploadedFilePaths,
+            count: uploadedFileNames.length,
           }
           : null,
       });
