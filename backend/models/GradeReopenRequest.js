@@ -24,31 +24,52 @@ class GradeReopenRequest {
   static async findByUserId(userId) {
     try {
       const [rows] = await db.execute(
-        `SELECT grr.*,
-                sec.section_name,
-                s.subject_name
-         FROM GRADE_REOPEN_REQUEST grr
-         JOIN TEACHER_ASSIGNMENT ta ON grr.teacher_assignment_id = ta.teacher_assignment_id
-         JOIN SUBJECT_OFFERING so ON ta.subject_offering_id = so.subject_offering_id
-         JOIN SUBJECT s ON so.subject_id = s.subject_id
-         JOIN SECTION sec ON so.section_id = sec.section_id
-         WHERE ta.user_id = ?
-         ORDER BY grr.request_id DESC`,
+        `
+      SELECT
+        grr.*,
+        sec.section_name,
+        s.subject_name,
+        gs.term_id
+
+      FROM GRADE_REOPEN_REQUEST grr
+
+      INNER JOIN TEACHER_ASSIGNMENT ta
+        ON grr.teacher_assignment_id =
+           ta.teacher_assignment_id
+
+      INNER JOIN SUBJECT_OFFERING so
+        ON ta.subject_offering_id =
+           so.subject_offering_id
+
+      INNER JOIN GRADE_SHEET gs
+        ON grr.grade_sheet_id =
+           gs.grade_sheet_id
+
+      INNER JOIN SUBJECT s
+        ON so.subject_id =
+           s.subject_id
+
+      INNER JOIN SECTION sec
+        ON so.section_id =
+           sec.section_id
+
+      WHERE ta.user_id = ?
+
+      ORDER BY grr.request_id DESC
+      `,
         [userId]
       );
+
       return rows;
+
     } catch (err) {
-      console.error(`DEBUG [GradeReopenRequest.findByUserId] Error for user ${userId}:`, err.message);
-      // Fallback: plain query without JOINs
-      try {
-        const [rows] = await db.execute(
-          `SELECT * FROM GRADE_REOPEN_REQUEST ORDER BY request_id DESC`
-        );
-        return rows.filter(r => String(r.user_id) === String(userId));
-      } catch (fbErr) {
-        console.error(`DEBUG [GradeReopenRequest.findByUserId] Fallback error:`, fbErr.message);
-        return [];
-      }
+
+      console.error(
+        `DEBUG [GradeReopenRequest.findByUserId] Error for user ${userId}:`,
+        err.message
+      );
+
+      return [];
     }
   }
 
@@ -114,10 +135,6 @@ class GradeReopenRequest {
       return result.insertId;
 
     } catch (err) {
-      console.error(
-        "DEBUG [GradeReopenRequest.create] Error:",
-        err.message
-      );
 
       throw err;
     }
