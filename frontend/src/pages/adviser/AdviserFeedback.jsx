@@ -346,10 +346,10 @@ export default function AdviserFeedback() {
                   : "Recent",
               });
             }
-            if (item.improvements_comment && item.improvements_comment.trim()) {
+            if (item.improvements_comments && item.improvements_comments.trim()) {
               comments.push({
                 id: `${item.feedback_id}-imp`,
-                text: `"${item.improvements_comment}"`,
+                text: `"${item.improvements_comments}"`,
                 category: "Areas for Improvement",
                 date: item.created_at
                   ? new Date(item.created_at).toLocaleDateString("en-US", {
