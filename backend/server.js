@@ -37,6 +37,7 @@ const notificationRoutes = require('./routes/notificationRoutes');
 const feedbackRoutes = require('./routes/feedbackRoutes');
 const principalFeedbackRoutes = require('./routes/principalFeedbackRoutes');
 const departmentHeadDashboardRoutes = require('./routes/departmentHeadDashboard.routes');
+const atRiskPredictionRoutes = require('./routes/atRiskPredictionRoutes');
 const gradingPeriodRoutes = require('./routes/gradingPeriodRoutes');
 const masterSheetRoutes = require('./routes/masterSheetRoutes');
 const GradingPeriodService = require('./services/GradingPeriodService');
@@ -69,6 +70,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/feedback', feedbackRoutes);
 app.use('/api/principal/feedback', principalFeedbackRoutes);
 app.use('/api/department-head', departmentHeadDashboardRoutes);
+app.use('/api/principal/at-risk-prediction', atRiskPredictionRoutes);
 app.use('/api/grading-periods', gradingPeriodRoutes);
 app.use('/api/master-sheets', masterSheetRoutes);
 
