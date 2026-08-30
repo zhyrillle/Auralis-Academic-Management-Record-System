@@ -127,8 +127,7 @@ export default function App() {
             path="/principal/analytics/historical-comparison"
             element={<HistoricalComparison />}
           />
-          <Route path="/principal/reports" element={<PlaceholderPage />} />
-          <Route path="/principal/feedback" element={<TeacherFeedback />} />
+          <Route path="/principal/reports" element={<PrincipalReports />} />
 
           {/* 3. Department Head */}
           <Route

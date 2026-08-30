@@ -1,148 +1,158 @@
-import { principalAnalyticsPreviewData } from "../data/principalAnalyticsPreviewData";
+/**
+ * Principal Analytics Service
+ *
+ * REST API client connecting to backend /api/principal/analytics routes.
+ * Guaranteed to return structured zero-data fallbacks if backend is offline.
+ */
 
-const PREVIEW_DELAY_MS = 320;
-const TERM_INDEX = { "term-1": 0, "term-2": 1, "term-3": 2 };
+const API_BASE_URL = (
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api"
+).replace(/\/$/, "");
 
-const delay = () =>
-  new Promise((resolve) => {
-    window.setTimeout(resolve, PREVIEW_DELAY_MS);
-  });
+export const principalAnalyticsTerms = [
+  { id: "overall", label: "Overall" },
+  { id: "term-1", label: "Term 1" },
+  { id: "term-2", label: "Term 2" },
+  { id: "term-3", label: "Term 3" },
+];
 
-const round = (value) => Math.round(value * 10) / 10;
-const average = (values) =>
-  values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+const DEFAULT_SUBJECTS = [
+  { id: "filipino", code: "FIL", label: "Filipino", color: "#8b5cf6", learnerCount: 0, termAverages: [0, 0, 0], termPassRates: [0, 0, 0] },
+  { id: "english", code: "ENG", label: "English", color: "#2563eb", learnerCount: 0, termAverages: [0, 0, 0], termPassRates: [0, 0, 0] },
+  { id: "mathematics", code: "MATH", label: "Mathematics", color: "#ef4444", learnerCount: 0, termAverages: [0, 0, 0], termPassRates: [0, 0, 0] },
+  { id: "science", code: "SCI", label: "Science", color: "#10b981", learnerCount: 0, termAverages: [0, 0, 0], termPassRates: [0, 0, 0] },
+  { id: "ap", code: "AP", label: "Araling Panlipunan", color: "#6366f1", learnerCount: 0, termAverages: [0, 0, 0], termPassRates: [0, 0, 0] },
+  { id: "tle", code: "TLE", label: "TLE", color: "#f59e0b", learnerCount: 0, termAverages: [0, 0, 0], termPassRates: [0, 0, 0] },
+  { id: "mapeh", code: "MAPEH", label: "MAPEH", color: "#ec4899", learnerCount: 0, termAverages: [0, 0, 0], termPassRates: [0, 0, 0] },
+  { id: "esp", code: "ESP", label: "ESP", color: "#64748b", learnerCount: 0, termAverages: [0, 0, 0], termPassRates: [0, 0, 0] },
+];
 
-const getSchoolYear = (value) =>
-  principalAnalyticsPreviewData.schoolYears.find((year) => year.value === value);
-
-const aggregateSubjectRecords = (records) => {
-  const subjects = new Map();
-
-  records.forEach((record) => {
-    const current = subjects.get(record.subjectId) || {
-      id: record.subjectId,
-      code: record.subjectCode,
-      label: record.subject,
-      color: record.color,
-      records: [],
-    };
-    current.records.push(record);
-    subjects.set(record.subjectId, current);
-  });
-
-  return Array.from(subjects.values()).map((subject) => ({
-    id: subject.id,
-    code: subject.code,
-    label: subject.label,
-    color: subject.color,
-    learnerCount: Math.round(average(subject.records.map((record) => record.learnerCount))),
-    termAverages: [0, 1, 2].map((index) =>
-      round(average(subject.records.map((record) => record.termAverages[index]))),
-    ),
-    termPassRates: [0, 1, 2].map((index) =>
-      round(average(subject.records.map((record) => record.termPassRates[index]))),
-    ),
-  }));
-};
-
+/**
+ * Fetches Subject Performance Trend from the backend database.
+ */
 export async function getSubjectPerformanceTrend({
-  schoolYear,
+  schoolYear = "2026-2027",
   gradeLevel = "all",
   term = "overall",
 }) {
-  await delay();
+  try {
+    const params = new URLSearchParams({
+      schoolYear: String(schoolYear),
+      gradeLevel: String(gradeLevel),
+      term: String(term),
+    });
 
-  const year = getSchoolYear(schoolYear);
-  if (!year) throw new Error("The selected school year is unavailable.");
-  if (term !== "overall" && TERM_INDEX[term] === undefined) {
-    throw new Error("The selected academic term is unavailable.");
+    const res = await fetch(`${API_BASE_URL}/principal/analytics/subject-trend?${params.toString()}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data && Array.isArray(data.subjects) && data.subjects.length > 0) {
+        return data;
+      }
+    }
+  } catch (error) {
+    console.warn("Using zero-data fallback for Subject Trend:", error.message);
   }
 
-  const matchingRecords = principalAnalyticsPreviewData.records.filter(
-    (record) =>
-      record.schoolYear === schoolYear &&
-      (gradeLevel === "all" || record.gradeLevel === Number(gradeLevel)),
-  );
-  const subjects = aggregateSubjectRecords(matchingRecords);
-  const schoolWideAverages = [0, 1, 2].map((index) =>
-    round(average(subjects.map((subject) => subject.termAverages[index]))),
-  );
-
+  // Graceful Zero Data Response
   return {
-    schoolYear: year,
+    schoolYear: { id: `sy-${schoolYear}`, label: `SY ${schoolYear.replace("-", "–")}`, value: schoolYear },
     gradeLevel,
     term,
-    subjects,
-    schoolWideAverages,
-    totalLearners: Math.round(average(subjects.map((subject) => subject.learnerCount))),
-    availableSchoolYears: principalAnalyticsPreviewData.schoolYears,
-    availableGradeLevels: principalAnalyticsPreviewData.gradeLevels,
+    subjects: DEFAULT_SUBJECTS,
+    schoolWideAverages: [0, 0, 0],
+    totalLearners: 0,
+    availableSchoolYears: [
+      { id: "sy-2026-2027", label: "SY 2026–2027", value: "2026-2027" },
+      { id: "sy-2025-2026", label: "SY 2025–2026", value: "2025-2026" },
+      { id: "sy-2024-2025", label: "SY 2024–2025", value: "2024-2025" },
+    ],
+    availableGradeLevels: [
+      { id: "g-all", label: "All Grade Levels", value: "all" },
+      { id: "g-7", label: "Grade 7", value: "7" },
+      { id: "g-8", label: "Grade 8", value: "8" },
+      { id: "g-9", label: "Grade 9", value: "9" },
+      { id: "g-10", label: "Grade 10", value: "10" },
+    ],
   };
 }
 
+/**
+ * Fetches Historical Comparison across two school years from the backend database.
+ */
 export async function getHistoricalComparison({
-  primarySchoolYear,
-  comparisonSchoolYear,
+  primarySchoolYear = "2026-2027",
+  comparisonSchoolYear = "2025-2026",
   term = "overall",
 }) {
-  await delay();
+  try {
+    const params = new URLSearchParams({
+      primarySchoolYear: String(primarySchoolYear),
+      comparisonSchoolYear: String(comparisonSchoolYear),
+      term: String(term),
+    });
 
-  const primaryYear = getSchoolYear(primarySchoolYear);
-  const comparisonYear = getSchoolYear(comparisonSchoolYear);
-  if (!primaryYear || !comparisonYear) {
-    throw new Error("One of the selected school years is unavailable.");
+    const res = await fetch(`${API_BASE_URL}/principal/analytics/historical-comparison?${params.toString()}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data && Array.isArray(data.subjects) && data.subjects.length > 0) {
+        return data;
+      }
+    }
+  } catch (error) {
+    console.warn("Using zero-data fallback for Historical Comparison:", error.message);
   }
-  if (primarySchoolYear === comparisonSchoolYear) {
-    throw new Error("Choose two different school years to compare.");
-  }
-  if (term !== "overall" && TERM_INDEX[term] === undefined) {
-    throw new Error("The selected academic term is unavailable.");
-  }
 
-  const primarySubjects = aggregateSubjectRecords(
-    principalAnalyticsPreviewData.records.filter(
-      (record) => record.schoolYear === primarySchoolYear,
-    ),
-  );
-  const comparisonSubjects = aggregateSubjectRecords(
-    principalAnalyticsPreviewData.records.filter(
-      (record) => record.schoolYear === comparisonSchoolYear,
-    ),
-  );
-
-  const subjects = primarySubjects.map((primarySubject) => {
-    const comparisonSubject = comparisonSubjects.find(
-      (subject) => subject.id === primarySubject.id,
-    );
-    return {
-      ...primarySubject,
-      primaryTermAverages: primarySubject.termAverages,
-      comparisonTermAverages: comparisonSubject?.termAverages || [],
-      primaryTermPassRates: primarySubject.termPassRates,
-      comparisonTermPassRates: comparisonSubject?.termPassRates || [],
-    };
-  });
-
-  const primaryTrend = [0, 1, 2].map((index) =>
-    round(average(subjects.map((subject) => subject.primaryTermAverages[index]))),
-  );
-  const comparisonTrend = [0, 1, 2].map((index) =>
-    round(average(subjects.map((subject) => subject.comparisonTermAverages[index]))),
-  );
-  const totalStudents = Math.round(
-    average(primarySubjects.map((subject) => subject.learnerCount)) * 4,
-  );
-
+  // Graceful Zero Data Response
   return {
-    primarySchoolYear: primaryYear,
-    comparisonSchoolYear: comparisonYear,
+    primarySchoolYear: { id: `sy-${primarySchoolYear}`, label: `SY ${primarySchoolYear.replace("-", "–")}`, value: primarySchoolYear },
+    comparisonSchoolYear: { id: `sy-${comparisonSchoolYear}`, label: `SY ${comparisonSchoolYear.replace("-", "–")}`, value: comparisonSchoolYear },
     term,
-    totalStudents,
-    subjects,
-    primaryTrend,
-    comparisonTrend,
-    availableSchoolYears: principalAnalyticsPreviewData.schoolYears,
+    totalStudents: 0,
+    subjects: DEFAULT_SUBJECTS.map((s) => ({
+      ...s,
+      primaryAverage: 0,
+      comparisonAverage: 0,
+      difference: 0,
+      passRate: 0,
+      improved: true,
+      primaryTermAverages: [0, 0, 0],
+      comparisonTermAverages: [0, 0, 0],
+      primaryTermPassRates: [0, 0, 0],
+      comparisonTermPassRates: [0, 0, 0],
+    })),
+    primaryTrend: [0, 0, 0],
+    comparisonTrend: [0, 0, 0],
+    primaryOverallAverage: 0,
+    comparisonOverallAverage: 0,
+    overallDifference: 0,
+    availableSchoolYears: [
+      { id: "sy-2026-2027", label: "SY 2026–2027", value: "2026-2027" },
+      { id: "sy-2025-2026", label: "SY 2025–2026", value: "2025-2026" },
+      { id: "sy-2024-2025", label: "SY 2024–2025", value: "2024-2025" },
+    ],
   };
 }
 
-export const principalAnalyticsTerms = principalAnalyticsPreviewData.terms;
+/**
+ * Fetches dynamic options for School Years and Grade Levels.
+ */
+export async function getPrincipalAnalyticsOptions() {
+  try {
+    const res = await fetch(`${API_BASE_URL}/principal/analytics/options`);
+    if (res.ok) return await res.json();
+  } catch (e) {
+    console.warn("Using default options fallback:", e.message);
+  }
+  return {
+    schoolYears: [
+      { id: "sy-2026-2027", label: "SY 2026–2027", value: "2026-2027" },
+      { id: "sy-2025-2026", label: "SY 2025–2026", value: "2025-2026" },
+    ],
+    gradeLevels: [
+      { id: "g7", label: "Grade 7", value: "7" },
+      { id: "g8", label: "Grade 8", value: "8" },
+      { id: "g9", label: "Grade 9", value: "9" },
+      { id: "g10", label: "Grade 10", value: "10" },
+    ],
+  };
+}
