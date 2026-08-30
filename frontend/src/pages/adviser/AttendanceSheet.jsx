@@ -61,15 +61,24 @@ function getMonthSchoolDays(dateStr) {
   return { schoolDays, weeks };
 }
 
-export default function AttendanceSheet({ onBack }) {
+export default function AttendanceSheet({ activeClass: propActiveClass, onBack }) {
   const location = useLocation();
   const navigate = useNavigate();
   const currentUser = getStoredUser();
 
+  const activeClass = propActiveClass || location.state?.activeClass || location.state?.activeSelectedClass;
+  const targetSectionId =
+    activeClass?.section_id ||
+    activeClass?.sectionId ||
+    location.state?.section_id ||
+    (typeof activeClass?.id === "number" ? activeClass.id : null) ||
+    (typeof activeClass?.id === "string" && !isNaN(Number(activeClass.id)) ? Number(activeClass.id) : null) ||
+    (typeof activeClass?.id === "string" && activeClass.id.startsWith("class-") ? Number(activeClass.id.replace("class-", "")) : null);
+
   const handleBack = onBack || (() => navigate("/adviser/sections", {
     state: {
       currentView: "class-record",
-      activeSelectedClass: location.state?.activeClass,
+      activeSelectedClass: activeClass,
     },
   }));
 
@@ -91,12 +100,14 @@ export default function AttendanceSheet({ onBack }) {
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
   }, []);
 
-  // ── Load all data on mount ──
+  // ── Load all data on mount and whenever section changes ──
   useEffect(() => {
-    const userId = currentUser?.user_id || currentUser?.id;
-    if (!userId && !location.state?.activeClass?.section_id) return;
+    setStudents([]);
+    setSheetsByDate({});
+    setAttendanceMap({});
+    setAdviserAssignment(null);
     loadAll();
-  }, [currentUser?.user_id, currentUser?.id]);
+  }, [targetSectionId, currentUser?.user_id, currentUser?.id]);
 
   const loadAll = async () => {
     setLoading(true);
@@ -104,29 +115,33 @@ export default function AttendanceSheet({ onBack }) {
       const userId = currentUser?.user_id || currentUser?.id;
       let assignment = null;
 
-      // 1. Get adviser assignment by user ID
-      if (userId) {
+      // 1. Resolve adviser assignment: Prioritize targeted section from Class Record
+      if (targetSectionId) {
+        const assignRes = await fetch(`${BASE_URL}/section-adviser-assignments/section/${targetSectionId}`);
+        const assignments = assignRes.ok ? await assignRes.json() : [];
+        if (Array.isArray(assignments) && assignments.length > 0) {
+          assignment = assignments[0];
+        } else if (assignments && assignments.adviser_assignment_id) {
+          assignment = assignments;
+        }
+
+        // Fallback: If no formal adviser assignment exists yet, build assignment record from section info
+        if (!assignment) {
+          const secRes = await fetch(`${BASE_URL}/sections/${targetSectionId}`);
+          const secData = secRes.ok ? await secRes.json() : null;
+          assignment = {
+            section_id: Number(targetSectionId),
+            adviser_assignment_id: null,
+            section_name: secData?.section_name || activeClass?.sectionName || activeClass?.section_name || `Section ${targetSectionId}`,
+            grade_level_name: secData?.grade_level_name || activeClass?.gradeLevel || activeClass?.grade_level_name || "",
+          };
+        }
+      } else if (userId) {
+        // Fallback: Get adviser assignment by user ID
         const assignRes = await fetch(`${BASE_URL}/section-adviser-assignments/user/${userId}`);
         const assignments = assignRes.ok ? await assignRes.json() : [];
         if (assignments.length > 0) {
           assignment = assignments[0];
-        }
-      }
-
-      // Fallback: If not found by user, check if section is passed in navigation state
-      if (!assignment && location.state?.activeClass?.section_id) {
-        const secId = location.state.activeClass.section_id;
-        const allAssignRes = await fetch(`${BASE_URL}/section-adviser-assignments`);
-        const allAssignments = allAssignRes.ok ? await allAssignRes.json() : [];
-        assignment = allAssignments.find(a => Number(a.section_id) === Number(secId));
-      }
-
-      // Fallback: Default to first available assignment if in dev/demo
-      if (!assignment) {
-        const allAssignRes = await fetch(`${BASE_URL}/section-adviser-assignments`);
-        const allAssignments = allAssignRes.ok ? await allAssignRes.json() : [];
-        if (allAssignments.length > 0) {
-          assignment = allAssignments[0];
         }
       }
 
@@ -162,33 +177,34 @@ export default function AttendanceSheet({ onBack }) {
 
       setStudents(enrichedStudents);
 
-      // 4. Get all attendance sheets for this adviser assignment
-      const sheetsRes = await fetch(`${BASE_URL}/attendance-sheets/adviser/${adviserAssignmentId}`);
-      const sheets = sheetsRes.ok ? await sheetsRes.json() : [];
+      // 4. Get all attendance sheets for this adviser assignment if configured
+      if (adviserAssignmentId) {
+        const sheetsRes = await fetch(`${BASE_URL}/attendance-sheets/adviser/${adviserAssignmentId}`);
+        const sheets = sheetsRes.ok ? await sheetsRes.json() : [];
 
-      // Build sheetsByDate map
-      const byDate = {};
-      sheets.forEach(sh => {
-        const d = sh.attendance_date?.split("T")[0] || sh.attendance_date;
-        byDate[d] = sh.attendance_sheet_id;
-      });
-      setSheetsByDate(byDate);
+        // Build sheetsByDate map
+        const byDate = {};
+        sheets.forEach(sh => {
+          const d = sh.attendance_date?.split("T")[0] || sh.attendance_date;
+          byDate[d] = sh.attendance_sheet_id;
+        });
+        setSheetsByDate(byDate);
 
-      // 5. Load attendance records for each sheet
-      const attMap = {};
-      await Promise.all(
-        sheets.map(async sh => {
-          const dateStr = sh.attendance_date?.split("T")[0] || sh.attendance_date;
-          const attRes = await fetch(`${BASE_URL}/attendance/sheet/${sh.attendance_sheet_id}`);
-          const attRows = attRes.ok ? await attRes.json() : [];
-          attRows.forEach(row => {
-            const key = `${row.student_section_id}-${dateStr}`;
-            attMap[key] = row.status;
-          });
-        })
-      );
-      setAttendanceMap(attMap);
-
+        // 5. Load attendance records for each sheet
+        const attMap = {};
+        await Promise.all(
+          sheets.map(async sh => {
+            const dateStr = sh.attendance_date?.split("T")[0] || sh.attendance_date;
+            const attRes = await fetch(`${BASE_URL}/attendance/sheet/${sh.attendance_sheet_id}`);
+            const attRows = attRes.ok ? await attRes.json() : [];
+            attRows.forEach(row => {
+              const key = `${row.student_section_id}-${dateStr}`;
+              attMap[key] = row.status;
+            });
+          })
+        );
+        setAttendanceMap(attMap);
+      }
     } catch (err) {
       console.error("Error loading attendance data:", err);
       triggerToast("Failed to load attendance data.", "error");
