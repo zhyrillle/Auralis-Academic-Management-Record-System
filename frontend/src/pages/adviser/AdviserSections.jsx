@@ -8,6 +8,7 @@ import ClassCard from "../../components/sections/ClassCard";
 import GradingSheet from "./GradingSheet"; // Imported the separated component
 import ClassRecord from "./ClassRecord.jsx";
 import SectionDetails from "./SectionDetails.jsx";
+import AttendanceSheet from "./AttendanceSheet.jsx";
 
 // Auth & Services
 import { getStoredUser } from "../../utils/auth";
@@ -367,8 +368,19 @@ export default function AdviserSections({ userRole: propUserRole }) {
         </>
       ) : currentView === "class-record" ? (
         <ClassRecord
+          key={`cr-${activeSelectedClass?.subject_offering_id || activeSelectedClass?.section_id || activeSelectedClass?.id || "default"}`}
           activeClass={activeSelectedClass}
           onBack={() => setCurrentView("dashboard")}
+          onAttendance={(cls) => {
+            setactiveSelectedClass(cls || activeSelectedClass);
+            setCurrentView("attendance-sheet");
+          }}
+        />
+      ) : currentView === "attendance-sheet" ? (
+        <AttendanceSheet
+          key={`att-${activeSelectedClass?.section_id || activeSelectedClass?.id || "default"}`}
+          activeClass={activeSelectedClass}
+          onBack={() => setCurrentView("class-record")}
         />
       ) : currentView === "section-details" ? (
         <SectionDetails

@@ -34,47 +34,61 @@ class Section {
   }
 
   static async findAdviserSections(userId) {
-    // 1. Advisory Sections for user (via SECTION_ADVISER_ASSIGNMENT or direct SECTION.user_id)
-    const [advisoryRows] = await db.execute(
-      `SELECT DISTINCT
-         sec.section_id,
-         sec.section_name,
-         gl.grade_level_id,
-         gl.grade_level_name,
-         'Advisory Class' AS class_type,
-         sy.ends_on AS school_year_end
-       FROM SECTION sec
-       INNER JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
-       LEFT JOIN SECTION_ADVISER_ASSIGNMENT saa ON saa.section_id = sec.section_id
-       LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = saa.school_year_id
-       WHERE (saa.user_id = ? OR sec.user_id = ?)
-       ORDER BY gl.grade_level_id ASC, sec.section_name ASC`,
-      [userId, userId]
-    );
+    let advisoryRows = [];
+    try {
+      // 1. Advisory Sections for user (via SECTION_ADVISER_ASSIGNMENT)
+      const [rows] = await db.execute(
+        `SELECT DISTINCT
+           sec.section_id,
+           sec.section_name,
+           sec.is_specialized,
+           gl.grade_level_id,
+           gl.grade_level_name,
+           'Advisory Class' AS class_type,
+           sy.ends_on AS school_year_end
+         FROM SECTION_ADVISER_ASSIGNMENT saa
+         INNER JOIN SECTION sec ON sec.section_id = saa.section_id
+         INNER JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
+         LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = saa.school_year_id
+         WHERE saa.user_id = ?
+         ORDER BY gl.grade_level_id ASC, sec.section_name ASC`,
+        [userId]
+      );
+      advisoryRows = rows;
+    } catch (err) {
+      console.warn('Advisory sections query error:', err.message);
+    }
 
-    // 2. Regular / Teaching Classes for user (via TEACHER_ASSIGNMENT)
-    const [teacherRows] = await db.execute(
-      `SELECT DISTINCT
-         ta.teacher_assignment_id,
-         so.subject_offering_id,
-         so.subject_id,
-         sec.section_id,
-         sec.section_name,
-         gl.grade_level_id,
-         gl.grade_level_name,
-         s.subject_name,
-         'Regular Class' AS class_type,
-         sy.ends_on AS school_year_end
-       FROM TEACHER_ASSIGNMENT ta
-       INNER JOIN SUBJECT_OFFERING so ON so.subject_offering_id = ta.subject_offering_id
-       INNER JOIN SECTION sec ON sec.section_id = so.section_id
-       INNER JOIN SUBJECT s ON s.subject_id = so.subject_id
-       INNER JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
-       LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = so.school_year_id
-       WHERE ta.user_id = ?
-       ORDER BY gl.grade_level_id ASC, sec.section_name ASC`,
-      [userId]
-    );
+    let teacherRows = [];
+    try {
+      // 2. Regular / Teaching Classes for user (via TEACHER_ASSIGNMENT)
+      const [rows] = await db.execute(
+        `SELECT DISTINCT
+           ta.teacher_assignment_id,
+           so.subject_offering_id,
+           so.subject_id,
+           sec.section_id,
+           sec.section_name,
+           sec.is_specialized,
+           gl.grade_level_id,
+           gl.grade_level_name,
+           s.subject_name,
+           'Regular Class' AS class_type,
+           sy.ends_on AS school_year_end
+         FROM TEACHER_ASSIGNMENT ta
+         INNER JOIN SUBJECT_OFFERING so ON so.subject_offering_id = ta.subject_offering_id
+         INNER JOIN SECTION sec ON sec.section_id = so.section_id
+         INNER JOIN SUBJECT s ON s.subject_id = so.subject_id
+         INNER JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
+         LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = so.school_year_id
+         WHERE ta.user_id = ?
+         ORDER BY gl.grade_level_id ASC, sec.section_name ASC`,
+        [userId]
+      );
+      teacherRows = rows;
+    } catch (err) {
+      console.warn('Teacher sections query error:', err.message);
+    }
 
     // Map section_id -> subject_name taught in that section
     const sectionSubjectMap = {};

@@ -49,13 +49,48 @@ class GradeActivity {
   }
 
   static async update(id, data) {
-    const keys = Object.keys(data);
-    const values = Object.values(data);
-    const setClause = keys.map((key) => `${key} = ?`).join(", ");
-    await db.execute(
-      `UPDATE GRADE_ACTIVITY SET ${setClause}, updated_at = NOW(6) WHERE activity_id = ?`,
-      [...values, id],
-    );
+    const updateFields = [];
+    const updateValues = [];
+
+    if (data.activity_name !== undefined) {
+      updateFields.push('activity_name = ?');
+      updateValues.push(data.activity_name);
+    }
+    if (data.highest_possible_score !== undefined || data.max_score !== undefined) {
+      const score = data.highest_possible_score !== undefined ? data.highest_possible_score : data.max_score;
+      updateFields.push('highest_possible_score = ?');
+      updateValues.push(Number(score));
+    }
+    if (data.activity_date !== undefined) {
+      let dateVal = null;
+      if (data.activity_date && String(data.activity_date).trim() !== '') {
+        const str = String(data.activity_date).trim();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+          dateVal = str;
+        } else {
+          const d = new Date(str);
+          if (!isNaN(d.getTime())) {
+            try { dateVal = d.toISOString().slice(0, 10); } catch {}
+          }
+        }
+      }
+      updateFields.push(`activity_date = CASE 
+        WHEN ? IS NOT NULL AND ? != '' THEN ? 
+        ELSE COALESCE(activity_date, CURRENT_DATE) 
+      END`);
+      updateValues.push(dateVal, dateVal, dateVal);
+    }
+    if (data.status !== undefined) {
+      updateFields.push('status = ?');
+      updateValues.push(data.status);
+    }
+
+    if (updateFields.length > 0) {
+      await db.execute(
+        `UPDATE GRADE_ACTIVITY SET ${updateFields.join(', ')}, updated_at = NOW(6) WHERE activity_id = ?`,
+        [...updateValues, id],
+      );
+    }
     return this.findById(id);
   }
 

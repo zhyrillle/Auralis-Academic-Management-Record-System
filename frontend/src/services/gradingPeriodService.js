@@ -412,3 +412,30 @@ export function createGradeSheetReopeningRequest(userId, gradeSheetId, reason) {
     },
   );
 }
+
+export async function getActiveSchoolYear(userId) {
+  try {
+    const payload = await request('/grading-periods/context', { userId });
+    const context = mapGradingPeriodContext(payload);
+    return {
+      activeTerm: context.activeSchoolYear?.active_term || 'T1',
+      ...context.activeSchoolYear,
+    };
+  } catch (e) {
+    return { activeTerm: 'T1' };
+  }
+}
+
+const gradingPeriodService = {
+  getActiveSchoolYear,
+  getGradingPeriodContext,
+  updateTermTimeline,
+  createTermTimeline,
+  approveReopeningRequest,
+  denyReopeningRequest,
+  getReopeningActivity,
+  getReopeningGradeSheetOptions,
+  createGradeSheetReopeningRequest,
+};
+
+export default gradingPeriodService;
