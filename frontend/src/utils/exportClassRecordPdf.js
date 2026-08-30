@@ -294,11 +294,12 @@ export function triggerClassRecordPrint({
       margin: 0 auto;
     }
     .header-grid {
-      display: grid;
-      grid-template-columns: 80px 1fr 140px;
+      display: flex;
+      justify-content: center;
       align-items: center;
-      gap: 8px;
+      gap: 36px;
       margin-bottom: 5px;
+      padding: 0 10px;
     }
     .seal-logo {
       width: 68px;
@@ -445,13 +446,14 @@ export function triggerClassRecordPrint({
     }
     .hps-row td, .hps-row th {
       font-weight: bold;
-      font-size: 7pt;
+      font-size: 7.5pt;
       background: #f1f5f9;
     }
     .hps-lbl {
       text-align: right !important;
       padding-right: 6px !important;
       font-weight: bold;
+      font-size: 7.5pt;
     }
     .gender-hdr td {
       text-align: left !important;
@@ -464,6 +466,7 @@ export function triggerClassRecordPrint({
     .st-num {
       width: 22px;
       font-weight: bold;
+      padding: 2px 1px !important;
     }
     .st-name {
       text-align: left !important;
@@ -487,12 +490,12 @@ export function triggerClassRecordPrint({
     .init-grade-cell {
       font-weight: bold;
       font-size: 7.5pt;
-      width: 44px;
+      width: 48px;
     }
     .q-grade-cell {
       font-weight: bold;
       font-size: 8pt;
-      width: 44px;
+      width: 54px;
     }
     .failing-green {
       background-color: #dcfce7 !important;
@@ -557,14 +560,31 @@ export function triggerClassRecordPrint({
     </div>
 
     <table>
+      <colgroup>
+        <col style="width: 22px;" />
+        <col style="width: 220px;" />
+        ${wwCols.map(() => '<col style="width: 20px;" />').join('')}
+        <col style="width: 30px;" />
+        <col style="width: 38px;" />
+        <col style="width: 32px;" />
+        ${ptCols.map(() => '<col style="width: 20px;" />').join('')}
+        <col style="width: 30px;" />
+        <col style="width: 38px;" />
+        <col style="width: 32px;" />
+        <col style="width: 30px;" />
+        <col style="width: 38px;" />
+        <col style="width: 32px;" />
+        <col style="width: 48px;" />
+        <col style="width: 54px;" />
+      </colgroup>
       <thead>
         <tr>
-          <th colspan="2" rowspan="2" style="width: 242px;">LEARNERS' NAMES</th>
+          <th colspan="2" rowspan="2">LEARNERS' NAMES</th>
           <th colspan="${wwCols.length + 3}">WRITTEN WORK (${formattedData.weights.WW}%)</th>
           <th colspan="${ptCols.length + 3}">PERFORMANCE TASKS (${formattedData.weights.PT}%)</th>
           <th colspan="3">QUARTERLY ASSESSMENT (${formattedData.weights.QA}%)</th>
-          <th rowspan="2" style="width: 44px;">Initial Grade</th>
-          <th rowspan="2" style="width: 44px;">Quarterly Grade</th>
+          <th rowspan="2" style="white-space: normal; line-height: 1.1;">Initial<br/>Grade</th>
+          <th rowspan="2" style="white-space: normal; line-height: 1.1;">Quarterly<br/>Grade</th>
         </tr>
         <tr>
           ${wwColsHeaders}
