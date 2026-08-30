@@ -63,6 +63,7 @@ export function formatClassRecordData({
 
     const wwPS = totalWWHps > 0 ? parseFloat(((wwTotalRaw / totalWWHps) * 100).toFixed(2)) : 0;
     const wwWS = parseFloat((wwPS * (wwWeight / 100)).toFixed(2));
+    const wwIsFailing = hasWwInput && wwPS < 60;
 
     // PT scores & totals
     let ptTotalRaw = 0;
@@ -80,6 +81,7 @@ export function formatClassRecordData({
 
     const ptPS = totalPTHps > 0 ? parseFloat(((ptTotalRaw / totalPTHps) * 100).toFixed(2)) : 0;
     const ptWS = parseFloat((ptPS * (ptWeight / 100)).toFixed(2));
+    const ptIsFailing = hasPtInput && ptPS < 60;
 
     // QA score & totals
     let qaScoreVal = "";
@@ -91,6 +93,7 @@ export function formatClassRecordData({
 
     const qaPS = totalQAHps > 0 && hasQaInput ? parseFloat(((Number(qaScoreVal) / totalQAHps) * 100).toFixed(2)) : 0;
     const qaWS = parseFloat((qaPS * (qaWeight / 100)).toFixed(2));
+    const qaIsFailing = hasQaInput && qaPS < 60;
 
     // DepEd Initial Grade = WS_WW + WS_PT + WS_QA
     const hasAnyInput = hasWwInput || hasPtInput || hasQaInput;
@@ -106,7 +109,6 @@ export function formatClassRecordData({
 
     return {
       index: index + 1,
-      lrn: student.lrn || student.LRN || "",
       fullName,
       lastName,
       firstName,
@@ -115,13 +117,16 @@ export function formatClassRecordData({
       wwTotalRaw: hasWwInput ? wwTotalRaw : "",
       wwPS: hasWwInput ? wwPS.toFixed(2) : "",
       wwWS: hasWwInput ? wwWS.toFixed(2) : "",
+      wwIsFailing,
       ptScores,
       ptTotalRaw: hasPtInput ? ptTotalRaw : "",
       ptPS: hasPtInput ? ptPS.toFixed(2) : "",
       ptWS: hasPtInput ? ptWS.toFixed(2) : "",
+      ptIsFailing,
       qaScore: qaScoreVal,
       qaPS: hasQaInput ? qaPS.toFixed(2) : "",
       qaWS: hasQaInput ? qaWS.toFixed(2) : "",
+      qaIsFailing,
       initialGrade,
       quarterlyGrade: quarterlyGrade !== null && quarterlyGrade !== undefined ? quarterlyGrade : "",
       isFailing,
@@ -140,8 +145,10 @@ export function formatClassRecordData({
       schoolYear: metadata.schoolYear || "2023-2024",
       quarterLabel: metadata.quarterLabel || "FIRST QUARTER",
       gradeAndSection: metadata.gradeAndSection || "GRADE 10 - MAKAKALIKASAN",
-      teacherName: metadata.teacherName || "SUBJECT TEACHER",
+      teacherName: metadata.teacherName || "",
       subjectName: metadata.subjectName || "MATHEMATICS",
+      section: metadata.section || "MAKAKALIKASAN",
+      subject: metadata.subject || "MATHEMATICS",
       activeTerm: metadata.activeTerm || "T1",
     },
     weights: { WW: wwWeight, PT: ptWeight, QA: qaWeight },
@@ -168,6 +175,7 @@ export function triggerClassRecordPrint({
   students,
   grades,
   depedLogoUrl,
+  depedWordmarkLogoUrl,
 }) {
   const formattedData = formatClassRecordData({
     metadata,
@@ -189,11 +197,14 @@ export function triggerClassRecordPrint({
     gradeAndSection,
     teacherName,
     subjectName,
+    section,
+    subject,
+    activeTerm,
   } = formattedData.metadata;
 
   const wwCols = formattedData.writtenWorkColumns;
   const ptCols = formattedData.performanceTaskColumns;
-  const totalCols = 3 + wwCols.length + 3 + ptCols.length + 3 + 1 + 2 + 2;
+  const totalCols = 2 + wwCols.length + 3 + ptCols.length + 3 + 3 + 2;
 
   // Construct table columns HTML
   const wwColsHeaders = wwCols.map((c, i) => `<th class="vertical-cell"><div class="v-text">${c.activity_name || (c.date ? String(c.date).slice(5) : String(i + 1))}</div></th>`).join("");
@@ -210,27 +221,49 @@ export function triggerClassRecordPrint({
       return `
         <tr>
           <td class="st-num">${st.index}</td>
-          <td class="st-lrn">${st.lrn}</td>
-          <td class="st-name">${st.fullName}</td>
+          <td class="st-name ${st.isFailing ? 'failing-green' : ''}">${st.fullName}</td>
           ${wwCells}
           <td class="total-cell">${st.wwTotalRaw}</td>
-          <td class="ps-cell">${st.wwPS}</td>
+          <td class="ps-cell ${st.wwIsFailing ? 'failing-green' : ''}">${st.wwPS}</td>
           <td class="ws-cell">${st.wwWS}</td>
           ${ptCells}
           <td class="total-cell">${st.ptTotalRaw}</td>
-          <td class="ps-cell">${st.ptPS}</td>
+          <td class="ps-cell ${st.ptIsFailing ? 'failing-green' : ''}">${st.ptPS}</td>
           <td class="ws-cell">${st.ptWS}</td>
           <td>${st.qaScore}</td>
-          <td class="ps-cell">${st.qaPS}</td>
+          <td class="ps-cell ${st.qaIsFailing ? 'failing-green' : ''}">${st.qaPS}</td>
           <td class="ws-cell">${st.qaWS}</td>
           <td class="init-grade-cell">${st.initialGrade}</td>
-          <td class="q-grade-cell ${st.isFailing ? 'failing-grade' : ''}">${st.quarterlyGrade}</td>
+          <td class="q-grade-cell ${st.isFailing ? 'failing-green' : ''}">${st.quarterlyGrade}</td>
         </tr>
       `;
     }).join("");
   };
 
-  const safeFilename = `Class_Record_${subjectName.replace(/[^a-zA-Z0-9]/g, '_')}_${gradeAndSection.replace(/[^a-zA-Z0-9]/g, '_')}_${quarterLabel.replace(/[^a-zA-Z0-9]/g, '_')}`;
+  // Build clean sanitized filename: e.g. class_record_t1_banana_english
+  const rawTerm = String(activeTerm || metadata?.activeTerm || "T1").trim().toLowerCase();
+  let termCode = "t1";
+  if (rawTerm.includes("4") || rawTerm.includes("t4") || rawTerm.includes("fourth")) termCode = "t4";
+  else if (rawTerm.includes("3") || rawTerm.includes("t3") || rawTerm.includes("third")) termCode = "t3";
+  else if (rawTerm.includes("2") || rawTerm.includes("t2") || rawTerm.includes("second")) termCode = "t2";
+  else if (rawTerm.includes("1") || rawTerm.includes("t1") || rawTerm.includes("first")) termCode = "t1";
+
+  const rawSec = String(section || metadata?.section || "section")
+    .replace(/^grade\s*[a-z0-9]*\s*[-–]\s*/i, "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  const safeSec = rawSec || "section";
+
+  const rawSubj = String(subject || metadata?.subject || "subject")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  const safeSubj = rawSubj || "subject";
+
+  const safeFilename = `class_record_${termCode}_${safeSec}_${safeSubj}`;
 
   const htmlContent = `
 <!DOCTYPE html>
@@ -241,7 +274,7 @@ export function triggerClassRecordPrint({
   <style>
     @page {
       size: A4 landscape;
-      margin: 5mm 6mm 5mm 6mm;
+      margin: 4mm 5mm 4mm 5mm;
     }
     * {
       box-sizing: border-box;
@@ -254,7 +287,7 @@ export function triggerClassRecordPrint({
       padding: 0;
       color: #000;
       background: #fff;
-      font-size: 7.5pt;
+      font-size: 7pt;
     }
     .print-page {
       width: 100%;
@@ -265,11 +298,11 @@ export function triggerClassRecordPrint({
       grid-template-columns: 80px 1fr 140px;
       align-items: center;
       gap: 8px;
-      margin-bottom: 6px;
+      margin-bottom: 5px;
     }
     .seal-logo {
-      width: 70px;
-      height: 70px;
+      width: 68px;
+      height: 68px;
       object-fit: contain;
     }
     .header-center {
@@ -283,10 +316,11 @@ export function triggerClassRecordPrint({
       letter-spacing: 0.5px;
     }
     .title-sub {
-      font-size: 7.5pt;
+      font-size: 5.5pt;
       font-style: italic;
       margin-top: 1px;
-      margin-bottom: 4px;
+      margin-bottom: 3px;
+      color: #333;
     }
     .meta-box-row {
       display: flex;
@@ -321,20 +355,10 @@ export function triggerClassRecordPrint({
       align-items: center;
       justify-content: center;
     }
-    .deped-logo-txt {
-      font-size: 16pt;
-      font-weight: 900;
-      color: #0038a8;
-      line-height: 1;
-      letter-spacing: -0.5px;
-    }
-    .deped-logo-sub {
-      font-size: 5pt;
-      font-weight: bold;
-      color: #0038a8;
-      letter-spacing: 0.5px;
-      text-align: center;
-      margin-top: 1px;
+    .deped-wordmark-img {
+      height: 44px;
+      max-width: 135px;
+      object-fit: contain;
     }
     .subhead-bar {
       display: grid;
@@ -391,9 +415,12 @@ export function triggerClassRecordPrint({
     }
     thead tr:first-child th {
       font-weight: bold;
-      font-size: 7.5pt;
+      font-size: 7pt;
       background: #fff;
-      padding: 3px 1px;
+      padding: 2px 1px;
+      white-space: normal;
+      line-height: 1.15;
+      height: 24px;
     }
     thead tr:nth-child(2) th {
       font-size: 6.5pt;
@@ -401,7 +428,7 @@ export function triggerClassRecordPrint({
       background: #fff;
     }
     .vertical-cell {
-      height: 44px;
+      height: 46px;
       vertical-align: bottom !important;
       padding: 2px 1px !important;
     }
@@ -413,7 +440,7 @@ export function triggerClassRecordPrint({
       font-weight: bold;
       display: inline-block;
       line-height: 1;
-      max-height: 40px;
+      max-height: 42px;
       margin: 0 auto;
     }
     .hps-row td, .hps-row th {
@@ -435,30 +462,27 @@ export function triggerClassRecordPrint({
       letter-spacing: 0.5px;
     }
     .st-num {
-      width: 20px;
+      width: 22px;
       font-weight: bold;
-    }
-    .st-lrn {
-      width: 80px;
-      font-family: monospace, Arial, sans-serif;
-      font-size: 6.5pt;
     }
     .st-name {
       text-align: left !important;
-      padding-left: 4px !important;
+      padding-left: 6px !important;
       font-weight: bold;
       font-size: 7pt;
-      width: 170px;
+      width: 220px;
     }
     .ps-cell {
-      color: #15803d;
-      font-weight: bold;
+      font-weight: 500;
+      width: 38px;
     }
     .ws-cell {
       font-weight: 500;
+      width: 32px;
     }
     .total-cell {
       font-weight: bold;
+      width: 30px;
     }
     .init-grade-cell {
       font-weight: bold;
@@ -470,9 +494,10 @@ export function triggerClassRecordPrint({
       font-size: 8pt;
       width: 44px;
     }
-    .failing-grade {
-      color: #b91c1c;
-      background-color: #fee2e2;
+    .failing-green {
+      background-color: #dcfce7 !important;
+      color: #166534 !important;
+      font-weight: bold !important;
     }
   </style>
 </head>
@@ -480,7 +505,7 @@ export function triggerClassRecordPrint({
   <div class="print-page">
     <div class="header-grid">
       <div>
-        ${depedLogoUrl ? `<img src="${depedLogoUrl}" class="seal-logo" alt="DepEd Seal" />` : '<div style="width:70px;height:70px;border:1px solid #ccc;display:flex;align-items:center;justify-content:center;font-size:8px;">SEAL</div>'}
+        ${depedLogoUrl ? `<img src="${depedLogoUrl}" class="seal-logo" alt="DepEd Seal" />` : '<div style="width:68px;height:68px;border:1px solid #ccc;display:flex;align-items:center;justify-content:center;font-size:8px;">SEAL</div>'}
       </div>
       <div class="header-center">
         <h1 class="title-main">Class Record</h1>
@@ -511,8 +536,7 @@ export function triggerClassRecordPrint({
         </div>
       </div>
       <div class="deped-right-brand">
-        <div class="deped-logo-txt">DepED</div>
-        <div class="deped-logo-sub">DEPARTMENT OF EDUCATION</div>
+        ${depedWordmarkLogoUrl ? `<img src="${depedWordmarkLogoUrl}" class="deped-wordmark-img" alt="Department of Education" />` : ''}
       </div>
     </div>
 
@@ -535,7 +559,7 @@ export function triggerClassRecordPrint({
     <table>
       <thead>
         <tr>
-          <th colspan="3" rowspan="2" style="width: 270px;">LEARNERS' NAMES</th>
+          <th colspan="2" rowspan="2" style="width: 242px;">LEARNERS' NAMES</th>
           <th colspan="${wwCols.length + 3}">WRITTEN WORK (${formattedData.weights.WW}%)</th>
           <th colspan="${ptCols.length + 3}">PERFORMANCE TASKS (${formattedData.weights.PT}%)</th>
           <th colspan="3">QUARTERLY ASSESSMENT (${formattedData.weights.QA}%)</th>
@@ -544,19 +568,19 @@ export function triggerClassRecordPrint({
         </tr>
         <tr>
           ${wwColsHeaders}
-          <th style="width: 28px;">Total</th>
-          <th style="width: 32px;">PS</th>
-          <th style="width: 30px;">WS</th>
+          <th style="width: 30px;">Total</th>
+          <th style="width: 38px;">PS</th>
+          <th style="width: 32px;">WS</th>
           ${ptColsHeaders}
-          <th style="width: 28px;">Total</th>
-          <th style="width: 32px;">PS</th>
-          <th style="width: 30px;">WS</th>
-          <th style="width: 28px;">1</th>
-          <th style="width: 32px;">PS</th>
-          <th style="width: 30px;">WS</th>
+          <th style="width: 30px;">Total</th>
+          <th style="width: 38px;">PS</th>
+          <th style="width: 32px;">WS</th>
+          <th style="width: 30px;">1</th>
+          <th style="width: 38px;">PS</th>
+          <th style="width: 32px;">WS</th>
         </tr>
         <tr class="hps-row">
-          <td colspan="3" class="hps-lbl">HIGHEST POSSIBLE SCORE</td>
+          <td colspan="2" class="hps-lbl">HIGHEST POSSIBLE SCORE</td>
           ${wwHpsCells}
           <td>${formattedData.totalWWHps}</td>
           <td>100.00</td>
@@ -588,6 +612,10 @@ export function triggerClassRecordPrint({
 </html>
   `;
 
+  // Update top window title so browser Save As PDF dialog uses safeFilename
+  const originalTitle = document.title;
+  document.title = safeFilename;
+
   // Open clean print window / iframe
   const iframe = document.createElement("iframe");
   iframe.style.position = "fixed";
@@ -607,7 +635,10 @@ export function triggerClassRecordPrint({
   setTimeout(() => {
     iframe.contentWindow.print();
     setTimeout(() => {
-      document.body.removeChild(iframe);
-    }, 2000);
+      document.title = originalTitle;
+      if (document.body.contains(iframe)) {
+        document.body.removeChild(iframe);
+      }
+    }, 4000);
   }, 350);
 }

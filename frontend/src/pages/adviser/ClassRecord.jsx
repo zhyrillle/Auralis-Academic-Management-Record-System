@@ -591,13 +591,25 @@ export default function ClassRecord({ activeClass, onBack, onAttendance }) {
       "MAKAKALIKASAN";
     const gradeAndSection = `${formattedGradeLevel} - ${String(rawSection).toUpperCase()}`;
 
-    const rawTeacher =
-      classContextData?.teacher_name ||
-      activeClass?.teacher_name ||
-      activeClass?.teacherName ||
-      activeClass?.adviser ||
-      "";
-    const teacherName = rawTeacher ? String(rawTeacher).toUpperCase() : "SUBJECT TEACHER";
+    let rawTeacher = classContextData?.teacher_name;
+    if (!rawTeacher || rawTeacher.toLowerCase().includes("subject teacher")) {
+      try {
+        const storedUser = JSON.parse(localStorage.getItem("user") || "null");
+        if (storedUser && (storedUser.first_name || storedUser.last_name)) {
+          const parts = [
+            storedUser.first_name,
+            storedUser.middle_name,
+            storedUser.last_name,
+            storedUser.extension_name,
+          ].filter(Boolean);
+          rawTeacher = parts.join(" ");
+        }
+      } catch {}
+    }
+    if (!rawTeacher || rawTeacher.toLowerCase().includes("subject teacher")) {
+      rawTeacher = activeClass?.teacher_name || activeClass?.teacherName || activeClass?.adviser || "";
+    }
+    const teacherName = rawTeacher ? String(rawTeacher).toUpperCase() : "";
 
     const rawSubject =
       classContextData?.subject_name ||
@@ -639,6 +651,8 @@ export default function ClassRecord({ activeClass, onBack, onAttendance }) {
       gradeAndSection,
       teacherName,
       subjectName,
+      section: rawSection,
+      subject: rawSubject,
       activeTerm,
     };
   }, [classContextData, activeClass, activeTerm]);

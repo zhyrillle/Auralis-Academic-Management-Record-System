@@ -355,7 +355,11 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
            sch.school_code,
            sch.region,
            sch.division,
-           CONCAT(u.first_name, ' ', u.last_name) AS teacher_name
+           COALESCE(
+             NULLIF(TRIM(CONCAT_WS(' ', u.first_name, u.middle_name, u.last_name, u.extension_name)), ''),
+             NULLIF(TRIM(CONCAT_WS(' ', u_adv.first_name, u_adv.middle_name, u_adv.last_name, u_adv.extension_name)), ''),
+             NULLIF(TRIM(CONCAT_WS(' ', u.first_name, u.last_name)), '')
+           ) AS teacher_name
          FROM SUBJECT_OFFERING so
          LEFT JOIN SUBJECT s ON s.subject_id = so.subject_id
          LEFT JOIN SECTION sec ON sec.section_id = so.section_id
@@ -364,6 +368,8 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
          LEFT JOIN SCHOOL sch ON 1=1
          LEFT JOIN TEACHER_ASSIGNMENT ta ON ta.subject_offering_id = so.subject_offering_id
          LEFT JOIN USER u ON u.user_id = ta.user_id
+         LEFT JOIN SECTION_ADVISER_ASSIGNMENT saa ON saa.section_id = sec.section_id
+         LEFT JOIN USER u_adv ON u_adv.user_id = saa.user_id
          WHERE so.section_id = ?
          ORDER BY so.subject_offering_id ASC LIMIT 1`,
         [requestedSectionId]
@@ -389,7 +395,11 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
            sch.school_code,
            sch.region,
            sch.division,
-           CONCAT(u.first_name, ' ', u.last_name) AS teacher_name
+           COALESCE(
+             NULLIF(TRIM(CONCAT_WS(' ', u.first_name, u.middle_name, u.last_name, u.extension_name)), ''),
+             NULLIF(TRIM(CONCAT_WS(' ', u_adv.first_name, u_adv.middle_name, u_adv.last_name, u_adv.extension_name)), ''),
+             NULLIF(TRIM(CONCAT_WS(' ', u.first_name, u.last_name)), '')
+           ) AS teacher_name
          FROM SUBJECT_OFFERING so
          LEFT JOIN SUBJECT s ON s.subject_id = so.subject_id
          LEFT JOIN SECTION sec ON sec.section_id = so.section_id
@@ -398,6 +408,8 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
          LEFT JOIN SCHOOL sch ON 1=1
          LEFT JOIN TEACHER_ASSIGNMENT ta ON ta.subject_offering_id = so.subject_offering_id
          LEFT JOIN USER u ON u.user_id = ta.user_id
+         LEFT JOIN SECTION_ADVISER_ASSIGNMENT saa ON saa.section_id = sec.section_id
+         LEFT JOIN USER u_adv ON u_adv.user_id = saa.user_id
          WHERE so.subject_offering_id = ?`,
         [subjectOfferingId]
       );
@@ -423,7 +435,11 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
            sch.school_code,
            sch.region,
            sch.division,
-           CONCAT(u.first_name, ' ', u.last_name) AS teacher_name
+           COALESCE(
+             NULLIF(TRIM(CONCAT_WS(' ', u.first_name, u.middle_name, u.last_name, u.extension_name)), ''),
+             NULLIF(TRIM(CONCAT_WS(' ', u_adv.first_name, u_adv.middle_name, u_adv.last_name, u_adv.extension_name)), ''),
+             NULLIF(TRIM(CONCAT_WS(' ', u.first_name, u.last_name)), '')
+           ) AS teacher_name
          FROM SUBJECT_OFFERING so
          LEFT JOIN SUBJECT s ON s.subject_id = so.subject_id
          LEFT JOIN SECTION sec ON sec.section_id = so.section_id
@@ -432,6 +448,8 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
          LEFT JOIN SCHOOL sch ON 1=1
          LEFT JOIN TEACHER_ASSIGNMENT ta ON ta.subject_offering_id = so.subject_offering_id
          LEFT JOIN USER u ON u.user_id = ta.user_id
+         LEFT JOIN SECTION_ADVISER_ASSIGNMENT saa ON saa.section_id = sec.section_id
+         LEFT JOIN USER u_adv ON u_adv.user_id = saa.user_id
          WHERE so.section_id = ?
          ORDER BY so.subject_offering_id ASC LIMIT 1`,
         [subjectOfferingId]

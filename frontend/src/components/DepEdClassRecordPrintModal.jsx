@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import { X, Printer } from "lucide-react";
 import depedLogoUrl from "../assets/deped_logo.png";
+import depedWordmarkLogoUrl from "../assets/deped-logo.gif";
 import { formatClassRecordData, triggerClassRecordPrint } from "../utils/exportClassRecordPdf";
 import "../styles/DepEdClassRecordPrint.css";
 
@@ -44,7 +45,7 @@ export default function DepEdClassRecordPrintModal({
 
   const wwCols = formattedData.writtenWorkColumns;
   const ptCols = formattedData.performanceTaskColumns;
-  const totalCols = 3 + wwCols.length + 3 + ptCols.length + 3 + 1 + 2 + 2;
+  const totalCols = 2 + wwCols.length + 3 + ptCols.length + 3 + 3 + 2;
 
   const handlePrint = () => {
     triggerClassRecordPrint({
@@ -56,29 +57,29 @@ export default function DepEdClassRecordPrintModal({
       students,
       grades,
       depedLogoUrl,
+      depedWordmarkLogoUrl,
     });
   };
 
   const renderStudentRows = (list) => {
     return list.map((st) => (
-      <tr key={`st-${st.lrn || st.index}`}>
+      <tr key={`st-${st.fullName || st.index}`}>
         <td className="student-num-cell">{st.index}</td>
-        <td className="student-lrn-cell">{st.lrn}</td>
-        <td className="student-name-cell">{st.fullName}</td>
+        <td className={`student-name-cell ${st.isFailing ? "failing" : ""}`}>{st.fullName}</td>
         {st.wwScores.map((score, i) => (
           <td key={`ww-${i}`}>{score}</td>
         ))}
         <td style={{ fontWeight: "bold" }}>{st.wwTotalRaw}</td>
-        <td className="ps-cell">{st.wwPS}</td>
+        <td className={`ps-cell ${st.wwIsFailing ? "failing" : ""}`}>{st.wwPS}</td>
         <td className="ws-cell">{st.wwWS}</td>
         {st.ptScores.map((score, i) => (
           <td key={`pt-${i}`}>{score}</td>
         ))}
         <td style={{ fontWeight: "bold" }}>{st.ptTotalRaw}</td>
-        <td className="ps-cell">{st.ptPS}</td>
+        <td className={`ps-cell ${st.ptIsFailing ? "failing" : ""}`}>{st.ptPS}</td>
         <td className="ws-cell">{st.ptWS}</td>
         <td>{st.qaScore}</td>
-        <td className="ps-cell">{st.qaPS}</td>
+        <td className={`ps-cell ${st.qaIsFailing ? "failing" : ""}`}>{st.qaPS}</td>
         <td className="ws-cell">{st.qaWS}</td>
         <td className="initial-grade-cell">{st.initialGrade}</td>
         <td className={`quarterly-grade-cell ${st.isFailing ? "failing" : ""}`}>
@@ -166,8 +167,11 @@ export default function DepEdClassRecordPrintModal({
               </div>
 
               <div className="deped-logo-wrap">
-                <div className="deped-wordmark-title">DepED</div>
-                <div className="deped-wordmark-sub">DEPARTMENT OF EDUCATION</div>
+                <img
+                  src={depedWordmarkLogoUrl}
+                  alt="Department of Education"
+                  className="deped-wordmark-img"
+                />
               </div>
             </div>
 
@@ -194,7 +198,7 @@ export default function DepEdClassRecordPrintModal({
             <table className="deped-table">
               <thead>
                 <tr>
-                  <th colSpan={3} rowSpan={2} style={{ width: "260px" }}>
+                  <th colSpan={2} rowSpan={2} style={{ width: "242px" }}>
                     LEARNERS' NAMES
                   </th>
                   <th colSpan={wwCols.length + 3}>
@@ -206,10 +210,10 @@ export default function DepEdClassRecordPrintModal({
                   <th colSpan={3}>
                     QUARTERLY ASSESSMENT ({formattedData.weights.QA}%)
                   </th>
-                  <th rowSpan={2} style={{ width: "45px" }}>
+                  <th rowSpan={2} style={{ width: "44px" }}>
                     Initial Grade
                   </th>
-                  <th rowSpan={2} style={{ width: "45px" }}>
+                  <th rowSpan={2} style={{ width: "44px" }}>
                     Quarterly Grade
                   </th>
                 </tr>
@@ -222,7 +226,7 @@ export default function DepEdClassRecordPrintModal({
                     </th>
                   ))}
                   <th style={{ width: "30px" }}>Total</th>
-                  <th style={{ width: "34px" }}>PS</th>
+                  <th style={{ width: "38px" }}>PS</th>
                   <th style={{ width: "32px" }}>WS</th>
 
                   {ptCols.map((col, i) => (
@@ -233,17 +237,17 @@ export default function DepEdClassRecordPrintModal({
                     </th>
                   ))}
                   <th style={{ width: "30px" }}>Total</th>
-                  <th style={{ width: "34px" }}>PS</th>
+                  <th style={{ width: "38px" }}>PS</th>
                   <th style={{ width: "32px" }}>WS</th>
 
                   <th style={{ width: "30px" }}>1</th>
-                  <th style={{ width: "34px" }}>PS</th>
+                  <th style={{ width: "38px" }}>PS</th>
                   <th style={{ width: "32px" }}>WS</th>
                 </tr>
 
                 {/* HIGHEST POSSIBLE SCORE ROW */}
                 <tr className="hps-row">
-                  <td colSpan={3} className="hps-label-cell">
+                  <td colSpan={2} className="hps-label-cell">
                     HIGHEST POSSIBLE SCORE
                   </td>
                   {wwCols.map((c) => (
