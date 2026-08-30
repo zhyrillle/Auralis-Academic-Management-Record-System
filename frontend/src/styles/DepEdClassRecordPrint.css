@@ -1,0 +1,444 @@
+/* ============================================================
+   DepEd Order No. 8, s. 2015 JHS Class Record Landscape Styling
+   ============================================================ */
+
+.deped-print-container {
+  background: #ffffff;
+  color: #000000;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 8pt;
+  line-height: 1.15;
+  width: 100%;
+  max-width: 100%;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+/* Modal Overlay */
+.deped-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(4px);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.deped-modal-content {
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  width: 98vw;
+  max-width: 1350px;
+  height: 94vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid #cbd5e1;
+}
+
+.deped-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  background: #102f55;
+  color: #ffffff;
+}
+
+.deped-modal-header h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.deped-modal-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.deped-print-btn {
+  background: #22c55e;
+  color: #ffffff;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: background-color 0.15s;
+}
+
+.deped-print-btn:hover {
+  background: #16a34a;
+}
+
+.deped-close-btn {
+  background: transparent;
+  color: #94a3b8;
+  border: none;
+  padding: 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, background-color 0.15s;
+}
+
+.deped-close-btn:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.deped-modal-body {
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+  background: #f8fafc;
+}
+
+/* Document Paper View inside Modal */
+.deped-paper {
+  background: #ffffff;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  padding: 14px 18px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #e2e8f0;
+}
+
+/* Top Header */
+.deped-header-wrap {
+  display: grid;
+  grid-template-columns: 85px 1fr 140px;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.deped-seal-img {
+  width: 75px;
+  height: 75px;
+  object-fit: contain;
+}
+
+.deped-header-center {
+  text-align: center;
+}
+
+.deped-main-title {
+  font-size: 15pt;
+  font-weight: bold;
+  letter-spacing: 0.5px;
+  margin: 0;
+  color: #000;
+  text-transform: uppercase;
+}
+
+.deped-subtitle {
+  font-size: 7.5pt;
+  font-style: italic;
+  margin-top: 1px;
+  margin-bottom: 6px;
+  color: #333;
+}
+
+/* Top Metadata Boxes */
+.deped-meta-boxes {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 4px;
+}
+
+.deped-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 8pt;
+}
+
+.deped-meta-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.deped-meta-field .meta-label {
+  font-weight: bold;
+  font-size: 7.5pt;
+}
+
+.deped-meta-field .meta-box {
+  border: 1px solid #000;
+  padding: 1px 8px;
+  font-weight: bold;
+  font-size: 8pt;
+  min-height: 16px;
+  display: inline-flex;
+  align-items: center;
+  background: #fff;
+}
+
+.deped-logo-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.deped-wordmark-title {
+  font-size: 16pt;
+  font-weight: 900;
+  color: #0038a8;
+  line-height: 1;
+  letter-spacing: -0.5px;
+}
+
+.deped-wordmark-sub {
+  font-size: 5pt;
+  font-weight: bold;
+  color: #0038a8;
+  letter-spacing: 0.5px;
+  text-align: center;
+  margin-top: 2px;
+}
+
+/* Sub-header Bar */
+.deped-subheader-bar {
+  display: grid;
+  grid-template-columns: 180px 220px 240px 1fr;
+  border: 1.5px solid #000;
+  margin-bottom: 6px;
+  background: #fff;
+}
+
+.deped-subheader-cell {
+  border-right: 1.5px solid #000;
+  padding: 3px 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 8pt;
+}
+
+.deped-subheader-cell:last-child {
+  border-right: none;
+}
+
+.deped-subheader-cell.quarter-cell {
+  font-weight: bold;
+  font-size: 8.5pt;
+  justify-content: center;
+  text-align: center;
+  background: #f8fafc;
+}
+
+.deped-sub-label {
+  font-weight: bold;
+  font-size: 7.5pt;
+  white-space: nowrap;
+}
+
+.deped-sub-val {
+  font-weight: bold;
+  font-size: 8pt;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Main Table */
+.deped-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 7.5pt;
+  border: 1.5px solid #000;
+}
+
+.deped-table th,
+.deped-table td {
+  border: 1px solid #000;
+  padding: 2px 2px;
+  text-align: center;
+  vertical-align: middle;
+  box-sizing: border-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Top Categories Header */
+.deped-table thead tr:first-child th {
+  font-weight: bold;
+  font-size: 8pt;
+  background: #fff;
+  padding: 4px 2px;
+}
+
+.deped-table thead tr:nth-child(2) th {
+  font-size: 7pt;
+  font-weight: bold;
+  background: #fff;
+}
+
+/* Rotated / Vertical Header Cells */
+.vertical-header-cell {
+  height: 48px;
+  vertical-align: bottom !important;
+  padding: 2px 1px !important;
+}
+
+.vertical-text {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  white-space: nowrap;
+  font-size: 6.5pt;
+  font-weight: bold;
+  display: inline-block;
+  line-height: 1;
+  max-height: 44px;
+  margin: 0 auto;
+}
+
+/* Highest Possible Score Row */
+.hps-row th,
+.hps-row td {
+  font-weight: bold;
+  font-size: 7.5pt;
+  background: #f1f5f9;
+}
+
+.hps-label-cell {
+  text-align: right !important;
+  padding-right: 8px !important;
+  font-weight: bold;
+}
+
+/* Gender Group Divider Row */
+.gender-header-row td {
+  text-align: left !important;
+  padding: 3px 8px !important;
+  font-weight: bold;
+  font-size: 8pt;
+  background: #e2e8f0;
+  letter-spacing: 0.5px;
+}
+
+/* Student Rows */
+.student-num-cell {
+  width: 22px;
+  font-weight: bold;
+}
+
+.student-lrn-cell {
+  width: 85px;
+  font-family: monospace, Arial, sans-serif;
+  font-size: 7pt;
+}
+
+.student-name-cell {
+  text-align: left !important;
+  padding-left: 5px !important;
+  font-weight: bold;
+  font-size: 7.5pt;
+}
+
+.ps-cell {
+  color: #15803d;
+  font-weight: bold;
+}
+
+.ws-cell {
+  font-weight: 500;
+}
+
+.grade-cell {
+  font-weight: bold;
+  font-size: 8pt;
+}
+
+.initial-grade-cell {
+  font-weight: bold;
+}
+
+.quarterly-grade-cell {
+  font-weight: bold;
+  font-size: 8.5pt;
+}
+
+.quarterly-grade-cell.failing {
+  color: #b91c1c;
+  background-color: #fee2e2;
+}
+
+/* Print Specific Rules */
+@media print {
+  @page {
+    size: landscape;
+    margin: 4mm 5mm 4mm 5mm;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  .deped-paper,
+  .deped-paper * {
+    visibility: visible;
+  }
+
+  .deped-paper {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    box-shadow: none;
+    border: none;
+    background: #fff !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .deped-modal-overlay {
+    position: static;
+    background: transparent;
+    padding: 0;
+  }
+
+  .deped-modal-content {
+    border: none;
+    box-shadow: none;
+    width: 100%;
+    height: auto;
+  }
+
+  .deped-modal-header {
+    display: none !important;
+  }
+
+  .deped-modal-body {
+    padding: 0;
+    overflow: visible;
+    background: transparent;
+  }
+}
