@@ -6,7 +6,7 @@
   background: #ffffff;
   color: #000000;
   font-family: Arial, Helvetica, sans-serif;
-  font-size: 8pt;
+  font-size: 7.5pt;
   line-height: 1.15;
   width: 100%;
   max-width: 100%;
@@ -35,7 +35,7 @@
   border-radius: 12px;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
   width: 98vw;
-  max-width: 1350px;
+  max-width: 1380px;
   height: 94vh;
   display: flex;
   flex-direction: column;
@@ -115,7 +115,7 @@
 .deped-paper {
   background: #ffffff;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-  padding: 14px 18px;
+  padding: 12px 16px;
   margin: 0 auto;
   width: 100%;
   box-sizing: border-box;
@@ -128,12 +128,12 @@
   grid-template-columns: 85px 1fr 140px;
   align-items: center;
   gap: 12px;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .deped-seal-img {
-  width: 75px;
-  height: 75px;
+  width: 72px;
+  height: 72px;
   object-fit: contain;
 }
 
@@ -151,10 +151,10 @@
 }
 
 .deped-subtitle {
-  font-size: 7.5pt;
+  font-size: 5.5pt;
   font-style: italic;
   margin-top: 1px;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
   color: #333;
 }
 
@@ -163,7 +163,7 @@
   display: flex;
   flex-direction: column;
   gap: 3px;
-  margin-top: 4px;
+  margin-top: 3px;
 }
 
 .deped-meta-row {
@@ -171,7 +171,7 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  font-size: 8pt;
+  font-size: 7.5pt;
 }
 
 .deped-meta-field {
@@ -182,14 +182,14 @@
 
 .deped-meta-field .meta-label {
   font-weight: bold;
-  font-size: 7.5pt;
+  font-size: 7pt;
 }
 
 .deped-meta-field .meta-box {
   border: 1px solid #000;
   padding: 1px 8px;
   font-weight: bold;
-  font-size: 8pt;
+  font-size: 7.5pt;
   min-height: 16px;
   display: inline-flex;
   align-items: center;
@@ -203,29 +203,19 @@
   justify-content: center;
 }
 
-.deped-wordmark-title {
-  font-size: 16pt;
-  font-weight: 900;
-  color: #0038a8;
-  line-height: 1;
-  letter-spacing: -0.5px;
-}
-
-.deped-wordmark-sub {
-  font-size: 5pt;
-  font-weight: bold;
-  color: #0038a8;
-  letter-spacing: 0.5px;
-  text-align: center;
-  margin-top: 2px;
+.deped-wordmark-img {
+  height: 44px;
+  max-width: 140px;
+  object-fit: contain;
+  display: block;
 }
 
 /* Sub-header Bar */
 .deped-subheader-bar {
   display: grid;
-  grid-template-columns: 180px 220px 240px 1fr;
+  grid-template-columns: 160px 220px 240px 1fr;
   border: 1.5px solid #000;
-  margin-bottom: 6px;
+  margin-bottom: 5px;
   background: #fff;
 }
 
@@ -235,7 +225,7 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: 8pt;
+  font-size: 7.5pt;
 }
 
 .deped-subheader-cell:last-child {
@@ -244,7 +234,7 @@
 
 .deped-subheader-cell.quarter-cell {
   font-weight: bold;
-  font-size: 8.5pt;
+  font-size: 8pt;
   justify-content: center;
   text-align: center;
   background: #f8fafc;
@@ -252,13 +242,13 @@
 
 .deped-sub-label {
   font-weight: bold;
-  font-size: 7.5pt;
+  font-size: 7pt;
   white-space: nowrap;
 }
 
 .deped-sub-val {
   font-weight: bold;
-  font-size: 8pt;
+  font-size: 7.5pt;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -269,14 +259,14 @@
   width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
-  font-size: 7.5pt;
+  font-size: 7pt;
   border: 1.5px solid #000;
 }
 
 .deped-table th,
 .deped-table td {
   border: 1px solid #000;
-  padding: 2px 2px;
+  padding: 2px 1px;
   text-align: center;
   vertical-align: middle;
   box-sizing: border-box;
@@ -288,13 +278,16 @@
 /* Top Categories Header */
 .deped-table thead tr:first-child th {
   font-weight: bold;
-  font-size: 8pt;
+  font-size: 7pt;
   background: #fff;
-  padding: 4px 2px;
+  padding: 3px 1px;
+  white-space: normal;
+  line-height: 1.15;
+  height: 24px;
 }
 
 .deped-table thead tr:nth-child(2) th {
-  font-size: 7pt;
+  font-size: 6.5pt;
   font-weight: bold;
   background: #fff;
 }
@@ -310,7 +303,7 @@
   writing-mode: vertical-rl;
   transform: rotate(180deg);
   white-space: nowrap;
-  font-size: 6.5pt;
+  font-size: 6pt;
   font-weight: bold;
   display: inline-block;
   line-height: 1;
@@ -322,22 +315,22 @@
 .hps-row th,
 .hps-row td {
   font-weight: bold;
-  font-size: 7.5pt;
+  font-size: 7pt;
   background: #f1f5f9;
 }
 
 .hps-label-cell {
   text-align: right !important;
-  padding-right: 8px !important;
+  padding-right: 6px !important;
   font-weight: bold;
 }
 
 /* Gender Group Divider Row */
 .gender-header-row td {
   text-align: left !important;
-  padding: 3px 8px !important;
+  padding: 2px 6px !important;
   font-weight: bold;
-  font-size: 8pt;
+  font-size: 7.5pt;
   background: #e2e8f0;
   letter-spacing: 0.5px;
 }
@@ -348,21 +341,27 @@
   font-weight: bold;
 }
 
-.student-lrn-cell {
-  width: 85px;
-  font-family: monospace, Arial, sans-serif;
+.student-name-cell {
+  text-align: left !important;
+  padding-left: 6px !important;
+  font-weight: bold;
   font-size: 7pt;
 }
 
-.student-name-cell {
-  text-align: left !important;
-  padding-left: 5px !important;
+/* Green Highlight for Failed Metrics & Failed Student Names */
+.student-name-cell.failing {
+  background-color: #dcfce7 !important;
+  color: #166534 !important;
   font-weight: bold;
-  font-size: 7.5pt;
 }
 
 .ps-cell {
-  color: #15803d;
+  font-weight: 500;
+}
+
+.ps-cell.failing {
+  background-color: #dcfce7 !important;
+  color: #166534 !important;
   font-weight: bold;
 }
 
@@ -370,23 +369,20 @@
   font-weight: 500;
 }
 
-.grade-cell {
-  font-weight: bold;
-  font-size: 8pt;
-}
-
 .initial-grade-cell {
   font-weight: bold;
+  font-size: 7.5pt;
 }
 
 .quarterly-grade-cell {
   font-weight: bold;
-  font-size: 8.5pt;
+  font-size: 8pt;
 }
 
 .quarterly-grade-cell.failing {
-  color: #b91c1c;
-  background-color: #fee2e2;
+  background-color: #dcfce7 !important;
+  color: #166534 !important;
+  font-weight: bold;
 }
 
 /* Print Specific Rules */
