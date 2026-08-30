@@ -29,6 +29,12 @@ export default function DepEdClassRecordPrintModal({
     });
   }, [isOpen, metadata, weights, writtenWorkColumns, performanceTaskColumns, quarterlyAssessmentHPS, students, grades]);
 
+  const displayTitle = useMemo(() => {
+    const raw = metadata?.gradeAndSection || "Grade 10 Makakalikasan";
+    const text = String(raw).replace(/\s*[-–]\s*/g, " ").trim();
+    return `${text} Class Record Preview`;
+  }, [metadata?.gradeAndSection]);
+
   if (!isOpen || !formattedData) return null;
 
   const {
@@ -95,7 +101,7 @@ export default function DepEdClassRecordPrintModal({
         {/* Modal Top Bar */}
         <div className="deped-modal-header">
           <h3>
-            <span>DepEd JHS Class Record Preview</span>
+            <span>{displayTitle}</span>
           </h3>
           <div className="deped-modal-actions">
             <button
@@ -196,9 +202,30 @@ export default function DepEdClassRecordPrintModal({
 
             {/* Main Class Record Table */}
             <table className="deped-table">
+              <colgroup>
+                <col style={{ width: "22px" }} />
+                <col style={{ width: "220px" }} />
+                {wwCols.map((c) => (
+                  <col key={`col-ww-${c.id}`} style={{ width: "20px" }} />
+                ))}
+                <col style={{ width: "30px" }} />
+                <col style={{ width: "38px" }} />
+                <col style={{ width: "32px" }} />
+                {ptCols.map((c) => (
+                  <col key={`col-pt-${c.id}`} style={{ width: "20px" }} />
+                ))}
+                <col style={{ width: "30px" }} />
+                <col style={{ width: "38px" }} />
+                <col style={{ width: "32px" }} />
+                <col style={{ width: "30px" }} />
+                <col style={{ width: "38px" }} />
+                <col style={{ width: "32px" }} />
+                <col style={{ width: "48px" }} />
+                <col style={{ width: "54px" }} />
+              </colgroup>
               <thead>
                 <tr>
-                  <th colSpan={2} rowSpan={2} style={{ width: "242px" }}>
+                  <th colSpan={2} rowSpan={2}>
                     LEARNERS' NAMES
                   </th>
                   <th colSpan={wwCols.length + 3}>
@@ -210,10 +237,10 @@ export default function DepEdClassRecordPrintModal({
                   <th colSpan={3}>
                     QUARTERLY ASSESSMENT ({formattedData.weights.QA}%)
                   </th>
-                  <th rowSpan={2} style={{ width: "44px" }}>
+                  <th rowSpan={2} style={{ whiteSpace: "normal", lineHeight: 1.1 }}>
                     Initial Grade
                   </th>
-                  <th rowSpan={2} style={{ width: "44px" }}>
+                  <th rowSpan={2} style={{ whiteSpace: "normal", lineHeight: 1.1 }}>
                     Quarterly Grade
                   </th>
                 </tr>
