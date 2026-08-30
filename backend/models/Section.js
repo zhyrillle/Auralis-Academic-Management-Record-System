@@ -98,6 +98,13 @@ class Section {
       }
     });
 
+    const checkIsSpecialized = (val) => {
+      if (val === null || val === undefined) return false;
+      if (val === 1 || val === "1" || val === true || val === "true") return true;
+      if (typeof val === "number" && val > 0) return true;
+      return false;
+    };
+
     const result = [];
     const addedSectionIds = new Set();
 
@@ -107,6 +114,7 @@ class Section {
         addedSectionIds.add(row.section_id);
         const gradeNum = parseInt(String(row.grade_level_name).replace(/\D/g, "")) || "";
         const subjectName = sectionSubjectMap[row.section_id] || "Mathematics";
+        const isSpecialized = checkIsSpecialized(row.is_specialized);
         result.push({
           id: `sec-${row.section_id}`,
           section_id: row.section_id,
@@ -114,7 +122,9 @@ class Section {
           gradeLevel: gradeNum ? `G${gradeNum}` : row.grade_level_name,
           grade_level_name: row.grade_level_name,
           subject: subjectName,
-          classType: "Advisory Class",
+          classType: isSpecialized ? "Special Program" : "Advisory Class",
+          is_specialized: isSpecialized ? 1 : 0,
+          isAdviser: true,
           deadline: row.school_year_end ? String(row.school_year_end).slice(0, 10) : "2026-07-31",
           submitted: false,
         });
@@ -126,6 +136,7 @@ class Section {
       if (!addedSectionIds.has(row.section_id)) {
         addedSectionIds.add(row.section_id);
         const gradeNum = parseInt(String(row.grade_level_name).replace(/\D/g, "")) || "";
+        const isSpecialized = checkIsSpecialized(row.is_specialized);
         result.push({
           id: `sec-${row.section_id}`,
           section_id: row.section_id,
@@ -135,7 +146,9 @@ class Section {
           gradeLevel: gradeNum ? `G${gradeNum}` : row.grade_level_name,
           grade_level_name: row.grade_level_name,
           subject: row.subject_name || "Mathematics",
-          classType: "Regular Class",
+          classType: isSpecialized ? "Special Program" : "Regular Class",
+          is_specialized: isSpecialized ? 1 : 0,
+          isAdviser: false,
           deadline: row.school_year_end ? String(row.school_year_end).slice(0, 10) : "2026-08-15",
           submitted: false,
         });

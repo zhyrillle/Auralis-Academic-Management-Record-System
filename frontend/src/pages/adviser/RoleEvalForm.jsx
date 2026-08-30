@@ -119,7 +119,7 @@ export default function RoleEvalForm({ formType, person, onBack, onCancel }) {
       q7_rate: ratings[6],
       q8_rate: ratings[7],
       strengths_comments: answers[0] || null,
-      improvements_comment: answers[1] || null,
+      improvements_comments: answers[1] || null,
       status: "OPEN"
     };
 

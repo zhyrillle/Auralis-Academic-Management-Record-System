@@ -1,7 +1,4 @@
-// TODO: BACKEND CONNECTION
-// (paste your base URL here, e.g. import.meta.env.VITE_API_BASE_URL)
-// (paste your auth/token handling here if endpoints require it)
-// (paste your actual endpoint paths + response shape here once backend team confirms)
+const API_BASE_URL = "http://localhost:5000/api/principal/at-risk-prediction";
 
 /**
  * @typedef {Object} AtRiskPredictionSummary
@@ -34,14 +31,32 @@
  * @property {number} totalCount
  */
 
-export async function getAtRiskPredictionSummary({ schoolYear, term, gradeLevel }) {
-  // (paste your endpoint call here, e.g. GET /api/principal/at-risk-prediction/summary)
-  void schoolYear; void term; void gradeLevel;
-  throw new Error("Not implemented — connect backend endpoint here");
+export async function getAtRiskPredictionSummary({ schoolYear, term, gradeLevel } = {}) {
+  const params = new URLSearchParams();
+  if (schoolYear) params.append("schoolYear", schoolYear);
+  if (term && term !== "overall") params.append("term", term);
+  if (gradeLevel) params.append("gradeLevel", gradeLevel);
+
+  const url = `${API_BASE_URL}/summary${params.toString() ? `?${params.toString()}` : ""}`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch at-risk summary: ${res.statusText}`);
+  }
+  return res.json();
 }
 
-export async function getStudentsByRiskLevel({ schoolYear, term, gradeLevel, riskLevel, limit }) {
-  // (paste your endpoint call here)
-  void schoolYear; void term; void gradeLevel; void riskLevel; void limit;
-  throw new Error("Not implemented — connect backend endpoint here");
+export async function getStudentsByRiskLevel({ schoolYear, term, gradeLevel, riskLevel, limit } = {}) {
+  const params = new URLSearchParams();
+  if (schoolYear) params.append("schoolYear", schoolYear);
+  if (term && term !== "overall") params.append("term", term);
+  if (gradeLevel) params.append("gradeLevel", gradeLevel);
+  if (riskLevel) params.append("riskLevel", riskLevel);
+  if (limit) params.append("limit", limit);
+
+  const url = `${API_BASE_URL}/students${params.toString() ? `?${params.toString()}` : ""}`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch ${riskLevel} risk students: ${res.statusText}`);
+  }
+  return res.json();
 }

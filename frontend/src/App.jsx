@@ -23,6 +23,8 @@ import ProfilePage from "./pages/ProfilePage";
 import AtRiskBreakdown from "./pages/principal/AtRiskBreakdown";
 import AtRiskPrediction from "./pages/principal/AtRiskPrediction";
 import TeacherFeedback from "./pages/principal/TeacherFeedback";
+import SubjectPerformanceTrend from "./pages/principal/SubjectPerformanceTrend";
+import HistoricalComparison from "./pages/principal/HistoricalComparison";
 import GradeReopeningRequest from "./pages/adviser/GradeReopeningRequest";
 import SectionDetails from "./pages/adviser/SectionDetails";
 import AdviserNotifications from "./pages/adviser/AdviserNotifications";
@@ -119,11 +121,11 @@ export default function App() {
           />
           <Route
             path="/principal/analytics/subject-trend"
-            element={<PlaceholderPage />}
+            element={<SubjectPerformanceTrend />}
           />
           <Route
             path="/principal/analytics/historical-comparison"
-            element={<PlaceholderPage />}
+            element={<HistoricalComparison />}
           />
           <Route path="/principal/reports" element={<PlaceholderPage />} />
           <Route path="/principal/feedback" element={<TeacherFeedback />} />

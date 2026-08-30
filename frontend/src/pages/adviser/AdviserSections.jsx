@@ -18,48 +18,6 @@ import { getAdviserSections, getStudentsBySection } from "../../services/section
 import "../../styles/sections.css";
 import "../../styles/attendanceSheet.css";
 
-// -------------------------------------------------------------
-// INITIAL MOCK DATA (FALLBACK)
-// -------------------------------------------------------------
-const INITIAL_CLASSES = [
-  {
-    id: "class-1",
-    sectionName: "Mahogany",
-    gradeLevel: "G10",
-    subject: "Mathematics",
-    classType: "Advisory Class",
-    deadline: "2026-07-31",
-    submitted: false,
-  },
-  {
-    id: "class-2",
-    sectionName: "Gemelina",
-    gradeLevel: "G10",
-    subject: "Mathematics",
-    classType: "Regular Class",
-    deadline: "2026-08-05",
-    submitted: false,
-  },
-  {
-    id: "class-3",
-    sectionName: "Narra",
-    gradeLevel: "G9",
-    subject: "Advanced Algebra",
-    classType: "Regular Class",
-    deadline: "2026-07-28",
-    submitted: false,
-  },
-  {
-    id: "class-4",
-    sectionName: "Tanguile",
-    gradeLevel: "G10",
-    subject: "Geometry",
-    classType: "Regular Class",
-    deadline: "2026-08-12",
-    submitted: false,
-  },
-];
-
 const generateMockStudents = () => ({
   "class-1": [
     { id: "s1", lrn: 102938475601, firstName: "Juan", lastName: "Dela Cruz", middleName: "Santos", sex: "M", term1: 92, term2: 90, term3: 94 },
@@ -109,12 +67,12 @@ export default function AdviserSections({ userRole: propUserRole }) {
         if (fetched && Array.isArray(fetched) && fetched.length > 0) {
           setClasses(fetched);
         } else {
-          setClasses(INITIAL_CLASSES);
+          setClasses([]);
         }
       } catch (err) {
         console.error("Error fetching adviser sections:", err);
         setError("Unable to connect to backend. Showing default assigned classes.");
-        setClasses(INITIAL_CLASSES);
+        setClasses([]);
       } finally {
         setLoading(false);
       }
@@ -167,6 +125,7 @@ export default function AdviserSections({ userRole: propUserRole }) {
   // Controls Filters and Sorting
   const [filterSubject, setFilterSubject] = useState("All");
   const [filterGrade, setFilterGrade] = useState("All");
+  const [filterClassType, setFilterClassType] = useState("All");
   const [sortBy, setSortBy] = useState("sectionName");
   const [sortAscending, setSortAscending] = useState(true);
 
@@ -196,6 +155,20 @@ export default function AdviserSections({ userRole: propUserRole }) {
     let result = [...classes];
     if (filterSubject !== "All") result = result.filter((c) => c.subject === filterSubject);
     if (filterGrade !== "All") result = result.filter((c) => c.gradeLevel === filterGrade);
+    if (filterClassType !== "All") {
+      result = result.filter((c) => {
+        const isSpec = Boolean(
+          c?.is_specialized == 1 ||
+          c?.is_specialized === true ||
+          c?.is_specialized === "1" ||
+          String(c?.is_specialized).toLowerCase() === "true" ||
+          c?.classType === "Special Program"
+        );
+        const isAdv = !isSpec && (c?.isAdviser === true || c?.classType === "Advisory Class");
+        const type = isSpec ? "Special Program" : isAdv ? "Advisory Class" : "Regular Class";
+        return type === filterClassType;
+      });
+    }
 
     result.sort((a, b) => {
       let valA = a[sortBy] ? a[sortBy].toLowerCase() : "";
@@ -210,7 +183,7 @@ export default function AdviserSections({ userRole: propUserRole }) {
       return 0;
     });
     return result;
-  }, [classes, filterSubject, filterGrade, sortBy, sortAscending]);
+  }, [classes, filterSubject, filterGrade, filterClassType, sortBy, sortAscending]);
 
   const subjectOptions = useMemo(() => ["All", ...Array.from(new Set(classes.map((c) => c.subject)))], [classes]);
   const gradeOptions = useMemo(() => ["All", ...Array.from(new Set(classes.map((c) => c.gradeLevel)))], [classes]);
@@ -312,6 +285,18 @@ export default function AdviserSections({ userRole: propUserRole }) {
                 ]}
                 minWidth="150px"
               />
+
+              <SelectFilter
+                value={filterClassType}
+                onChange={setFilterClassType}
+                options={[
+                  { value: "All", label: "All Class Types" },
+                  { value: "Regular Class", label: "Regular Class" },
+                  { value: "Advisory Class", label: "Advisory Class" },
+                  { value: "Special Program", label: "Special Program" }
+                ]}
+                minWidth="150px"
+              />
             </div>
             <div className="control-right">
               <div className="control-text">
@@ -384,7 +369,9 @@ export default function AdviserSections({ userRole: propUserRole }) {
         />
       ) : currentView === "section-details" ? (
         <SectionDetails
+          section={activeSelectedClass}
           student={activeSelectedClass}
+          isAdviser={activeSelectedClass?.isAdviser}
           userRole={userRole}
           onBack={() => setCurrentView("dashboard")}
         />
