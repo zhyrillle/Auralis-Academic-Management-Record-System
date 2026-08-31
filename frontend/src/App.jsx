@@ -30,6 +30,7 @@ import PerformanceLowest from "./pages/principal/PerformanceLowest";
 import TeacherFeedback from "./pages/principal/TeacherFeedback";
 import SubjectPerformanceTrend from "./pages/principal/SubjectPerformanceTrend";
 import HistoricalComparison from "./pages/principal/HistoricalComparison";
+import PrincipalReports from "./pages/principal/PrincipalReports";
 import GradeReopeningRequest from "./pages/adviser/GradeReopeningRequest";
 import SectionDetails from "./pages/adviser/SectionDetails";
 import AdviserNotifications from "./pages/adviser/AdviserNotifications";
@@ -132,7 +133,7 @@ export default function App() {
             path="/principal/analytics/historical-comparison"
             element={<HistoricalComparison />}
           />
-          <Route path="/principal/reports" element={<PlaceholderPage />} />
+          <Route path="/principal/reports" element={<PrincipalReports />} />
           <Route path="/principal/feedback" element={<TeacherFeedback />} />
 
           {/* 3. Department Head */}

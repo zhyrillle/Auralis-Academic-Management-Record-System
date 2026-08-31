@@ -36,12 +36,16 @@ const auditEventRoutes = require('./routes/auditEventRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const feedbackRoutes = require('./routes/feedbackRoutes');
 const principalFeedbackRoutes = require('./routes/principalFeedbackRoutes');
+const principalAnalyticsRoutes = require('./routes/principalAnalyticsRoutes');
 const departmentHeadDashboardRoutes = require('./routes/departmentHeadDashboard.routes');
 const atRiskPredictionRoutes = require('./routes/atRiskPredictionRoutes');
 const gradingPeriodRoutes = require('./routes/gradingPeriodRoutes');
+const classRecordRoutes = require('./routes/classRecordRoutes');
+const StudentGrade = require('./models/StudentGrade');
 const masterSheetRoutes = require('./routes/masterSheetRoutes');
 const GradingPeriodService = require('./services/GradingPeriodService');
 
+app.use('/api', classRecordRoutes);
 app.use('/api/schools', schoolRoutes);
 app.use('/api/school-years', schoolYearRoutes);
 app.use('/api/academic-terms', academicTermRoutes);
@@ -69,6 +73,7 @@ app.use('/api/audit-logs', auditEventRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/feedback', feedbackRoutes);
 app.use('/api/principal/feedback', principalFeedbackRoutes);
+app.use('/api/principal/analytics', principalAnalyticsRoutes);
 app.use('/api/department-head', departmentHeadDashboardRoutes);
 app.use('/api/principal/at-risk-prediction', atRiskPredictionRoutes);
 app.use('/api/grading-periods', gradingPeriodRoutes);
@@ -85,6 +90,7 @@ const { logEmailServiceStatus } = require('./services/emailService');
 app.listen(PORT, () => {
   console.log(`API Server running on http://localhost:${PORT}`);
   logEmailServiceStatus();
+  StudentGrade.initTable().catch((err) => console.error('StudentGrade init error:', err.message));
 
   // Lifecycle enforcement is intentionally server-side. A page does not need
   // to be open for expired temporary access to be closed.

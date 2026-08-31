@@ -21,10 +21,15 @@ import HistoricalComparisonTable from "./analytics/HistoricalComparisonTable";
 import GroupedBarChart from "../../components/charts/GroupedBarChart";
 import "../../styles/principalAnalytics.css";
 
-const round = (value) => Math.round(value * 10) / 10;
+const round = (value) => Math.round(Number(value || 0) * 10) / 10;
 const average = (values) =>
-  values.reduce((sum, value) => sum + value, 0) / values.length;
-const termIndex = (term) => Number(term.split("-")[1]) - 1;
+  Array.isArray(values) && values.length
+    ? values.reduce((sum, value) => sum + Number(value || 0), 0) / values.length
+    : 0;
+const termIndex = (term) => {
+  const num = Number(String(term || "").split("-")[1]);
+  return isNaN(num) ? 0 : num - 1;
+};
 
 const getStatus = (currentAverage, difference) => {
   if (currentAverage < 75 || difference <= -3) return "Needs attention";
@@ -74,24 +79,28 @@ export default function HistoricalComparison() {
   };
 
   const rows = useMemo(() => {
-    if (!data?.subjects.length) return [];
+    if (!data?.subjects?.length) return [];
     const selectedTermIndex =
       data.term === "overall" ? null : termIndex(data.term);
     return data.subjects.map((subject) => {
+      const primaryAverages = subject.primaryTermAverages || [0, 0, 0];
+      const comparisonAverages = subject.comparisonTermAverages || [0, 0, 0];
+      const primaryPassRates = subject.primaryTermPassRates || [0, 0, 0];
+
       const primaryAverage = round(
         selectedTermIndex === null
-          ? average(subject.primaryTermAverages)
-          : subject.primaryTermAverages[selectedTermIndex],
+          ? average(primaryAverages)
+          : primaryAverages[selectedTermIndex] || 0,
       );
       const comparisonAverage = round(
         selectedTermIndex === null
-          ? average(subject.comparisonTermAverages)
-          : subject.comparisonTermAverages[selectedTermIndex],
+          ? average(comparisonAverages)
+          : comparisonAverages[selectedTermIndex] || 0,
       );
       const passRate = round(
         selectedTermIndex === null
-          ? average(subject.primaryTermPassRates)
-          : subject.primaryTermPassRates[selectedTermIndex],
+          ? average(primaryPassRates)
+          : primaryPassRates[selectedTermIndex] || 0,
       );
       const difference = round(primaryAverage - comparisonAverage);
       return {

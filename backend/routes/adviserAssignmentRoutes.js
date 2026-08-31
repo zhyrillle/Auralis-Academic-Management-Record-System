@@ -20,6 +20,15 @@ router.get('/user/:userId', async (req, res) => {
   }
 });
 
+router.get('/section/:sectionId', async (req, res) => {
+  try {
+    const assignments = await SectionAdviserAssignment.findBySectionId(req.params.sectionId);
+    res.json(assignments);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/:id', async (req, res) => {
   try {
     const adviser = await SectionAdviserAssignment.findById(req.params.id);
