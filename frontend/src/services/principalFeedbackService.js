@@ -43,7 +43,7 @@ const defaultLikertQuestions = [
  * Placeholder REST Route: GET /api/principal/feedback/summary?term=:term&schoolYear=:schoolYear
  * Retrieves top metric cards for teacher feedback.
  */
-export async function getTeacherFeedbackSummary(term = "Overall", schoolYear = "2025-2026") {
+export async function getTeacherFeedbackSummary(term = "Overall", schoolYear = "2026-2027") {
   try {
     const response = await fetch(
       `${API_BASE_URL}/principal/feedback/summary?term=${encodeURIComponent(term)}&schoolYear=${encodeURIComponent(schoolYear)}`,
@@ -59,7 +59,7 @@ export async function getTeacherFeedbackSummary(term = "Overall", schoolYear = "
  * Placeholder REST Route: GET /api/principal/feedback/likert-results?term=:term&schoolYear=:schoolYear
  * Retrieves the Likert scale ratings for leadership evaluation.
  */
-export async function getLikertEvaluationResults(term = "Overall", schoolYear = "2025-2026") {
+export async function getLikertEvaluationResults(term = "Overall", schoolYear = "2026-2027") {
   try {
     const response = await fetch(
       `${API_BASE_URL}/principal/feedback/likert-results?term=${encodeURIComponent(term)}&schoolYear=${encodeURIComponent(schoolYear)}`,
@@ -76,7 +76,7 @@ export async function getLikertEvaluationResults(term = "Overall", schoolYear = 
  * Placeholder REST Route: GET /api/principal/feedback/comments?term=:term&schoolYear=:schoolYear&query=:query
  * Retrieves open-ended teacher responses.
  */
-export async function getTeacherFeedbackComments(term = "Overall", schoolYear = "2025-2026", query = "") {
+export async function getTeacherFeedbackComments(term = "Overall", schoolYear = "2026-2027", query = "") {
   try {
     const response = await fetch(
       `${API_BASE_URL}/principal/feedback/comments?term=${encodeURIComponent(term)}&schoolYear=${encodeURIComponent(schoolYear)}&query=${encodeURIComponent(query)}`,

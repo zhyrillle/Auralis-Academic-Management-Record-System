@@ -24,7 +24,7 @@ import "./TeacherFeedback.css";
 export default function TeacherFeedback() {
   // Controls state
   const [selectedTerm, setSelectedTerm] = useState("Overall");
-  const [selectedYear, setSelectedYear] = useState("2025-2026");
+  const [selectedYear, setSelectedYear] = useState("2026-2027");
   const [yearDropdownOpen, setYearDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -42,7 +42,7 @@ export default function TeacherFeedback() {
   const [loading, setLoading] = useState(true);
 
   const terms = ["Overall", "Term 1", "Term 2", "Term 3"];
-  const schoolYears = ["2025-2026", "2026-2027"];
+  const schoolYears = ["2026-2027", "2025-2026"];
 
   // Fetch feedback data on term / year change
   useEffect(() => {
