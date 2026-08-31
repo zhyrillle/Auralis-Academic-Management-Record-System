@@ -30,7 +30,7 @@ import DepEdClassRecordPrintModal from "../../components/DepEdClassRecordPrintMo
 const OFFLINE_KEY_PREFIX = "auralis_class_record_pending_";
 const CACHE_KEY_PREFIX = "auralis_class_record_cache_";
 
-export default function ClassRecord({ activeClass, onBack, onAttendance }) {
+export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdateQuarterlyGrades }) {
   const navigate = useNavigate();
   const location = useLocation();
   const params = useParams();
@@ -514,6 +514,40 @@ export default function ClassRecord({ activeClass, onBack, onAttendance }) {
     () => performanceTaskColumns.reduce((sum, col) => sum + Number(col.max_score || 0), 0),
     [performanceTaskColumns]
   );
+
+  // Propagate quarterly grade to parent component (GradingSheet)
+  const studentQuarterlyGradesMap = useMemo(() => {
+    if (!students || students.length === 0) return {};
+    const map = {};
+    students.forEach((student) => {
+      const studentGradesObj = grades[student.id] || {};
+      const ww = studentGradesObj.writtenWorks || {};
+      const pt = studentGradesObj.performanceTasks || {};
+      const qa = studentGradesObj.quarterlyAssessment || "";
+
+      const rowCalc = calculateStudentGrades({
+        writtenWorks: ww,
+        performanceTasks: pt,
+        quarterlyAssessment: qa,
+        writtenWorkColumns,
+        performanceTaskColumns,
+        quarterlyAssessmentHPS,
+        weights,
+      });
+
+      const qg = rowCalc.quarterlyGrade !== "-" ? rowCalc.quarterlyGrade : "";
+      map[student.id] = qg;
+      if (student.student_id) map[student.student_id] = qg;
+      if (student.lrn) map[student.lrn] = qg;
+    });
+    return map;
+  }, [students, grades, writtenWorkColumns, performanceTaskColumns, quarterlyAssessmentHPS, weights]);
+
+  useEffect(() => {
+    if (typeof onUpdateQuarterlyGrades === "function" && Object.keys(studentQuarterlyGradesMap).length > 0) {
+      onUpdateQuarterlyGrades(activeTerm, studentQuarterlyGradesMap);
+    }
+  }, [studentQuarterlyGradesMap, activeTerm, onUpdateQuarterlyGrades]);
 
   // ============================================================
   // CONDITIONAL DISABLING FOR DOWNLOAD BUTTON
