@@ -16,9 +16,9 @@ import {
 import AnalyticsSkeleton from "./analytics/AnalyticsSkeleton";
 import AnalyticsStatCard from "./analytics/AnalyticsStatCard";
 import AnalyticsTermTabs from "./analytics/AnalyticsTermTabs";
-import AverageLineChart from "./analytics/AverageLineChart";
+import LineChart from "../../components/charts/LineChart";
 import HistoricalComparisonTable from "./analytics/HistoricalComparisonTable";
-import SubjectBarChart from "./analytics/SubjectBarChart";
+import GroupedBarChart from "../../components/charts/GroupedBarChart";
 import "../../styles/principalAnalytics.css";
 
 const round = (value) => Math.round(Number(value || 0) * 10) / 10;
@@ -312,8 +312,9 @@ export default function HistoricalComparison() {
                 </div>
               </div>
               {displayedTerm === "overall" ? (
-                <AverageLineChart
+                <LineChart
                   ariaLabel={`Average grade comparison for ${data.primarySchoolYear.label} and ${data.comparisonSchoolYear.label}`}
+                  labels={["Term 1", "Term 2", "Term 3"]}
                   series={[
                     {
                       id: "primary",
@@ -321,7 +322,7 @@ export default function HistoricalComparison() {
                       color: "#17376d",
                       values: data.primaryTrend.map((value) => ({
                         value,
-                        learnerCount: data.totalStudents,
+                        detail: `${data.totalStudents} learners`,
                       })),
                     },
                     {
@@ -330,13 +331,13 @@ export default function HistoricalComparison() {
                       color: "#d4a017",
                       values: data.comparisonTrend.map((value) => ({
                         value,
-                        learnerCount: data.totalStudents,
+                        detail: `${data.totalStudents} learners`,
                       })),
                     },
                   ]}
                 />
               ) : (
-                <SubjectBarChart
+                <GroupedBarChart
                   ariaLabel={`Term ${selectedTermIndex + 1} subject comparison between selected school years`}
                   groups={rows.map((row) => ({
                     id: row.id,
@@ -347,14 +348,14 @@ export default function HistoricalComparison() {
                         id: `${row.id}-primary`,
                         label: data.primarySchoolYear.label,
                         value: row.primaryAverage,
-                        learnerCount: row.learnerCount,
+                        detail: `${row.learnerCount} learners`,
                         color: "#17376d",
                       },
                       {
                         id: `${row.id}-comparison`,
                         label: data.comparisonSchoolYear.label,
                         value: row.comparisonAverage,
-                        learnerCount: row.learnerCount,
+                        detail: `${row.learnerCount} learners`,
                         color: "#d4a017",
                       },
                     ],
