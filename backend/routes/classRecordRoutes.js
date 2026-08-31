@@ -1999,5 +1999,39 @@ router.post('/class-record/submit', async (req, res) => {
   }
 });
 
+/**
+ * POST /api/class-record/export-grading-sheet
+ * Generates official DepEd CLASS RECORD - FINAL GRADES formatted Excel sheet
+ */
+const GradingSheetWorkbookService = require('../services/GradingSheetWorkbookService');
+router.post('/class-record/export-grading-sheet', async (req, res) => {
+  try {
+    const { sectionName, gradeLevel, subjectName, teacherName, region, division, schoolId, schoolName, schoolYear, students } = req.body;
+    
+    const workbook = await GradingSheetWorkbookService.generateWorkbook({
+      sectionName,
+      gradeLevel,
+      subjectName,
+      teacherName,
+      region,
+      division,
+      schoolId,
+      schoolName,
+      schoolYear,
+      students,
+    });
+
+    const fileName = `Grading_Sheet_${(sectionName || 'Section').replace(/\s+/g, '_')}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error('Error exporting grading sheet excel:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
 

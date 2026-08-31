@@ -65,9 +65,9 @@ export default function GradingSheet({
         };
     }, [students, searchStudentQuery, filterDescriptor, filterRemark, calculateFinalGrade]);
 
-    const handleDownloadSheet = () => {
-        downloadGradingSheetCSV(activeSelectedClass, students, calculateFinalGrade, getDescriptor, getRemark);
-        triggerToast(`Downloaded CSV Grading Sheet for ${activeSelectedClass.gradeLevel} - ${activeSelectedClass.sectionName}`, "info");
+    const handleDownloadSheet = async () => {
+        await downloadGradingSheetCSV(activeSelectedClass, students, calculateFinalGrade, getDescriptor, getRemark, teacherName);
+        triggerToast(`Downloaded Excel Grading Sheet for ${activeSelectedClass.gradeLevel} - ${activeSelectedClass.sectionName}`, "info");
     };
 
     // Central modal pipeline interceptor
