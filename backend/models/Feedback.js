@@ -251,7 +251,7 @@ class Feedback {
     return result.affectedRows > 0;
   }
 
-  static async getDateRange(term = "Overall", schoolYear = "2026-2027") {
+  static async getDateRange(schoolYear = "2026-2027") {
     if (!schoolYear || schoolYear === "Overall" || schoolYear === "all") {
       return { startDate: null, endDate: null };
     }
@@ -263,7 +263,7 @@ class Feedback {
 
     try {
       const [terms] = await db.execute(
-        `SELECT at.term_name, at.starts_at, at.ends_at 
+        `SELECT at.starts_at, at.ends_at 
          FROM ACADEMIC_TERM at
          JOIN SCHOOL_YEAR sy ON at.school_year_id = sy.school_year_id
          WHERE sy.starts_on = ? OR YEAR(sy.starts_on) = ? OR (YEAR(sy.starts_on) = ? AND YEAR(sy.ends_on) = ?)`,
@@ -271,20 +271,6 @@ class Feedback {
       );
 
       if (terms.length > 0) {
-        const termLower = String(term || "").toLowerCase();
-        let matched = null;
-        if (termLower.includes("1") || termLower.includes("first")) {
-          matched = terms.find(t => t.term_name.includes("1") || t.term_name.toLowerCase().includes("first"));
-        } else if (termLower.includes("2") || termLower.includes("second")) {
-          matched = terms.find(t => t.term_name.includes("2") || t.term_name.toLowerCase().includes("second"));
-        } else if (termLower.includes("3") || termLower.includes("third")) {
-          matched = terms.find(t => t.term_name.includes("3") || t.term_name.toLowerCase().includes("third"));
-        }
-
-        if (matched) {
-          return { startDate: matched.starts_at, endDate: matched.ends_at };
-        }
-
         const starts = terms.map(t => new Date(t.starts_at)).sort((a, b) => a - b);
         const ends = terms.map(t => new Date(t.ends_at)).sort((a, b) => b - a);
         return { startDate: starts[0], endDate: ends[0] };
@@ -293,33 +279,15 @@ class Feedback {
       console.warn("[WARN] getDateRange DB query error:", e.message);
     }
 
-    const termLower = String(term || "").toLowerCase();
-    if (termLower.includes("1") || termLower.includes("first")) {
-      return {
-        startDate: new Date(`${startYr}-06-01T00:00:00.000Z`),
-        endDate: new Date(`${startYr}-09-30T23:59:59.999Z`),
-      };
-    } else if (termLower.includes("2") || termLower.includes("second")) {
-      return {
-        startDate: new Date(`${startYr}-10-01T00:00:00.000Z`),
-        endDate: new Date(`${startYr}-12-31T23:59:59.999Z`),
-      };
-    } else if (termLower.includes("3") || termLower.includes("third")) {
-      return {
-        startDate: new Date(`${endYr}-01-01T00:00:00.000Z`),
-        endDate: new Date(`${endYr}-05-31T23:59:59.999Z`),
-      };
-    }
-
     return {
       startDate: new Date(`${startYr}-06-01T00:00:00.000Z`),
       endDate: new Date(`${endYr}-05-31T23:59:59.999Z`),
     };
   }
 
-  static async getPrincipalFeedbackSummary(term = "Overall", schoolYear = "2026-2027") {
+  static async getPrincipalFeedbackSummary(schoolYear = "2026-2027") {
     try {
-      const { startDate, endDate } = await this.getDateRange(term, schoolYear);
+      const { startDate, endDate } = await this.getDateRange(schoolYear);
 
       let whereClause = "WHERE LOWER(u.role) LIKE '%principal%'";
       const params = [];
@@ -355,8 +323,7 @@ class Feedback {
         `SELECT 
           SUM(
             (CASE WHEN strengths_comments IS NOT NULL AND TRIM(strengths_comments) != '' THEN 1 ELSE 0 END) +
-            (CASE WHEN improvements_comments IS NOT NULL AND TRIM(improvements_comments) != '' THEN 1 ELSE 0 END) +
-            (CASE WHEN comment IS NOT NULL AND TRIM(comment) != '' THEN 1 ELSE 0 END)
+            (CASE WHEN improvements_comments IS NOT NULL AND TRIM(improvements_comments) != '' THEN 1 ELSE 0 END)
           ) AS total_comments
          FROM FEEDBACK f
          INNER JOIN \`USER\` u ON f.evaluee_id = u.user_id
@@ -381,30 +348,15 @@ class Feedback {
         belowTargetCount = qAvgs.filter((avg) => avg > 0 && avg < 3.0).length;
       }
 
-      // Calculate dynamic rating difference (comparing to previous period rating or baseline 3.0)
+      // Calculate rating difference vs previous school year
       let ratingDiff = "+0.0";
       if (overallRating > 0) {
-        const tLower = String(term || "").toLowerCase();
         const syParts = String(schoolYear || "").split(/[-–_]/);
         const startYr = parseInt(syParts[0], 10) || 2026;
         const endYr = syParts[1] ? parseInt(syParts[1], 10) : startYr + 1;
         const prevSY = `${startYr - 1}-${endYr - 1}`;
 
-        let prevTerm = "Overall";
-        let prevSchoolYear = prevSY;
-
-        if (tLower.includes("3") || tLower.includes("third")) {
-          prevTerm = "Term 2";
-          prevSchoolYear = schoolYear;
-        } else if (tLower.includes("2") || tLower.includes("second")) {
-          prevTerm = "Term 1";
-          prevSchoolYear = schoolYear;
-        } else if (tLower.includes("1") || tLower.includes("first")) {
-          prevTerm = "Overall";
-          prevSchoolYear = prevSY;
-        }
-
-        const { startDate: prevStart, endDate: prevEnd } = await this.getDateRange(prevTerm, prevSchoolYear);
+        const { startDate: prevStart, endDate: prevEnd } = await this.getDateRange(prevSY);
 
         let prevRating = 0;
         if (prevStart && prevEnd) {
@@ -426,7 +378,7 @@ class Feedback {
           const diff = overallRating - prevRating;
           ratingDiff = (diff >= 0 ? "+" : "") + diff.toFixed(1);
         } else {
-          // If no previous period data exists, compare against standard 3.0 baseline
+          // Compare against standard 3.0 baseline
           const diff = overallRating - 3.0;
           ratingDiff = (diff >= 0 ? "+" : "") + diff.toFixed(1);
         }
@@ -451,7 +403,7 @@ class Feedback {
     }
   }
 
-  static async getPrincipalLikertResults(term = "Overall", schoolYear = "2026-2027") {
+  static async getPrincipalLikertResults(schoolYear = "2026-2027") {
     try {
       const questions = [
         "The principal communicates clear goals and vision for the school.",
@@ -464,7 +416,7 @@ class Feedback {
         "The principal demonstrates fair and transparent decision-making.",
       ];
 
-      const { startDate, endDate } = await this.getDateRange(term, schoolYear);
+      const { startDate, endDate } = await this.getDateRange(schoolYear);
 
       let whereClause = "WHERE LOWER(u.role) LIKE '%principal%'";
       const params = [];
@@ -508,9 +460,9 @@ class Feedback {
     }
   }
 
-  static async getPrincipalFeedbackComments(term = "Overall", schoolYear = "2026-2027", query = "") {
+  static async getPrincipalFeedbackComments(schoolYear = "2026-2027", query = "") {
     try {
-      const { startDate, endDate } = await this.getDateRange(term, schoolYear);
+      const { startDate, endDate } = await this.getDateRange(schoolYear);
 
       let sql = `
         SELECT f.*
@@ -527,8 +479,8 @@ class Feedback {
 
       if (query && query.trim()) {
         const q = `%${query.trim()}%`;
-        sql += ` AND (f.strengths_comments LIKE ? OR f.improvements_comments LIKE ? OR f.comment LIKE ?)`;
-        params.push(q, q, q);
+        sql += ` AND (f.strengths_comments LIKE ? OR f.improvements_comments LIKE ?)`;
+        params.push(q, q);
       }
 
       sql += ` ORDER BY f.feedback_id DESC`;
@@ -539,7 +491,6 @@ class Feedback {
       rows.forEach((row, idx) => {
         const praiseText = row.strengths_comments || row.strengths_comment || row.strenghts_comment;
         const suggestionText = row.improvements_comments || row.improvements_comment;
-        const generalText = row.comment;
 
         if (praiseText && String(praiseText).trim()) {
           comments.push({
@@ -554,14 +505,6 @@ class Feedback {
             id: `imp-${row.feedback_id}-${idx}`,
             category: "Areas for Improvement",
             text: String(suggestionText).trim(),
-            created_at: row.created_at,
-          });
-        }
-        if (generalText && String(generalText).trim()) {
-          comments.push({
-            id: `com-${row.feedback_id}-${idx}`,
-            category: "General",
-            text: String(generalText).trim(),
             created_at: row.created_at,
           });
         }

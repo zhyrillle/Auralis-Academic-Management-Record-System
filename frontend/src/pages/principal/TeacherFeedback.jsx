@@ -17,6 +17,7 @@ import {
   getTeacherFeedbackSummary,
   getLikertEvaluationResults,
   getTeacherFeedbackComments,
+  getSchoolYears,
 } from "../../services/principalFeedbackService";
 
 // Scoped Styling
@@ -24,11 +25,11 @@ import "./TeacherFeedback.css";
 
 export default function TeacherFeedback() {
   // Controls state
-  const [selectedTerm, setSelectedTerm] = useState("Term 1");
   const [selectedYear, setSelectedYear] = useState("2026-2027");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [yearDropdownOpen, setYearDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [schoolYears, setSchoolYears] = useState([]);
 
   // Data states (Zero / Empty initial states)
   const [summary, setSummary] = useState({
@@ -43,10 +44,26 @@ export default function TeacherFeedback() {
   const [comments, setComments] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const terms = ["Term 1", "Term 2", "Term 3"];
-  const schoolYears = ["2026-2027", "2025-2026"];
+  // Fetch available school years dynamically on mount
+  useEffect(() => {
+    let isMounted = true;
 
-  // Fetch feedback data on term / year change
+    async function loadSchoolYears() {
+      const years = await getSchoolYears();
+      if (isMounted && Array.isArray(years) && years.length > 0) {
+        setSchoolYears(years);
+        setSelectedYear((prev) => (years.includes(prev) ? prev : years[0]));
+      }
+    }
+
+    loadSchoolYears();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Fetch feedback data on school year change
   useEffect(() => {
     let isMounted = true;
 
@@ -54,9 +71,9 @@ export default function TeacherFeedback() {
       setLoading(true);
       try {
         const [sumRes, likertRes, commentsRes] = await Promise.all([
-          getTeacherFeedbackSummary(selectedTerm, selectedYear),
-          getLikertEvaluationResults(selectedTerm, selectedYear),
-          getTeacherFeedbackComments(selectedTerm, selectedYear, searchQuery),
+          getTeacherFeedbackSummary(selectedYear),
+          getLikertEvaluationResults(selectedYear),
+          getTeacherFeedbackComments(selectedYear, searchQuery),
         ]);
 
         if (isMounted) {
@@ -86,7 +103,7 @@ export default function TeacherFeedback() {
     return () => {
       isMounted = false;
     };
-  }, [selectedTerm, selectedYear]);
+  }, [selectedYear]);
 
   // Filter comments locally with search query and category selector
   const filteredComments = useMemo(() => {
@@ -144,22 +161,8 @@ export default function TeacherFeedback() {
         </div>
       </header>
 
-      {/* 2. Controls Filter Bar (Term Selector & School Year) */}
+      {/* 2. Controls Filter Bar (School Year Selector) */}
       <section className="tf-controls-bar">
-        {/* Term Tabs */}
-        <div className="tf-term-group">
-          {terms.map((t) => (
-            <button
-              key={t}
-              type="button"
-              className={`tf-term-btn ${selectedTerm === t ? "active" : ""}`}
-              onClick={() => setSelectedTerm(t)}
-            >
-              {t}
-            </button>
-          ))}
-        </div>
-
         {/* School Year Dropdown */}
         <div className="tf-dropdown-wrap">
           <button
@@ -202,7 +205,7 @@ export default function TeacherFeedback() {
           </div>
           <div className="tf-stat-body">
             <span className="tf-stat-value">{summary.totalResponses ?? 0}</span>
-            <span className="tf-stat-sub">All terms</span>
+            <span className="tf-stat-sub">SY {selectedYear}</span>
           </div>
         </div>
 
