@@ -9,7 +9,11 @@ export default function StackedBarChart({
 }) {
   const legendItems = suppliedLegendItems || groups[0]?.segments || [];
   const hasLimitedViewport = Number.isInteger(maxVisibleGroups);
-  const isScrollable = hasLimitedViewport && groups.length > maxVisibleGroups;
+  const hasData =
+    groups.length > 0 &&
+    groups.some((group) =>
+      group.segments.some((segment) => Number(segment.value) > 0),
+    );
 
   return (
     <div className="stacked-bar-chart" role="group" aria-label={ariaLabel}>
@@ -36,7 +40,7 @@ export default function StackedBarChart({
         tabIndex={isScrollable ? 0 : undefined}
         aria-label={isScrollable ? `Scrollable ${ariaLabel}` : undefined}
       >
-        {groups.length ? (
+        {hasData ? (
           groups.map((group, groupIndex) => (
             <div className="stacked-bar-chart__group" key={group.id}>
               <strong>{group.label}</strong>

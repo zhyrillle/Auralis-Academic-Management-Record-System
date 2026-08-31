@@ -27,7 +27,7 @@ export default function RankedProgressList({
   const content = visibleItems.length ? (
     <ol className="pp-ranked-list">
       {visibleItems.map((item, index) => {
-        const width = 28 + ((item.value - minimum) / spread) * 72;
+        const width = item.value <= 0 ? 0 : 28 + ((item.value - minimum) / spread) * 72;
         return (
           <li key={item.id}>
             <span className="pp-ranked-list__rank">{index + 1}</span>

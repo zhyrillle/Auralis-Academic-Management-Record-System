@@ -286,7 +286,7 @@ export default function PerformanceSections() {
                   ariaLabel="Grade band distribution by section"
                   legendItems={PERFORMANCE_BANDS}
                   maxVisibleGroups={10}
-                  emptyMessage="No sections match the current search and grade-level filter."
+                  emptyMessage="No data available yet."
                   groups={distributionSections.map((section) => ({
                     id: section.id,
                     label: section.label,

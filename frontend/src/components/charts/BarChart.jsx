@@ -68,7 +68,9 @@ export default function BarChart({
 
           {data.map((item, index) => {
             const centerX = PADDING.left + groupWidth * index + groupWidth / 2;
-            const y = yFor(item.value);
+            const safeValue = item.value <= 0 ? minimum : Math.max(item.value, minimum);
+            const y = yFor(safeValue);
+            const barHeight = item.value <= 0 ? 0 : Math.max(0, baseline - y);
             const detail = { ...item, x: centerX, y };
             const isActive = activeBar?.id === item.id;
             return (
@@ -78,7 +80,7 @@ export default function BarChart({
                   x={centerX - barWidth / 2}
                   y={y}
                   width={barWidth}
-                  height={baseline - y}
+                  height={barHeight}
                   rx="7"
                   fill={item.color || "#17376d"}
                   tabIndex="0"

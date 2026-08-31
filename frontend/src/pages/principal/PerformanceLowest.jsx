@@ -129,24 +129,50 @@ export default function PerformanceLowest() {
         },
       ]
     : [];
-  const rankedGradeLevels = data.gradeLevels.map((item) => ({
-    id: item.id,
-    label: item.label,
-    value: item.averageGrade,
-    tone: toneFor(item.averageGrade),
-  }));
-  const rankedSections = data.sections.map((item) => ({
-    id: item.id,
-    label: item.label,
-    value: item.averageGrade,
-    tone: toneFor(item.averageGrade),
-  }));
-  const rankedSubjects = data.subjects.map((item) => ({
-    id: item.id,
-    label: item.label,
-    value: item.averageGrade,
-    tone: toneFor(item.averageGrade),
-  }));
+  const hasGradeLevels = data.gradeLevels.some((item) => item.averageGrade > 0);
+  const rankedGradeLevels = hasGradeLevels
+    ? data.gradeLevels.map((item) => ({
+        id: item.id,
+        label: item.label,
+        value: item.averageGrade,
+        tone: toneFor(item.averageGrade),
+      }))
+    : Array.from({ length: 4 }, (_, i) => ({
+        id: `gl-slot-${i + 1}`,
+        label: "—",
+        value: 0,
+        tone: "neutral",
+      }));
+
+  const hasSections = data.sections.some((item) => item.averageGrade > 0);
+  const rankedSections = hasSections
+    ? data.sections.map((item) => ({
+        id: item.id,
+        label: item.label,
+        value: item.averageGrade,
+        tone: toneFor(item.averageGrade),
+      }))
+    : Array.from({ length: 5 }, (_, i) => ({
+        id: `sec-slot-${i + 1}`,
+        label: "—",
+        value: 0,
+        tone: "neutral",
+      }));
+
+  const hasSubjects = data.subjects.some((item) => item.averageGrade > 0);
+  const rankedSubjects = hasSubjects
+    ? data.subjects.map((item) => ({
+        id: item.id,
+        label: item.label,
+        value: item.averageGrade,
+        tone: toneFor(item.averageGrade),
+      }))
+    : Array.from({ length: 5 }, (_, i) => ({
+        id: `subj-slot-${i + 1}`,
+        label: "—",
+        value: 0,
+        tone: "neutral",
+      }));
 
   return (
     <main className="pa-page pp-page">

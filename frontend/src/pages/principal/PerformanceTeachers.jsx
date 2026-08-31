@@ -249,6 +249,7 @@ export default function PerformanceTeachers() {
               title="Performance Rate per Teacher"
               subtitle="Average grade across each teacher's assigned classes."
               items={rankedTeachers
+                .filter((teacher) => teacher.averageGrade > 0)
                 .map((teacher) => ({
                   id: teacher.id,
                   label: teacher.name,
@@ -271,13 +272,15 @@ export default function PerformanceTeachers() {
                   disabled={isFiltering}
                 />
               }
-              emptyMessage="No teachers match your ranking search."
+              emptyMessage="No data available yet."
             />
             <PerformanceProgressTable
               title="Submission Monitor"
               subtitle="Grading-report completion by teacher and assigned classes."
               columns={columns}
-              data={submissionTeachers}
+              data={submissionTeachers.filter(
+                (t) => t.assignments.length > 0 && (t.completion > 0 || t.averageGrade > 0)
+              )}
               maxVisibleRows={10}
               viewportRows={Math.min(data.teachers.length, 10)}
               controls={
@@ -289,7 +292,7 @@ export default function PerformanceTeachers() {
                   disabled={isFiltering}
                 />
               }
-              emptyMessage="No teachers match your submission-monitor search."
+              emptyMessage="No data available yet."
             />
             <section className="pa-panel">
               <div className="pa-panel__header">
@@ -307,44 +310,52 @@ export default function PerformanceTeachers() {
                   />
                 </div>
               </div>
-              <SubjectLegend
-                className="pp-teacher-legend"
-                subjects={chartTeachers.map((teacher) => ({
-                  id: teacher.id,
-                  code: teacher.name,
-                  color: teacher.color,
-                }))}
-                selectedIds={selectedTeacherIds || []}
-                onToggle={(id) =>
-                  setSelectedTeacherIds((current) =>
-                    current.includes(id)
-                      ? current.filter((teacherId) => teacherId !== id)
-                      : [...current, id],
-                  )
-                }
-                onAll={() =>
-                  setSelectedTeacherIds(
-                    data.teachers.map((teacher) => teacher.id),
-                  )
-                }
-                onNone={() => setSelectedTeacherIds([])}
-              />
-              {selectedChartTeachers.length ? <LineChart
-                labels={["Term 1", "Term 2", "Term 3"]}
-                selectedIndex={
-                  term === "overall" ? undefined : Number(term.at(-1)) - 1
-                }
-                ariaLabel="Class average grade trend by teacher"
-                series={selectedChartTeachers.map((teacher) => ({
-                  id: teacher.id,
-                  label: teacher.name,
-                  color: teacher.color,
-                  values: teacher.termAverages.map((value) => ({
-                    value,
-                    detail: `${teacher.learnerCount} learners`,
-                  })),
-                }))}
-              /> : (
+              {chartTeachers.some((t) => t.termAverages?.some((v) => v > 0)) && (
+                <SubjectLegend
+                  className="pp-teacher-legend"
+                  subjects={chartTeachers
+                    .filter((t) => t.termAverages?.some((v) => v > 0))
+                    .map((teacher) => ({
+                      id: teacher.id,
+                      code: teacher.name,
+                      color: teacher.color,
+                    }))}
+                  selectedIds={selectedTeacherIds || []}
+                  onToggle={(id) =>
+                    setSelectedTeacherIds((current) =>
+                      current.includes(id)
+                        ? current.filter((teacherId) => teacherId !== id)
+                        : [...current, id],
+                    )
+                  }
+                  onAll={() =>
+                    setSelectedTeacherIds(
+                      data.teachers.map((teacher) => teacher.id),
+                    )
+                  }
+                  onNone={() => setSelectedTeacherIds([])}
+                />
+              )}
+              {selectedChartTeachers.filter((t) => t.termAverages?.some((v) => v > 0)).length ? (
+                <LineChart
+                  labels={["Term 1", "Term 2", "Term 3"]}
+                  selectedIndex={
+                    term === "overall" ? undefined : Number(term.at(-1)) - 1
+                  }
+                  ariaLabel="Class average grade trend by teacher"
+                  series={selectedChartTeachers
+                    .filter((t) => t.termAverages?.some((v) => v > 0))
+                    .map((teacher) => ({
+                      id: teacher.id,
+                      label: teacher.name,
+                      color: teacher.color,
+                      values: teacher.termAverages.map((value) => ({
+                        value,
+                        detail: `${teacher.learnerCount} learners`,
+                      })),
+                    }))}
+                />
+              ) : (
                 <div className="pa-empty-chart">
                   <div className="pa-empty-chart__graph" aria-hidden="true">
                     <LineChart
@@ -354,9 +365,7 @@ export default function PerformanceTeachers() {
                     />
                   </div>
                   <div className="pa-empty-chart__message" role="status">
-                    {chartTeachers.length
-                      ? "Select at least one teacher to display the class-average trend."
-                      : "No teachers match your chart search."}
+                    No data available yet.
                   </div>
                 </div>
               )}

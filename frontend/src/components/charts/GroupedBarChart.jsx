@@ -69,7 +69,9 @@ export default function GroupedBarChart({
               {group.values.map((bar, barIndex) => {
                 const x =
                   centerX - (seriesCount * barWidth) / 2 + barIndex * barWidth;
-                const y = yFor(bar.value);
+                const safeValue = bar.value <= 0 ? minimum : Math.max(bar.value, minimum);
+                const y = yFor(safeValue);
+                const barHeight = bar.value <= 0 ? 0 : Math.max(0, yFor(minimum) - y);
                 const detail = {
                   ...bar,
                   group: group.label,
@@ -84,7 +86,7 @@ export default function GroupedBarChart({
                       x={x + 4}
                       y={y}
                       width={barWidth - 8}
-                      height={yFor(minimum) - y}
+                      height={barHeight}
                       rx="6"
                       fill={bar.color}
                       tabIndex="0"

@@ -144,22 +144,28 @@ export default function PerformanceSubjects() {
     {
       key: "highestSection",
       label: "Highest Section",
-      render: (row) => (
-        <span>
-          {row.highestSection.section.code}{" "}
-          <b className="pp-positive">{row.highestSection.averageGrade}</b>
-        </span>
-      ),
+      render: (row) =>
+        row.highestSection?.section?.code ? (
+          <span>
+            {row.highestSection.section.code}{" "}
+            <b className="pp-positive">{row.highestSection.averageGrade}</b>
+          </span>
+        ) : (
+          <span>—</span>
+        ),
     },
     {
       key: "lowestSection",
       label: "Lowest Section",
-      render: (row) => (
-        <span>
-          {row.lowestSection.section.code}{" "}
-          <b className="pp-negative">{row.lowestSection.averageGrade}</b>
-        </span>
-      ),
+      render: (row) =>
+        row.lowestSection?.section?.code ? (
+          <span>
+            {row.lowestSection.section.code}{" "}
+            <b className="pp-negative">{row.lowestSection.averageGrade}</b>
+          </span>
+        ) : (
+          <span>—</span>
+        ),
     },
     {
       key: "status",
