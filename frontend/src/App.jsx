@@ -25,6 +25,7 @@ import AtRiskPrediction from "./pages/principal/AtRiskPrediction";
 import TeacherFeedback from "./pages/principal/TeacherFeedback";
 import SubjectPerformanceTrend from "./pages/principal/SubjectPerformanceTrend";
 import HistoricalComparison from "./pages/principal/HistoricalComparison";
+import PrincipalReports from "./pages/principal/PrincipalReports";
 import GradeReopeningRequest from "./pages/adviser/GradeReopeningRequest";
 import SectionDetails from "./pages/adviser/SectionDetails";
 import AdviserNotifications from "./pages/adviser/AdviserNotifications";
@@ -128,6 +129,7 @@ export default function App() {
             element={<HistoricalComparison />}
           />
           <Route path="/principal/reports" element={<PrincipalReports />} />
+          <Route path="/principal/feedback" element={<TeacherFeedback />} />
 
           {/* 3. Department Head */}
           <Route
