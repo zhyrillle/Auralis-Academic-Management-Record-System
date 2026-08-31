@@ -1,6 +1,6 @@
 {
   "scripts": {
-    "test": "node --test test/GradeComputationService.test.js test/MasterSheetWorkbookService.test.js"
+    "test": "node --test test/GradeComputationService.test.js test/MasterSheetWorkbookService.test.js test/SectionDetailsService.test.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
