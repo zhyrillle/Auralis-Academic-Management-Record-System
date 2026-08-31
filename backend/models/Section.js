@@ -162,18 +162,29 @@ class Section {
     const [rows] = await db.execute(
       `SELECT 
          s.student_id AS id,
+         s.student_id,
          s.LRN AS lrn,
          s.first_name AS firstName,
          s.last_name AS lastName,
          s.middle_name AS middleName,
-         s.sex
+         s.sex,
+         MAX(CASE WHEN sg.term IN ('T1', '1st Term', 'Quarter 1', '1') THEN sg.quarterly_grade END) AS term1,
+         MAX(CASE WHEN sg.term IN ('T2', '2nd Term', 'Quarter 2', '2') THEN sg.quarterly_grade END) AS term2,
+         MAX(CASE WHEN sg.term IN ('T3', '3rd Term', 'Quarter 3', '3') THEN sg.quarterly_grade END) AS term3
        FROM STUDENT_SECTION ss
        INNER JOIN STUDENT s ON s.student_id = ss.student_id
+       LEFT JOIN STUDENT_GRADE sg ON sg.student_id = s.student_id
        WHERE ss.section_id = ?
+       GROUP BY s.student_id, s.LRN, s.first_name, s.last_name, s.middle_name, s.sex
        ORDER BY s.last_name ASC, s.first_name ASC`,
       [sectionId]
     );
-    return rows;
+    return rows.map((r) => ({
+      ...r,
+      term1: r.term1 !== null && r.term1 !== undefined ? Number(r.term1) : "",
+      term2: r.term2 !== null && r.term2 !== undefined ? Number(r.term2) : "",
+      term3: r.term3 !== null && r.term3 !== undefined ? Number(r.term3) : "",
+    }));
   }
 }
 

@@ -1898,5 +1898,106 @@ router.get('/class-record/:subject_offering_id/export', async (req, res) => {
   }
 });
 
+/**
+ * POST /api/class-record/submit
+ * Submits grades for a class / subject offering / section and term, setting GRADE_SHEET workflow_status = 'SUBMITTED'
+ * and persisting student quarterly grades into STUDENT_GRADE so MasterSheetService reads them for the adviser's section.
+ */
+router.post('/class-record/submit', async (req, res) => {
+  const connection = await db.getConnection();
+  try {
+    const { subject_offering_id, section_id, term = 'T1', students = [] } = req.body;
+    const { termCode, termName } = normalizeTerm(term);
+
+    // Resolve subject offerings to submit
+    let offeringIds = [];
+    if (subject_offering_id) {
+      offeringIds.push(subject_offering_id);
+    }
+    if (section_id) {
+      const [offerings] = await connection.execute(
+        'SELECT subject_offering_id FROM SUBJECT_OFFERING WHERE section_id = ?',
+        [section_id]
+      );
+      offerings.forEach((off) => {
+        if (!offeringIds.includes(off.subject_offering_id)) {
+          offeringIds.push(off.subject_offering_id);
+        }
+      });
+    }
+
+    if (offeringIds.length === 0 && (subject_offering_id || section_id)) {
+      const rawId = Number(String(subject_offering_id || section_id).replace(/\D/g, '')) || 1;
+      offeringIds.push(rawId);
+    }
+
+    for (const offId of offeringIds) {
+      // 1. Get school_year_id
+      const [offRows] = await connection.execute(
+        'SELECT school_year_id FROM SUBJECT_OFFERING WHERE subject_offering_id = ?',
+        [offId]
+      );
+      const schoolYearId = offRows.length > 0 ? offRows[0].school_year_id : 1;
+
+      // 2. Ensure GRADE_SHEET exists
+      const sheetData = await ensureGradeSheet(offId, schoolYearId, termName);
+      const gradeSheetId = sheetData.gradeSheetId;
+
+      // 3. Update GRADE_SHEET workflow_status to 'SUBMITTED'
+      await connection.execute(
+        `UPDATE GRADE_SHEET
+         SET workflow_status = 'SUBMITTED', submitted_at = NOW(6), updated_at = NOW(6)
+         WHERE grade_sheet_id = ?`,
+        [gradeSheetId]
+      );
+
+      // 4. Save student grades if provided
+      if (Array.isArray(students) && students.length > 0) {
+        for (const s of students) {
+          const sId = s.student_id || s.id;
+          const sSecId = s.student_section_id || null;
+          const cleanStudentId = typeof sId === 'string' ? Number(sId.replace(/\D/g, '')) || 1 : Number(sId);
+
+          const termGradePairs = [
+            { termCode: 'T1', val: s.term1 },
+            { termCode: 'T2', val: s.term2 },
+            { termCode: 'T3', val: s.term3 },
+          ];
+
+          for (const pair of termGradePairs) {
+            const qg = pair.val;
+            if (sId && qg !== undefined && qg !== null && qg !== "") {
+              const numericGrade = Number(qg);
+              if (!isNaN(numericGrade)) {
+                const remarks = numericGrade >= 75 ? 'Passed' : 'Failed';
+                await connection.execute(
+                  `INSERT INTO STUDENT_GRADE (
+                    subject_offering_id, student_id, student_section_id, term, quarterly_grade, remarks, created_at, updated_at
+                  ) VALUES (?, ?, ?, ?, ?, ?, NOW(6), NOW(6))
+                  ON DUPLICATE KEY UPDATE
+                    student_section_id = VALUES(student_section_id),
+                    quarterly_grade = VALUES(quarterly_grade),
+                    remarks = VALUES(remarks),
+                    updated_at = NOW(6)`,
+                  [offId, cleanStudentId, sSecId, pair.termCode, numericGrade, remarks]
+                );
+              }
+            }
+          }
+        }
+      }
+    }
+
+    await connection.commit();
+    res.json({ message: 'Grades submitted to adviser master sheet successfully', submitted: true });
+  } catch (err) {
+    await connection.rollback();
+    console.error('Error in POST /api/class-record/submit:', err);
+    res.status(500).json({ error: err.message });
+  } finally {
+    connection.release();
+  }
+});
+
 module.exports = router;
 
