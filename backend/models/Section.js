@@ -163,6 +163,7 @@ class Section {
       `SELECT 
          s.student_id AS id,
          s.student_id,
+         ss.student_section_id,
          s.LRN AS lrn,
          s.first_name AS firstName,
          s.last_name AS lastName,
@@ -175,7 +176,7 @@ class Section {
        INNER JOIN STUDENT s ON s.student_id = ss.student_id
        LEFT JOIN STUDENT_GRADE sg ON sg.student_id = s.student_id
        WHERE ss.section_id = ?
-       GROUP BY s.student_id, s.LRN, s.first_name, s.last_name, s.middle_name, s.sex
+       GROUP BY ss.student_section_id, s.student_id, s.LRN, s.first_name, s.last_name, s.middle_name, s.sex
        ORDER BY s.last_name ASC, s.first_name ASC`,
       [sectionId]
     );
