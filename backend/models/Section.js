@@ -38,8 +38,10 @@ class Section {
     try {
       // 1. Advisory Sections for user (via SECTION_ADVISER_ASSIGNMENT)
       const [rows] = await db.execute(
-        `SELECT DISTINCT
+         `SELECT DISTINCT
+           saa.adviser_assignment_id,
            sec.section_id,
+           saa.school_year_id,
            sec.section_name,
            sec.is_specialized,
            gl.grade_level_id,
@@ -68,6 +70,7 @@ class Section {
            so.subject_offering_id,
            so.subject_id,
            sec.section_id,
+           so.school_year_id,
            sec.section_name,
            sec.is_specialized,
            gl.grade_level_id,
@@ -106,18 +109,24 @@ class Section {
     };
 
     const result = [];
-    const addedSectionIds = new Set();
+    const addedSectionAssignments = new Set();
 
     // 1. Process Advisory Classes first (one single card per advisory section)
     for (const row of advisoryRows) {
-      if (!addedSectionIds.has(row.section_id)) {
-        addedSectionIds.add(row.section_id);
+      const sectionAssignmentKey = `${row.section_id}:${row.school_year_id}`;
+      if (!addedSectionAssignments.has(sectionAssignmentKey)) {
+        addedSectionAssignments.add(sectionAssignmentKey);
         const gradeNum = parseInt(String(row.grade_level_name).replace(/\D/g, "")) || "";
         const subjectName = sectionSubjectMap[row.section_id] || "Mathematics";
         const isSpecialized = checkIsSpecialized(row.is_specialized);
         result.push({
-          id: `sec-${row.section_id}`,
+          id: `advisory-${row.adviser_assignment_id}`,
+          assignmentType: "advisory",
+          assignmentId: Number(row.adviser_assignment_id),
+          adviser_assignment_id: Number(row.adviser_assignment_id),
           section_id: row.section_id,
+          schoolYearId: Number(row.school_year_id),
+          school_year_id: Number(row.school_year_id),
           sectionName: row.section_name,
           gradeLevel: gradeNum ? `G${gradeNum}` : row.grade_level_name,
           grade_level_name: row.grade_level_name,
@@ -131,15 +140,21 @@ class Section {
       }
     }
 
-    // 2. Process Regular Teaching Classes for other sections (deduplicated by section_id)
+    // 2. Process Regular Teaching Classes for other section/year assignments.
     for (const row of teacherRows) {
-      if (!addedSectionIds.has(row.section_id)) {
-        addedSectionIds.add(row.section_id);
+      const sectionAssignmentKey = `${row.section_id}:${row.school_year_id}`;
+      if (!addedSectionAssignments.has(sectionAssignmentKey)) {
+        addedSectionAssignments.add(sectionAssignmentKey);
         const gradeNum = parseInt(String(row.grade_level_name).replace(/\D/g, "")) || "";
         const isSpecialized = checkIsSpecialized(row.is_specialized);
         result.push({
-          id: `sec-${row.section_id}`,
+          id: `teaching-${row.teacher_assignment_id}`,
+          assignmentType: "teaching",
+          assignmentId: Number(row.teacher_assignment_id),
+          teacher_assignment_id: Number(row.teacher_assignment_id),
           section_id: row.section_id,
+          schoolYearId: Number(row.school_year_id),
+          school_year_id: Number(row.school_year_id),
           subject_id: row.subject_id,
           subject_offering_id: row.subject_offering_id,
           sectionName: row.section_name,

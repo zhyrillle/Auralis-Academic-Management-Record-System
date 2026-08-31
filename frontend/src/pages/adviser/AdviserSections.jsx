@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { Check, FileSpreadsheet, X, ArrowDownNarrowWide, Loader2 } from "lucide-react";
+import { Check, FileSpreadsheet, ArrowDownNarrowWide, Loader2 } from "lucide-react";
 import { useLocation } from "react-router-dom";
 
 // Components
@@ -29,13 +29,11 @@ export default function AdviserSections({ userRole: propUserRole }) {
   const [classes, setClasses] = useState([]);
   const [studentsBySection, setStudentsBySection] = useState({});
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
 
   // Fetch sections from backend
   useEffect(() => {
     async function fetchAdviserClasses() {
       setLoading(true);
-      setError(null);
       try {
         const user = getStoredUser();
         const userId = user?.user_id || user?.id || 1;
@@ -48,7 +46,6 @@ export default function AdviserSections({ userRole: propUserRole }) {
         }
       } catch (err) {
         console.error("Error fetching adviser sections:", err);
-        setError("Unable to connect to backend. Showing default assigned classes.");
         setClasses([]);
       } finally {
         setLoading(false);
@@ -253,17 +250,6 @@ export default function AdviserSections({ userRole: propUserRole }) {
     );
   }, [classes, activeSelectedClass]);
 
-  const activeClassStats = useMemo(() => {
-    if (!activeSelectedClass) return null;
-    const students = studentsBySection[activeSelectedClass.id] || [];
-    const total = students.length;
-    const males = students.filter((s) => s.sex === "M").length;
-    const females = students.filter((s) => s.sex === "F").length;
-    const grades = students.map((s) => calculateFinalGrade(s.term1, s.term2, s.term3)).filter((g) => g !== "");
-    const avgGrade = grades.length > 0 ? Math.round(grades.reduce((sum, val) => sum + val, 0) / grades.length) : "N/A";
-    return { total, males, females, avgGrade };
-  }, [activeSelectedClass, studentsBySection]);
-
   return (
     <div className="sections-page-container">
       {/* Toast Notifications */}
@@ -403,6 +389,7 @@ export default function AdviserSections({ userRole: propUserRole }) {
         />
       ) : currentView === "section-details" ? (
         <SectionDetails
+          key={`${activeSelectedClass?.assignmentType || "section"}-${activeSelectedClass?.assignmentId || activeSelectedClass?.section_id || "details"}`}
           section={activeSelectedClass}
           student={activeSelectedClass}
           isAdviser={activeSelectedClass?.isAdviser}

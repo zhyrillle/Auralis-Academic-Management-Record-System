@@ -43,6 +43,7 @@ const gradingPeriodRoutes = require('./routes/gradingPeriodRoutes');
 const classRecordRoutes = require('./routes/classRecordRoutes');
 const StudentGrade = require('./models/StudentGrade');
 const masterSheetRoutes = require('./routes/masterSheetRoutes');
+const sectionDetailsRoutes = require('./routes/sectionDetailsRoutes');
 const GradingPeriodService = require('./services/GradingPeriodService');
 
 app.use('/api', classRecordRoutes);
@@ -78,6 +79,7 @@ app.use('/api/department-head', departmentHeadDashboardRoutes);
 app.use('/api/principal/at-risk-prediction', atRiskPredictionRoutes);
 app.use('/api/grading-periods', gradingPeriodRoutes);
 app.use('/api/master-sheets', masterSheetRoutes);
+app.use('/api/section-details', sectionDetailsRoutes);
 
 app.get('/', (req, res) => {
   res.json({ status: 'Backend API is running' });
