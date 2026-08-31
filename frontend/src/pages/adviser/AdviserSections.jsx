@@ -8,6 +8,7 @@ import ClassCard from "../../components/sections/ClassCard";
 import GradingSheet from "./GradingSheet"; // Imported the separated component
 import ClassRecord from "./ClassRecord.jsx";
 import SectionDetails from "./SectionDetails.jsx";
+import AttendanceSheet from "./AttendanceSheet.jsx";
 
 // Auth & Services
 import { getStoredUser } from "../../utils/auth";
@@ -16,71 +17,6 @@ import { getAdviserSections, getStudentsBySection } from "../../services/section
 // Style
 import "../../styles/sections.css";
 import "../../styles/attendanceSheet.css";
-
-// -------------------------------------------------------------
-// INITIAL MOCK DATA (FALLBACK)
-// -------------------------------------------------------------
-const INITIAL_CLASSES = [
-  {
-    id: "class-1",
-    sectionName: "Mahogany",
-    gradeLevel: "G10",
-    subject: "Mathematics",
-    classType: "Advisory Class",
-    deadline: "2026-07-31",
-    submitted: false,
-  },
-  {
-    id: "class-2",
-    sectionName: "Gemelina",
-    gradeLevel: "G10",
-    subject: "Mathematics",
-    classType: "Regular Class",
-    deadline: "2026-08-05",
-    submitted: false,
-  },
-  {
-    id: "class-3",
-    sectionName: "Narra",
-    gradeLevel: "G9",
-    subject: "Advanced Algebra",
-    classType: "Regular Class",
-    deadline: "2026-07-28",
-    submitted: false,
-  },
-  {
-    id: "class-4",
-    sectionName: "Tanguile",
-    gradeLevel: "G10",
-    subject: "Geometry",
-    classType: "Regular Class",
-    deadline: "2026-08-12",
-    submitted: false,
-  },
-];
-
-const generateMockStudents = () => ({
-  "class-1": [
-    { id: "s1", lrn: 102938475601, firstName: "Juan", lastName: "Dela Cruz", middleName: "Santos", sex: "M", term1: 92, term2: 90, term3: 94 },
-    { id: "s2", lrn: 102938475602, firstName: "Pedro", lastName: "Penduko", middleName: "Reyes", sex: "M", term1: 85, term2: 83, term3: 84 },
-    { id: "s3", lrn: 102938475603, firstName: "Jose", lastName: "Rizal", middleName: "Protacio", sex: "M", term1: 98, term2: 97, term3: 99 },
-    { id: "s4", lrn: 102938475604, firstName: "Andres", lastName: "Bonifacio", middleName: "Castro", sex: "M", term1: 74, term2: 78, term3: 73 },
-    { id: "s5", lrn: 102938475605, firstName: "Maria", lastName: "Clara", middleName: "Lara", sex: "F", term1: 95, term2: 96, term3: 94 },
-    { id: "s6", lrn: 102938475606, firstName: "Gabriela", lastName: "Silang", middleName: "Cariño", sex: "F", term1: 88, term2: 89, term3: 91 },
-    { id: "s7", lrn: 102938475607, firstName: "Melchora", lastName: "Aquino", middleName: "Ramos", sex: "F", term1: 72, term2: 75, term3: 73 },
-    { id: "s8", lrn: 102938475608, firstName: "Leonor", lastName: "Rivera", middleName: "Kipping", sex: "F", term1: 82, term2: 85, term3: 86 },
-  ],
-  "class-2": [
-    { id: "s21", lrn: 202938475601, firstName: "Emilio", lastName: "Aguinaldo", middleName: "Famy", sex: "M", term1: 85, term2: 86, term3: 88 },
-    { id: "s22", lrn: 202938475602, firstName: "Apolinario", lastName: "Mabini", middleName: "Maranan", sex: "M", term1: 90, term2: 92, term3: 93 },
-    { id: "s23", lrn: 202938475603, firstName: "Marcelo", lastName: "Del Pilar", middleName: "Hilario", sex: "M", term1: 78, term2: 80, term3: 82 },
-    { id: "s24", lrn: 202938475604, firstName: "Juan", lastName: "Luna", middleName: "Novicio", sex: "M", term1: 83, term2: 85, term3: 84 },
-    { id: "s25", lrn: 202938475605, firstName: "Teresa", lastName: "Magbanua", middleName: "Ferraris", sex: "F", term1: 87, term2: 88, term3: 90 },
-    { id: "s26", lrn: 202938475606, firstName: "Gregoria", lastName: "De Jesus", middleName: "Alvarez", sex: "F", term1: 91, term2: 93, term3: 92 },
-    { id: "s27", lrn: 202938475607, firstName: "Marina", lastName: "Dizon", middleName: "Santiago", sex: "F", term1: 80, term2: 82, term3: 81 },
-    { id: "s28", lrn: 202938475608, firstName: "Gliceria", lastName: "Marella", middleName: "Villavicencio", sex: "F", term1: 73, term2: 74, term3: 75 },
-  ],
-});
 
 import { normalizeRole } from "../../utils/auth";
 
@@ -91,7 +27,7 @@ export default function AdviserSections({ userRole: propUserRole }) {
   const userRole = propUserRole || (normRole === "adviser" ? "adviser" : "teacher");
 
   const [classes, setClasses] = useState([]);
-  const [studentsBySection, setStudentsBySection] = useState(generateMockStudents());
+  const [studentsBySection, setStudentsBySection] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -108,12 +44,12 @@ export default function AdviserSections({ userRole: propUserRole }) {
         if (fetched && Array.isArray(fetched) && fetched.length > 0) {
           setClasses(fetched);
         } else {
-          setClasses(INITIAL_CLASSES);
+          setClasses([]);
         }
       } catch (err) {
         console.error("Error fetching adviser sections:", err);
         setError("Unable to connect to backend. Showing default assigned classes.");
-        setClasses(INITIAL_CLASSES);
+        setClasses([]);
       } finally {
         setLoading(false);
       }
@@ -135,7 +71,6 @@ export default function AdviserSections({ userRole: propUserRole }) {
     async function fetchSectionStudents() {
       if (!activeSelectedClass || !activeSelectedClass.section_id) return;
       const classKey = activeSelectedClass.id;
-      if (studentsBySection[classKey] && studentsBySection[classKey].length > 0) return;
 
       try {
         const studentList = await getStudentsBySection(activeSelectedClass.section_id);
@@ -144,14 +79,15 @@ export default function AdviserSections({ userRole: propUserRole }) {
             ...prev,
             [classKey]: studentList.map((s) => ({
               id: s.id,
+              student_id: s.student_id || s.id,
               lrn: s.lrn,
               firstName: s.firstName || s.first_name,
               lastName: s.lastName || s.last_name,
               middleName: s.middleName || s.middle_name || "",
               sex: s.sex || "M",
-              term1: s.term1 || 85,
-              term2: s.term2 || 88,
-              term3: s.term3 || 90,
+              term1: s.term1 !== undefined && s.term1 !== null ? s.term1 : "",
+              term2: s.term2 !== undefined && s.term2 !== null ? s.term2 : "",
+              term3: s.term3 !== undefined && s.term3 !== null ? s.term3 : "",
             })),
           }));
         }
@@ -166,6 +102,7 @@ export default function AdviserSections({ userRole: propUserRole }) {
   // Controls Filters and Sorting
   const [filterSubject, setFilterSubject] = useState("All");
   const [filterGrade, setFilterGrade] = useState("All");
+  const [filterClassType, setFilterClassType] = useState("All");
   const [sortBy, setSortBy] = useState("sectionName");
   const [sortAscending, setSortAscending] = useState(true);
 
@@ -195,6 +132,20 @@ export default function AdviserSections({ userRole: propUserRole }) {
     let result = [...classes];
     if (filterSubject !== "All") result = result.filter((c) => c.subject === filterSubject);
     if (filterGrade !== "All") result = result.filter((c) => c.gradeLevel === filterGrade);
+    if (filterClassType !== "All") {
+      result = result.filter((c) => {
+        const isSpec = Boolean(
+          c?.is_specialized == 1 ||
+          c?.is_specialized === true ||
+          c?.is_specialized === "1" ||
+          String(c?.is_specialized).toLowerCase() === "true" ||
+          c?.classType === "Special Program"
+        );
+        const isAdv = !isSpec && (c?.isAdviser === true || c?.classType === "Advisory Class");
+        const type = isSpec ? "Special Program" : isAdv ? "Advisory Class" : "Regular Class";
+        return type === filterClassType;
+      });
+    }
 
     result.sort((a, b) => {
       let valA = a[sortBy] ? a[sortBy].toLowerCase() : "";
@@ -209,14 +160,70 @@ export default function AdviserSections({ userRole: propUserRole }) {
       return 0;
     });
     return result;
-  }, [classes, filterSubject, filterGrade, sortBy, sortAscending]);
+  }, [classes, filterSubject, filterGrade, filterClassType, sortBy, sortAscending]);
 
   const subjectOptions = useMemo(() => ["All", ...Array.from(new Set(classes.map((c) => c.subject)))], [classes]);
   const gradeOptions = useMemo(() => ["All", ...Array.from(new Set(classes.map((c) => c.gradeLevel)))], [classes]);
 
+  const handleUpdateQuarterlyGrades = (term, quarterlyGradesMap) => {
+    if (!activeSelectedClass) return;
+    const classId = activeSelectedClass.id;
+
+    setStudentsBySection((prev) => {
+      const currentList = prev[classId] || [];
+      if (currentList.length === 0) return prev;
+
+      const termKey =
+        term === "T1" || String(term).includes("1")
+          ? "term1"
+          : term === "T2" || String(term).includes("2")
+            ? "term2"
+            : "term3";
+
+      let updated = false;
+      const updatedList = currentList.map((stud) => {
+        const newGrade =
+          quarterlyGradesMap[stud.id] ??
+          quarterlyGradesMap[stud.student_id] ??
+          quarterlyGradesMap[stud.lrn];
+
+        if (newGrade !== undefined && newGrade !== null && newGrade !== "" && stud[termKey] !== Number(newGrade)) {
+          updated = true;
+          return { ...stud, [termKey]: Number(newGrade) };
+        }
+        return stud;
+      });
+
+      if (!updated) return prev;
+
+      return {
+        ...prev,
+        [classId]: updatedList,
+      };
+    });
+  };
+
   const handleGradeSubmit = async (classId) => {
-    // simulate API call if needed
-    // await api.submitGrades(classId);
+    const classObj = classes.find((c) => c.id === classId) || activeSelectedClass;
+    const studentsForClass = studentsBySection[classId] || [];
+
+    try {
+      const rawSecId = classObj?.section_id || classObj?.sectionId || (typeof classId === 'string' && classId.startsWith('sec-') ? Number(classId.replace('sec-', '')) : null);
+      const rawOffId = classObj?.subject_offering_id || classObj?.offering_id;
+
+      await fetch("http://localhost:5000/api/class-record/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subject_offering_id: rawOffId,
+          section_id: rawSecId,
+          term: "T1",
+          students: studentsForClass,
+        }),
+      });
+    } catch (e) {
+      console.warn("Backend submit notice:", e.message);
+    }
 
     setClasses((prev) =>
       prev.map((c) =>
@@ -233,7 +240,7 @@ export default function AdviserSections({ userRole: propUserRole }) {
     }));
 
     triggerToast(
-      `Grading sheet for ${activeSelectedClass.gradeLevel} - ${activeSelectedClass.sectionName} has been submitted!`
+      `Grading sheet for ${activeSelectedClass?.gradeLevel || ""} - ${activeSelectedClass?.sectionName || ""} has been submitted!`
     );
   };
 
@@ -311,6 +318,18 @@ export default function AdviserSections({ userRole: propUserRole }) {
                 ]}
                 minWidth="150px"
               />
+
+              <SelectFilter
+                value={filterClassType}
+                onChange={setFilterClassType}
+                options={[
+                  { value: "All", label: "All Class Types" },
+                  { value: "Regular Class", label: "Regular Class" },
+                  { value: "Advisory Class", label: "Advisory Class" },
+                  { value: "Special Program", label: "Special Program" }
+                ]}
+                minWidth="150px"
+              />
             </div>
             <div className="control-right">
               <div className="control-text">
@@ -367,12 +386,26 @@ export default function AdviserSections({ userRole: propUserRole }) {
         </>
       ) : currentView === "class-record" ? (
         <ClassRecord
+          key={`cr-${activeSelectedClass?.subject_offering_id || activeSelectedClass?.section_id || activeSelectedClass?.id || "default"}`}
           activeClass={activeSelectedClass}
           onBack={() => setCurrentView("dashboard")}
+          onAttendance={(cls) => {
+            setactiveSelectedClass(cls || activeSelectedClass);
+            setCurrentView("attendance-sheet");
+          }}
+          onUpdateQuarterlyGrades={handleUpdateQuarterlyGrades}
+        />
+      ) : currentView === "attendance-sheet" ? (
+        <AttendanceSheet
+          key={`att-${activeSelectedClass?.section_id || activeSelectedClass?.id || "default"}`}
+          activeClass={activeSelectedClass}
+          onBack={() => setCurrentView("class-record")}
         />
       ) : currentView === "section-details" ? (
         <SectionDetails
+          section={activeSelectedClass}
           student={activeSelectedClass}
+          isAdviser={activeSelectedClass?.isAdviser}
           userRole={userRole}
           onBack={() => setCurrentView("dashboard")}
         />

@@ -102,7 +102,7 @@ const getManagementUsers = async () => {
           SELECT 1
           FROM SECTION_ADVISER_ASSIGNMENT saa
           LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = saa.school_year_id
-          WHERE saa.user_id = u.user_id AND sy.status IN ('ACTIVE', 'ONGOING')
+          WHERE saa.user_id = u.user_id AND (sy.status IS NULL OR LOWER(sy.status) IN ('active', 'ongoing'))
         ) AND u.role IN ('subject_teacher', 'subject teacher') THEN 'adviser'
         WHEN u.role IN ('subject_teacher', 'subject teacher') THEN 'subject teacher'
         WHEN u.role IN ('department_head', 'department head') THEN 'department head'
@@ -122,7 +122,7 @@ const getManagementUsers = async () => {
           FROM DEPARTMENT_HEAD dh
           INNER JOIN DEPARTMENT d ON d.department_id = dh.department_id
           LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = dh.school_year_id
-          WHERE dh.user_id = u.user_id AND sy.status IN ('ACTIVE', 'ONGOING')
+          WHERE dh.user_id = u.user_id AND (sy.status IS NULL OR LOWER(sy.status) IN ('active', 'ongoing'))
           ORDER BY dh.department_head_id DESC LIMIT 1
         )
         ELSE 'General Education'
@@ -133,7 +133,7 @@ const getManagementUsers = async () => {
         INNER JOIN SECTION sec ON sec.section_id = saa.section_id
         INNER JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
         LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = saa.school_year_id
-        WHERE saa.user_id = u.user_id AND sy.status IN ('ACTIVE', 'ONGOING')
+        WHERE saa.user_id = u.user_id AND (sy.status IS NULL OR LOWER(sy.status) IN ('active', 'ongoing'))
         ORDER BY saa.adviser_assignment_id DESC LIMIT 1
       ) AS gradeLevel,
       (
@@ -141,7 +141,7 @@ const getManagementUsers = async () => {
         FROM SECTION_ADVISER_ASSIGNMENT saa
         INNER JOIN SECTION sec ON sec.section_id = saa.section_id
         LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = saa.school_year_id
-        WHERE saa.user_id = u.user_id AND sy.status IN ('ACTIVE', 'ONGOING')
+        WHERE saa.user_id = u.user_id AND (sy.status IS NULL OR LOWER(sy.status) IN ('active', 'ongoing'))
         ORDER BY saa.adviser_assignment_id DESC LIMIT 1
       ) AS section,
       (
@@ -149,7 +149,7 @@ const getManagementUsers = async () => {
         FROM SECTION_ADVISER_ASSIGNMENT saa
         INNER JOIN SECTION sec ON sec.section_id = saa.section_id
         LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = saa.school_year_id
-        WHERE saa.user_id = u.user_id AND sy.status IN ('ACTIVE', 'ONGOING')
+        WHERE saa.user_id = u.user_id AND (sy.status IS NULL OR LOWER(sy.status) IN ('active', 'ongoing'))
         ORDER BY saa.adviser_assignment_id DESC LIMIT 1
       ) AS adviser_section_name,
       (
@@ -158,14 +158,14 @@ const getManagementUsers = async () => {
         INNER JOIN SECTION sec ON sec.section_id = saa.section_id
         INNER JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
         LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = saa.school_year_id
-        WHERE saa.user_id = u.user_id AND sy.status IN ('ACTIVE', 'ONGOING')
+        WHERE saa.user_id = u.user_id AND (sy.status IS NULL OR LOWER(sy.status) IN ('active', 'ongoing'))
         ORDER BY saa.adviser_assignment_id DESC LIMIT 1
       ) AS adviser_grade_level_name,
       (
         SELECT saa.section_id
         FROM SECTION_ADVISER_ASSIGNMENT saa
         LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = saa.school_year_id
-        WHERE saa.user_id = u.user_id AND sy.status IN ('ACTIVE', 'ONGOING')
+        WHERE saa.user_id = u.user_id AND (sy.status IS NULL OR LOWER(sy.status) IN ('active', 'ongoing'))
         ORDER BY saa.adviser_assignment_id DESC LIMIT 1
       ) AS adviser_section_id,
       (
@@ -173,9 +173,17 @@ const getManagementUsers = async () => {
         FROM SECTION_ADVISER_ASSIGNMENT saa
         INNER JOIN SECTION sec ON sec.section_id = saa.section_id
         LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = saa.school_year_id
-        WHERE saa.user_id = u.user_id AND sy.status IN ('ACTIVE', 'ONGOING')
+        WHERE saa.user_id = u.user_id AND (sy.status IS NULL OR LOWER(sy.status) IN ('active', 'ongoing'))
         ORDER BY saa.adviser_assignment_id DESC LIMIT 1
-      ) AS adviser_grade_level_id
+      ) AS adviser_grade_level_id,
+      (
+        SELECT sec.is_specialized
+        FROM SECTION_ADVISER_ASSIGNMENT saa
+        INNER JOIN SECTION sec ON sec.section_id = saa.section_id
+        LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = saa.school_year_id
+        WHERE saa.user_id = u.user_id AND (sy.status IS NULL OR LOWER(sy.status) IN ('active', 'ongoing'))
+        ORDER BY saa.adviser_assignment_id DESC LIMIT 1
+      ) AS is_specialized
     FROM USER u
     WHERE u.role <> 'system_admin'
     ORDER BY u.last_name ASC, u.first_name ASC
@@ -190,6 +198,7 @@ const getManagementUsers = async () => {
         so.subject_id,
         so.section_id,
         sec.grade_level_id,
+        sec.is_specialized,
         s.subject_name,
         s.subject_code,
         sec.section_name,
@@ -200,7 +209,7 @@ const getManagementUsers = async () => {
       INNER JOIN SUBJECT s ON s.subject_id = so.subject_id
       INNER JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
       LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = so.school_year_id
-      WHERE ta.user_id = ? AND sy.status IN ('ACTIVE', 'ONGOING')
+      WHERE ta.user_id = ? AND (sy.status IS NULL OR LOWER(sy.status) IN ('active', 'ongoing'))
       ORDER BY gl.grade_level_id ASC, sec.section_name ASC, s.subject_name ASC
       `,
       [user.user_id]
@@ -257,6 +266,7 @@ router.post("/login", async (req, res) => {
         saa.adviser_assignment_id,
         saa.section_id,
         sec.section_name,
+        sec.is_specialized,
         gl.grade_level_id,
         gl.grade_level_name
       FROM SECTION_ADVISER_ASSIGNMENT saa

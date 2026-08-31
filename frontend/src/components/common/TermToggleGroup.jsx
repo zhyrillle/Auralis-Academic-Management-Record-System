@@ -8,11 +8,20 @@ import "../../styles/themes.css";
  * @param {string} [props.selectedTerm="T1"] - Currently selected term ("T1", "T2", "T3")
  * @param {function(string):void} [props.onSelectTerm] - Callback when a term is selected
  */
-export default function TermToggleGroup({ selectedTerm = "T1", onSelectTerm }) {
+export default function TermToggleGroup({
+  selectedTerm,
+  activeTerm = "T1",
+  onSelectTerm,
+  onTermChange,
+  termStatusMap,
+}) {
   const terms = ["T1", "T2", "T3"];
+  const currentTerm = selectedTerm || activeTerm;
 
   const handleSelect = (term) => {
-    if (onSelectTerm) {
+    if (onTermChange) {
+      onTermChange(term);
+    } else if (onSelectTerm) {
       onSelectTerm(term);
     }
   };
@@ -27,7 +36,7 @@ export default function TermToggleGroup({ selectedTerm = "T1", onSelectTerm }) {
       }}
     >
       {terms.map((term) => {
-        const isActive = selectedTerm === term;
+        const isActive = currentTerm === term;
 
         return (
           <button

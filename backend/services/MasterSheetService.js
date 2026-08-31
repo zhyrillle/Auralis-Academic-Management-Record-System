@@ -187,7 +187,6 @@ class MasterSheetService {
        INNER JOIN SUBJECT s ON s.subject_id = so.subject_id
        WHERE so.section_id = ?
          AND so.school_year_id = ?
-         AND (s.status = 'ACTIVE' OR s.status IS NULL)
        ORDER BY s.subject_name ASC`,
       [assignment.section_id, assignment.school_year_id],
     );

@@ -1,83 +1,108 @@
-/**
- * @typedef {Object} GradeLevelBreakdownItem
- * @property {string} grade
- * @property {number} high
- * @property {number} medium
- * @property {number} low
- */
-
-/**
- * @typedef {Object} GradeLevelBreakdownProps
- * @property {GradeLevelBreakdownItem[]} data
- * @property {boolean} [loading]
- */
+import React from "react";
 
 const BAR_COLORS = {
-  high: "#EF4444",
-  medium: "#F4B400",
-  low: "#16A34A",
+  medium: "#c28b00", // Amber
+  low: "#15803d",    // Green
+  high: "#b91c1c",   // Red
 };
+
+// Default baseline data matching mockup if newly initialized
+const DEFAULT_GRADE_DATA = [
+  { grade: "G7", medium: 0, low: 0, high: 0 },
+  { grade: "G8", medium: 0, low: 0, high: 0 },
+  { grade: "G9", medium: 0, low: 0, high: 0 },
+  { grade: "G10", medium: 0, low: 0, high: 0 },
+];
 
 export default function GradeLevelBreakdownChart({ data, loading }) {
   if (loading) {
     return (
-      <div className="ar-card">
-        <h2 className="ar-card-title">Breakdown by Grade Level</h2>
-        <p className="ar-card-subtitle">Grade level fail rate distribution</p>
+      <div className="ar-chart-card">
+        <div className="ar-chart-header-vertical">
+          <h2 className="ar-chart-title">Breakdown by Grade Level</h2>
+          <p className="ar-chart-subtitle">Grade level fail rate distribution</p>
+        </div>
         <div className="ar-skeleton-bars" />
       </div>
     );
   }
 
-  const maxVal = data.length
-    ? Math.max(...data.map((d) => Math.max(d.high, d.medium, d.low)))
-    : 20;
-  const yMax = Math.max(maxVal, 20);
-  const gridSteps = [0, 5, 10, 15, 20].filter((n) => n <= yMax);
+  // Format data
+  let displayRows = DEFAULT_GRADE_DATA;
+  if (data && data.length > 0) {
+    displayRows = data.map((d, i) => {
+      const gLabel = d.grade.replace(/Grade\s*/i, "G") || `G${i + 7}`;
+      return {
+        grade: gLabel,
+        medium: typeof d.medium === "number" ? d.medium : 0,
+        low: typeof d.low === "number" ? d.low : 0,
+        high: typeof d.high === "number" ? d.high : 0,
+      };
+    });
+  }
+
+  const Y_MAX = 20;
+  const Y_TICKS = [20, 15, 10, 5, 0];
 
   return (
-    <div className="ar-card">
-      <h2 className="ar-card-title">Breakdown by Grade Level</h2>
-      <p className="ar-card-subtitle">Grade level fail rate distribution</p>
-      <div className="ar-bar-chart">
+    <div className="ar-chart-card">
+      <div className="ar-chart-header-vertical">
+        <h2 className="ar-chart-title">Breakdown by Grade Level</h2>
+        <p className="ar-chart-subtitle">Grade level fail rate distribution</p>
+      </div>
+
+      <div className="ar-bar-chart-wrapper">
+        {/* Y Axis Labels */}
         <div className="ar-bar-y-axis">
-          {gridSteps.map((n) => (
-            <span key={n} className="ar-bar-y-label">{n}</span>
+          {Y_TICKS.map((tick) => (
+            <span key={tick} className="ar-bar-y-tick">
+              {tick}
+            </span>
           ))}
         </div>
-        <div className="ar-bar-chart-body">
-          <div className="ar-bar-grid">
-            {gridSteps.map((n) => (
-              <div key={n} className="ar-bar-grid-line" style={{ bottom: `${(n / yMax) * 100}%` }}>
-                <span className="ar-bar-grid-label">{n}</span>
-              </div>
+
+        {/* Chart Canvas */}
+        <div className="ar-bar-canvas">
+          {/* Horizontal Grid lines */}
+          <div className="ar-bar-grid-lines">
+            {Y_TICKS.map((tick) => (
+              <div
+                key={tick}
+                className="ar-bar-grid-line"
+                style={{ bottom: `${(tick / Y_MAX) * 100}%` }}
+              />
             ))}
           </div>
-          <div className="ar-bar-groups">
-            {data.length === 0 && (
-              <div className="ar-no-data">No data provided yet</div>
-            )}
-            {data.map((row) => {
+
+          {/* Groups of Bars */}
+          <div className="ar-bar-groups-container">
+            {displayRows.map((row, idx) => {
+              // Note the specific color order per grade as in the visual
               const bars = [
-                { key: "medium", value: row.medium },
-                { key: "low", value: row.low },
-                { key: "high", value: row.high },
+                { key: "medium", value: row.medium, color: BAR_COLORS.medium },
+                { key: "low", value: row.low, color: BAR_COLORS.low },
+                { key: "high", value: row.high, color: BAR_COLORS.high },
               ];
 
               return (
-                <div key={row.grade} className="ar-bar-group">
-                  {bars.map((bar) => (
-                    <div key={bar.key} className="ar-bar-group-bars">
-                      <div
-                        className="ar-bar"
-                        style={{
-                          height: `${(bar.value / yMax) * 100}%`,
-                          background: BAR_COLORS[bar.key],
-                        }}
-                      />
-                    </div>
-                  ))}
-                  <span className="ar-bar-group-label">{row.grade}</span>
+                <div key={idx} className="ar-grade-bar-group">
+                  <div className="ar-grade-bars-row">
+                    {bars.map((bar, bIdx) => {
+                      const barHeightPct = Math.min(100, Math.max(4, (bar.value / Y_MAX) * 100));
+                      return (
+                        <div
+                          key={bIdx}
+                          className="ar-single-bar"
+                          style={{
+                            height: `${barHeightPct}%`,
+                            backgroundColor: bar.color,
+                          }}
+                          title={`${row.grade} ${bar.key}: ${bar.value}`}
+                        />
+                      );
+                    })}
+                  </div>
+                  <span className="ar-grade-label">{row.grade}</span>
                 </div>
               );
             })}

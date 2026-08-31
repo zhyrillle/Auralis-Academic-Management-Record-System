@@ -37,8 +37,9 @@ export default function GradeReopeningRequest() {
   const [requestDate, setRequestDate] = useState("2026-05-20T09:30");
   const [requestAccessUntil, setRequestAccessUntil] = useState("2026-05-25T17:00");
   const [reason, setReason] = useState("");
-  const [selectedFile, setSelectedFile] = useState(null);
+  const [selectedFiles, setSelectedFiles] = useState([]);
   const [formError, setFormError] = useState("");
+  const [isDragOver, setIsDragOver] = useState(false);
 
   // Requests Data & Modals State
   const [requests, setRequests] = useState(INITIAL_REQUESTS);
@@ -114,28 +115,54 @@ export default function GradeReopeningRequest() {
   const approvedCount = requests.filter((r) => r.status === "Approved").length;
   const rejectedCount = requests.filter((r) => r.status === "Rejected" || r.status === "Declined").length;
 
-  // File Upload Handlers (10MB limit enforcement)
-  const validateAndSetFile = (file) => {
-    if (file.size > 10 * 1024 * 1024) {
-      setFormError("File size exceeds maximum allowed limit of 10MB.");
-      return false;
+  // File Upload Handlers (10MB per-file limit)
+  const validateAndAddFiles = (newFiles) => {
+    const oversized = Array.from(newFiles).filter(
+      (f) => f.size > 10 * 1024 * 1024
+    );
+    if (oversized.length > 0) {
+      setFormError(`File "${oversized[0].name}" exceeds the 10MB limit.`);
+      return;
     }
     setFormError("");
-    setSelectedFile(file);
-    return true;
+    setSelectedFiles((prev) => {
+      const existingNames = new Set(prev.map((f) => f.name));
+      const unique = Array.from(newFiles).filter(
+        (f) => !existingNames.has(f.name)
+      );
+      return [...prev, ...unique];
+    });
   };
 
   const handleFileChange = (e) => {
-    if (e.target.files && e.target.files[0]) {
-      validateAndSetFile(e.target.files[0]);
+    if (e.target.files && e.target.files.length > 0) {
+      validateAndAddFiles(e.target.files);
+      // Defer reset so browser doesn't cancel the file selection
+      const input = e.target;
+      setTimeout(() => { input.value = ""; }, 0);
     }
   };
 
   const handleDrop = (e) => {
     e.preventDefault();
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      validateAndSetFile(e.dataTransfer.files[0]);
+    setIsDragOver(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      validateAndAddFiles(e.dataTransfer.files);
     }
+  };
+
+  const handleDragEnter = (e) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  };
+
+  const handleRemoveFile = (index) => {
+    setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleClear = () => {
@@ -148,7 +175,7 @@ export default function GradeReopeningRequest() {
     setRequestDate("2026-05-20T09:30");
     setRequestAccessUntil("2026-05-25T17:00");
     setReason("");
-    setSelectedFile(null);
+    setSelectedFiles([]);
     setFormError("");
   };
 
@@ -175,7 +202,6 @@ export default function GradeReopeningRequest() {
       setCurrentTeacherAssignmentId(null);
       setCurrentGradeSheetId(null);
     }
-    console.log("Handled Sections Data:", handledSections);
   };
 
   const getTermId = (termVal) => {
@@ -215,11 +241,6 @@ export default function GradeReopeningRequest() {
       return;
     }
 
-    if (selectedFile && selectedFile.size > 10 * 1024 * 1024) {
-      setFormError("File size exceeds maximum allowed limit of 10MB.");
-      return;
-    }
-
     try {
       // Create FormData
       const formData = new FormData();
@@ -233,10 +254,10 @@ export default function GradeReopeningRequest() {
       formData.append("reason", reason);
       formData.append("status", "PENDING");
 
-      // Only append the file if one was selected
-      if (selectedFile) {
-        formData.append("supporting_file", selectedFile);
-      }
+      // Append each selected file under the same field name
+      selectedFiles.forEach((file) => {
+        formData.append("supporting_file", file);
+      });
 
       // IMPORTANT:
       // Do NOT manually set Content-Type.
@@ -277,10 +298,8 @@ export default function GradeReopeningRequest() {
 
         reason,
 
-        file: selectedFile
-          ? `${selectedFile.name} (${(
-            selectedFile.size / 1024
-          ).toFixed(0)} KB)`
+        file: selectedFiles.length > 0
+          ? selectedFiles.map((f) => `${f.name} (${(f.size / 1024).toFixed(0)} KB)`).join(", ")
           : null,
       };
 
@@ -427,44 +446,49 @@ export default function GradeReopeningRequest() {
               <label className="grr-label">Supporting Documents (Optional)</label>
               <span className="grr-sublabel">You may upload files that support your request.</span>
 
-              <div
-                className="grr-dropzone"
+              <label
+                htmlFor="file-upload-input"
+                className={`grr-dropzone${isDragOver ? " grr-dropzone--active" : ""}`}
                 onDragOver={(e) => e.preventDefault()}
+                onDragEnter={handleDragEnter}
+                onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
-                onClick={() => document.getElementById("file-upload-input").click()}
               >
                 <UploadCloud className="grr-dropzone-icon" />
                 <div className="grr-dropzone-text">
                   <span className="grr-dropzone-title">Drag and drop files here or</span>
-                  <span className="grr-dropzone-subtitle">PDF, JPG, PNG (Max. 10MB)</span>
+                  <span className="grr-dropzone-subtitle">PDF, JPG, PNG (Max. 10MB each)</span>
                 </div>
-                <button type="button" className="grr-choose-btn">
-                  Choose File
-                </button>
+                <span className="grr-choose-btn">Choose Files</span>
                 <input
                   id="file-upload-input"
                   type="file"
                   hidden
+                  multiple
                   onChange={handleFileChange}
                   accept=".pdf,.png,.jpg,.jpeg"
                 />
-              </div>
+              </label>
 
-              {selectedFile && (
-                <div className="grr-file-preview">
-                  <div className="grr-file-info">
-                    <FileText size={16} color="#112d61" />
-                    <span>
-                      {selectedFile.name} ({(selectedFile.size / 1024).toFixed(0)} KB)
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    className="grr-remove-file-btn"
-                    onClick={() => setSelectedFile(null)}
-                  >
-                    <X size={16} />
-                  </button>
+              {selectedFiles.length > 0 && (
+                <div className="grr-file-list">
+                  {selectedFiles.map((file, idx) => (
+                    <div key={idx} className="grr-file-preview">
+                      <div className="grr-file-info">
+                        <FileText size={16} color="#112d61" />
+                        <span>
+                          {file.name} ({(file.size / 1024).toFixed(0)} KB)
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        className="grr-remove-file-btn"
+                        onClick={() => handleRemoveFile(idx)}
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>

@@ -52,7 +52,34 @@ const SORT_OPTIONS = [
  * @param {function():void} [props.onBack] - Navigation handler for back button
  * @param {function(Object):void} [props.onViewStudent] - Action handler when clicking Eye button
  */
-export default function SectionDetails({ userRole = "adviser", onBack, onViewStudent }) {
+export default function SectionDetails({
+  student,
+  section,
+  isAdviser,
+  userRole = "adviser",
+  onBack,
+  onViewStudent,
+}) {
+  const activeSection = section || (student && student.sectionName ? student : null);
+
+  const isSectionAdviser = useMemo(() => {
+    if (typeof isAdviser === "boolean") {
+      return isAdviser;
+    }
+    if (activeSection) {
+      if (typeof activeSection.isAdviser === "boolean") {
+        return activeSection.isAdviser;
+      }
+      if (activeSection.classType === "Regular Class") {
+        return false;
+      }
+      if (activeSection.classType === "Advisory Class") {
+        return true;
+      }
+    }
+    return userRole === "adviser";
+  }, [isAdviser, activeSection, userRole]);
+
   // State Management
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedRisk, setSelectedRisk] = useState(null); // "Low", "Medium", "High" or null
@@ -66,25 +93,25 @@ export default function SectionDetails({ userRole = "adviser", onBack, onViewStu
 
   // Filter & Sort Logic
   const filteredStudents = useMemo(() => {
-    let result = INITIAL_STUDENTS.filter((student) => {
+    let result = INITIAL_STUDENTS.filter((studentItem) => {
       // Search query match
       const query = searchQuery.toLowerCase().trim();
       const matchesSearch =
         !query ||
-        student.name.toLowerCase().includes(query) ||
-        student.lrn.includes(query);
+        studentItem.name.toLowerCase().includes(query) ||
+        studentItem.lrn.includes(query);
 
       // Risk filter match
       let matchesRisk = true;
-      if (selectedRisk === "Low") matchesRisk = student.riskStatus === "Low Risk";
-      if (selectedRisk === "Medium") matchesRisk = student.riskStatus === "Medium Risk";
-      if (selectedRisk === "High") matchesRisk = student.riskStatus === "At Risk";
+      if (selectedRisk === "Low") matchesRisk = studentItem.riskStatus === "Low Risk";
+      if (selectedRisk === "Medium") matchesRisk = studentItem.riskStatus === "Medium Risk";
+      if (selectedRisk === "High") matchesRisk = studentItem.riskStatus === "At Risk";
 
       // Honor filter match
       let matchesHonor = true;
-      if (selectedHonor === "With") matchesHonor = student.honorStatus === "With Honor";
-      if (selectedHonor === "High") matchesHonor = student.honorStatus === "High Honor";
-      if (selectedHonor === "Highest") matchesHonor = student.honorStatus === "Highest Honor";
+      if (selectedHonor === "With") matchesHonor = studentItem.honorStatus === "With Honor";
+      if (selectedHonor === "High") matchesHonor = studentItem.honorStatus === "High Honor";
+      if (selectedHonor === "Highest") matchesHonor = studentItem.honorStatus === "Highest Honor";
 
       return matchesSearch && matchesRisk && matchesHonor;
     });
@@ -130,11 +157,11 @@ export default function SectionDetails({ userRole = "adviser", onBack, onViewStu
   };
 
   // Eye action button click handler -> Redirects to StudentSF9Page
-  const handleActionClick = (student) => {
+  const handleActionClick = (studentItem) => {
     if (onViewStudent) {
-      onViewStudent(student);
+      onViewStudent(studentItem);
     } else {
-      setActiveSf9Student(student);
+      setActiveSf9Student(studentItem);
     }
   };
 
@@ -163,7 +190,7 @@ export default function SectionDetails({ userRole = "adviser", onBack, onViewStu
     }
   };
 
-  // Helper for rendering Honor Badges (Rectangular, rendered ONLY if userRole === 'adviser')
+  // Helper for rendering Honor Badges
   const renderHonorBadge = (status) => {
     switch (status) {
       case "With Honor":
@@ -235,8 +262,8 @@ export default function SectionDetails({ userRole = "adviser", onBack, onViewStu
             ))}
           </div>
 
-          {/* Honor Filter Group (rendered ONLY if userRole === 'adviser') */}
-          {userRole === "adviser" && (
+          {/* Honor Filter Group (rendered ONLY if user is adviser of section) */}
+          {isSectionAdviser && (
             <div className="filter-segmented-group">
               {["With", "High", "Highest"].map((hKey) => (
                 <button
@@ -300,65 +327,65 @@ export default function SectionDetails({ userRole = "adviser", onBack, onViewStu
           <table className="section-data-table">
             <thead>
               <tr>
-                <th className="text-center" style={{ width: userRole === "adviser" ? "5%" : "6%" }}>
+                <th className="text-center" style={{ width: isSectionAdviser ? "5%" : "6%" }}>
                   No.
                 </th>
-                <th className="text-left" style={{ width: userRole === "adviser" ? "16%" : "20%" }}>
+                <th className="text-left" style={{ width: isSectionAdviser ? "16%" : "20%" }}>
                   LRN
                 </th>
-                <th className="text-left" style={{ width: userRole === "adviser" ? "26%" : "35%" }}>
+                <th className="text-left" style={{ width: isSectionAdviser ? "26%" : "35%" }}>
                   Student Name
                 </th>
-                <th className="text-center" style={{ width: userRole === "adviser" ? "18%" : "21%" }}>
+                <th className="text-center" style={{ width: isSectionAdviser ? "18%" : "21%" }}>
                   At-risk Status
                 </th>
-                <th className="text-center" style={{ width: userRole === "adviser" ? "12%" : "12%" }}>
+                <th className="text-center" style={{ width: isSectionAdviser ? "12%" : "12%" }}>
                   Term Grade
                 </th>
 
-                {/* Conditional Honor Status Column (rendered ONLY if userRole === 'adviser') */}
-                {userRole === "adviser" && (
+                {/* Conditional Honor Status Column (rendered ONLY if user is adviser for section) */}
+                {isSectionAdviser && (
                   <th className="text-center" style={{ width: "16%" }}>
                     Honor Status
                   </th>
                 )}
 
-                <th className="text-center" style={{ width: userRole === "adviser" ? "7%" : "6%" }}>
+                <th className="text-center" style={{ width: isSectionAdviser ? "7%" : "6%" }}>
                   Action
                 </th>
               </tr>
             </thead>
             <tbody>
               {filteredStudents.length > 0 ? (
-                filteredStudents.map((student, index) => (
-                  <tr key={student.id}>
+                filteredStudents.map((stdItem, index) => (
+                  <tr key={stdItem.id}>
                     <td className="text-center">
                       {index + 1}
                     </td>
                     <td className="text-left student-lrn">
-                      {student.lrn}
+                      {stdItem.lrn}
                     </td>
                     <td className="text-left student-name">
-                      {student.name}
+                      {stdItem.name}
                     </td>
                     <td className="text-center">
-                      {renderRiskBadge(student.riskStatus)}
+                      {renderRiskBadge(stdItem.riskStatus)}
                     </td>
                     <td className="text-center">
-                      {student.grade}
+                      {stdItem.grade}
                     </td>
 
-                    {/* Conditional Honor Status Cell (rendered ONLY if userRole === 'adviser') */}
-                    {userRole === "adviser" && (
+                    {/* Conditional Honor Status Cell (rendered ONLY if user is adviser for section) */}
+                    {isSectionAdviser && (
                       <td className="text-center">
-                        {renderHonorBadge(student.honorStatus)}
+                        {renderHonorBadge(stdItem.honorStatus)}
                       </td>
                     )}
 
                     <td className="text-center">
                       <button
                         type="button"
-                        onClick={() => handleActionClick(student)}
+                        onClick={() => handleActionClick(stdItem)}
                         className="action-eye-btn"
                         title="View Student Details"
                       >
@@ -370,7 +397,7 @@ export default function SectionDetails({ userRole = "adviser", onBack, onViewStu
               ) : (
                 <tr>
                   <td
-                    colSpan={userRole === "adviser" ? 7 : 6}
+                    colSpan={isSectionAdviser ? 7 : 6}
                     className="text-center"
                     style={{ padding: "32px", color: "var(--subtext-color)" }}
                   >

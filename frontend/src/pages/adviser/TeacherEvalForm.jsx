@@ -73,7 +73,7 @@ export default function TeacherEvalForm({ teacher, onBack, onCancel }) {
       q7_rate: ratings[6],
       q8_rate: ratings[7],
       strengths_comments: strengths,
-      improvements_comment: improve,
+      improvements_comments: improve,
       status: "OPEN"
     };
 
