@@ -22,6 +22,11 @@ import AdviserFeedback from "./pages/adviser/AdviserFeedback";
 import ProfilePage from "./pages/ProfilePage";
 import AtRiskBreakdown from "./pages/principal/AtRiskBreakdown";
 import AtRiskPrediction from "./pages/principal/AtRiskPrediction";
+import PerformanceGradeLevels from "./pages/principal/PerformanceGradeLevels";
+import PerformanceSections from "./pages/principal/PerformanceSections";
+import PerformanceSubjects from "./pages/principal/PerformanceSubjects";
+import PerformanceTeachers from "./pages/principal/PerformanceTeachers";
+import PerformanceLowest from "./pages/principal/PerformanceLowest";
 import TeacherFeedback from "./pages/principal/TeacherFeedback";
 import SubjectPerformanceTrend from "./pages/principal/SubjectPerformanceTrend";
 import HistoricalComparison from "./pages/principal/HistoricalComparison";
@@ -101,23 +106,23 @@ export default function App() {
           />
           <Route
             path="/principal/performance-level/grade-levels"
-            element={<PlaceholderPage />}
+            element={<PerformanceGradeLevels />}
           />
           <Route
             path="/principal/performance-level/sections"
-            element={<PlaceholderPage />}
+            element={<PerformanceSections />}
           />
           <Route
             path="/principal/performance-level/subjects"
-            element={<PlaceholderPage />}
+            element={<PerformanceSubjects />}
           />
           <Route
             path="/principal/performance-level/teachers"
-            element={<PlaceholderPage />}
+            element={<PerformanceTeachers />}
           />
           <Route
             path="/principal/performance-level/lowest-performers"
-            element={<PlaceholderPage />}
+            element={<PerformanceLowest />}
           />
           <Route
             path="/principal/analytics/subject-trend"

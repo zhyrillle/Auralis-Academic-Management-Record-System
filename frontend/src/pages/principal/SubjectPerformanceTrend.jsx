@@ -17,8 +17,8 @@ import {
 import AnalyticsSkeleton from "./analytics/AnalyticsSkeleton";
 import AnalyticsStatCard from "./analytics/AnalyticsStatCard";
 import AnalyticsTermTabs from "./analytics/AnalyticsTermTabs";
-import AverageLineChart from "./analytics/AverageLineChart";
-import SubjectBarChart from "./analytics/SubjectBarChart";
+import LineChart from "../../components/charts/LineChart";
+import GroupedBarChart from "../../components/charts/GroupedBarChart";
 import SubjectLegend from "./analytics/SubjectLegend";
 import "../../styles/principalAnalytics.css";
 
@@ -311,8 +311,9 @@ export default function SubjectPerformanceTrend() {
                       </p>
                     </div>
                   </div>
-                  <AverageLineChart
+                  <LineChart
                     ariaLabel="School-wide average grade across Terms 1 to 3"
+                    labels={["Term 1", "Term 2", "Term 3"]}
                     showArea
                     series={[
                       {
@@ -321,7 +322,7 @@ export default function SubjectPerformanceTrend() {
                         color: "#17376d",
                         values: data.schoolWideAverages.map((value) => ({
                           value,
-                          learnerCount: data.totalLearners,
+                          detail: `${data.totalLearners} learners`,
                         })),
                       },
                     ]}
@@ -355,21 +356,23 @@ export default function SubjectPerformanceTrend() {
                     onNone={() => setSelectedSubjectIds([])}
                   />
                   {selectedSubjects.length ? (
-                    <AverageLineChart
+                    <LineChart
                       ariaLabel="Average grade trend for selected subjects"
+                      labels={["Term 1", "Term 2", "Term 3"]}
                       series={selectedSubjects.map((subject) => ({
                         ...subject,
                         values: subject.termAverages.map((value) => ({
                           value,
-                          learnerCount: subject.learnerCount,
+                          detail: `${subject.learnerCount} learners`,
                         })),
                       }))}
                     />
                   ) : (
                     <div className="pa-empty-chart">
                       <div className="pa-empty-chart__graph" aria-hidden="true">
-                        <AverageLineChart
+                        <LineChart
                           ariaLabel="Empty subject trend chart"
+                          labels={["Term 1", "Term 2", "Term 3"]}
                           series={[]}
                         />
                       </div>
@@ -401,7 +404,7 @@ export default function SubjectPerformanceTrend() {
                     />
                   </div>
                 </div>
-                <SubjectBarChart
+                <GroupedBarChart
                   ariaLabel={`Subject average grades for Term ${termIndex(displayedTerm) + 1}`}
                   groups={[...data.subjects]
                     .sort(
@@ -418,7 +421,7 @@ export default function SubjectPerformanceTrend() {
                           id: `${subject.id}-${displayedTerm}`,
                           label: `Term ${termIndex(displayedTerm) + 1}`,
                           value: subject.termAverages[termIndex(displayedTerm)],
-                          learnerCount: subject.learnerCount,
+                          detail: `${subject.learnerCount} learners`,
                           color: subject.color,
                         },
                       ],
