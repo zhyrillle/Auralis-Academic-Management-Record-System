@@ -251,8 +251,84 @@ class Feedback {
     return result.affectedRows > 0;
   }
 
-  static async getPrincipalFeedbackSummary(term = "Overall", schoolYear = "2025-2026") {
+  static async getDateRange(term = "Overall", schoolYear = "2026-2027") {
+    if (!schoolYear || schoolYear === "Overall" || schoolYear === "all") {
+      return { startDate: null, endDate: null };
+    }
+    const syParts = String(schoolYear).split(/[-–_]/);
+    const startYr = parseInt(syParts[0], 10);
+    const endYr = syParts[1] ? parseInt(syParts[1], 10) : startYr + 1;
+
+    if (isNaN(startYr)) return { startDate: null, endDate: null };
+
     try {
+      const [terms] = await db.execute(
+        `SELECT at.term_name, at.starts_at, at.ends_at 
+         FROM ACADEMIC_TERM at
+         JOIN SCHOOL_YEAR sy ON at.school_year_id = sy.school_year_id
+         WHERE sy.starts_on = ? OR YEAR(sy.starts_on) = ? OR (YEAR(sy.starts_on) = ? AND YEAR(sy.ends_on) = ?)`,
+        [startYr, startYr, startYr, endYr]
+      );
+
+      if (terms.length > 0) {
+        const termLower = String(term || "").toLowerCase();
+        let matched = null;
+        if (termLower.includes("1") || termLower.includes("first")) {
+          matched = terms.find(t => t.term_name.includes("1") || t.term_name.toLowerCase().includes("first"));
+        } else if (termLower.includes("2") || termLower.includes("second")) {
+          matched = terms.find(t => t.term_name.includes("2") || t.term_name.toLowerCase().includes("second"));
+        } else if (termLower.includes("3") || termLower.includes("third")) {
+          matched = terms.find(t => t.term_name.includes("3") || t.term_name.toLowerCase().includes("third"));
+        }
+
+        if (matched) {
+          return { startDate: matched.starts_at, endDate: matched.ends_at };
+        }
+
+        const starts = terms.map(t => new Date(t.starts_at)).sort((a, b) => a - b);
+        const ends = terms.map(t => new Date(t.ends_at)).sort((a, b) => b - a);
+        return { startDate: starts[0], endDate: ends[0] };
+      }
+    } catch (e) {
+      console.warn("[WARN] getDateRange DB query error:", e.message);
+    }
+
+    const termLower = String(term || "").toLowerCase();
+    if (termLower.includes("1") || termLower.includes("first")) {
+      return {
+        startDate: new Date(`${startYr}-06-01T00:00:00.000Z`),
+        endDate: new Date(`${startYr}-09-30T23:59:59.999Z`),
+      };
+    } else if (termLower.includes("2") || termLower.includes("second")) {
+      return {
+        startDate: new Date(`${startYr}-10-01T00:00:00.000Z`),
+        endDate: new Date(`${startYr}-12-31T23:59:59.999Z`),
+      };
+    } else if (termLower.includes("3") || termLower.includes("third")) {
+      return {
+        startDate: new Date(`${endYr}-01-01T00:00:00.000Z`),
+        endDate: new Date(`${endYr}-05-31T23:59:59.999Z`),
+      };
+    }
+
+    return {
+      startDate: new Date(`${startYr}-06-01T00:00:00.000Z`),
+      endDate: new Date(`${endYr}-05-31T23:59:59.999Z`),
+    };
+  }
+
+  static async getPrincipalFeedbackSummary(term = "Overall", schoolYear = "2026-2027") {
+    try {
+      const { startDate, endDate } = await this.getDateRange(term, schoolYear);
+
+      let whereClause = "WHERE LOWER(u.role) LIKE '%principal%'";
+      const params = [];
+
+      if (startDate && endDate) {
+        whereClause += " AND f.created_at >= ? AND f.created_at <= ?";
+        params.push(startDate, endDate);
+      }
+
       const [rows] = await db.execute(
         `SELECT 
           COUNT(*) AS total_responses,
@@ -268,7 +344,8 @@ class Feedback {
           AVG(q8_rate) AS q8_avg
          FROM FEEDBACK f
          INNER JOIN \`USER\` u ON f.evaluee_id = u.user_id
-         WHERE LOWER(u.role) LIKE '%principal%'`
+         ${whereClause}`,
+        params
       );
 
       const totalResponses = rows[0]?.total_responses || 0;
@@ -283,7 +360,8 @@ class Feedback {
           ) AS total_comments
          FROM FEEDBACK f
          INNER JOIN \`USER\` u ON f.evaluee_id = u.user_id
-         WHERE LOWER(u.role) LIKE '%principal%'`
+         ${whereClause}`,
+        params
       );
 
       const totalComments = parseInt(commentCountRows[0]?.total_comments || 0, 10);
@@ -322,7 +400,7 @@ class Feedback {
     }
   }
 
-  static async getPrincipalLikertResults(term = "Overall", schoolYear = "2025-2026") {
+  static async getPrincipalLikertResults(term = "Overall", schoolYear = "2026-2027") {
     try {
       const questions = [
         "The principal communicates clear goals and vision for the school.",
@@ -334,6 +412,16 @@ class Feedback {
         "The principal is approachable and open to teacher feedback.",
         "The principal demonstrates fair and transparent decision-making.",
       ];
+
+      const { startDate, endDate } = await this.getDateRange(term, schoolYear);
+
+      let whereClause = "WHERE LOWER(u.role) LIKE '%principal%'";
+      const params = [];
+
+      if (startDate && endDate) {
+        whereClause += " AND f.created_at >= ? AND f.created_at <= ?";
+        params.push(startDate, endDate);
+      }
 
       const [rows] = await db.execute(
         `SELECT 
@@ -347,7 +435,8 @@ class Feedback {
           AVG(q8_rate) AS q8_avg
          FROM FEEDBACK f
          INNER JOIN \`USER\` u ON f.evaluee_id = u.user_id
-         WHERE LOWER(u.role) LIKE '%principal%'`
+         ${whereClause}`,
+        params
       );
 
       const r = rows[0] || {};
@@ -368,8 +457,10 @@ class Feedback {
     }
   }
 
-  static async getPrincipalFeedbackComments(term = "Overall", schoolYear = "2025-2026", query = "") {
+  static async getPrincipalFeedbackComments(term = "Overall", schoolYear = "2026-2027", query = "") {
     try {
+      const { startDate, endDate } = await this.getDateRange(term, schoolYear);
+
       let sql = `
         SELECT f.*
         FROM FEEDBACK f
@@ -377,6 +468,11 @@ class Feedback {
         WHERE LOWER(u.role) LIKE '%principal%'
       `;
       const params = [];
+
+      if (startDate && endDate) {
+        sql += ` AND f.created_at >= ? AND f.created_at <= ?`;
+        params.push(startDate, endDate);
+      }
 
       if (query && query.trim()) {
         const q = `%${query.trim()}%`;
