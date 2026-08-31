@@ -14,7 +14,6 @@ import DeptClassRecord from "./pages/department-head/DeptClassRecord";
 import PrincipalDashboard from "./pages/principal/PrincipalDashboard";
 import TeacherDashboard from "./pages/teacher/TeacherDashboard";
 import PerformanceReport from "./pages/adviser/PerformanceReport";
-import PlaceholderPage from "./pages/PlaceholderPage";
 import DashboardLayout from "./components/layout/DashboardLayout";
 import AdviserSections from "./pages/adviser/AdviserSections";
 import MasterSheet from "./pages/adviser/MasterSheet";
@@ -58,9 +57,7 @@ export default function App() {
       <Routes>
         <Route
           path="/"
-          element={
-            <Login user={user} onLoginSuccess={handleLoginSuccess} />
-          }
+          element={<Login user={user} onLoginSuccess={handleLoginSuccess} />}
         />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/otp" element={<OtpVerify />} />
@@ -68,27 +65,19 @@ export default function App() {
 
         {/* Protected Dashboard Layout routes */}
         <Route
-          element={
-            <DashboardLayout user={user} onLogout={handleLogout} />
-          }
+          element={<DashboardLayout user={user} onLogout={handleLogout} />}
         >
           {/* Shared profile route for every signed-in account */}
           <Route
             path="/profile"
             element={
-              <ProfilePage
-                user={user}
-                onUserUpdated={handleUserUpdated}
-              />
+              <ProfilePage user={user} onUserUpdated={handleUserUpdated} />
             }
           />
 
           {/* 1. System Administrator */}
           <Route path="/system-admin/dashboard" element={<AdminDashboard />} />
-          <Route
-            path="/system-admin/manage-users"
-            element={<ManageUsers />}
-          />
+          <Route path="/system-admin/manage-users" element={<ManageUsers />} />
           <Route
             path="/system-admin/grading-periods"
             element={<AcademicPeriod user={user} />}
@@ -149,12 +138,15 @@ export default function App() {
           {/* 4. Adviser */}
           <Route path="/adviser/dashboard" element={<AdviserDashboard />} />
           <Route path="/adviser/sections" element={<AdviserSections />} />
-          <Route path="/adviser/sections/details" element={<SectionDetails />} />
           <Route
-            path="/adviser/attendance"
-            element={<AttendanceSheet />}
+            path="/adviser/sections/details"
+            element={<SectionDetails />}
           />
-          <Route path="/adviser/notifications" element={<AdviserNotifications />} />
+          <Route path="/adviser/attendance" element={<AttendanceSheet />} />
+          <Route
+            path="/adviser/notifications"
+            element={<AdviserNotifications />}
+          />
           <Route path="/adviser/master-sheet" element={<MasterSheet />} />
           <Route path="/adviser/performance" element={<PerformanceReport />} />
           <Route path="/adviser/feedback" element={<AdviserFeedback />} />
@@ -178,10 +170,7 @@ export default function App() {
             path="/teacher/feedback"
             element={<AdviserFeedback userRole="teacher" />}
           />
-          <Route
-            path="/teacher/request"
-            element={<GradeReopeningRequest />}
-          />
+          <Route path="/teacher/request" element={<GradeReopeningRequest />} />
         </Route>
       </Routes>
     </BrowserRouter>
