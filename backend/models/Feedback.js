@@ -381,10 +381,61 @@ class Feedback {
         belowTargetCount = qAvgs.filter((avg) => avg > 0 && avg < 3.0).length;
       }
 
+      // Calculate dynamic rating difference (comparing to previous period rating or baseline 3.0)
+      let ratingDiff = "+0.0";
+      if (overallRating > 0) {
+        const tLower = String(term || "").toLowerCase();
+        const syParts = String(schoolYear || "").split(/[-–_]/);
+        const startYr = parseInt(syParts[0], 10) || 2026;
+        const endYr = syParts[1] ? parseInt(syParts[1], 10) : startYr + 1;
+        const prevSY = `${startYr - 1}-${endYr - 1}`;
+
+        let prevTerm = "Overall";
+        let prevSchoolYear = prevSY;
+
+        if (tLower.includes("3") || tLower.includes("third")) {
+          prevTerm = "Term 2";
+          prevSchoolYear = schoolYear;
+        } else if (tLower.includes("2") || tLower.includes("second")) {
+          prevTerm = "Term 1";
+          prevSchoolYear = schoolYear;
+        } else if (tLower.includes("1") || tLower.includes("first")) {
+          prevTerm = "Overall";
+          prevSchoolYear = prevSY;
+        }
+
+        const { startDate: prevStart, endDate: prevEnd } = await this.getDateRange(prevTerm, prevSchoolYear);
+
+        let prevRating = 0;
+        if (prevStart && prevEnd) {
+          const [prevRows] = await db.execute(
+            `SELECT 
+              AVG((COALESCE(q1_rate, 0) + COALESCE(q2_rate, 0) + COALESCE(q3_rate, 0) + COALESCE(q4_rate, 0) + 
+                   COALESCE(q5_rate, 0) + COALESCE(q6_rate, 0) + COALESCE(q7_rate, 0) + COALESCE(q8_rate, 0)) / 8.0) AS avg_rating
+             FROM FEEDBACK f
+             INNER JOIN \`USER\` u ON f.evaluee_id = u.user_id
+             WHERE LOWER(u.role) LIKE '%principal%' AND f.created_at >= ? AND f.created_at <= ?`,
+            [prevStart, prevEnd]
+          );
+          if (prevRows[0]?.avg_rating) {
+            prevRating = parseFloat(prevRows[0].avg_rating);
+          }
+        }
+
+        if (prevRating > 0) {
+          const diff = overallRating - prevRating;
+          ratingDiff = (diff >= 0 ? "+" : "") + diff.toFixed(1);
+        } else {
+          // If no previous period data exists, compare against standard 3.0 baseline
+          const diff = overallRating - 3.0;
+          ratingDiff = (diff >= 0 ? "+" : "") + diff.toFixed(1);
+        }
+      }
+
       return {
         totalResponses,
         overallRating,
-        ratingDiff: "+0.0",
+        ratingDiff,
         totalComments,
         belowTargetCount,
       };
@@ -493,7 +544,7 @@ class Feedback {
         if (praiseText && String(praiseText).trim()) {
           comments.push({
             id: `str-${row.feedback_id}-${idx}`,
-            category: "Praise",
+            category: "Strengths & Contributions",
             text: String(praiseText).trim(),
             created_at: row.created_at,
           });
@@ -501,7 +552,7 @@ class Feedback {
         if (suggestionText && String(suggestionText).trim()) {
           comments.push({
             id: `imp-${row.feedback_id}-${idx}`,
-            category: "Suggestion",
+            category: "Areas for Improvement",
             text: String(suggestionText).trim(),
             created_at: row.created_at,
           });

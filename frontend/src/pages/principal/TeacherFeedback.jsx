@@ -9,6 +9,7 @@ import {
   Moon,
   Bell,
   MessageSquareOff,
+  Filter,
 } from "lucide-react";
 
 // Services
@@ -23,8 +24,9 @@ import "./TeacherFeedback.css";
 
 export default function TeacherFeedback() {
   // Controls state
-  const [selectedTerm, setSelectedTerm] = useState("Overall");
+  const [selectedTerm, setSelectedTerm] = useState("Term 1");
   const [selectedYear, setSelectedYear] = useState("2026-2027");
+  const [selectedCategory, setSelectedCategory] = useState("All");
   const [yearDropdownOpen, setYearDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -41,7 +43,7 @@ export default function TeacherFeedback() {
   const [comments, setComments] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const terms = ["Overall", "Term 1", "Term 2", "Term 3"];
+  const terms = ["Term 1", "Term 2", "Term 3"];
   const schoolYears = ["2026-2027", "2025-2026"];
 
   // Fetch feedback data on term / year change
@@ -86,14 +88,29 @@ export default function TeacherFeedback() {
     };
   }, [selectedTerm, selectedYear]);
 
-  // Filter comments locally with search query
+  // Filter comments locally with search query and category selector
   const filteredComments = useMemo(() => {
-    if (!searchQuery.trim()) return comments;
-    const q = searchQuery.toLowerCase();
-    return comments.filter((c) =>
-      c.text?.toLowerCase().includes(q) || c.category?.toLowerCase().includes(q)
-    );
-  }, [comments, searchQuery]);
+    let list = comments;
+
+    if (selectedCategory && selectedCategory !== "All") {
+      list = list.filter((c) => {
+        const cat = (c.category || "").toLowerCase();
+        const sel = selectedCategory.toLowerCase();
+        if (sel.includes("strength")) return cat.includes("strength") || cat.includes("praise");
+        if (sel.includes("improvement")) return cat.includes("improvement") || cat.includes("area") || cat.includes("suggestion");
+        return cat === sel;
+      });
+    }
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter(
+        (c) => c.text?.toLowerCase().includes(q) || c.category?.toLowerCase().includes(q)
+      );
+    }
+
+    return list;
+  }, [comments, selectedCategory, searchQuery]);
 
   return (
     <div className="tf-container">
@@ -202,8 +219,13 @@ export default function TeacherFeedback() {
               {Number(summary.overallRating || 0).toFixed(1)}
             </span>
             <span className="tf-stat-sub">
-              {Number(summary.overallRating || 0) > 0 && (
-                <span className="tf-stat-sub-diff">↗ {summary.ratingDiff || "+0.0"}</span>
+              {Number(summary.overallRating || 0) > 0 && summary.ratingDiff != null && (
+                <span className={`tf-stat-sub-diff ${String(summary.ratingDiff).startsWith('-')
+                  ? 'tf-stat-sub-diff--down'
+                  : 'tf-stat-sub-diff--up'
+                  }`}>
+                  {String(summary.ratingDiff).startsWith('-') ? '↘' : String(summary.ratingDiff) === '+0.0' || String(summary.ratingDiff) === '0.0' ? '→' : '↗'} {summary.ratingDiff}
+                </span>
               )}
               <span>out of 5.0</span>
             </span>
@@ -300,7 +322,7 @@ export default function TeacherFeedback() {
         </div>
       </section>
 
-      {/* 5. Comment Explorer (Without Praise/Suggestion/Concern filter pills) */}
+      {/* 5. Comment Explorer with Category Filter Dropdown & Category Badges */}
       <section className="tf-section-card">
         <div className="tf-comments-header">
           <div className="tf-comments-title-wrap">
@@ -308,30 +330,71 @@ export default function TeacherFeedback() {
             <p className="tf-subtitle">Open-ended responses from teachers</p>
           </div>
 
-          <div className="tf-search-box">
-            <Search size={16} className="tf-search-icon" />
-            <input
-              type="text"
-              className="tf-search-input"
-              placeholder="Search comments"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
+          <div className="tf-comments-controls">
+            {/* Category Filter Dropdown */}
+            <div className="tf-category-dropdown">
+              <Filter size={15} className="tf-filter-icon" />
+              <select
+                className="tf-category-select"
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+              >
+                <option value="All">All Categories</option>
+                <option value="Strengths & Contributions">Strengths & Contributions</option>
+                <option value="Areas for Improvement">Areas for Improvement</option>
+              </select>
+            </div>
+
+            {/* Search Box */}
+            <div className="tf-search-box">
+              <Search size={16} className="tf-search-icon" />
+              <input
+                type="text"
+                className="tf-search-input"
+                placeholder="Search comments"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
           </div>
         </div>
 
         <div className="tf-comments-list">
           {filteredComments.length > 0 ? (
-            filteredComments.map((comment, idx) => (
-              <div key={comment.id || idx} className="tf-comment-card">
-                <p className="tf-comment-text">"{comment.text}"</p>
-              </div>
-            ))
+            filteredComments.map((comment, idx) => {
+              const catLower = (comment.category || "").toLowerCase();
+              let badgeClass = "tf-comment-tag--general";
+              if (catLower.includes("strength") || catLower.includes("praise")) {
+                badgeClass = "tf-comment-tag--strengths";
+              } else if (catLower.includes("improvement") || catLower.includes("suggestion") || catLower.includes("area")) {
+                badgeClass = "tf-comment-tag--improvements";
+              }
+
+              return (
+                <div key={comment.id || idx} className="tf-comment-card">
+                  <div className="tf-comment-card-header">
+                    <span className={`tf-comment-tag ${badgeClass}`}>
+                      {comment.category || "Comment"}
+                    </span>
+                    {comment.created_at && (
+                      <span className="tf-comment-date">
+                        {new Date(comment.created_at).toLocaleDateString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        })}
+                      </span>
+                    )}
+                  </div>
+                  <p className="tf-comment-text">"{comment.text}"</p>
+                </div>
+              );
+            })
           ) : (
             <div className="tf-empty-comments">
               <MessageSquareOff size={32} />
               <span className="tf-empty-text">
-                No teacher comments available yet.
+                No teacher comments available for the selected filters.
               </span>
             </div>
           )}
