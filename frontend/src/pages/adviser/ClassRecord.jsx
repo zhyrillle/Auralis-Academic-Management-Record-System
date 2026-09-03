@@ -11,6 +11,8 @@ import {
 } from "lucide-react";
 import backIconUrl from "../../assets/backButton.svg";
 import unavailableIconUrl from "../../assets/adviser-assets/unavailableicon.png";
+import depedLogoUrl from "../../assets/deped_logo.png";
+import depedWordmarkLogoUrl from "../../assets/deped-logo.gif";
 import "../../styles/ClassRecord.css";
 import {
   getClassRecord,
@@ -24,11 +26,10 @@ import {
 import {
   calculateStudentGrades,
   DEFAULT_JHS_WEIGHTS,
+  getGradeDescriptor,
 } from "../../utils/depedTransmutation";
-import DepEdClassRecordPrintModal from "../../components/DepEdClassRecordPrintModal";
+import { triggerClassRecordPrint } from "../../utils/exportClassRecordPdf";
 
-const OFFLINE_KEY_PREFIX = "auralis_class_record_pending_";
-const CACHE_KEY_PREFIX = "auralis_class_record_cache_";
 
 export default function ClassRecord({ activeClass, onBack, onAttendance }) {
   const navigate = useNavigate();
@@ -76,7 +77,6 @@ export default function ClassRecord({ activeClass, onBack, onAttendance }) {
 
   // DepEd JHS Class Record Export state
   const [classContextData, setClassContextData] = useState(null);
-  const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
 
   // Term Lock & Availability state
   const [isLocked, setIsLocked] = useState(false);
@@ -84,17 +84,30 @@ export default function ClassRecord({ activeClass, onBack, onAttendance }) {
   const [loadedTermName, setLoadedTermName] = useState("");
   const [activeTermName, setActiveTermName] = useState("");
 
-  // Component weights (WW %, PT %, QA %)
+  // Component weights (WW 20%, PT 50%, EX 30%)
   const [weights, setWeights] = useState(DEFAULT_JHS_WEIGHTS);
 
   // Assessment Columns (Default initial count: 1 per component)
   const [writtenWorkColumns, setWrittenWorkColumns] = useState([
-    { id: "ww1", assessment_id: null, label: "1", activity_name: "Written Work 1", max_score: 20 },
+    { id: "ww1", assessment_id: null, label: "1", activity_name: "Written Work 1", max_score: 30 },
   ]);
 
   const [performanceTaskColumns, setPerformanceTaskColumns] = useState([
     { id: "pt1", assessment_id: null, label: "1", activity_name: "Performance Task 1", max_score: 50 },
   ]);
+
+  // Dynamic & Customizable Examinations (ST1: 25, ST2: 25, TE: 50, weights: 30, 30, 40)
+  const [examConfig, setExamConfig] = useState({
+    st1HPS: 25,
+    st2HPS: 25,
+    teHPS: 50,
+    st1Weight: 30,
+    st2Weight: 30,
+    teWeight: 40,
+    st1Id: null,
+    st2Id: null,
+    teId: null,
+  });
 
   const [quarterlyAssessmentHPS, setQuarterlyAssessmentHPS] = useState(50);
   const [quarterlyAssessmentId, setQuarterlyAssessmentId] = useState(null);
@@ -121,38 +134,32 @@ export default function ClassRecord({ activeClass, onBack, onAttendance }) {
   const [modalState, setModalState] = useState({
     isOpen: false,
     mode: "add", // "add" | "edit"
-    category: "WW", // "WW" | "PT"
+    category: "WW", // "WW" | "PT" | "EX" | "EX_WEIGHT"
     categoryLabel: "Written Works",
     columnId: null,
     assessmentId: null,
     title: "",
     maxScore: "20",
     date: "",
+    examKey: null,
   });
 
   const saveTimerRef = useRef(null);
   const pendingQueueRef = useRef(new Map());
   const isFlushingRef = useRef(false);
   const hasPendingFlushRef = useRef(false);
-
-  // Sync pending queue from localStorage on offering/term change
+  // Wipe legacy localStorage class record cache keys once on mount
   useEffect(() => {
-    pendingQueueRef.current.clear();
     try {
-      const raw = localStorage.getItem(`${OFFLINE_KEY_PREFIX}${subjectOfferingId}_${activeTerm}`);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
-          parsed.forEach((item) => {
-            const key = `${item.student_id}_${item.assessment_id}`;
-            pendingQueueRef.current.set(key, item);
-          });
+      Object.keys(localStorage).forEach((key) => {
+        if (key.startsWith("auralis_class_record_")) {
+          localStorage.removeItem(key);
         }
-      }
+      });
     } catch {}
-  }, [subjectOfferingId, activeTerm]);
+  }, []);
 
-  // Flush pending offline scores to backend immediately (atomic & concurrency safe)
+  // Flush pending scores to backend immediately (atomic & concurrency safe)
   const flushPendingScores = useCallback(async () => {
     if (isLocked) return;
 
@@ -190,39 +197,20 @@ export default function ClassRecord({ activeClass, onBack, onAttendance }) {
         scores: payloadScores,
       });
 
-      // Remove only items from the snapshot (preserves newer inputs)
-      snapshot.forEach(([k]) => {
-        pendingQueueRef.current.delete(k);
+      // Remove only items whose queue record matches the sent snapshot
+      // (preserves newer inputs typed while the save request was in flight!)
+      snapshot.forEach(([k, sentItem]) => {
+        if (pendingQueueRef.current.get(k) === sentItem) {
+          pendingQueueRef.current.delete(k);
+        }
       });
 
-      // Update localStorage
-      const remaining = Array.from(pendingQueueRef.current.values());
-      if (remaining.length === 0) {
-        localStorage.removeItem(`${OFFLINE_KEY_PREFIX}${subjectOfferingId}_${activeTerm}`);
+      if (pendingQueueRef.current.size === 0) {
         setSyncStatus("saved");
-      } else {
-        localStorage.setItem(
-          `${OFFLINE_KEY_PREFIX}${subjectOfferingId}_${activeTerm}`,
-          JSON.stringify(remaining)
-        );
       }
-
-      // Update cache
-      try {
-        localStorage.setItem(
-          `${CACHE_KEY_PREFIX}${subjectOfferingId}_${activeTerm}`,
-          JSON.stringify({
-            students,
-            grades: gradesRef.current,
-            weights,
-            wwCols: writtenWorkColumns,
-            ptCols: performanceTaskColumns,
-          })
-        );
-      } catch {}
     } catch (err) {
-      console.warn("Auto-save sync offline fallback:", err.message);
-      setSyncStatus("offline");
+      console.warn("Auto-save sync error:", err.message);
+      setSyncStatus("error");
     } finally {
       isFlushingRef.current = false;
       if (hasPendingFlushRef.current || pendingQueueRef.current.size > 0) {
@@ -230,7 +218,7 @@ export default function ClassRecord({ activeClass, onBack, onAttendance }) {
         flushPendingScores();
       }
     }
-  }, [isLocked, subjectOfferingId, activeTerm, students, weights, writtenWorkColumns, performanceTaskColumns]);
+  }, [isLocked, subjectOfferingId, activeTerm]);
 
   // Online / Offline window listeners
   useEffect(() => {
@@ -278,7 +266,6 @@ export default function ClassRecord({ activeClass, onBack, onAttendance }) {
             }),
             keepalive: true,
           });
-          localStorage.removeItem(`${OFFLINE_KEY_PREFIX}${subjectOfferingId}_${activeTerm}`);
         } catch (e) {
           console.warn("Unmount keepalive sync error:", e);
         }
@@ -298,7 +285,6 @@ export default function ClassRecord({ activeClass, onBack, onAttendance }) {
         });
         const blob = new Blob([payload], { type: "application/json" });
         navigator.sendBeacon(`${API_BASE_URL}/scores/batch`, blob);
-        localStorage.removeItem(`${OFFLINE_KEY_PREFIX}${subjectOfferingId}_${activeTerm}`);
       }
     };
 
@@ -307,15 +293,14 @@ export default function ClassRecord({ activeClass, onBack, onAttendance }) {
   }, [subjectOfferingId, activeTerm]);
 
   // ============================================================
-  // LOAD DATA FROM BACKEND OR LOCAL CACHE
+  // LOAD DATA FROM BACKEND
   // ============================================================
   const loadClassRecord = useCallback(
     async (termToLoad) => {
-      // 1. Reset current state immediately to clear stale students from previous sections
       setStudents([]);
       setGrades({});
 
-      // 2. Fetch fresh data from backend with dynamic subjectOfferingId & sectionId
+      // Fetch fresh data from backend with dynamic subjectOfferingId & sectionId
       try {
         const data = await getClassRecord(subjectOfferingId, termToLoad, sectionId);
 
@@ -342,6 +327,9 @@ export default function ClassRecord({ activeClass, onBack, onAttendance }) {
 
           const wwCols = [];
           const ptCols = [];
+          let st1Ass = null;
+          let st2Ass = null;
+          let teAss = null;
           let qaHps = 50;
           let qaId = null;
 
@@ -349,10 +337,11 @@ export default function ClassRecord({ activeClass, onBack, onAttendance }) {
             data.assessments.forEach((ass) => {
               const compCode = (ass.component_code || "").toUpperCase();
               const type = (ass.type || ass.assessment_type || "").toLowerCase();
+              const name = String(ass.activity_name || ass.title || "").toUpperCase();
 
               const isWW = compCode === "WW" || type === "writtenwork" || type === "writtenworks" || type.includes("written");
               const isPT = compCode === "PT" || type === "performancetask" || type === "performancetasks" || type.includes("performance");
-              const isQA = compCode === "QA" || compCode === "STE" || type === "quarterlyassessment" || type === "quarterlyassessments" || type.includes("quarterly");
+              const isQA = compCode === "QA" || compCode === "STE" || compCode === "EX" || type === "quarterlyassessment" || type.includes("exam") || type.includes("summative");
 
               const aId = ass.assessment_id || ass.activity_id;
 
@@ -362,7 +351,7 @@ export default function ClassRecord({ activeClass, onBack, onAttendance }) {
                   assessment_id: aId,
                   label: String(wwCols.length + 1),
                   activity_name: ass.activity_name || ass.title || `Written Work ${wwCols.length + 1}`,
-                  max_score: Number(ass.max_score || ass.highest_possible_score || 20),
+                  max_score: Number(ass.max_score || ass.highest_possible_score || 30),
                   date: ass.activity_date,
                 });
               } else if (isPT) {
@@ -375,8 +364,15 @@ export default function ClassRecord({ activeClass, onBack, onAttendance }) {
                   date: ass.activity_date,
                 });
               } else if (isQA) {
-                qaHps = Number(ass.max_score || ass.highest_possible_score || 50);
-                qaId = aId;
+                if (name.includes("ST1") || name.includes("SUMMATIVE TEST 1") || name.includes("SUMMATIVE 1")) {
+                  st1Ass = ass;
+                } else if (name.includes("ST2") || name.includes("SUMMATIVE TEST 2") || name.includes("SUMMATIVE 2")) {
+                  st2Ass = ass;
+                } else {
+                  teAss = ass;
+                  qaHps = Number(ass.max_score || ass.highest_possible_score || 50);
+                  qaId = aId;
+                }
               }
             });
           }
@@ -385,6 +381,16 @@ export default function ClassRecord({ activeClass, onBack, onAttendance }) {
           if (ptCols.length > 0) setPerformanceTaskColumns(ptCols);
           setQuarterlyAssessmentHPS(qaHps);
           setQuarterlyAssessmentId(qaId);
+
+          setExamConfig((prev) => ({
+            ...prev,
+            st1HPS: Number(st1Ass?.max_score || st1Ass?.highest_possible_score || prev.st1HPS || 25),
+            st1Id: st1Ass?.assessment_id || st1Ass?.activity_id || prev.st1Id,
+            st2HPS: Number(st2Ass?.max_score || st2Ass?.highest_possible_score || prev.st2HPS || 25),
+            st2Id: st2Ass?.assessment_id || st2Ass?.activity_id || prev.st2Id,
+            teHPS: Number(teAss?.max_score || teAss?.highest_possible_score || prev.teHPS || 50),
+            teId: teAss?.assessment_id || teAss?.activity_id || prev.teId,
+          }));
 
           if (Array.isArray(data.students)) {
             const loadedStudents = data.students.map((st) => ({
@@ -404,7 +410,7 @@ export default function ClassRecord({ activeClass, onBack, onAttendance }) {
               const rawScores = st.scores || {};
               const wwGrades = {};
               const ptGrades = {};
-              let qaGrade = "";
+              const exGrades = { st1: "", st2: "", te: "" };
 
               wwCols.forEach((col) => {
                 const val = rawScores[col.assessment_id] !== undefined ? rawScores[col.assessment_id] : rawScores[col.id];
@@ -416,16 +422,38 @@ export default function ClassRecord({ activeClass, onBack, onAttendance }) {
                 ptGrades[col.id] = val !== undefined && val !== null ? val : "";
               });
 
-              if (qaId && rawScores[qaId] !== undefined && rawScores[qaId] !== null) {
-                qaGrade = rawScores[qaId];
+              // Resolve ST1, ST2, TE scores (bound to student model & raw assessment scores)
+              if (st.examinations?.st1 !== undefined && st.examinations?.st1 !== null && st.examinations?.st1 !== "") {
+                exGrades.st1 = st.examinations.st1;
+              } else if (st1Ass && rawScores[st1Ass.assessment_id] !== undefined && rawScores[st1Ass.assessment_id] !== null) {
+                exGrades.st1 = rawScores[st1Ass.assessment_id];
+              } else if (rawScores.st1 !== undefined && rawScores.st1 !== null) {
+                exGrades.st1 = rawScores.st1;
+              }
+
+              if (st.examinations?.st2 !== undefined && st.examinations?.st2 !== null && st.examinations?.st2 !== "") {
+                exGrades.st2 = st.examinations.st2;
+              } else if (st2Ass && rawScores[st2Ass.assessment_id] !== undefined && rawScores[st2Ass.assessment_id] !== null) {
+                exGrades.st2 = rawScores[st2Ass.assessment_id];
+              } else if (rawScores.st2 !== undefined && rawScores.st2 !== null) {
+                exGrades.st2 = rawScores.st2;
+              }
+
+              if (st.examinations?.te !== undefined && st.examinations?.te !== null && st.examinations?.te !== "") {
+                exGrades.te = st.examinations.te;
+              } else if (teAss && rawScores[teAss.assessment_id] !== undefined && rawScores[teAss.assessment_id] !== null) {
+                exGrades.te = rawScores[teAss.assessment_id];
+              } else if (rawScores.te !== undefined && rawScores.te !== null) {
+                exGrades.te = rawScores.te;
               } else if (rawScores.qa !== undefined && rawScores.qa !== null) {
-                qaGrade = rawScores.qa;
+                exGrades.te = rawScores.qa;
               }
 
               newGrades[String(st.student_id)] = {
                 writtenWorks: wwGrades,
                 performanceTasks: ptGrades,
-                quarterlyAssessment: qaGrade,
+                examinations: exGrades,
+                quarterlyAssessment: exGrades.te !== undefined && exGrades.te !== null ? exGrades.te : "",
               };
             });
 
@@ -443,7 +471,14 @@ export default function ClassRecord({ activeClass, onBack, onAttendance }) {
                   if (ptCol) {
                     newGrades[sId].performanceTasks[ptCol.id] = item.raw_score !== null ? item.raw_score : "";
                   }
-                  if (String(item.assessment_id) === String(qaId) || item.assessment_id === "qa") {
+                  if (item.exam_key === "st1" || (st1Ass && String(item.assessment_id) === String(st1Ass.assessment_id)) || item.assessment_id === "st1") {
+                    newGrades[sId].examinations.st1 = item.raw_score !== null ? item.raw_score : "";
+                  }
+                  if (item.exam_key === "st2" || (st2Ass && String(item.assessment_id) === String(st2Ass.assessment_id)) || item.assessment_id === "st2") {
+                    newGrades[sId].examinations.st2 = item.raw_score !== null ? item.raw_score : "";
+                  }
+                  if (item.exam_key === "te" || (teAss && String(item.assessment_id) === String(teAss.assessment_id)) || item.assessment_id === "te" || item.assessment_id === "qa") {
+                    newGrades[sId].examinations.te = item.raw_score !== null ? item.raw_score : "";
                     newGrades[sId].quarterlyAssessment = item.raw_score !== null ? item.raw_score : "";
                   }
                 }
@@ -456,29 +491,13 @@ export default function ClassRecord({ activeClass, onBack, onAttendance }) {
               flushPendingScores();
             }
 
-            // Cache data in localStorage
-            try {
-              localStorage.setItem(
-                `${CACHE_KEY_PREFIX}${subjectOfferingId}_${termToLoad}`,
-                JSON.stringify({
-                  students: loadedStudents,
-                  grades: newGrades,
-                  weights: data.component_weights,
-                  wwCols,
-                  ptCols,
-                  qaId,
-                  qaHps,
-                  isLocked: isSheetLocked,
-                })
-              );
-            } catch {}
           }
 
           setSyncStatus(isSheetLocked ? "locked" : "saved");
         }
       } catch (err) {
-        console.warn("Offline or backend fallback:", err.message);
-        setSyncStatus(navigator.onLine ? "saved" : "offline");
+        console.warn("Error loading class record:", err.message);
+        setSyncStatus("saved");
       }
     },
     [subjectOfferingId, sectionId]
@@ -486,8 +505,6 @@ export default function ClassRecord({ activeClass, onBack, onAttendance }) {
 
   useEffect(() => {
     if (subjectOfferingId || sectionId) {
-      setStudents([]);
-      setGrades({});
       loadClassRecord(activeTerm);
     }
   }, [subjectOfferingId, sectionId, activeTerm, loadClassRecord]);
@@ -515,9 +532,42 @@ export default function ClassRecord({ activeClass, onBack, onAttendance }) {
     [performanceTaskColumns]
   );
 
+  // Propagate quarterly grade to parent component (GradingSheet)
+  const studentQuarterlyGradesMap = useMemo(() => {
+    if (!students || students.length === 0) return {};
+    const map = {};
+    students.forEach((student) => {
+      const studentGradesObj = grades[student.id] || {};
+      const ww = studentGradesObj.writtenWorks || {};
+      const pt = studentGradesObj.performanceTasks || {};
+      const ex = studentGradesObj.examinations || {};
+
+      const rowCalc = calculateStudentGrades({
+        writtenWorks: ww,
+        performanceTasks: pt,
+        examinations: ex,
+        quarterlyAssessment: ex.te || "",
+        writtenWorkColumns,
+        performanceTaskColumns,
+        examConfig,
+        weights,
+      });
+
+      const qg = rowCalc.termGrade !== "-" ? rowCalc.termGrade : (rowCalc.quarterlyGrade !== "-" ? rowCalc.quarterlyGrade : "");
+      map[student.id] = qg;
+      if (student.student_id) map[student.student_id] = qg;
+      if (student.lrn) map[student.lrn] = qg;
+    });
+    return map;
+  }, [students, grades, writtenWorkColumns, performanceTaskColumns, examConfig, weights]);
+
+  useEffect(() => {
+    if (typeof onUpdateQuarterlyGrades === "function" && Object.keys(studentQuarterlyGradesMap).length > 0) {
+      onUpdateQuarterlyGrades(activeTerm, studentQuarterlyGradesMap);
+    }
+  }, [studentQuarterlyGradesMap, activeTerm, onUpdateQuarterlyGrades]);
   // ============================================================
   // CONDITIONAL DISABLING FOR DOWNLOAD BUTTON
-  // (Disabled if ANY score field for an active assessment is left blank/unfilled)
   // ============================================================
   const isDownloadDisabled = useMemo(() => {
     if (!students || students.length === 0) return true;
@@ -527,7 +577,7 @@ export default function ClassRecord({ activeClass, onBack, onAttendance }) {
       const studentGradesObj = grades[student.id] || {};
       const ww = studentGradesObj.writtenWorks || {};
       const pt = studentGradesObj.performanceTasks || {};
-      const qa = studentGradesObj.quarterlyAssessment;
+      const ex = studentGradesObj.examinations || {};
 
       // Check all Written Works columns
       for (const col of writtenWorkColumns) {
@@ -545,51 +595,44 @@ export default function ClassRecord({ activeClass, onBack, onAttendance }) {
         }
       }
 
-      // Check Quarterly Assessment
-      if (qa === undefined || qa === null || qa === "" || isNaN(Number(qa))) {
-        return true; // Found blank/unencoded QA score
-      }
+      // Check Examinations (ST1, ST2, TE)
+      if (ex.st1 === undefined || ex.st1 === null || ex.st1 === "" || isNaN(Number(ex.st1))) return true;
+      if (ex.st2 === undefined || ex.st2 === null || ex.st2 === "" || isNaN(Number(ex.st2))) return true;
+      if (ex.te === undefined || ex.te === null || ex.te === "" || isNaN(Number(ex.te))) return true;
     }
 
-    return false; // Complete non-null scores for all students!
+    return false;
   }, [students, grades, writtenWorkColumns, performanceTaskColumns]);
 
   // ============================================================
   // DEPED JHS EXPORT METADATA RESOLUTION
   // ============================================================
   const exportMetadata = useMemo(() => {
-    const termLabelMap = {
-      T1: "FIRST QUARTER",
-      T2: "SECOND QUARTER",
-      T3: "THIRD QUARTER",
-      T4: "FOURTH QUARTER",
+    const termMap = {
+      T1: { termTitle: "CLASS RECORD - TERM 1", termHeader: "FIRST TERM", quarterLabel: "FIRST QUARTER" },
+      T2: { termTitle: "CLASS RECORD - TERM 2", termHeader: "SECOND TERM", quarterLabel: "SECOND QUARTER" },
+      T3: { termTitle: "CLASS RECORD - TERM 3", termHeader: "THIRD TERM", quarterLabel: "THIRD QUARTER" },
+      T4: { termTitle: "CLASS RECORD - TERM 4", termHeader: "FOURTH TERM", quarterLabel: "FOURTH QUARTER" },
     };
-    const quarterLabel =
-      termLabelMap[activeTerm] ||
-      (activeTerm.toUpperCase().includes("1")
-        ? "FIRST QUARTER"
-        : activeTerm.toUpperCase().includes("2")
-        ? "SECOND QUARTER"
-        : activeTerm.toUpperCase().includes("3")
-        ? "THIRD QUARTER"
-        : activeTerm.toUpperCase().includes("4")
-        ? "FOURTH QUARTER"
-        : `${activeTerm.toUpperCase()} QUARTER`);
+    const tInfo = termMap[activeTerm] || {
+      termTitle: `CLASS RECORD - ${activeTerm.toUpperCase()}`,
+      termHeader: `${activeTerm.toUpperCase()} TERM`,
+      quarterLabel: `${activeTerm.toUpperCase()} QUARTER`,
+    };
 
     const rawGradeLevel =
       classContextData?.grade_level_name ||
       activeClass?.gradeLevel ||
       activeClass?.grade ||
-      "Grade 10";
-    const formattedGradeLevel = String(rawGradeLevel).toUpperCase().startsWith("GRADE")
-      ? String(rawGradeLevel).toUpperCase()
-      : `GRADE ${String(rawGradeLevel).toUpperCase()}`;
+      "10";
+    const gradeLevelDisplay = String(rawGradeLevel).replace(/[^0-9]/g, "") || String(rawGradeLevel);
+
     const rawSection =
       classContextData?.section_name ||
       activeClass?.section_name ||
       activeClass?.sectionName ||
       "MAKAKALIKASAN";
-    const gradeAndSection = `${formattedGradeLevel} - ${String(rawSection).toUpperCase()}`;
+    const gradeAndSection = `GRADE ${gradeLevelDisplay} - ${String(rawSection).toUpperCase()}`;
 
     let rawTeacher = classContextData?.teacher_name;
     if (!rawTeacher || rawTeacher.toLowerCase().includes("subject teacher")) {
@@ -609,37 +652,21 @@ export default function ClassRecord({ activeClass, onBack, onAttendance }) {
     if (!rawTeacher || rawTeacher.toLowerCase().includes("subject teacher")) {
       rawTeacher = activeClass?.teacher_name || activeClass?.teacherName || activeClass?.adviser || "";
     }
-    const teacherName = rawTeacher ? String(rawTeacher).toUpperCase() : "";
+    const teacherName = rawTeacher ? String(rawTeacher).toUpperCase() : "0";
 
     const rawSubject =
       classContextData?.subject_name ||
       activeClass?.subject_name ||
       activeClass?.subjectName ||
       activeClass?.subject ||
-      "READING AND WRITING SKILLS";
-    const subjectName = String(rawSubject).toUpperCase();
+      "";
+    const subjectName = rawSubject ? String(rawSubject).toUpperCase() : "0";
 
-    const region = (classContextData?.region || activeClass?.region || "REGION X").toUpperCase();
-    const division = (
-      classContextData?.division ||
-      activeClass?.division ||
-      "GINGOOG CITY"
-    ).toUpperCase();
-    const schoolName = (
-      classContextData?.school_name ||
-      activeClass?.school_name ||
-      "GINGOOG CITY COMPREHENSIVE NHS"
-    ).toUpperCase();
-    const schoolId =
-      classContextData?.school_code ||
-      activeClass?.school_code ||
-      activeClass?.schoolId ||
-      "304130";
-    const schoolYear =
-      classContextData?.school_year_label ||
-      activeClass?.school_year ||
-      activeClass?.schoolYear ||
-      "2023-2024";
+    const region = (classContextData?.region || activeClass?.region || "Region X");
+    const division = (classContextData?.division || activeClass?.division || "GINGOOG");
+    const schoolName = (classContextData?.school_name || activeClass?.school_name || "GINGOOG CITY COMPREHENSIVE NHS");
+    const schoolId = (classContextData?.school_code || activeClass?.school_code || activeClass?.schoolId || "304130");
+    const schoolYear = (classContextData?.school_year_label || activeClass?.school_year || activeClass?.schoolYear || "2026-2027");
 
     return {
       region,
@@ -647,26 +674,127 @@ export default function ClassRecord({ activeClass, onBack, onAttendance }) {
       schoolName,
       schoolId,
       schoolYear,
-      quarterLabel,
+      termTitle: tInfo.termTitle,
+      termHeader: tInfo.termHeader,
+      quarterLabel: tInfo.quarterLabel,
       gradeAndSection,
+      gradeLevelDisplay,
       teacherName,
       subjectName,
       section: rawSection,
-      subject: rawSubject,
       activeTerm,
     };
   }, [classContextData, activeClass, activeTerm]);
+
+  // Handle Examinations Score Change
+  const handleExamScoreChange = (studentId, examKey, value, maxScore, assessmentId) => {
+    if (isLocked) return;
+
+    const numVal = Number(value);
+    const cellKey = `${studentId}_${examKey}`;
+    const maxAllowed = Number(maxScore || 0);
+
+    if (value !== "" && !isNaN(numVal) && numVal < 0) return;
+
+    if (value !== "" && !isNaN(numVal) && maxAllowed > 0 && numVal > maxAllowed) {
+      showErrorTooltip(cellKey, `Score cannot exceed ${maxAllowed}`);
+
+      setGrades((prev) => ({
+        ...prev,
+        [studentId]: {
+          ...prev[studentId],
+          examinations: {
+            ...(prev[studentId]?.examinations || {}),
+            [examKey]: "",
+          },
+        },
+      }));
+
+      const studentObj = students.find((s) => s.id === studentId || String(s.student_id) === studentId);
+      if (studentObj) {
+        queueScoreChange(
+          assessmentId || examKey,
+          studentObj.student_id,
+          studentObj.student_section_id,
+          "",
+          examKey
+        );
+      }
+      return;
+    }
+
+    if (errorTooltip?.cellKey === cellKey) {
+      setErrorTooltip(null);
+    }
+
+    setGrades((prev) => ({
+      ...prev,
+      [studentId]: {
+        ...prev[studentId],
+        examinations: {
+          ...(prev[studentId]?.examinations || {}),
+          [examKey]: value,
+        },
+        quarterlyAssessment: examKey === "te" ? value : prev[studentId]?.quarterlyAssessment,
+      },
+    }));
+
+    const studentObj = students.find((s) => s.id === studentId || String(s.student_id) === studentId);
+    if (studentObj) {
+      queueScoreChange(
+        assessmentId || examKey,
+        studentObj.student_id,
+        studentObj.student_section_id,
+        value,
+        examKey
+      );
+    }
+  };
+
+  const openEditExamModal = (examKey, defaultTitle, currentHps, assessmentId) => {
+    if (isLocked) return;
+    setModalState({
+      isOpen: true,
+      mode: "edit",
+      category: "EX",
+      categoryLabel: "Examinations",
+      columnId: examKey,
+      assessmentId: assessmentId || null,
+      title: defaultTitle,
+      maxScore: String(currentHps || 25),
+      date: "",
+      examKey,
+    });
+  };
+
+  const openEditSubWeightModal = (weightKey, label, currentWeight) => {
+    if (isLocked) return;
+    setModalState({
+      isOpen: true,
+      mode: "edit",
+      category: "EX_WEIGHT",
+      categoryLabel: "Exam Sub-Weight",
+      columnId: weightKey,
+      assessmentId: null,
+      title: label,
+      maxScore: String(currentWeight || 30),
+      date: "",
+      examKey: weightKey,
+    });
+  };
 
   // ============================================================
   // DEBOUNCED QUEUE AUTO-SAVER (Fast, non-blocking, concurrency safe)
   // ============================================================
   const queueScoreChange = useCallback(
-    (assessmentId, studentId, studentSectionId, rawScore) => {
+    (assessmentId, studentId, studentSectionId, rawScore, examKey = null) => {
       if (isLocked) return;
 
-      const key = `${studentId}_${assessmentId}`;
+      const normalizedExamKey = examKey || (assessmentId === "st1" || assessmentId === "st2" || assessmentId === "te" ? assessmentId : null);
+      const key = `${studentId}_${normalizedExamKey || assessmentId}`;
       const record = {
         assessment_id: assessmentId,
+        exam_key: normalizedExamKey,
         student_id: studentId,
         student_section_id: studentSectionId,
         raw_score: rawScore === "" ? null : Number(rawScore),
@@ -674,29 +802,14 @@ export default function ClassRecord({ activeClass, onBack, onAttendance }) {
 
       pendingQueueRef.current.set(key, record);
 
-      try {
-        const allItems = Array.from(pendingQueueRef.current.values());
-        if (allItems.length > 0) {
-          localStorage.setItem(
-            `${OFFLINE_KEY_PREFIX}${subjectOfferingId}_${activeTerm}`,
-            JSON.stringify(allItems)
-          );
-        }
-      } catch {}
-
-      if (!navigator.onLine) {
-        setSyncStatus("offline");
-        return;
-      }
-
       setSyncStatus("saving");
 
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
       saveTimerRef.current = setTimeout(() => {
         flushPendingScores();
-      }, 350); // 350ms debounced auto-saver
+      }, 700); // 700ms debounce ensures comfortable multi-digit score typing
     },
-    [isLocked, subjectOfferingId, activeTerm, flushPendingScores]
+    [isLocked, flushPendingScores]
   );
 
   const handleGradeChange = (studentId, category, columnId, value, colMaxScore, assessmentId) => {
@@ -888,6 +1001,61 @@ const formatToISODate = (val) => {
 
     const safeDate = formatToISODate(date) || null;
 
+    if (category === "EX_WEIGHT") {
+      if (modalState.examKey === "st1Weight") {
+        setExamConfig((prev) => ({ ...prev, st1Weight: numMax }));
+      } else if (modalState.examKey === "st2Weight") {
+        setExamConfig((prev) => ({ ...prev, st2Weight: numMax }));
+      } else if (modalState.examKey === "teWeight") {
+        setExamConfig((prev) => ({ ...prev, teWeight: numMax }));
+      }
+      setModalState((prev) => ({ ...prev, isOpen: false }));
+      return;
+    }
+
+    if (category === "EX") {
+      if (modalState.examKey === "st1") {
+        setExamConfig((prev) => ({ ...prev, st1HPS: numMax }));
+      } else if (modalState.examKey === "st2") {
+        setExamConfig((prev) => ({ ...prev, st2HPS: numMax }));
+      } else if (modalState.examKey === "te") {
+        setExamConfig((prev) => ({ ...prev, teHPS: numMax }));
+      }
+
+      try {
+        if (assessmentId) {
+          await updateAssessment(assessmentId, {
+            activity_name: title,
+            title: title,
+            max_score: numMax,
+            highest_possible_score: numMax,
+          });
+        } else {
+          const res = await createAssessment({
+            subject_offering_id: subjectOfferingId,
+            term: activeTerm,
+            component_code: "QA",
+            type: "quarterlyAssessment",
+            activity_name: title,
+            title: title,
+            max_score: numMax,
+            highest_possible_score: numMax,
+          });
+          const newAss = res?.assessment;
+          if (newAss) {
+            if (modalState.examKey === "st1") setExamConfig((prev) => ({ ...prev, st1Id: newAss.assessment_id }));
+            else if (modalState.examKey === "st2") setExamConfig((prev) => ({ ...prev, st2Id: newAss.assessment_id }));
+            else if (modalState.examKey === "te") setExamConfig((prev) => ({ ...prev, teId: newAss.assessment_id }));
+          }
+        }
+      } catch (err) {
+        console.warn("Exam HPS updated locally:", err);
+      }
+
+      setModalState((prev) => ({ ...prev, isOpen: false }));
+      return;
+    }
+
     if (mode === "add") {
       try {
         const res = await createAssessment({
@@ -989,10 +1157,21 @@ const formatToISODate = (val) => {
     }
   };
 
-  // Download / Export handler: triggers DepEd standard landscape PDF preview and print
+  // Download / Export handler: directly triggers DepEd standard landscape PDF generation/print
   const handleDownload = () => {
     if (isDownloadDisabled) return;
-    setIsPdfModalOpen(true);
+    triggerClassRecordPrint({
+      metadata: exportMetadata,
+      weights,
+      writtenWorkColumns,
+      performanceTaskColumns,
+      examConfig,
+      quarterlyAssessmentHPS: examConfig.teHPS,
+      students,
+      grades,
+      depedLogoUrl,
+      depedWordmarkLogoUrl,
+    });
   };
 
   const isAvailable = activeTerm === "T1" || activeTerm === "T2" || activeTerm === "T3";
@@ -1157,262 +1336,451 @@ const formatToISODate = (val) => {
             </div>
           )}
 
-          {/* TOTAL STUDENTS */}
-          <div className="student-count">
-            Total Students: {students.length}
-          </div>
+          {/* ============================================================
+              OFFICIAL CLASS RECORD TEMPLATE HEADER & METADATA
+          ============================================================ */}
+          <div className="cr-template-container">
+            <div className="cr-template-header-wrap">
+              <div className="cr-seal-wrap">
+                <img src={depedLogoUrl} alt="DepEd Seal" className="cr-seal-img" />
+              </div>
 
-          {/* ==================================================
-              TABLE
-          ================================================== */}
-          <div className="class-record-table-wrapper">
-            <table className="class-record-table">
-              {/* =================================================
-                  TABLE HEADER
-              ================================================= */}
-              <thead>
-                {/* ROW 1: MAIN HEADERS */}
-                <tr>
-                  <th rowSpan="2" className="number-header">
-                    No.
-                  </th>
+              <div className="cr-header-center">
+                <h1 className="cr-main-title">{exportMetadata.termTitle}</h1>
 
-                  <th rowSpan="2" className="lrn-header">
-                    LRN
-                  </th>
-
-                  <th rowSpan="2" className="name-header">
-                    Learners' Name
-                  </th>
-
-                  {/* WRITTEN WORKS */}
-                  <th colSpan={writtenWorkColumns.length + 3} className="category-header">
-                    <div className="category-title">
-                      <span>Written Works ({weights.WW}%)</span>
-                      <button
-                        type="button"
-                        className={`add-column-btn ${isLocked ? "disabled" : ""}`}
-                        onClick={() => openAddColumnModal("WW")}
-                        disabled={isLocked}
-                        title={isLocked ? "Cannot add column in a locked term" : "Add Written Work Column"}
-                      >
-                        + Add
-                      </button>
+                <div className="cr-meta-section">
+                  {/* ROW 1: REGION | DIVISION | SCHOOL ID */}
+                  <div className="cr-meta-row">
+                    <div className="cr-meta-field">
+                      <span className="cr-meta-label">REGION</span>
+                      <div className="cr-meta-box box-md">{exportMetadata.region}</div>
                     </div>
-                  </th>
-
-                  {/* PERFORMANCE TASKS */}
-                  <th colSpan={performanceTaskColumns.length + 3} className="category-header">
-                    <div className="category-title">
-                      <span>Performance Tasks ({weights.PT}%)</span>
-                      <button
-                        type="button"
-                        className={`add-column-btn ${isLocked ? "disabled" : ""}`}
-                        onClick={() => openAddColumnModal("PT")}
-                        disabled={isLocked}
-                        title={isLocked ? "Cannot add column in a locked term" : "Add Performance Task Column"}
-                      >
-                        + Add
-                      </button>
+                    <div className="cr-meta-field">
+                      <span className="cr-meta-label">DIVISION</span>
+                      <div className="cr-meta-box box-md">{exportMetadata.division}</div>
                     </div>
-                  </th>
+                    <div className="cr-meta-field">
+                      <span className="cr-meta-label">SCHOOL ID</span>
+                      <div className="cr-meta-box box-sm">{exportMetadata.schoolId}</div>
+                    </div>
+                  </div>
 
-                  {/* QUARTERLY ASSESSMENT */}
-                  <th colSpan="3" className="category-header">
-                    Quarterly Assessment ({weights.QA}%)
-                  </th>
+                  {/* ROW 2: SCHOOL NAME | SCHOOL YEAR */}
+                  <div className="cr-meta-row">
+                    <div className="cr-meta-field">
+                      <span className="cr-meta-label">SCHOOL NAME</span>
+                      <div className="cr-meta-box box-lg">{exportMetadata.schoolName}</div>
+                    </div>
+                    <div className="cr-meta-field">
+                      <span className="cr-meta-label">SCHOOL YEAR</span>
+                      <div className="cr-meta-box box-sm">{exportMetadata.schoolYear}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
 
-                  {/* FINAL GRADES */}
-                  <th rowSpan="2" className="grade-header">
-                    Initial<br />Grade
-                  </th>
+              <div className="cr-logo-wrap">
+                <img src={depedWordmarkLogoUrl} alt="DepEd Wordmark" className="cr-wordmark-img" />
+              </div>
+            </div>
 
-                  <th rowSpan="2" className="grade-header">
-                    Quarterly<br />Grade
-                  </th>
-                </tr>
+            {/* TOTAL STUDENTS COUNTER */}
+            <div className="student-count" style={{ padding: "0 10px 8px" }}>
+              Total Students: {students.length}
+            </div>
 
-                {/* ROW 2: SUB HEADERS */}
-                <tr>
-                  {/* WRITTEN WORKS */}
-                  {writtenWorkColumns.map((column) => (
-                    <th key={column.id} className="sub-header dynamic-col-header" title={column.activity_name || `Written Work ${column.label}`}>
-                      <div className="col-header-inner">
-                        <span>{column.label}</span>
-                        {!isLocked && (
-                          <div className="col-actions">
-                            <button type="button" className="col-action-btn" onClick={() => openEditColumnModal(column, "WW")} title="Edit Column">
-                              <Edit2 size={10} />
-                            </button>
-                            {writtenWorkColumns.length > 1 && (
-                              <button type="button" className="col-action-btn col-delete-btn" onClick={() => handleDeleteColumn(column, "WW")} title="Delete Column">
-                                <X size={10} />
+            {/* ==================================================
+                OFFICIAL TEMPLATE SPREADSHEET TABLE
+            ================================================== */}
+            {(() => {
+              const wwColsCount = writtenWorkColumns.length + 3; // + Total, PS, WS
+              const ptColsCount = performanceTaskColumns.length + 3; // + Total, PS, WS
+              const exColsCount = 8; // ST1, ST2, TE, WS ST1, WS ST2, WS TE, PS, WS
+              const totalTableCols = 2 + wwColsCount + ptColsCount + exColsCount + 3; // + No + Name + Initial + Term + Descriptor
+
+              const wwHalf1 = Math.max(1, Math.floor(wwColsCount / 2));
+              const wwHalf2 = Math.max(1, wwColsCount - wwHalf1);
+
+              const ptHalf1 = Math.max(1, Math.floor(ptColsCount / 2));
+              const ptHalf2 = Math.max(1, ptColsCount - ptHalf1);
+
+              // Subject & Teacher spans covering exactly the component widths
+              const subjColsCount = exColsCount + 3; // 8 EX columns + 3 Summary columns = 11 columns
+              const subjHalf1 = 3;
+              const subjHalf2 = Math.max(1, subjColsCount - subjHalf1);
+
+              return (
+                <div className="class-record-table-wrapper">
+                  <table className="class-record-table">
+                    {/* Fixed explicit column widths to prevent any shifting */}
+                    <colgroup>
+                      <col style={{ width: "40px", minWidth: "40px", maxWidth: "40px" }} />
+                      <col style={{ width: "240px", minWidth: "240px", maxWidth: "240px" }} />
+                      {writtenWorkColumns.map((col) => (
+                        <col key={`col-ww-${col.id}`} style={{ width: "44px", minWidth: "44px" }} />
+                      ))}
+                      <col style={{ width: "48px", minWidth: "48px" }} />
+                      <col style={{ width: "48px", minWidth: "48px" }} />
+                      <col style={{ width: "48px", minWidth: "48px" }} />
+                      {performanceTaskColumns.map((col) => (
+                        <col key={`col-pt-${col.id}`} style={{ width: "44px", minWidth: "44px" }} />
+                      ))}
+                      <col style={{ width: "48px", minWidth: "48px" }} />
+                      <col style={{ width: "48px", minWidth: "48px" }} />
+                      <col style={{ width: "48px", minWidth: "48px" }} />
+                      <col style={{ width: "44px", minWidth: "44px" }} />
+                      <col style={{ width: "44px", minWidth: "44px" }} />
+                      <col style={{ width: "44px", minWidth: "44px" }} />
+                      <col style={{ width: "50px", minWidth: "50px" }} />
+                      <col style={{ width: "50px", minWidth: "50px" }} />
+                      <col style={{ width: "50px", minWidth: "50px" }} />
+                      <col style={{ width: "48px", minWidth: "48px" }} />
+                      <col style={{ width: "48px", minWidth: "48px" }} />
+                      <col style={{ width: "60px", minWidth: "60px" }} />
+                      <col style={{ width: "60px", minWidth: "60px" }} />
+                      <col style={{ width: "95px", minWidth: "95px" }} />
+                    </colgroup>
+
+                    <thead>
+                      {/* ROW 1: TABLE INFORMATION HEADER */}
+                      <tr>
+                        {/* Cell 1: FIRST TERM (spans 4 header rows down to HPS, and 2 columns: index + learner name) */}
+                        <th rowSpan={4} colSpan={2} className="cr-term-col">
+                          {exportMetadata.termHeader}
+                        </th>
+
+                        {/* Cell 2: GRADE LEVEL */}
+                        <th colSpan={wwHalf1} className="cr-info-label">
+                          GRADE LEVEL
+                        </th>
+
+                        {/* Cell 3: 8 */}
+                        <td colSpan={wwHalf2} className="cr-info-val">
+                          {exportMetadata.gradeLevelDisplay || "0"}
+                        </td>
+
+                        {/* Cell 4: TEACHER (Must span 2 rows vertically) */}
+                        <th rowSpan={2} colSpan={ptHalf1} className="cr-info-label">
+                          TEACHER
+                        </th>
+
+                        {/* Cell 5: HARVEY BABIA (Spans 2 rows and merges across teacher value block) */}
+                        <td rowSpan={2} colSpan={ptHalf2} className="cr-info-val">
+                          {exportMetadata.teacherName || "0"}
+                        </td>
+
+                        {/* Cell 6: SUBJECT (Must span 2 rows vertically) */}
+                        <th rowSpan={2} colSpan={subjHalf1} className="cr-info-label">
+                          SUBJECT
+                        </th>
+
+                        {/* Cell 7: ENGLISH (Spans 2 rows vertically across EX and summary block) */}
+                        <td rowSpan={2} colSpan={subjHalf2} className="cr-info-val">
+                          {exportMetadata.subjectName || "0"}
+                        </td>
+                      </tr>
+
+                      {/* ROW 2: SECTION */}
+                      <tr>
+                        {/* Cell 1: SECTION */}
+                        <th colSpan={wwHalf1} className="cr-info-label">
+                          SECTION
+                        </th>
+
+                        {/* Cell 2: Carrots */}
+                        <td colSpan={wwHalf2} className="cr-info-val">
+                          {exportMetadata.section || "0"}
+                        </td>
+                        {/* Note: TEACHER and SUBJECT span down from Row 1 via rowSpan={2} */}
+                      </tr>
+
+                      {/* ROW 3: COMPONENT HEADERS */}
+                      <tr>
+                        {/* Group 1 (WWs): WRITTEN / ORAL WORKS (WWs) (20%) */}
+                        <th colSpan={wwColsCount} className="cr-comp-header">
+                          <div className="cr-comp-title-wrap">
+                            <span>WRITTEN / ORAL WORKS (WWs) ({weights.WW || 20}%)</span>
+                            {!isLocked && (
+                              <button
+                                type="button"
+                                className="add-column-btn"
+                                onClick={() => openAddColumnModal("WW")}
+                                title="Add Written Work Column"
+                              >
+                                + Add
                               </button>
                             )}
                           </div>
-                        )}
-                      </div>
-                    </th>
-                  ))}
+                        </th>
 
-                  <th className="sub-header total-header">Total</th>
-                  <th className="sub-header">PS</th>
-                  <th className="sub-header">WS</th>
-
-                  {/* PERFORMANCE TASKS */}
-                  {performanceTaskColumns.map((column) => (
-                    <th key={column.id} className="sub-header dynamic-col-header" title={column.activity_name || `Performance Task ${column.label}`}>
-                      <div className="col-header-inner">
-                        <span>{column.label}</span>
-                        {!isLocked && (
-                          <div className="col-actions">
-                            <button type="button" className="col-action-btn" onClick={() => openEditColumnModal(column, "PT")} title="Edit Column">
-                              <Edit2 size={10} />
-                            </button>
-                            {performanceTaskColumns.length > 1 && (
-                              <button type="button" className="col-action-btn col-delete-btn" onClick={() => handleDeleteColumn(column, "PT")} title="Delete Column">
-                                <X size={10} />
+                        {/* Group 2 (PTs): PRODUCT / PERFORMANCE TASKS (PTs) (50%) */}
+                        <th colSpan={ptColsCount} className="cr-comp-header">
+                          <div className="cr-comp-title-wrap">
+                            <span>PRODUCT / PERFORMANCE TASKS (PTs) ({weights.PT || 50}%)</span>
+                            {!isLocked && (
+                              <button
+                                type="button"
+                                className="add-column-btn"
+                                onClick={() => openAddColumnModal("PT")}
+                                title="Add Performance Task Column"
+                              >
+                                + Add
                               </button>
                             )}
                           </div>
-                        )}
-                      </div>
-                    </th>
-                  ))}
+                        </th>
 
-                  <th className="sub-header total-header">Total</th>
-                  <th className="sub-header">PS</th>
-                  <th className="sub-header">WS</th>
+                        {/* Group 3 (EXs): EXAMINATIONS (EXs) (30%) */}
+                        <th colSpan={exColsCount} className="cr-comp-header">
+                          <span>EXAMINATIONS (EXs) ({weights.EX || weights.QA || 30}%)</span>
+                        </th>
 
-                  {/* QUARTERLY ASSESSMENT */}
-                  <th className="sub-header">1</th>
-                  <th className="sub-header">PS</th>
-                  <th className="sub-header">WS</th>
-                </tr>
+                        {/* Summary Headers */}
+                        <th rowSpan={2} className="cr-summary-header">
+                          Initial<br />Grade
+                        </th>
+                        <th rowSpan={2} className="cr-summary-header">
+                          Term<br />Grade
+                        </th>
+                        <th rowSpan={2} className="cr-summary-header descriptor-col">
+                          Descriptor
+                        </th>
+                      </tr>
 
-                {/* ROW 3: HIGHEST POSSIBLE SCORE (HPS) ROW */}
-                <tr className="hps-row">
-                  <td colSpan="3" className="hps-label-cell">
-                    HIGHEST POSSIBLE SCORE
-                  </td>
+                      {/* ROW 4: SUB HEADERS */}
+                      <tr>
+                        {/* WW Column Headers: Individual numbers (1, 2, 3, ...), then Total, PS, WS */}
+                        {writtenWorkColumns.map((column) => (
+                          <th key={column.id} className="cr-sub-header dynamic-col-header" title={column.activity_name || `Written Work ${column.label}`}>
+                            <div className="col-header-inner">
+                              <span>{column.label}</span>
+                              {!isLocked && (
+                                <div className="col-actions">
+                                  <button type="button" className="col-action-btn" onClick={() => openEditColumnModal(column, "WW")} title="Edit Column">
+                                    <Edit2 size={10} />
+                                  </button>
+                                  {writtenWorkColumns.length > 1 && (
+                                    <button type="button" className="col-action-btn col-delete-btn" onClick={() => handleDeleteColumn(column, "WW")} title="Delete Column">
+                                      <X size={10} />
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </th>
+                        ))}
+                        <th className="cr-sub-header">Total</th>
+                        <th className="cr-sub-header">PS</th>
+                        <th className="cr-sub-header">WS</th>
 
-                  {/* WW HPS */}
-                  {writtenWorkColumns.map((col) => (
-                    <td key={col.id} className="hps-score-cell">
-                      {col.max_score}
-                    </td>
-                  ))}
-                  <td className="hps-score-cell hps-total-cell">{totalWW_HPS}</td>
-                  <td className="hps-score-cell">100%</td>
-                  <td className="hps-score-cell">{weights.WW}%</td>
+                        {/* PT Column Headers: Individual numbers (1, 2, ...), then Total, PS, WS */}
+                        {performanceTaskColumns.map((column) => (
+                          <th key={column.id} className="cr-sub-header dynamic-col-header" title={column.activity_name || `Performance Task ${column.label}`}>
+                            <div className="col-header-inner">
+                              <span>{column.label}</span>
+                              {!isLocked && (
+                                <div className="col-actions">
+                                  <button type="button" className="col-action-btn" onClick={() => openEditColumnModal(column, "PT")} title="Edit Column">
+                                    <Edit2 size={10} />
+                                  </button>
+                                  {performanceTaskColumns.length > 1 && (
+                                    <button type="button" className="col-action-btn col-delete-btn" onClick={() => handleDeleteColumn(column, "PT")} title="Delete Column">
+                                      <X size={10} />
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </th>
+                        ))}
+                        <th className="cr-sub-header">Total</th>
+                        <th className="cr-sub-header">PS</th>
+                        <th className="cr-sub-header">WS</th>
 
-                  {/* PT HPS */}
-                  {performanceTaskColumns.map((col) => (
-                    <td key={col.id} className="hps-score-cell">
-                      {col.max_score}
-                    </td>
-                  ))}
-                  <td className="hps-score-cell hps-total-cell">{totalPT_HPS}</td>
-                  <td className="hps-score-cell">100%</td>
-                  <td className="hps-score-cell">{weights.PT}%</td>
+                        {/* EX Column Headers: ST1, ST2, TE, WS ST1, WS ST2, WS TE, PS, WS */}
+                        <th className="cr-sub-header">ST1</th>
+                        <th className="cr-sub-header">ST2</th>
+                        <th className="cr-sub-header">TE</th>
+                        <th className="cr-sub-header wide-sub">WS ST1</th>
+                        <th className="cr-sub-header wide-sub">WS ST2</th>
+                        <th className="cr-sub-header wide-sub">WS TE</th>
+                        <th className="cr-sub-header">PS</th>
+                        <th className="cr-sub-header">WS</th>
+                      </tr>
 
-                  {/* QA HPS */}
-                  <td className="hps-score-cell">{quarterlyAssessmentHPS}</td>
-                  <td className="hps-score-cell">100%</td>
-                  <td className="hps-score-cell">{weights.QA}%</td>
+                      {/* ROW 5 (HPS Row): HIGHEST POSSIBLE SCORE */}
+                      <tr className="hps-row">
+                        <th colSpan={2} className="cr-hps-title-cell hps-label">
+                          HIGHEST POSSIBLE SCORE
+                        </th>
 
-                  {/* FINAL GRADES HPS */}
-                  <td className="hps-score-cell hps-final-cell">100</td>
-                  <td className="hps-score-cell hps-final-cell">100</td>
-                </tr>
-              </thead>
+                        {/* WW HPS */}
+                        {writtenWorkColumns.map((col) => (
+                          <td
+                            key={col.id}
+                            className="cr-hps-cell editable-hps"
+                            onClick={() => openEditColumnModal(col, "WW")}
+                            title="Click to edit HPS"
+                          >
+                            {col.max_score}
+                          </td>
+                        ))}
+                        <td className="cr-hps-cell">{totalWW_HPS}</td>
+                        <td className="cr-hps-cell">100</td>
+                        <td className="cr-hps-cell">{weights.WW || 20}%</td>
 
-              {/* =================================================
-                  TABLE BODY
-              ================================================= */}
-              <tbody>
-                {students.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={3 + writtenWorkColumns.length + 3 + performanceTaskColumns.length + 3 + 3 + 2}
-                      style={{ textAlign: "center", padding: "40px 16px", color: "#64748b", fontWeight: 500 }}
-                    >
-                      No students currently enrolled in this section.
-                    </td>
-                  </tr>
-                ) : (
-                  <>
-                    {/* MALE IDENTIFIER */}
-                    <tr className="gender-divider-row">
-                      <td colSpan="3" className="gender-divider-sticky-cell">
-                        MALE {maleStudents.length > 0 ? `(${maleStudents.length})` : ""}
-                      </td>
-                      <td
-                        colSpan={writtenWorkColumns.length + 3 + performanceTaskColumns.length + 3 + 3 + 2}
-                        className="gender-divider-fill-cell"
-                      />
-                    </tr>
+                        {/* PT HPS */}
+                        {performanceTaskColumns.map((col) => (
+                          <td
+                            key={col.id}
+                            className="cr-hps-cell editable-hps"
+                            onClick={() => openEditColumnModal(col, "PT")}
+                            title="Click to edit HPS"
+                          >
+                            {col.max_score}
+                          </td>
+                        ))}
+                        <td className="cr-hps-cell">{totalPT_HPS}</td>
+                        <td className="cr-hps-cell">100</td>
+                        <td className="cr-hps-cell">{weights.PT || 50}%</td>
 
-                    {/* MALE STUDENTS */}
-                    {maleStudents.map((student, index) => (
-                      <StudentRow
-                        key={student.id}
-                        student={student}
-                        number={index + 1}
-                        grades={grades}
-                        writtenWorkColumns={writtenWorkColumns}
-                        performanceTaskColumns={performanceTaskColumns}
-                        quarterlyAssessmentHPS={quarterlyAssessmentHPS}
-                        quarterlyAssessmentId={quarterlyAssessmentId}
-                        weights={weights}
-                        isLocked={isLocked}
-                        errorTooltip={errorTooltip}
-                        handleGradeChange={handleGradeChange}
-                        handleSingleGradeChange={handleSingleGradeChange}
-                        handleScoreBlur={handleScoreBlur}
-                      />
-                    ))}
+                        {/* EX HPS & WEIGHTS */}
+                        <td
+                          className="cr-hps-cell editable-hps"
+                          onClick={() => openEditExamModal("st1", "Summative Test 1", examConfig.st1HPS, examConfig.st1Id)}
+                          title="Click to edit ST1 HPS"
+                        >
+                          {examConfig.st1HPS}
+                        </td>
+                        <td
+                          className="cr-hps-cell editable-hps"
+                          onClick={() => openEditExamModal("st2", "Summative Test 2", examConfig.st2HPS, examConfig.st2Id)}
+                          title="Click to edit ST2 HPS"
+                        >
+                          {examConfig.st2HPS}
+                        </td>
+                        <td
+                          className="cr-hps-cell editable-hps"
+                          onClick={() => openEditExamModal("te", "Term Exam", examConfig.teHPS, examConfig.teId)}
+                          title="Click to edit Term Exam HPS"
+                        >
+                          {examConfig.teHPS}
+                        </td>
+                        <td
+                          className="cr-hps-cell editable-hps"
+                          onClick={() => openEditSubWeightModal("st1Weight", "WS ST1 Weight", examConfig.st1Weight)}
+                          title="Click to edit WS ST1 Weight"
+                        >
+                          {examConfig.st1Weight}
+                        </td>
+                        <td
+                          className="cr-hps-cell editable-hps"
+                          onClick={() => openEditSubWeightModal("st2Weight", "WS ST2 Weight", examConfig.st2Weight)}
+                          title="Click to edit WS ST2 Weight"
+                        >
+                          {examConfig.st2Weight}
+                        </td>
+                        <td
+                          className="cr-hps-cell editable-hps"
+                          onClick={() => openEditSubWeightModal("teWeight", "WS TE Weight", examConfig.teWeight)}
+                          title="Click to edit WS TE Weight"
+                        >
+                          {examConfig.teWeight}
+                        </td>
+                        <td className="cr-hps-cell">100</td>
+                        <td className="cr-hps-cell">{weights.EX || weights.QA || 30}%</td>
 
-                    {/* FEMALE IDENTIFIER */}
-                    <tr className="gender-divider-row">
-                      <td colSpan="3" className="gender-divider-sticky-cell">
-                        FEMALE {femaleStudents.length > 0 ? `(${femaleStudents.length})` : ""}
-                      </td>
-                      <td
-                        colSpan={writtenWorkColumns.length + 3 + performanceTaskColumns.length + 3 + 3 + 2}
-                        className="gender-divider-fill-cell"
-                      />
-                    </tr>
+                        {/* SUMMARY COLUMNS IN HPS ROW */}
+                        <td className="cr-hps-cell" />
+                        <td className="cr-hps-cell" />
+                        <td className="cr-hps-cell" />
+                      </tr>
+                    </thead>
 
-                    {/* FEMALE STUDENTS */}
-                    {femaleStudents.map((student, index) => (
-                      <StudentRow
-                        key={student.id}
-                        student={student}
-                        number={maleStudents.length + index + 1}
-                        grades={grades}
-                        writtenWorkColumns={writtenWorkColumns}
-                        performanceTaskColumns={performanceTaskColumns}
-                        quarterlyAssessmentHPS={quarterlyAssessmentHPS}
-                        quarterlyAssessmentId={quarterlyAssessmentId}
-                        weights={weights}
-                        isLocked={isLocked}
-                        errorTooltip={errorTooltip}
-                        handleGradeChange={handleGradeChange}
-                        handleSingleGradeChange={handleSingleGradeChange}
-                        handleScoreBlur={handleScoreBlur}
-                      />
-                    ))}
-                  </>
-                )}
-              </tbody>
-            </table>
+                    {/* =================================================
+                        TABLE BODY
+                    ================================================= */}
+                    <tbody>
+                      {students.length === 0 ? (
+                        <tr>
+                          <td
+                            colSpan={totalTableCols}
+                            style={{ textAlign: "center", padding: "40px 16px", color: "#64748b", fontWeight: 500 }}
+                          >
+                            No students currently enrolled in this section.
+                          </td>
+                        </tr>
+                      ) : (
+                        <>
+                          {/* LEARNERS' NAMES DIVIDER ROW */}
+                          <tr className="cr-learners-names-row">
+                            <td colSpan={totalTableCols}>LEARNERS' NAMES</td>
+                          </tr>
+
+                          {/* MALE DIVIDER ROW */}
+                          <tr className="cr-gender-row">
+                            <td colSpan={totalTableCols}>
+                              MALE {maleStudents.length > 0 ? `(${maleStudents.length})` : ""}
+                            </td>
+                          </tr>
+
+                          {/* MALE STUDENTS */}
+                          {maleStudents.map((student, index) => (
+                            <StudentRow
+                              key={student.id}
+                              student={student}
+                              number={index + 1}
+                              grades={grades}
+                              writtenWorkColumns={writtenWorkColumns}
+                              performanceTaskColumns={performanceTaskColumns}
+                              examConfig={examConfig}
+                              weights={weights}
+                              isLocked={isLocked}
+                              errorTooltip={errorTooltip}
+                              handleGradeChange={handleGradeChange}
+                              handleExamScoreChange={handleExamScoreChange}
+                              handleScoreBlur={handleScoreBlur}
+                            />
+                          ))}
+
+                          {/* FEMALE DIVIDER ROW */}
+                          <tr className="cr-gender-row">
+                            <td colSpan={totalTableCols}>
+                              FEMALE {femaleStudents.length > 0 ? `(${femaleStudents.length})` : ""}
+                            </td>
+                          </tr>
+
+                          {/* FEMALE STUDENTS */}
+                          {femaleStudents.map((student, index) => (
+                            <StudentRow
+                              key={student.id}
+                              student={student}
+                              number={maleStudents.length + index + 1}
+                              grades={grades}
+                              writtenWorkColumns={writtenWorkColumns}
+                              performanceTaskColumns={performanceTaskColumns}
+                              examConfig={examConfig}
+                              weights={weights}
+                              isLocked={isLocked}
+                              errorTooltip={errorTooltip}
+                              handleGradeChange={handleGradeChange}
+                              handleExamScoreChange={handleExamScoreChange}
+                              handleScoreBlur={handleScoreBlur}
+                            />
+                          ))}
+                        </>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}
 
       {/* ============================================================
-          MODERN ADD / EDIT COLUMN MODAL (Sleek popover/dialog)
+          MODERN ADD / EDIT COLUMN MODAL
       ============================================================ */}
       {modalState.isOpen && (
         <div className="class-record-modal-backdrop" onClick={() => setModalState((prev) => ({ ...prev, isOpen: false }))}>
@@ -1423,7 +1791,15 @@ const formatToISODate = (val) => {
                   <Layers size={18} />
                 </div>
                 <div>
-                  <h3>{modalState.mode === "add" ? `Add ${modalState.categoryLabel} Column` : `Edit ${modalState.categoryLabel} Column`}</h3>
+                  <h3>
+                    {modalState.category === "EX"
+                      ? `Edit ${modalState.title} HPS`
+                      : modalState.category === "EX_WEIGHT"
+                      ? `Edit ${modalState.title}`
+                      : modalState.mode === "add"
+                      ? `Add ${modalState.categoryLabel} Column`
+                      : `Edit ${modalState.categoryLabel} Column`}
+                  </h3>
                   <p>Configure assessment details and Highest Possible Score</p>
                 </div>
               </div>
@@ -1438,26 +1814,33 @@ const formatToISODate = (val) => {
 
             <form onSubmit={handleSaveModalColumn} className="modal-form">
               <div className="modal-body">
-                <div className="form-group">
-                  <label>Column Title / Assessment Name</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Quiz 1, Long Test, Unit Assessment"
-                    className="modal-input"
-                    value={modalState.title}
-                    onChange={(e) => setModalState((prev) => ({ ...prev, title: e.target.value }))}
-                  />
-                </div>
+                {modalState.category !== "EX_WEIGHT" && (
+                  <div className="form-group">
+                    <label>Column Title / Assessment Name</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Quiz 1, Long Test, Unit Assessment"
+                      className="modal-input"
+                      value={modalState.title}
+                      onChange={(e) => setModalState((prev) => ({ ...prev, title: e.target.value }))}
+                      disabled={modalState.category === "EX"}
+                    />
+                  </div>
+                )}
 
                 <div className="form-row">
                   <div className="form-group flex-1">
-                    <label>Highest Possible Score (HPS)</label>
+                    <label>
+                      {modalState.category === "EX_WEIGHT"
+                        ? "Weight Percentage (%)"
+                        : "Highest Possible Score (HPS)"}
+                    </label>
                     <input
                       type="number"
                       required
                       min="1"
-                      placeholder="e.g. 20"
+                      placeholder="e.g. 25"
                       className="modal-input"
                       value={modalState.maxScore}
                       onChange={(e) => setModalState((prev) => ({ ...prev, maxScore: e.target.value }))}
@@ -1465,15 +1848,17 @@ const formatToISODate = (val) => {
                     <span className="input-hint">Must be greater than 0</span>
                   </div>
 
-                  <div className="form-group flex-1">
-                    <label>Activity Date</label>
-                    <input
-                      type="date"
-                      className="modal-input"
-                      value={modalState.date}
-                      onChange={(e) => setModalState((prev) => ({ ...prev, date: e.target.value }))}
-                    />
-                  </div>
+                  {modalState.category !== "EX" && modalState.category !== "EX_WEIGHT" && (
+                    <div className="form-group flex-1">
+                      <label>Activity Date</label>
+                      <input
+                        type="date"
+                        className="modal-input"
+                        value={modalState.date}
+                        onChange={(e) => setModalState((prev) => ({ ...prev, date: e.target.value }))}
+                      />
+                    </div>
+                  )}
                 </div>
 
                 <div className="modal-footer">
@@ -1485,7 +1870,11 @@ const formatToISODate = (val) => {
                     Cancel
                   </button>
                   <button type="submit" className="modal-submit-btn">
-                    {modalState.mode === "add" ? "Add Column" : "Save Changes"}
+                    {modalState.category === "EX" || modalState.category === "EX_WEIGHT"
+                      ? "Save HPS"
+                      : modalState.mode === "add"
+                      ? "Add Column"
+                      : "Save Changes"}
                   </button>
                 </div>
               </div>
@@ -1494,20 +1883,6 @@ const formatToISODate = (val) => {
         </div>
       )}
 
-      {/* ============================================================
-          DEPED JHS CLASS RECORD OFFICIAL PDF PREVIEW & PRINT MODAL
-      ============================================================ */}
-      <DepEdClassRecordPrintModal
-        isOpen={isPdfModalOpen}
-        onClose={() => setIsPdfModalOpen(false)}
-        metadata={exportMetadata}
-        weights={weights}
-        writtenWorkColumns={writtenWorkColumns}
-        performanceTaskColumns={performanceTaskColumns}
-        quarterlyAssessmentHPS={quarterlyAssessmentHPS}
-        students={students}
-        grades={grades}
-      />
     </div>
   );
 }
@@ -1521,43 +1896,44 @@ function StudentRow({
   grades,
   writtenWorkColumns,
   performanceTaskColumns,
-  quarterlyAssessmentHPS,
-  quarterlyAssessmentId,
+  examConfig,
   weights,
   isLocked,
   errorTooltip,
   handleGradeChange,
-  handleSingleGradeChange,
+  handleExamScoreChange,
   handleScoreBlur,
 }) {
   const studentGrades = grades[student.id] || {};
   const studentWW = studentGrades.writtenWorks || {};
   const studentPT = studentGrades.performanceTasks || {};
-  const studentQA = studentGrades.quarterlyAssessment || "";
+  const studentEX = studentGrades.examinations || {
+    st1: studentGrades.st1 || "",
+    st2: studentGrades.st2 || "",
+    te: studentGrades.te || studentGrades.quarterlyAssessment || "",
+  };
 
   // Real-time calculation with DepEd Transmutation Table
   const rowCalculation = useMemo(() => {
     return calculateStudentGrades({
       writtenWorks: studentWW,
       performanceTasks: studentPT,
-      quarterlyAssessment: studentQA,
+      examinations: studentEX,
+      quarterlyAssessment: studentEX.te || "",
       writtenWorkColumns,
       performanceTaskColumns,
-      quarterlyAssessmentHPS,
+      examConfig,
       weights,
     });
-  }, [studentWW, studentPT, studentQA, writtenWorkColumns, performanceTaskColumns, quarterlyAssessmentHPS, weights]);
+  }, [studentWW, studentPT, studentEX, writtenWorkColumns, performanceTaskColumns, examConfig, weights]);
 
   return (
     <tr className="student-row">
       {/* NUMBER */}
-      <td className="number-cell">{number}</td>
+      <td className="cr-student-num">{number}</td>
 
-      {/* LRN */}
-      <td className="lrn-cell">{student.lrn}</td>
-
-      {/* NAME */}
-      <td className="name-cell">
+      {/* LEARNERS' NAME */}
+      <td className="cr-student-name" title={`LRN: ${student.lrn || "N/A"}`}>
         {student.firstName} {student.lastName}
       </td>
 
@@ -1570,7 +1946,7 @@ function StudentRow({
         const isScoreFailing = !isExceeded && val !== undefined && val !== "" && !isNaN(numVal) && column.max_score > 0 && numVal / column.max_score < 0.6;
 
         return (
-          <td key={column.id} className={`grade-input-cell ${isScoreFailing ? "failing-cell" : ""}`}>
+          <td key={column.id} className={`cr-score-input-cell ${isScoreFailing ? "failing-cell" : ""}`}>
             <div className="grade-input-wrapper">
               <input
                 type="number"
@@ -1579,7 +1955,7 @@ function StudentRow({
                 value={val !== undefined ? val : ""}
                 disabled={isLocked}
                 readOnly={isLocked}
-                className={`${isExceeded ? "exceeded-score-input" : ""} ${isScoreFailing ? "failing-input" : ""} ${isLocked ? "locked-input" : ""}`}
+                className={`cr-score-input ${isExceeded ? "exceeded-score-input" : ""} ${isScoreFailing ? "failing-input" : ""} ${isLocked ? "locked-input" : ""}`}
                 onChange={(e) =>
                   handleGradeChange(
                     student.id,
@@ -1603,11 +1979,11 @@ function StudentRow({
         );
       })}
 
-      <td className="computed-cell">{rowCalculation.writtenWorks.total}</td>
-      <td className={`computed-cell ${rowCalculation.writtenWorks.isFailing ? "failing-metric" : ""}`}>
+      <td className="cr-calc-cell">{rowCalculation.writtenWorks.total}</td>
+      <td className={`cr-calc-cell ${rowCalculation.writtenWorks.isFailing ? "failing-metric" : ""}`}>
         {rowCalculation.writtenWorks.ps}
       </td>
-      <td className="computed-cell">{rowCalculation.writtenWorks.ws}</td>
+      <td className="cr-calc-cell">{rowCalculation.writtenWorks.ws}</td>
 
       {/* PERFORMANCE TASKS */}
       {performanceTaskColumns.map((column) => {
@@ -1618,7 +1994,7 @@ function StudentRow({
         const isScoreFailing = !isExceeded && val !== undefined && val !== "" && !isNaN(numVal) && column.max_score > 0 && numVal / column.max_score < 0.6;
 
         return (
-          <td key={column.id} className={`grade-input-cell ${isScoreFailing ? "failing-cell" : ""}`}>
+          <td key={column.id} className={`cr-score-input-cell ${isScoreFailing ? "failing-cell" : ""}`}>
             <div className="grade-input-wrapper">
               <input
                 type="number"
@@ -1627,7 +2003,7 @@ function StudentRow({
                 value={val !== undefined ? val : ""}
                 disabled={isLocked}
                 readOnly={isLocked}
-                className={`${isExceeded ? "exceeded-score-input" : ""} ${isScoreFailing ? "failing-input" : ""} ${isLocked ? "locked-input" : ""}`}
+                className={`cr-score-input ${isExceeded ? "exceeded-score-input" : ""} ${isScoreFailing ? "failing-input" : ""} ${isLocked ? "locked-input" : ""}`}
                 onChange={(e) =>
                   handleGradeChange(
                     student.id,
@@ -1651,77 +2027,119 @@ function StudentRow({
         );
       })}
 
-      <td className="computed-cell">{rowCalculation.performanceTasks.total}</td>
-      <td className={`computed-cell ${rowCalculation.performanceTasks.isFailing ? "failing-metric" : ""}`}>
+      <td className="cr-calc-cell">{rowCalculation.performanceTasks.total}</td>
+      <td className={`cr-calc-cell ${rowCalculation.performanceTasks.isFailing ? "failing-metric" : ""}`}>
         {rowCalculation.performanceTasks.ps}
       </td>
-      <td className="computed-cell">{rowCalculation.performanceTasks.ws}</td>
+      <td className="cr-calc-cell">{rowCalculation.performanceTasks.ws}</td>
 
-      {/* QUARTERLY ASSESSMENT */}
+      {/* EXAMINATIONS: ST1 | ST2 | TE | WS ST1 | WS ST2 | WS TE | PS | WS */}
+      {/* ST1 INPUT */}
       {(() => {
-        const numQA = Number(studentQA);
-        const cellKey = `${student.id}_qa`;
+        const val = studentEX.st1;
+        const numVal = Number(val);
+        const cellKey = `${student.id}_st1`;
         const isExceeded = errorTooltip?.cellKey === cellKey;
-        const isQAFailing = !isExceeded && studentQA !== "" && !isNaN(numQA) && quarterlyAssessmentHPS > 0 && numQA / quarterlyAssessmentHPS < 0.6;
+        const isFailing = !isExceeded && val !== undefined && val !== "" && !isNaN(numVal) && examConfig.st1HPS > 0 && numVal / examConfig.st1HPS < 0.6;
         return (
-          <td className={`grade-input-cell ${isQAFailing ? "failing-cell" : ""}`}>
+          <td className={`cr-score-input-cell ${isFailing ? "failing-cell" : ""}`}>
             <div className="grade-input-wrapper">
               <input
                 type="number"
                 min="0"
-                max={quarterlyAssessmentHPS}
-                value={studentQA}
+                max={examConfig.st1HPS}
+                value={val !== undefined && val !== null ? val : ""}
                 disabled={isLocked}
                 readOnly={isLocked}
-                className={`${isExceeded ? "exceeded-score-input" : ""} ${isQAFailing ? "failing-input" : ""} ${isLocked ? "locked-input" : ""}`}
-                onChange={(e) =>
-                  handleSingleGradeChange(
-                    student.id,
-                    "quarterlyAssessment",
-                    e.target.value,
-                    quarterlyAssessmentHPS,
-                    quarterlyAssessmentId
-                  )
-                }
+                className={`cr-score-input ${isExceeded ? "exceeded-score-input" : ""} ${isFailing ? "failing-input" : ""} ${isLocked ? "locked-input" : ""}`}
+                onChange={(e) => handleExamScoreChange(student.id, "st1", e.target.value, examConfig.st1HPS, examConfig.st1Id)}
                 onBlur={handleScoreBlur}
-                title={isLocked ? "This term is locked and read-only" : `Max: ${quarterlyAssessmentHPS}`}
+                title={isLocked ? "Locked" : `Max: ${examConfig.st1HPS}`}
               />
-              {isExceeded && (
-                <div className="score-exceeded-badge" role="alert">
-                  {errorTooltip.message}
-                </div>
-              )}
+              {isExceeded && <div className="score-exceeded-badge">{errorTooltip.message}</div>}
             </div>
           </td>
         );
       })()}
 
-      <td className={`computed-cell ${rowCalculation.quarterlyAssessment.isFailing ? "failing-metric" : ""}`}>
-        {rowCalculation.quarterlyAssessment.ps}
+      {/* ST2 INPUT */}
+      {(() => {
+        const val = studentEX.st2;
+        const numVal = Number(val);
+        const cellKey = `${student.id}_st2`;
+        const isExceeded = errorTooltip?.cellKey === cellKey;
+        const isFailing = !isExceeded && val !== undefined && val !== "" && !isNaN(numVal) && examConfig.st2HPS > 0 && numVal / examConfig.st2HPS < 0.6;
+        return (
+          <td className={`cr-score-input-cell ${isFailing ? "failing-cell" : ""}`}>
+            <div className="grade-input-wrapper">
+              <input
+                type="number"
+                min="0"
+                max={examConfig.st2HPS}
+                value={val !== undefined && val !== null ? val : ""}
+                disabled={isLocked}
+                readOnly={isLocked}
+                className={`cr-score-input ${isExceeded ? "exceeded-score-input" : ""} ${isFailing ? "failing-input" : ""} ${isLocked ? "locked-input" : ""}`}
+                onChange={(e) => handleExamScoreChange(student.id, "st2", e.target.value, examConfig.st2HPS, examConfig.st2Id)}
+                onBlur={handleScoreBlur}
+                title={isLocked ? "Locked" : `Max: ${examConfig.st2HPS}`}
+              />
+              {isExceeded && <div className="score-exceeded-badge">{errorTooltip.message}</div>}
+            </div>
+          </td>
+        );
+      })()}
+
+      {/* TE INPUT */}
+      {(() => {
+        const val = studentEX.te;
+        const numVal = Number(val);
+        const cellKey = `${student.id}_te`;
+        const isExceeded = errorTooltip?.cellKey === cellKey;
+        const isFailing = !isExceeded && val !== undefined && val !== "" && !isNaN(numVal) && examConfig.teHPS > 0 && numVal / examConfig.teHPS < 0.6;
+        return (
+          <td className={`cr-score-input-cell ${isFailing ? "failing-cell" : ""}`}>
+            <div className="grade-input-wrapper">
+              <input
+                type="number"
+                min="0"
+                max={examConfig.teHPS}
+                value={val !== undefined && val !== null ? val : ""}
+                disabled={isLocked}
+                readOnly={isLocked}
+                className={`cr-score-input ${isExceeded ? "exceeded-score-input" : ""} ${isFailing ? "failing-input" : ""} ${isLocked ? "locked-input" : ""}`}
+                onChange={(e) => handleExamScoreChange(student.id, "te", e.target.value, examConfig.teHPS, examConfig.teId)}
+                onBlur={handleScoreBlur}
+                title={isLocked ? "Locked" : `Max: ${examConfig.teHPS}`}
+              />
+              {isExceeded && <div className="score-exceeded-badge">{errorTooltip.message}</div>}
+            </div>
+          </td>
+        );
+      })()}
+
+      {/* EX COMPUTED SUB-WEIGHTS */}
+      <td className="cr-calc-cell">{rowCalculation.examinations.st1.ws}</td>
+      <td className="cr-calc-cell">{rowCalculation.examinations.st2.ws}</td>
+      <td className="cr-calc-cell">{rowCalculation.examinations.te.ws}</td>
+      <td className={`cr-calc-cell ${rowCalculation.examinations.isFailing ? "failing-metric" : ""}`}>
+        {rowCalculation.examinations.ps}
       </td>
-      <td className="computed-cell">{rowCalculation.quarterlyAssessment.ws}</td>
+      <td className="cr-calc-cell">{rowCalculation.examinations.ws}</td>
 
       {/* INITIAL GRADE */}
-      <td className="grade-input-cell final-grade-cell">
-        <input
-          type="text"
-          readOnly
-          value={rowCalculation.initialGrade !== "-" ? rowCalculation.initialGrade : ""}
-          placeholder="-"
-          className="computed-grade-display"
-        />
+      <td className="cr-summary-cell">
+        {rowCalculation.initialGrade !== "-" ? rowCalculation.initialGrade : ""}
       </td>
 
-      {/* QUARTERLY GRADE - TARGETED FAILING HIGHLIGHT */}
-      <td className={`grade-input-cell final-grade-cell ${rowCalculation.isFailing ? "failing-grade-cell" : ""}`}>
-        <input
-          type="text"
-          readOnly
-          value={rowCalculation.quarterlyGrade !== "-" ? rowCalculation.quarterlyGrade : ""}
-          placeholder="-"
-          className={`computed-grade-display ${rowCalculation.isFailing ? "failing-grade" : ""}`}
-          title={rowCalculation.isFailing ? "Failing Quarterly Grade (< 75)" : "Quarterly Grade"}
-        />
+      {/* TERM GRADE */}
+      <td className={`cr-summary-cell term-grade-cell ${rowCalculation.isFailing ? "failing-grade-cell" : ""}`}>
+        {rowCalculation.termGrade !== "-" ? rowCalculation.termGrade : ""}
+      </td>
+
+      {/* DESCRIPTOR */}
+      <td className="cr-descriptor-cell">
+        {rowCalculation.descriptor !== "-" ? rowCalculation.descriptor : ""}
       </td>
     </tr>
   );
