@@ -16,15 +16,20 @@ import {
 import AnalyticsSkeleton from "./analytics/AnalyticsSkeleton";
 import AnalyticsStatCard from "./analytics/AnalyticsStatCard";
 import AnalyticsTermTabs from "./analytics/AnalyticsTermTabs";
-import AverageLineChart from "./analytics/AverageLineChart";
+import LineChart from "../../components/charts/LineChart";
 import HistoricalComparisonTable from "./analytics/HistoricalComparisonTable";
-import SubjectBarChart from "./analytics/SubjectBarChart";
+import GroupedBarChart from "../../components/charts/GroupedBarChart";
 import "../../styles/principalAnalytics.css";
 
-const round = (value) => Math.round(value * 10) / 10;
+const round = (value) => Math.round(Number(value || 0) * 10) / 10;
 const average = (values) =>
-  values.reduce((sum, value) => sum + value, 0) / values.length;
-const termIndex = (term) => Number(term.split("-")[1]) - 1;
+  Array.isArray(values) && values.length
+    ? values.reduce((sum, value) => sum + Number(value || 0), 0) / values.length
+    : 0;
+const termIndex = (term) => {
+  const num = Number(String(term || "").split("-")[1]);
+  return isNaN(num) ? 0 : num - 1;
+};
 
 const getStatus = (currentAverage, difference) => {
   if (currentAverage < 75 || difference <= -3) return "Needs attention";
@@ -74,24 +79,28 @@ export default function HistoricalComparison() {
   };
 
   const rows = useMemo(() => {
-    if (!data?.subjects.length) return [];
+    if (!data?.subjects?.length) return [];
     const selectedTermIndex =
       data.term === "overall" ? null : termIndex(data.term);
     return data.subjects.map((subject) => {
+      const primaryAverages = subject.primaryTermAverages || [0, 0, 0];
+      const comparisonAverages = subject.comparisonTermAverages || [0, 0, 0];
+      const primaryPassRates = subject.primaryTermPassRates || [0, 0, 0];
+
       const primaryAverage = round(
         selectedTermIndex === null
-          ? average(subject.primaryTermAverages)
-          : subject.primaryTermAverages[selectedTermIndex],
+          ? average(primaryAverages)
+          : primaryAverages[selectedTermIndex] || 0,
       );
       const comparisonAverage = round(
         selectedTermIndex === null
-          ? average(subject.comparisonTermAverages)
-          : subject.comparisonTermAverages[selectedTermIndex],
+          ? average(comparisonAverages)
+          : comparisonAverages[selectedTermIndex] || 0,
       );
       const passRate = round(
         selectedTermIndex === null
-          ? average(subject.primaryTermPassRates)
-          : subject.primaryTermPassRates[selectedTermIndex],
+          ? average(primaryPassRates)
+          : primaryPassRates[selectedTermIndex] || 0,
       );
       const difference = round(primaryAverage - comparisonAverage);
       return {
@@ -303,8 +312,9 @@ export default function HistoricalComparison() {
                 </div>
               </div>
               {displayedTerm === "overall" ? (
-                <AverageLineChart
+                <LineChart
                   ariaLabel={`Average grade comparison for ${data.primarySchoolYear.label} and ${data.comparisonSchoolYear.label}`}
+                  labels={["Term 1", "Term 2", "Term 3"]}
                   series={[
                     {
                       id: "primary",
@@ -312,7 +322,7 @@ export default function HistoricalComparison() {
                       color: "#17376d",
                       values: data.primaryTrend.map((value) => ({
                         value,
-                        learnerCount: data.totalStudents,
+                        detail: `${data.totalStudents} learners`,
                       })),
                     },
                     {
@@ -321,13 +331,13 @@ export default function HistoricalComparison() {
                       color: "#d4a017",
                       values: data.comparisonTrend.map((value) => ({
                         value,
-                        learnerCount: data.totalStudents,
+                        detail: `${data.totalStudents} learners`,
                       })),
                     },
                   ]}
                 />
               ) : (
-                <SubjectBarChart
+                <GroupedBarChart
                   ariaLabel={`Term ${selectedTermIndex + 1} subject comparison between selected school years`}
                   groups={rows.map((row) => ({
                     id: row.id,
@@ -338,14 +348,14 @@ export default function HistoricalComparison() {
                         id: `${row.id}-primary`,
                         label: data.primarySchoolYear.label,
                         value: row.primaryAverage,
-                        learnerCount: row.learnerCount,
+                        detail: `${row.learnerCount} learners`,
                         color: "#17376d",
                       },
                       {
                         id: `${row.id}-comparison`,
                         label: data.comparisonSchoolYear.label,
                         value: row.comparisonAverage,
-                        learnerCount: row.learnerCount,
+                        detail: `${row.learnerCount} learners`,
                         color: "#d4a017",
                       },
                     ],

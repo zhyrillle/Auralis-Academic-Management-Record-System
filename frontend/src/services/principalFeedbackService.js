@@ -43,10 +43,10 @@ const defaultLikertQuestions = [
  * Placeholder REST Route: GET /api/principal/feedback/summary?term=:term&schoolYear=:schoolYear
  * Retrieves top metric cards for teacher feedback.
  */
-export async function getTeacherFeedbackSummary(term = "Overall", schoolYear = "2025-2026") {
+export async function getTeacherFeedbackSummary(schoolYear = "2026-2027") {
   try {
     const response = await fetch(
-      `${API_BASE_URL}/principal/feedback/summary?term=${encodeURIComponent(term)}&schoolYear=${encodeURIComponent(schoolYear)}`,
+      `${API_BASE_URL}/principal/feedback/summary?schoolYear=${encodeURIComponent(schoolYear)}`,
     );
     return await parseResponse(response);
   } catch (error) {
@@ -56,13 +56,13 @@ export async function getTeacherFeedbackSummary(term = "Overall", schoolYear = "
 }
 
 /**
- * Placeholder REST Route: GET /api/principal/feedback/likert-results?term=:term&schoolYear=:schoolYear
+ * REST Route: GET /api/principal/feedback/likert-results?schoolYear=:schoolYear
  * Retrieves the Likert scale ratings for leadership evaluation.
  */
-export async function getLikertEvaluationResults(term = "Overall", schoolYear = "2025-2026") {
+export async function getLikertEvaluationResults(schoolYear = "2026-2027") {
   try {
     const response = await fetch(
-      `${API_BASE_URL}/principal/feedback/likert-results?term=${encodeURIComponent(term)}&schoolYear=${encodeURIComponent(schoolYear)}`,
+      `${API_BASE_URL}/principal/feedback/likert-results?schoolYear=${encodeURIComponent(schoolYear)}`,
     );
     const data = await parseResponse(response);
     return data?.results || defaultLikertQuestions;
@@ -73,13 +73,13 @@ export async function getLikertEvaluationResults(term = "Overall", schoolYear = 
 }
 
 /**
- * Placeholder REST Route: GET /api/principal/feedback/comments?term=:term&schoolYear=:schoolYear&query=:query
+ * REST Route: GET /api/principal/feedback/comments?schoolYear=:schoolYear&query=:query
  * Retrieves open-ended teacher responses.
  */
-export async function getTeacherFeedbackComments(term = "Overall", schoolYear = "2025-2026", query = "") {
+export async function getTeacherFeedbackComments(schoolYear = "2026-2027", query = "") {
   try {
     const response = await fetch(
-      `${API_BASE_URL}/principal/feedback/comments?term=${encodeURIComponent(term)}&schoolYear=${encodeURIComponent(schoolYear)}&query=${encodeURIComponent(query)}`,
+      `${API_BASE_URL}/principal/feedback/comments?schoolYear=${encodeURIComponent(schoolYear)}&query=${encodeURIComponent(query)}`,
     );
     const data = await parseResponse(response);
     return data?.comments || [];
@@ -87,5 +87,36 @@ export async function getTeacherFeedbackComments(term = "Overall", schoolYear = 
     // Graceful fallback to empty comments
     return [];
   }
+}
+
+/**
+ * REST Route: GET /api/school-years
+ * Dynamically retrieves available school years.
+ */
+export async function getSchoolYears() {
+  try {
+    const response = await fetch(`${API_BASE_URL}/school-years`);
+    const data = await parseResponse(response);
+    if (Array.isArray(data) && data.length > 0) {
+      const formatted = data
+        .map((sy) => {
+          const start = typeof sy.starts_on === "number" || !isNaN(Number(sy.starts_on))
+            ? Number(sy.starts_on)
+            : new Date(sy.starts_on).getFullYear();
+          const end = typeof sy.ends_on === "number" || !isNaN(Number(sy.ends_on))
+            ? Number(sy.ends_on)
+            : new Date(sy.ends_on).getFullYear();
+          if (start && end) return `${start}-${end}`;
+          return null;
+        })
+        .filter(Boolean);
+
+      const unique = Array.from(new Set(formatted)).sort((a, b) => b.localeCompare(a));
+      if (unique.length > 0) return unique;
+    }
+  } catch (error) {
+    console.warn("Error fetching dynamic school years:", error);
+  }
+  return ["2026-2027", "2025-2026"];
 }
 

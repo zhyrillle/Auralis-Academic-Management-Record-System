@@ -7,13 +7,13 @@ import gccnhsLogo from "../../assets/gccnhs_logo.png";
 import backIconUrl from "../../assets/backButton.svg";
 import { getStoredUser, normalizeRole } from "../../utils/auth";
 
-export default function StudentSF9Page({ student, onBack, userRole: propUserRole }) {
+export default function StudentSF9Page({ student, onBack, userRole: propUserRole, initialTab }) {
   const storedUser = useMemo(() => getStoredUser(), []);
   const normRole = useMemo(() => normalizeRole(storedUser?.role, storedUser), [storedUser]);
-  const userRole = propUserRole || (normRole === "adviser" ? "adviser" : "teacher");
-  const isAdviser = userRole === "adviser";
+  const userRole = propUserRole || (normRole === "adviser" ? "adviser" : normRole === "principal" ? "principal" : "teacher");
+  const isAdviser = userRole === "adviser" || userRole === "principal";
 
-  const [activeTab, setActiveTab] = useState(isAdviser ? "sf9" : "personal");
+  const [activeTab, setActiveTab] = useState(initialTab || (isAdviser ? "sf9" : "personal"));
   const [viewMode, setViewMode] = useState("spread"); // "spread", "front", "back"
 
   // Teacher Comments/Remarks state for terms

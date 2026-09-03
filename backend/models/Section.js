@@ -38,8 +38,10 @@ class Section {
     try {
       // 1. Advisory Sections for user (via SECTION_ADVISER_ASSIGNMENT)
       const [rows] = await db.execute(
-        `SELECT DISTINCT
+         `SELECT DISTINCT
+           saa.adviser_assignment_id,
            sec.section_id,
+           saa.school_year_id,
            sec.section_name,
            sec.is_specialized,
            gl.grade_level_id,
@@ -68,6 +70,7 @@ class Section {
            so.subject_offering_id,
            so.subject_id,
            sec.section_id,
+           so.school_year_id,
            sec.section_name,
            sec.is_specialized,
            gl.grade_level_id,
@@ -106,18 +109,24 @@ class Section {
     };
 
     const result = [];
-    const addedSectionIds = new Set();
+    const addedSectionAssignments = new Set();
 
     // 1. Process Advisory Classes first (one single card per advisory section)
     for (const row of advisoryRows) {
-      if (!addedSectionIds.has(row.section_id)) {
-        addedSectionIds.add(row.section_id);
+      const sectionAssignmentKey = `${row.section_id}:${row.school_year_id}`;
+      if (!addedSectionAssignments.has(sectionAssignmentKey)) {
+        addedSectionAssignments.add(sectionAssignmentKey);
         const gradeNum = parseInt(String(row.grade_level_name).replace(/\D/g, "")) || "";
         const subjectName = sectionSubjectMap[row.section_id] || "Mathematics";
         const isSpecialized = checkIsSpecialized(row.is_specialized);
         result.push({
-          id: `sec-${row.section_id}`,
+          id: `advisory-${row.adviser_assignment_id}`,
+          assignmentType: "advisory",
+          assignmentId: Number(row.adviser_assignment_id),
+          adviser_assignment_id: Number(row.adviser_assignment_id),
           section_id: row.section_id,
+          schoolYearId: Number(row.school_year_id),
+          school_year_id: Number(row.school_year_id),
           sectionName: row.section_name,
           gradeLevel: gradeNum ? `G${gradeNum}` : row.grade_level_name,
           grade_level_name: row.grade_level_name,
@@ -131,15 +140,21 @@ class Section {
       }
     }
 
-    // 2. Process Regular Teaching Classes for other sections (deduplicated by section_id)
+    // 2. Process Regular Teaching Classes for other section/year assignments.
     for (const row of teacherRows) {
-      if (!addedSectionIds.has(row.section_id)) {
-        addedSectionIds.add(row.section_id);
+      const sectionAssignmentKey = `${row.section_id}:${row.school_year_id}`;
+      if (!addedSectionAssignments.has(sectionAssignmentKey)) {
+        addedSectionAssignments.add(sectionAssignmentKey);
         const gradeNum = parseInt(String(row.grade_level_name).replace(/\D/g, "")) || "";
         const isSpecialized = checkIsSpecialized(row.is_specialized);
         result.push({
-          id: `sec-${row.section_id}`,
+          id: `teaching-${row.teacher_assignment_id}`,
+          assignmentType: "teaching",
+          assignmentId: Number(row.teacher_assignment_id),
+          teacher_assignment_id: Number(row.teacher_assignment_id),
           section_id: row.section_id,
+          schoolYearId: Number(row.school_year_id),
+          school_year_id: Number(row.school_year_id),
           subject_id: row.subject_id,
           subject_offering_id: row.subject_offering_id,
           sectionName: row.section_name,
@@ -162,18 +177,30 @@ class Section {
     const [rows] = await db.execute(
       `SELECT 
          s.student_id AS id,
+         s.student_id,
+         ss.student_section_id,
          s.LRN AS lrn,
          s.first_name AS firstName,
          s.last_name AS lastName,
          s.middle_name AS middleName,
-         s.sex
+         s.sex,
+         MAX(CASE WHEN sg.term IN ('T1', '1st Term', 'Quarter 1', '1') THEN sg.quarterly_grade END) AS term1,
+         MAX(CASE WHEN sg.term IN ('T2', '2nd Term', 'Quarter 2', '2') THEN sg.quarterly_grade END) AS term2,
+         MAX(CASE WHEN sg.term IN ('T3', '3rd Term', 'Quarter 3', '3') THEN sg.quarterly_grade END) AS term3
        FROM STUDENT_SECTION ss
        INNER JOIN STUDENT s ON s.student_id = ss.student_id
+       LEFT JOIN STUDENT_GRADE sg ON sg.student_id = s.student_id
        WHERE ss.section_id = ?
+       GROUP BY ss.student_section_id, s.student_id, s.LRN, s.first_name, s.last_name, s.middle_name, s.sex
        ORDER BY s.last_name ASC, s.first_name ASC`,
       [sectionId]
     );
-    return rows;
+    return rows.map((r) => ({
+      ...r,
+      term1: r.term1 !== null && r.term1 !== undefined ? Number(r.term1) : "",
+      term2: r.term2 !== null && r.term2 !== undefined ? Number(r.term2) : "",
+      term3: r.term3 !== null && r.term3 !== undefined ? Number(r.term3) : "",
+    }));
   }
 }
 

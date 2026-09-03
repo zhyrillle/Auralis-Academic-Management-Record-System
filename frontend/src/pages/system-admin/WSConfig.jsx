@@ -24,7 +24,7 @@ const weightFields = ["writtenWork", "performanceTasks", "assessment"];
 const componentFieldByCode = {
   WW: "writtenWork",
   PT: "performanceTasks",
-  STE: "assessment",
+  QA: "assessment",
 };
 
 const defaultWeightsBySubjectCode = {

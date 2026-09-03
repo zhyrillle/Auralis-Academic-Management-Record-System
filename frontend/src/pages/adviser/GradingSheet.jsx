@@ -65,9 +65,9 @@ export default function GradingSheet({
         };
     }, [students, searchStudentQuery, filterDescriptor, filterRemark, calculateFinalGrade]);
 
-    const handleDownloadSheet = () => {
-        downloadGradingSheetCSV(activeSelectedClass, students, calculateFinalGrade, getDescriptor, getRemark);
-        triggerToast(`Downloaded CSV Grading Sheet for ${activeSelectedClass.gradeLevel} - ${activeSelectedClass.sectionName}`, "info");
+    const handleDownloadSheet = async () => {
+        await downloadGradingSheetCSV(activeSelectedClass, students, calculateFinalGrade, getDescriptor, getRemark, teacherName);
+        triggerToast(`Downloaded Excel Grading Sheet for ${activeSelectedClass.gradeLevel} - ${activeSelectedClass.sectionName}`, "info");
     };
 
     // Central modal pipeline interceptor
@@ -226,12 +226,14 @@ export default function GradingSheet({
                                 return (
                                     <tr key={stud.id} className="student-data-row">
                                         <td className="student-name-cell">
-                                            {stud.lastName}, {stud.firstName} {stud.middleName ? `${stud.middleName.charAt(0)}.` : ""}
+                                            <span className="student-full-name">
+                                                {stud.lastName}, {stud.firstName} {stud.middleName ? `${stud.middleName.charAt(0)}.` : ""}
+                                            </span>
                                             <span className="student-lrn">LRN: {stud.lrn}</span>
                                         </td>
-                                        <td className="grade-value-cell">{stud.term1}</td>
-                                        <td className="grade-value-cell">{stud.term2}</td>
-                                        <td className="grade-value-cell">{stud.term3}</td>
+                                        <td className="grade-value-cell">{stud.term1 !== undefined && stud.term1 !== null ? stud.term1 : ""}</td>
+                                        <td className="grade-value-cell">{stud.term2 !== undefined && stud.term2 !== null ? stud.term2 : ""}</td>
+                                        <td className="grade-value-cell">{stud.term3 !== undefined && stud.term3 !== null ? stud.term3 : ""}</td>
                                         <td className="final-grade-cell">{final}</td>
                                         <td className="descriptor-cell">{final && <span className={`badge ${getDescriptorClass(getDescriptor(final))}`}>{getDescriptor(final)}</span>}</td>
                                         <td className="remark-cell">{final && <span className={`badge ${getRemark(final) === "Passed" ? "badge-passed" : "badge-failed"}`}>{getRemark(final)}</span>}</td>
@@ -250,12 +252,14 @@ export default function GradingSheet({
                                 return (
                                     <tr key={stud.id} className="student-data-row">
                                         <td className="student-name-cell">
-                                            {stud.lastName}, {stud.firstName} {stud.middleName ? `${stud.middleName.charAt(0)}.` : ""}
+                                            <span className="student-full-name">
+                                                {stud.lastName}, {stud.firstName} {stud.middleName ? `${stud.middleName.charAt(0)}.` : ""}
+                                            </span>
                                             <span className="student-lrn">LRN: {stud.lrn}</span>
                                         </td>
-                                        <td className="grade-value-cell">{stud.term1}</td>
-                                        <td className="grade-value-cell">{stud.term2}</td>
-                                        <td className="grade-value-cell">{stud.term3}</td>
+                                        <td className="grade-value-cell">{stud.term1 !== undefined && stud.term1 !== null ? stud.term1 : ""}</td>
+                                        <td className="grade-value-cell">{stud.term2 !== undefined && stud.term2 !== null ? stud.term2 : ""}</td>
+                                        <td className="grade-value-cell">{stud.term3 !== undefined && stud.term3 !== null ? stud.term3 : ""}</td>
                                         <td className="final-grade-cell">{final}</td>
                                         <td className="descriptor-cell">{final && <span className={`badge ${getDescriptorClass(getDescriptor(final))}`}>{getDescriptor(final)}</span>}</td>
                                         <td className="remark-cell">{final && <span className={`badge ${getRemark(final) === "Passed" ? "badge-passed" : "badge-failed"}`}>{getRemark(final)}</span>}</td>

@@ -31,7 +31,7 @@ import {
 import { triggerClassRecordPrint } from "../../utils/exportClassRecordPdf";
 
 
-export default function ClassRecord({ activeClass, onBack, onAttendance }) {
+export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdateQuarterlyGrades }) {
   const navigate = useNavigate();
   const location = useLocation();
   const params = useParams();
