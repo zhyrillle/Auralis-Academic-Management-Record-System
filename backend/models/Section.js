@@ -168,9 +168,9 @@ class Section {
          s.last_name AS lastName,
          s.middle_name AS middleName,
          s.sex,
-         MAX(CASE WHEN sg.term IN ('T1', '1st Term', 'Quarter 1', '1') THEN sg.quarterly_grade END) AS term1,
-         MAX(CASE WHEN sg.term IN ('T2', '2nd Term', 'Quarter 2', '2') THEN sg.quarterly_grade END) AS term2,
-         MAX(CASE WHEN sg.term IN ('T3', '3rd Term', 'Quarter 3', '3') THEN sg.quarterly_grade END) AS term3
+         MAX(CASE WHEN UPPER(sg.term) IN ('T1', '1ST TERM', 'QUARTER 1', 'TERM 1', '1', 'QUARTER1', 'TERM1', 'FIRST TERM') THEN sg.quarterly_grade END) AS term1,
+         MAX(CASE WHEN UPPER(sg.term) IN ('T2', '2ND TERM', 'QUARTER 2', 'TERM 2', '2', 'QUARTER2', 'TERM2', 'SECOND TERM') THEN sg.quarterly_grade END) AS term2,
+         MAX(CASE WHEN UPPER(sg.term) IN ('T3', '3RD TERM', 'QUARTER 3', 'TERM 3', '3', 'QUARTER3', 'TERM3', 'THIRD TERM') THEN sg.quarterly_grade END) AS term3
        FROM STUDENT_SECTION ss
        INNER JOIN STUDENT s ON s.student_id = ss.student_id
        LEFT JOIN STUDENT_GRADE sg ON sg.student_id = s.student_id
