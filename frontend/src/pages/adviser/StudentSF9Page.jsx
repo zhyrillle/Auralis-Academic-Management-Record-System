@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { Eye, Download, FileText, Sparkles, Printer, FileSpreadsheet } from "lucide-react";
 import "../../styles/studentSF9.css";
 
@@ -6,6 +6,8 @@ import depedLogo from "../../assets/deped_logo.png";
 import gccnhsLogo from "../../assets/gccnhs_logo.png";
 import backIconUrl from "../../assets/backButton.svg";
 import { getStoredUser, normalizeRole } from "../../utils/auth";
+import { getStudentSF9Details } from "../../services/studentSf9Service";
+import Toast from "../../components/common/Toast.jsx";
 
 export default function StudentSF9Page({ student, onBack, userRole: propUserRole, initialTab }) {
   const storedUser = useMemo(() => getStoredUser(), []);
@@ -15,49 +17,113 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
 
   const [activeTab, setActiveTab] = useState(initialTab || (isAdviser ? "sf9" : "personal"));
   const [viewMode, setViewMode] = useState("spread"); // "spread", "front", "back"
+  const [sf9Data, setSf9Data] = useState(null);
+  const [loading, setLoading] = useState(false);
 
-  // Teacher Comments/Remarks state for terms
+  // Teacher Comments/Remarks state for terms with frontend localStorage persistence
+  const studentKey = student?.lrn || student?.student_id || student?.studentId || student?.id || "default";
+  const storageKey = `sf9_comments_${studentKey}`;
+
   const [comments, setComments] = useState({
-    term1: "Demonstrates consistent academic performance and actively participates in classroom discussions.",
-    term2: "Shows great progress in analytical tasks and exhibits exemplary leadership during group activities.",
-    term3: "Consistently maintains high standards in all learning areas. Promoted with commendable honors."
+    term1: "",
+    term2: "",
+    term3: ""
   });
 
-  // Dynamic / Mock student records matching official layout
-  const studentProfile = {
-    name: student?.name || "CRUZ, ALEX MATTHEW",
-    lrn: student?.lrn || "145783920614",
-    gradeLevel: student?.gradeLevel || "Grade 8 Mahogany",
-    grade: student?.grade || "8",
-    section: student?.section || "Mahogany",
-    program: student?.program || "Junior High School",
-    sex: student?.sex || "Male",
-    age: student?.age || 13,
-    schoolYear: student?.schoolYear || "2026 – 2027",
-    dateOfBirth: student?.dateOfBirth || "January 15, 2010",
-    address: student?.address || "123 Rizal Street, Brgy. San Isidro, Manila",
-    termGrade: student?.grade || 92,
-    honorStatus: student?.honorStatus || "With Honor",
-    daysPresent: student?.daysPresent || 202,
-    daysAbsent: student?.daysAbsent || 3,
-    missingActivities: student?.missingActivities || 2,
-    adviserName: student?.adviserName || "HARVEY BABIA",
-    principalName: student?.principalName || "HELEN C. TANASAS, PhD"
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
+        setComments(JSON.parse(saved));
+        return;
+      }
+    } catch (e) {
+      console.error("Error loading saved SF9 comments:", e);
+    }
+    setComments({ term1: "", term2: "", term3: "" });
+  }, [storageKey]);
+
+  const handleCommentChange = (term, val) => {
+    setComments(prev => {
+      const updated = { ...prev, [term]: val };
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(updated));
+      } catch (e) {
+        console.error("Error saving SF9 comments:", e);
+      }
+      return updated;
+    });
   };
 
-  // Official SF9 Subjects matching the new template
-  const [grades] = useState([
-    { code: "fil", name: "Filipino", t1: 90, t2: 91, t3: 92, final: 91, remark: "Passed" },
-    { code: "eng", name: "English", t1: 92, t2: 93, t3: 94, final: 93, remark: "Passed" },
-    { code: "math", name: "Mathematics", t1: 91, t2: 92, t3: 93, final: 92, remark: "Passed" },
-    { code: "sci", name: "Science", t1: 93, t2: 94, t3: 95, final: 94, remark: "Passed" },
-    { code: "ap", name: "Araling Panlipunan (AP)", t1: 89, t2: 90, t3: 91, final: 90, remark: "Passed" },
-    { code: "ve", name: "Values Education", t1: 92, t2: 93, t3: 94, final: 93, remark: "Passed" },
-    { code: "tle", name: "TLE", t1: 91, t2: 92, t3: 93, final: 92, remark: "Passed" },
-    { code: "mapeh", name: "MAPEH", t1: 90, t2: 91, t3: 92, final: 91, remark: "Passed", isHeader: true },
-    { code: "music_arts", name: "Music and Arts", t1: 90, t2: 91, t3: 92, final: "", remark: "", isSubSubject: true },
-    { code: "pe_health", name: "Physical Education and Health", t1: 91, t2: 92, t3: 93, final: "", remark: "", isSubSubject: true },
-  ]);
+  useEffect(() => {
+    let isMounted = true;
+    const identifier = student?.student_id || student?.studentId || student?.student_section_id || student?.studentSectionId || student?.lrn || student?.id;
+    if (identifier) {
+      setLoading(true);
+      getStudentSF9Details(identifier)
+        .then((data) => {
+          if (isMounted && data) {
+            setSf9Data(data);
+          }
+        })
+        .catch((err) => {
+          console.error("Failed to load dynamic SF9 data:", err);
+        })
+        .finally(() => {
+          if (isMounted) setLoading(false);
+        });
+    }
+    return () => { isMounted = false; };
+  }, [student]);
+
+  // Dynamic student records matching official layout
+  const studentProfile = useMemo(() => {
+    const fetched = sf9Data?.studentProfile || {};
+    return {
+      name: fetched.name || student?.name || "",
+      lrn: fetched.lrn || student?.lrn || "",
+      gradeLevel: fetched.gradeLevel || student?.gradeLevel || "",
+      grade: fetched.grade || student?.grade || "",
+      section: fetched.section || student?.section || "",
+      program: "", // Blank as requested
+      age: sf9Data ? (fetched.age ?? "") : (student?.age ?? ""),
+      schoolYear: fetched.schoolYear || student?.schoolYear || "",
+      dateOfBirth: fetched.dateOfBirth || student?.dateOfBirth || "",
+      address: fetched.address || student?.address || "",
+      termGrade: fetched.termGrade ?? student?.grade ?? "",
+      honorStatus: fetched.honorStatus || student?.honorStatus || "",
+      daysPresent: fetched.daysPresent ?? student?.daysPresent ?? 0,
+      daysAbsent: fetched.daysAbsent ?? student?.daysAbsent ?? 0,
+      missingActivities: fetched.missingActivities ?? student?.missingActivities ?? 0,
+      adviserName: fetched.adviserName || student?.adviserName || "",
+      principalName: (() => {
+        const raw = fetched.principalName || student?.principalName || "";
+        if (!raw) return "";
+        return (raw.toUpperCase().includes("PH.D") || raw.toUpperCase().includes("PHD")) ? raw : `${raw}, Ph.D.`;
+      })(),
+      admittedToGrade: "", // Leave blank as requested
+      eligibleForAdmission: "" // Leave blank as requested
+    };
+  }, [sf9Data, student]);
+
+  // Official SF9 Subjects
+  const grades = useMemo(() => {
+    if (sf9Data?.grades && sf9Data.grades.length > 0) {
+      return sf9Data.grades;
+    }
+    return [
+      { code: "fil", name: "Filipino", t1: "", t2: "", t3: "", final: "", remark: "" },
+      { code: "eng", name: "English", t1: "", t2: "", t3: "", final: "", remark: "" },
+      { code: "math", name: "Mathematics", t1: "", t2: "", t3: "", final: "", remark: "" },
+      { code: "sci", name: "Science", t1: "", t2: "", t3: "", final: "", remark: "" },
+      { code: "ap", name: "Araling Panlipunan (AP)", t1: "", t2: "", t3: "", final: "", remark: "" },
+      { code: "ve", name: "Values Education", t1: "", t2: "", t3: "", final: "", remark: "" },
+      { code: "tle", name: "TLE", t1: "", t2: "", t3: "", final: "", remark: "" },
+      { code: "mapeh", name: "MAPEH", t1: "", t2: "", t3: "", final: "", remark: "", isHeader: true },
+      { code: "music_arts", name: "Music and Arts", t1: "", t2: "", t3: "", final: "", remark: "", isSubSubject: true },
+      { code: "pe_health", name: "Physical Education and Health", t1: "", t2: "", t3: "", final: "", remark: "", isSubSubject: true },
+    ];
+  }, [sf9Data]);
 
   // Performance Descriptors matching the official layout
   const performanceDescriptors = [
@@ -69,21 +135,59 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
   ];
 
   // Official Attendance Record Data (11 months: Jun - Apr)
-  const attendanceData = {
-    months: ["Jun", "Jul", "Aug", "Sept", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr"],
-    classDays: [12, 21, 22, 20, 21, 20, 16, 21, 20, 21, 18],
-    daysPresent: [12, 21, 21, 20, 21, 19, 16, 21, 20, 20, 18],
-    daysAbsent: [0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0]
+  const attendanceData = useMemo(() => {
+    if (sf9Data?.attendanceData) {
+      return sf9Data.attendanceData;
+    }
+    return {
+      months: ["Jun", "Jul", "Aug", "Sept", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr"],
+      classDays: new Array(11).fill(0),
+      daysPresent: new Array(11).fill(0),
+      daysAbsent: new Array(11).fill(0)
+    };
+  }, [sf9Data]);
+
+  const [toast, setToast] = useState({ message: "", variant: "success" });
+
+  const showToast = (message, variant = "success") => {
+    setToast({ message, variant });
+    setTimeout(() => {
+      setToast({ message: "", variant: "success" });
+    }, 4000);
   };
 
   const getAttendanceTotal = (arr) => arr.reduce((acc, curr) => acc + curr, 0);
 
-  const handleCommentChange = (term, val) => {
-    setComments(prev => ({ ...prev, [term]: val }));
+  const getStudentLastName = () => {
+    if (student?.last_name) return String(student.last_name).trim().toUpperCase().replace(/[^A-Z0-9_-]/gi, "");
+    if (student?.lastName) return String(student.lastName).trim().toUpperCase().replace(/[^A-Z0-9_-]/gi, "");
+    if (studentProfile?.name) {
+      const nameStr = String(studentProfile.name).trim();
+      if (nameStr.includes(",")) {
+        const parts = nameStr.split(",");
+        const cleaned = parts[0].trim().toUpperCase().replace(/[^A-Z0-9_-]/gi, "");
+        if (cleaned) return cleaned;
+      } else {
+        const parts = nameStr.split(/\s+/);
+        const lastPart = parts[parts.length - 1].trim().toUpperCase().replace(/[^A-Z0-9_-]/gi, "");
+        if (lastPart) return lastPart;
+      }
+    }
+    return "STUDENT";
   };
 
   const handlePrint = () => {
+    const originalTitle = document.title;
+    const lastName = getStudentLastName();
+    const fileName = `${lastName}_SF9`;
+
+    document.title = fileName;
     window.print();
+
+    setTimeout(() => {
+      document.title = originalTitle;
+      showToast(`Successfully downloaded ${fileName}.pdf!`, "success");
+    }, 500);
   };
 
   return (
@@ -330,7 +434,7 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
                   <tr className="general-average-row">
                     <td colSpan="4" className="general-avg-label">General Average</td>
                     <td className="grade-num font-bold">{studentProfile.termGrade}</td>
-                    <td className="grade-remark font-bold">Passed</td>
+                    <td className="grade-remark font-bold">{studentProfile.termGrade !== "" ? (studentProfile.honorStatus || "Passed") : ""}</td>
                   </tr>
                 </tbody>
               </table>
@@ -478,11 +582,11 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
                 <div className="sf9-cert-form-lines">
                   <div className="sf9-cert-line">
                     <span className="sf9-cert-label">Admitted to Grade:</span>
-                    <span className="sf9-cert-underline">Grade 9</span>
+                    <span className="sf9-cert-underline">{studentProfile.admittedToGrade || ""}</span>
                   </div>
                   <div className="sf9-cert-line">
                     <span className="sf9-cert-label">Eligible for Admission to Grade:</span>
-                    <span className="sf9-cert-underline">Grade 9</span>
+                    <span className="sf9-cert-underline">{studentProfile.eligibleForAdmission || ""}</span>
                   </div>
                 </div>
 
@@ -644,9 +748,15 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
               </div>
             </div>
           )}
-
         </div>
       )}
+
+      {/* Confirmation Toast Notification */}
+      <Toast
+        message={toast.message}
+        variant={toast.variant}
+        onDismiss={() => setToast({ message: "", variant: "success" })}
+      />
     </div>
   );
 }
