@@ -399,7 +399,7 @@ export default function AdviserSections({ userRole: propUserRole }) {
       ) : (
         activeSelectedClass && (
           <GradingSheet
-            activeSelectedClass={activeactiveSelectedClass}
+            activeSelectedClass={activeactiveSelectedClass || activeSelectedClass}
             students={studentsBySection[activeSelectedClass.id] || []}
             onBack={() => setCurrentView("dashboard")}
             triggerToast={triggerToast}
