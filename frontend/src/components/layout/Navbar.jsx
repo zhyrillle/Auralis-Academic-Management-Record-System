@@ -10,7 +10,26 @@ export default function Navbar({
 
   // Dynamic breadcrumbs based on route
   const getBreadcrumbs = () => {
-    const paths = location.pathname.split("/").filter((x) => x);
+    const pathname = location.pathname;
+
+    // Check for Section Details or Class Record routes
+    const isSectionDetails =
+      pathname === "/adviser/sections/details" ||
+      pathname === "/teacher/sections/details" ||
+      pathname.endsWith("/sections/details");
+
+    const isClassRecord =
+      pathname.startsWith("/class-record") ||
+      pathname.includes("/class-record");
+
+    if (isSectionDetails || isClassRecord) {
+      return [
+        { label: "Adviser", link: "/adviser/dashboard" },
+        { label: "Sections", link: "/adviser/sections" },
+      ];
+    }
+
+    const paths = pathname.split("/").filter((x) => x);
 
     return paths.map((path, idx) => {
       // Human readable titles
@@ -61,7 +80,13 @@ export default function Navbar({
 
           {breadcrumbs.length > 0 && (
             <div className="navbar-breadcrumbs">
-              <span>Home</span>
+              <span
+                onClick={() => navigate("/")}
+                style={{ cursor: "pointer" }}
+                title="Go to Home"
+              >
+                Home
+              </span>
 
               {breadcrumbs.map((bc, index) => (
                 <span
@@ -73,7 +98,17 @@ export default function Navbar({
                   }}
                 >
                   <ChevronRight size={12} />
-                  <span>{bc.label}</span>
+                  {index < breadcrumbs.length - 1 ? (
+                    <span
+                      onClick={() => navigate(bc.link)}
+                      style={{ cursor: "pointer" }}
+                      title={`Go to ${bc.label}`}
+                    >
+                      {bc.label}
+                    </span>
+                  ) : (
+                    <span>{bc.label}</span>
+                  )}
                 </span>
               ))}
             </div>

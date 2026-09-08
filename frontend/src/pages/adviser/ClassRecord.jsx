@@ -40,35 +40,41 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdat
   const [activeTerm, setActiveTerm] = useState("T1");
   const userSelectedTermRef = useRef(false);
 
+  // Dynamic Class Context Resolution (from prop or router location state)
+  const effectiveClass = useMemo(() => {
+    return activeClass || location.state?.activeClass || {};
+  }, [activeClass, location.state]);
+
   // Dynamic Section ID Resolution
   const sectionId = useMemo(() => {
     return (
-      activeClass?.section_id ||
-      activeClass?.sectionId ||
+      effectiveClass?.section_id ||
+      effectiveClass?.sectionId ||
       params.sectionId ||
       params.id ||
       location.state?.section_id ||
-      location.state?.activeClass?.section_id ||
-      (typeof activeClass?.id === "number" ? activeClass.id : null) ||
-      (typeof activeClass?.id === "string" && !isNaN(Number(activeClass.id)) ? Number(activeClass.id) : null) ||
-      (typeof activeClass?.id === "string" && activeClass.id.startsWith("sec-") ? Number(activeClass.id.replace("sec-", "")) : null) ||
-      (typeof activeClass?.id === "string" && activeClass.id.startsWith("class-") ? Number(activeClass.id.replace("class-", "")) : null) ||
+      (typeof effectiveClass?.id === "number" ? effectiveClass.id : null) ||
+      (typeof effectiveClass?.id === "string" && !isNaN(Number(effectiveClass.id)) ? Number(effectiveClass.id) : null) ||
+      (typeof effectiveClass?.id === "string" && effectiveClass.id.startsWith("sec-") ? Number(effectiveClass.id.replace("sec-", "")) : null) ||
+      (typeof effectiveClass?.id === "string" && effectiveClass.id.startsWith("class-") ? Number(effectiveClass.id.replace("class-", "")) : null) ||
       null
     );
-  }, [activeClass, params, location]);
+  }, [effectiveClass, params, location]);
 
   // Subject offering ID resolution (falls back to sectionId if offering is not explicitly assigned)
   const subjectOfferingId = useMemo(() => {
     return (
-      activeClass?.subject_offering_id ||
-      activeClass?.offering_id ||
+      effectiveClass?.subject_offering_id ||
+      effectiveClass?.offering_id ||
+      effectiveClass?.subject_id ||
       params.subjectOfferingId ||
+      params.subjectId ||
       params.offeringId ||
       location.state?.subject_offering_id ||
       sectionId ||
       1
     );
-  }, [activeClass, params, location, sectionId]);
+  }, [effectiveClass, params, location, sectionId]);
 
   // Sync / Cloud state (Google Docs inspiration: "saved" | "saving" | "offline")
   const [syncStatus, setSyncStatus] = useState("saved");
@@ -622,15 +628,15 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdat
 
     const rawGradeLevel =
       classContextData?.grade_level_name ||
-      activeClass?.gradeLevel ||
-      activeClass?.grade ||
+      effectiveClass?.gradeLevel ||
+      effectiveClass?.grade ||
       "10";
     const gradeLevelDisplay = String(rawGradeLevel).replace(/[^0-9]/g, "") || String(rawGradeLevel);
 
     const rawSection =
       classContextData?.section_name ||
-      activeClass?.section_name ||
-      activeClass?.sectionName ||
+      effectiveClass?.section_name ||
+      effectiveClass?.sectionName ||
       "MAKAKALIKASAN";
     const gradeAndSection = `GRADE ${gradeLevelDisplay} - ${String(rawSection).toUpperCase()}`;
 
@@ -650,23 +656,23 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdat
       } catch {}
     }
     if (!rawTeacher || rawTeacher.toLowerCase().includes("subject teacher")) {
-      rawTeacher = activeClass?.teacher_name || activeClass?.teacherName || activeClass?.adviser || "";
+      rawTeacher = effectiveClass?.teacher_name || effectiveClass?.teacherName || effectiveClass?.adviser || "";
     }
     const teacherName = rawTeacher ? String(rawTeacher).toUpperCase() : "0";
 
     const rawSubject =
       classContextData?.subject_name ||
-      activeClass?.subject_name ||
-      activeClass?.subjectName ||
-      activeClass?.subject ||
+      effectiveClass?.subject_name ||
+      effectiveClass?.subjectName ||
+      effectiveClass?.subject ||
       "";
     const subjectName = rawSubject ? String(rawSubject).toUpperCase() : "0";
 
-    const region = (classContextData?.region || activeClass?.region || "Region X");
-    const division = (classContextData?.division || activeClass?.division || "GINGOOG");
-    const schoolName = (classContextData?.school_name || activeClass?.school_name || "GINGOOG CITY COMPREHENSIVE NHS");
-    const schoolId = (classContextData?.school_code || activeClass?.school_code || activeClass?.schoolId || "304130");
-    const schoolYear = (classContextData?.school_year_label || activeClass?.school_year || activeClass?.schoolYear || "2026-2027");
+    const region = (classContextData?.region || effectiveClass?.region || "Region X");
+    const division = (classContextData?.division || effectiveClass?.division || "GINGOOG");
+    const schoolName = (classContextData?.school_name || effectiveClass?.school_name || "GINGOOG CITY COMPREHENSIVE NHS");
+    const schoolId = (classContextData?.school_code || effectiveClass?.school_code || effectiveClass?.schoolId || "304130");
+    const schoolYear = (classContextData?.school_year_label || effectiveClass?.school_year || effectiveClass?.schoolYear || "2026-2027");
 
     return {
       region,
@@ -684,7 +690,7 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdat
       section: rawSection,
       activeTerm,
     };
-  }, [classContextData, activeClass, activeTerm]);
+  }, [classContextData, effectiveClass, activeTerm]);
 
   // Handle Examinations Score Change
   const handleExamScoreChange = (studentId, examKey, value, maxScore, assessmentId) => {
@@ -1175,7 +1181,7 @@ const formatToISODate = (val) => {
   };
 
   const isAvailable = activeTerm === "T1" || activeTerm === "T2" || activeTerm === "T3";
-  const sectionName = activeClass?.sectionName || activeClass?.section_name || "Mahogany";
+  const sectionName = effectiveClass?.sectionName || effectiveClass?.section_name || "Mahogany";
 
   return (
     <div className="class-record-page">
@@ -1184,7 +1190,7 @@ const formatToISODate = (val) => {
       ============================================================ */}
       <div className="class-record-header">
         <div className="class-record-title-area">
-          <button className="class-record-back-btn" onClick={onBack} type="button" aria-label="Back">
+          <button className="class-record-back-btn" onClick={onBack || (() => navigate(-1))} type="button" aria-label="Back">
             <img src={backIconUrl} alt="Back" />
           </button>
           <h1>Assigned Classes</h1>
@@ -1250,9 +1256,9 @@ const formatToISODate = (val) => {
               isLocked
                 ? undefined
                 : onAttendance
-                ? () => onAttendance(activeClass)
+                ? () => onAttendance(effectiveClass)
                 : () => {
-                    navigate("/adviser/attendance", { state: { activeClass } });
+                    navigate("/adviser/attendance", { state: { activeClass: effectiveClass } });
                   }
             }
             disabled={isLocked}

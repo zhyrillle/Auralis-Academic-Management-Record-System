@@ -11,9 +11,9 @@ export default function AdviserEntryProgressGauge({ progress = 0, loading = fals
 
   const safeProgress = Math.min(100, Math.max(0, Number(progress) || 0));
 
-  // Semi-circle SVG parameters
-  const radius = 80;
-  const strokeWidth = 14;
+  // Semi-circle SVG parameters matching reference design
+  const radius = 100;
+  const strokeWidth = 20;
   // Arc length for 180 degree semi-circle = Math.PI * radius
   const arcLength = Math.PI * radius;
   const strokeDashoffset = arcLength * (1 - safeProgress / 100);
@@ -22,22 +22,22 @@ export default function AdviserEntryProgressGauge({ progress = 0, loading = fals
     <div className="adviser-dashboard__entry-gauge-card">
       <div className="adviser-dashboard__gauge-wrapper">
         <svg
-          viewBox="0 0 200 120"
+          viewBox="0 0 260 145"
           className="adviser-dashboard__gauge-svg"
           aria-hidden="true"
         >
           {/* Background Track (Grey) */}
           <path
-            d="M 20 100 A 80 80 0 0 1 180 100"
+            d="M 30 125 A 100 100 0 0 1 230 125"
             fill="none"
-            stroke="#E3E6EB"
+            stroke="#E5E9F0"
             strokeWidth={strokeWidth}
             strokeLinecap="round"
           />
 
           {/* Progress Path (Golden Yellow) */}
           <path
-            d="M 20 100 A 80 80 0 0 1 180 100"
+            d="M 30 125 A 100 100 0 0 1 230 125"
             fill="none"
             stroke="#ECC13C"
             strokeWidth={strokeWidth}

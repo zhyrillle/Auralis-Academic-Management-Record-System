@@ -273,7 +273,7 @@ router.post("/login", async (req, res) => {
       INNER JOIN SECTION sec ON sec.section_id = saa.section_id
       INNER JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
       LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = saa.school_year_id
-      WHERE saa.user_id = ? AND (sy.status IN ('ACTIVE', 'ONGOING') OR sy.school_year_id IS NULL)
+      WHERE saa.user_id = ?
       ORDER BY saa.adviser_assignment_id DESC
       LIMIT 1
       `,

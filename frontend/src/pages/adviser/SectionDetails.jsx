@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { AlertCircle, ArrowDownNarrowWide, Eye, RefreshCw, Users } from "lucide-react";
 
 import EmptyState from "../../components/common/EmptyState.jsx";
@@ -52,7 +53,29 @@ export default function SectionDetails({
   onBack,
   onViewStudent,
 }) {
-  const activeSection = section || (student?.sectionName ? student : null);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  const querySection = useMemo(() => {
+    const secId = searchParams.get("sectionId");
+    const asgnId = searchParams.get("assignmentId");
+    const asgnType = searchParams.get("assignmentType");
+    if (!secId && !asgnId) return null;
+    return {
+      section_id: secId ? Number(secId) || secId : null,
+      sectionId: secId ? Number(secId) || secId : null,
+      assignmentId: asgnId ? Number(asgnId) || asgnId : null,
+      assignmentType: asgnType || undefined,
+    };
+  }, [searchParams]);
+
+  const activeSection =
+    section ||
+    location.state?.section ||
+    location.state?.activeClass ||
+    (student?.sectionName ? student : null) ||
+    querySection;
   const currentUser = useMemo(() => getStoredUser(), []);
   const userId = currentUser?.user_id || currentUser?.id;
 
@@ -67,7 +90,11 @@ export default function SectionDetails({
     || (isSectionAdviser ? "advisory" : "teaching");
   const assignmentId = activeSection?.assignmentId
     || activeSection?.adviser_assignment_id
-    || activeSection?.teacher_assignment_id;
+    || activeSection?.teacher_assignment_id
+    || activeSection?.assignment_id
+    || activeSection?.section_id
+    || activeSection?.sectionId
+    || activeSection?.id;
 
   const [data, setData] = useState(null);
   const [initialLoading, setInitialLoading] = useState(
@@ -220,7 +247,7 @@ export default function SectionDetails({
     );
   }
 
-  const backAction = onBack || (() => window.history.back());
+  const backAction = onBack || (() => navigate(-1));
 
   if (!activeSection || !assignmentId) {
     return (
