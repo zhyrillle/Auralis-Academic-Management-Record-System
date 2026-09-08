@@ -34,6 +34,7 @@ import GradeReopeningRequest from "./pages/adviser/GradeReopeningRequest";
 import SectionDetails from "./pages/adviser/SectionDetails";
 import AdviserNotifications from "./pages/adviser/AdviserNotifications";
 import AttendanceSheet from "./pages/adviser/AttendanceSheet";
+import ClassRecord from "./pages/adviser/ClassRecord";
 import { getStoredUser, setStoredUser } from "./utils/auth";
 
 export default function App() {
@@ -151,12 +152,40 @@ export default function App() {
           <Route path="/adviser/performance" element={<PerformanceReport />} />
           <Route path="/adviser/feedback" element={<AdviserFeedback />} />
           <Route path="/adviser/request" element={<GradeReopeningRequest />} />
+          <Route
+            path="/class-record/:sectionId/:subjectId"
+            element={<ClassRecord />}
+          />
+          <Route
+            path="/class-record/:sectionId"
+            element={<ClassRecord />}
+          />
+          <Route
+            path="/adviser/class-record/:sectionId/:subjectId"
+            element={<ClassRecord />}
+          />
+          <Route
+            path="/adviser/class-record/:sectionId"
+            element={<ClassRecord />}
+          />
 
           {/* 5. Subject Teacher */}
           <Route path="/teacher/dashboard" element={<TeacherDashboard />} />
           <Route
             path="/teacher/sections"
             element={<AdviserSections userRole="teacher" />}
+          />
+          <Route
+            path="/teacher/sections/details"
+            element={<SectionDetails userRole="teacher" />}
+          />
+          <Route
+            path="/teacher/class-record/:sectionId/:subjectId"
+            element={<ClassRecord />}
+          />
+          <Route
+            path="/teacher/class-record/:sectionId"
+            element={<ClassRecord />}
           />
           <Route
             path="/teacher/notifications"

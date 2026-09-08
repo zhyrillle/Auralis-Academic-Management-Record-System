@@ -119,7 +119,7 @@ class SectionDetailsService {
          INNER JOIN SECTION sec ON sec.section_id = saa.section_id
          INNER JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
          INNER JOIN SCHOOL_YEAR sy ON sy.school_year_id = saa.school_year_id
-         WHERE saa.adviser_assignment_id = ?
+         WHERE (saa.adviser_assignment_id = ? OR (saa.section_id = ? AND saa.user_id = ?))
          LIMIT 1`
       : `SELECT
            ta.teacher_assignment_id AS assignment_id,
@@ -141,10 +141,10 @@ class SectionDetailsService {
          INNER JOIN SECTION sec ON sec.section_id = so.section_id
          INNER JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
          INNER JOIN SCHOOL_YEAR sy ON sy.school_year_id = so.school_year_id
-         WHERE ta.teacher_assignment_id = ?
+         WHERE (ta.teacher_assignment_id = ? OR (so.section_id = ? AND ta.user_id = ?))
          LIMIT 1`;
 
-    const [rows] = await database.execute(sql, [assignmentId]);
+    const [rows] = await database.execute(sql, [assignmentId, assignmentId, userId]);
     if (!rows.length) {
       throw serviceError(404, "ASSIGNMENT_NOT_FOUND", "The requested assignment was not found.");
     }

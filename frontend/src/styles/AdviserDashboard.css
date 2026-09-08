@@ -66,7 +66,7 @@
   display: grid;
   grid-template-columns: 1fr 340px;
   gap: 24px;
-  align-items: start;
+  align-items: stretch;
 }
 
 .adviser-dashboard__top-left-col {
@@ -79,6 +79,7 @@
   display: flex;
   flex-direction: column;
   gap: 20px;
+  height: 100%;
 }
 
 /* Welcome Banner */
@@ -90,7 +91,7 @@
   border-radius: 16px;
   padding: 24px 32px;
   position: relative;
-  overflow: hidden;
+  min-height: 130px;
   box-shadow: 0 4px 12px rgba(245, 206, 88, 0.2);
 }
 
@@ -115,17 +116,22 @@
 }
 
 .adviser-dashboard__banner-art-wrap {
+  position: absolute;
+  right: 28px;
+  bottom: 0;
+  height: 100%;
+  max-height: 140px;
   display: flex;
   align-items: flex-end;
   justify-content: flex-end;
-  height: 130px;
+  pointer-events: none;
 }
 
 .adviser-dashboard__banner-img {
-  height: 145px;
+  height: 180px;
   width: auto;
   object-fit: contain;
-  margin-bottom: -15px;
+  margin-bottom: 0;
   filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.08));
 }
 
@@ -288,20 +294,25 @@
 
 /* Entry Progress Gauge Card */
 .adviser-dashboard__entry-gauge-card {
-  background: linear-gradient(145deg, #FFF6DA 0%, #FEE8A2 100%);
+  background: linear-gradient(to bottom, #FFFFFF 0%, #FFF3B0 100%);
   border-radius: 16px;
-  padding: 24px 20px;
+  border: 1px solid rgba(254, 227, 134, 0.6);
+  padding: 28px 20px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 3px 10px rgba(254, 232, 162, 0.3);
+  box-shadow: 0 4px 16px rgba(245, 206, 88, 0.16);
+  flex: 1;
+  min-height: 280px;
+  box-sizing: border-box;
 }
 
 .adviser-dashboard__gauge-wrapper {
   position: relative;
-  width: 190px;
-  height: 110px;
+  width: 250px;
+  max-width: 92%;
+  height: 140px;
   display: flex;
   justify-content: center;
 }
@@ -314,7 +325,7 @@
 
 .adviser-dashboard__gauge-center-text {
   position: absolute;
-  bottom: 0;
+  bottom: 8px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -323,18 +334,19 @@
 }
 
 .adviser-dashboard__gauge-percent {
-  font-size: 2rem;
+  font-size: 2.35rem;
   font-weight: 800;
-  color: #DE9B10;
-  letter-spacing: -0.03em;
+  color: #ECC13C;
+  letter-spacing: -0.02em;
 }
 
 .adviser-dashboard__gauge-label {
-  margin-top: 12px;
-  font-size: 1.05rem;
-  font-weight: 700;
-  color: #D29410;
+  margin-top: 16px;
+  font-size: 1.12rem;
+  font-weight: 800;
+  color: #C89118;
   letter-spacing: -0.01em;
+  text-align: center;
 }
 
 /* --------------------------------------------------------------------------
@@ -355,12 +367,16 @@
 }
 
 .adviser-dashboard__class-cards-track {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  display: flex;
   gap: 16px;
+  overflow-x: auto;
+  padding-bottom: 12px;
+  scrollbar-width: thin;
 }
 
 .adviser-dashboard__class-card {
+  flex: 0 0 260px;
+  min-width: 260px;
   background: #FFFFFF;
   border-radius: 14px;
   padding: 18px 20px;
@@ -442,8 +458,8 @@
   margin-top: 6px;
   width: 100%;
   padding: 10px;
-  border-radius: 10px;
-  background-color: #C69524;
+  border-radius: 8px;
+  background-color: #C69A24;
   color: #FFFFFF;
   font-size: 0.82rem;
   font-weight: 700;
@@ -720,6 +736,103 @@
   overflow: visible;
 }
 
+/* Bar chart body with right vertical pills */
+.adviser-dashboard__bar-chart-body-with-pills {
+  display: flex;
+  align-items: flex-start;
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  gap: 12px;
+}
+
+.adviser-dashboard__vbar-container {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  position: relative;
+}
+
+.adviser-dashboard__term-pills-vertical {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.adviser-dashboard__term-circle-pill {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid #CBD5E1;
+  background: #FFFFFF;
+  color: #64748B;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.adviser-dashboard__term-circle-pill:hover,
+.adviser-dashboard__term-circle-pill.active {
+  border-color: #183256;
+  background-color: #183256;
+  color: #FFFFFF;
+}
+
+/* Dual HBar layout */
+.adviser-dashboard__hbar-dual-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+.adviser-dashboard__hbar-sub-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.adviser-dashboard__hbar-sub-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4px;
+}
+
+.adviser-dashboard__hbar-sub-title {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #1E293B;
+}
+
+.adviser-dashboard__hbar-sub-badge {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background-color: #EFF6FF;
+  color: #2563EB;
+}
+
+.adviser-dashboard__hbar-sub-badge.advisory {
+  background-color: #FEF3C7;
+  color: #B45309;
+}
+
+.adviser-dashboard__hbar-divider {
+  height: 1px;
+  background-color: #EDF2F7;
+  margin: 4px 0;
+}
+
 /* --------------------------------------------------------------------------
    Test / Exam Result Analysis
    -------------------------------------------------------------------------- */
@@ -821,13 +934,35 @@
   font-size: 0.88rem;
   font-weight: 600;
   color: #1E293B;
+  min-height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.adviser-dashboard__test-chart-hover-text {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #1E40AF;
+  background: #EFF6FF;
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 1px solid #BFDBFE;
+}
+
+.adviser-dashboard__hbar-section-subtitle {
+  font-size: 0.78rem;
+  color: #64748B;
+  margin-top: 2px;
+  display: block;
 }
 
 /* Right Panel for Test/Exam */
 .adviser-dashboard__test-exam-right {
-  background-color: #C3C7CE;
-  border-top-left-radius: 40px;
-  padding: 24px 28px;
+  background-color: #C0CEDD;
+  border-radius: 20px;
+  margin: 10px;
+  padding: 24px 24px;
   display: flex;
   flex-direction: column;
   gap: 16px;

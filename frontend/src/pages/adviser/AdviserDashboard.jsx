@@ -1,9 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  Search,
-  Filter,
-  Bell,
   FileText,
   Download,
   AlertCircle,
@@ -22,6 +19,7 @@ import {
   getTestExamAnalysis,
   getSubjectAreaPerformance,
   getCoreValuesComparison,
+  checkAdviserRole,
 } from "../../services/adviserDashboardService";
 
 // Custom Adviser Visual Components
@@ -39,11 +37,17 @@ import AdviserCoreValuesDonut from "../../components/adviser/AdviserCoreValuesDo
 import bannerArt from "../../assets/adviser-banner-illustration.png";
 
 // Scoped Stylesheet
-import "./AdviserDashboard.css";
+import "../../styles/AdviserDashboard.css";
 
 export default function AdviserDashboard() {
   const navigate = useNavigate();
   const [currentUser, setCurrentUser] = useState(() => getStoredUser());
+
+  // Role flag: strictly determined by presence in SECTION_ADVISER_ASSIGNMENT
+  const [isAdviser, setIsAdviser] = useState(() => {
+    const user = getStoredUser();
+    return Boolean(user?.is_adviser || user?.isAdviser);
+  });
 
   // Loading states
   const [loading, setLoading] = useState(true);
@@ -85,6 +89,15 @@ export default function AdviserDashboard() {
   const [subjectAreaData, setSubjectAreaData] = useState([]);
   const [coreValuesData, setCoreValuesData] = useState([]);
 
+  // Compute available sections list from teacher's assigned classes
+  const availableSections = useMemo(() => {
+    const sectionNames = assignedClasses
+      .map((c) => c.sectionName || c.section)
+      .filter(Boolean);
+    const unique = Array.from(new Set(sectionNames));
+    return ["All", ...unique];
+  }, [assignedClasses]);
+
   // Dynamic greeting calculation
   const getGreeting = () => {
     if (!currentUser) return "Hello!";
@@ -94,14 +107,18 @@ export default function AdviserDashboard() {
     return firstName ? `Hello, ${firstName}!` : "Hello!";
   };
 
-  // Initial Load
+  // Initial Load & Role Determination
   useEffect(() => {
     let isMounted = true;
 
     async function loadDashboardData() {
       setLoading(true);
+      const userId = currentUser?.user_id || currentUser?.id;
+
       try {
+        // Parallel fetch for dashboard metrics and role status
         const [
+          roleRes,
           sumRes,
           classesRes,
           attendRes,
@@ -111,18 +128,28 @@ export default function AdviserDashboard() {
           subjAreaRes,
           coreRes,
         ] = await Promise.all([
-          getAdviserSummary(),
-          getAssignedClasses(),
-          getAttendanceTrend(),
-          getSubjectPerformance(subjectTerm),
-          getGradeRangeDistribution(radarSection, radarTerm),
-          getTestExamAnalysis(testTerm, testSection),
-          getSubjectAreaPerformance(subjectAreaTerm),
-          getCoreValuesComparison(coreValuesTerm),
+          checkAdviserRole(userId),
+          getAdviserSummary(userId),
+          getAssignedClasses(userId),
+          getAttendanceTrend(userId),
+          getSubjectPerformance(subjectTerm, userId),
+          getGradeRangeDistribution(radarSection, radarTerm, userId),
+          getTestExamAnalysis(testTerm, testSection, userId),
+          getSubjectAreaPerformance(subjectAreaTerm, userId),
+          getCoreValuesComparison(coreValuesTerm, userId),
         ]);
 
         if (isMounted) {
-          setSummary(sumRes);
+          // Strictly apply SECTION_ADVISER_ASSIGNMENT determination
+          const resolvedIsAdviser =
+            typeof sumRes?.isAdviser === "boolean"
+              ? sumRes.isAdviser
+              : typeof roleRes?.isAdviser === "boolean"
+              ? roleRes.isAdviser
+              : false;
+
+          setIsAdviser(resolvedIsAdviser);
+          setSummary(sumRes || {});
           setAssignedClasses(classesRes || []);
           setAttendanceTrend(attendRes || []);
           setSubjectPerformance(subjPerfRes || []);
@@ -145,43 +172,106 @@ export default function AdviserDashboard() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [currentUser]);
 
   // Update Subject Performance on term switch
   useEffect(() => {
-    getSubjectPerformance(subjectTerm).then((res) =>
+    const userId = currentUser?.user_id || currentUser?.id;
+    getSubjectPerformance(subjectTerm, userId).then((res) =>
       setSubjectPerformance(res || []),
     );
-  }, [subjectTerm]);
+  }, [subjectTerm, currentUser]);
 
   // Update Radar on term / section switch
   useEffect(() => {
-    getGradeRangeDistribution(radarSection, radarTerm).then((res) =>
+    const userId = currentUser?.user_id || currentUser?.id;
+    getGradeRangeDistribution(radarSection, radarTerm, userId).then((res) =>
       setGradeDistribution(res || [0, 0, 0, 0, 0]),
     );
-  }, [radarSection, radarTerm]);
+  }, [radarSection, radarTerm, currentUser]);
 
   // Update Test/Exam on term / section switch
   useEffect(() => {
-    getTestExamAnalysis(testTerm, testSection).then(setTestExamData);
-  }, [testTerm, testSection]);
+    const userId = currentUser?.user_id || currentUser?.id;
+    getTestExamAnalysis(testTerm, testSection, userId).then(setTestExamData);
+  }, [testTerm, testSection, currentUser]);
 
-  // Update Subject Area on term switch
+  // Update Subject Area on term switch (Advisers only)
   useEffect(() => {
-    getSubjectAreaPerformance(subjectAreaTerm).then((res) =>
+    if (!isAdviser) return;
+    const userId = currentUser?.user_id || currentUser?.id;
+    getSubjectAreaPerformance(subjectAreaTerm, userId).then((res) =>
       setSubjectAreaData(res || []),
     );
-  }, [subjectAreaTerm]);
+  }, [subjectAreaTerm, currentUser, isAdviser]);
 
-  // Update Core Values on term switch
+  // Update Core Values on term switch (Advisers only)
   useEffect(() => {
-    getCoreValuesComparison(coreValuesTerm).then((res) =>
+    if (!isAdviser) return;
+    const userId = currentUser?.user_id || currentUser?.id;
+    getCoreValuesComparison(coreValuesTerm, userId).then((res) =>
       setCoreValuesData(res || []),
     );
-  }, [coreValuesTerm]);
+  }, [coreValuesTerm, currentUser, isAdviser]);
 
-  const handleContinueEntry = (sectionName) => {
-    navigate("/adviser/sections", { state: { targetSection: sectionName } });
+  const handleContinueEntry = (selected) => {
+    const cls =
+      typeof selected === "object"
+        ? selected
+        : assignedClasses.find(
+            (c) => c.section === selected || c.sectionName === selected,
+          ) || { section_name: selected };
+    const sectionId = cls.section_id || 1;
+    const subjectId = cls.subject_offering_id || cls.subject_id || 1;
+    navigate(`/class-record/${sectionId}/${subjectId}`, {
+      state: { activeClass: cls },
+    });
+  };
+
+  const handleSelectSection = (item) => {
+    if (!item) return;
+    const matchingClass =
+      assignedClasses.find(
+        (c) =>
+          c.section_id === item?.section_id ||
+          c.section === item?.section ||
+          c.sectionName === item?.section,
+      ) || item;
+
+    const assignmentType =
+      item.assignmentType ||
+      matchingClass.assignmentType ||
+      (item.isAdviser ? "advisory" : "teaching");
+
+    const assignmentId =
+      item.assignmentId ||
+      matchingClass.assignmentId ||
+      item.adviser_assignment_id ||
+      item.teacher_assignment_id ||
+      matchingClass.adviser_assignment_id ||
+      matchingClass.teacher_assignment_id ||
+      matchingClass.section_id ||
+      item.section_id;
+
+    const targetSection = {
+      ...matchingClass,
+      ...item,
+      assignmentType,
+      assignmentId,
+      section_id: item.section_id || matchingClass.section_id,
+      sectionName: item.sectionName || item.section || matchingClass.sectionName || matchingClass.section,
+    };
+
+    navigate(
+      `/adviser/sections/details?sectionId=${encodeURIComponent(
+        targetSection.section_id || ""
+      )}&assignmentId=${encodeURIComponent(assignmentId || "")}&assignmentType=${encodeURIComponent(
+        assignmentType
+      )}`,
+      {
+        state: { section: targetSection, activeClass: targetSection },
+      }
+    );
   };
 
   const handleDownloadDoc = (docType) => {
@@ -189,40 +279,13 @@ export default function AdviserDashboard() {
   };
 
   return (
-    <div className="adviser-dashboard__container">
-      {/* 1. Header with Title & Action Icons */}
+    <div className={`adviser-dashboard__container ${!isAdviser ? "adviser-dashboard__container--teacher-view" : ""}`}>
+      {/* 1. Header with Title */}
       <header className="adviser-dashboard__header">
         <h1 className="adviser-dashboard__title">Dashboard</h1>
-        <div className="adviser-dashboard__header-actions">
-          <button
-            type="button"
-            className="adviser-dashboard__icon-btn"
-            title="Search"
-            aria-label="Search"
-          >
-            <Search size={18} />
-          </button>
-          <button
-            type="button"
-            className="adviser-dashboard__icon-btn"
-            title="Filter"
-            aria-label="Filter"
-          >
-            <Filter size={18} />
-          </button>
-          <button
-            type="button"
-            className="adviser-dashboard__icon-btn"
-            title="Notifications"
-            aria-label="Notifications"
-            onClick={() => navigate("/adviser/notifications")}
-          >
-            <Bell size={18} />
-          </button>
-        </div>
       </header>
 
-      {/* 2. Top Hero Grid (Banner, Stat Cards, Quick Actions, Gauge, Subject Bar Chart) */}
+      {/* 2. Top Hero Grid (Banner, Stat Cards, Quick Actions [Adviser only], Gauge, Subject Bar Chart) */}
       <section className="adviser-dashboard__top-grid">
         {/* Left Column */}
         <div className="adviser-dashboard__top-left-col">
@@ -262,77 +325,80 @@ export default function AdviserDashboard() {
             <AdviserStatCard
               title="At-Risk Students"
               value={summary?.atRiskStudentsCount ?? 0}
-              subtitle={summary?.atRiskStudentsNote ?? "Across all sections"}
+              subtitle={summary?.atRiskStudentsNote ?? "Across assigned classes"}
               subtitleType="default"
               accentColor="#EF4444"
               loading={loading}
             />
           </div>
 
-          {/* Subject Performance Breakdown Bar Chart */}
+          {/* Section Performance Breakdown Bar Chart */}
           <AdviserSubjectBarChart
             data={subjectPerformance}
             term={subjectTerm}
             onTermChange={setSubjectTerm}
+            onSelectSection={handleSelectSection}
             loading={loading}
           />
         </div>
 
         {/* Right Column */}
         <div className="adviser-dashboard__top-right-col">
-          {/* Quick Actions Card */}
-          <div className="adviser-dashboard__quick-actions-card">
-            <h3 className="adviser-dashboard__quick-actions-title">
-              Quick actions
-            </h3>
-            <p className="adviser-dashboard__quick-actions-desc">
-              Generate official government documents
-            </p>
+          {/* Quick Actions Card (Advisers only) */}
+          {isAdviser && (
+            <div className="adviser-dashboard__quick-actions-card">
+              <h3 className="adviser-dashboard__quick-actions-title">
+                Quick actions
+              </h3>
+              <p className="adviser-dashboard__quick-actions-desc">
+                Generate official government documents
+              </p>
 
-            <div className="adviser-dashboard__quick-action-items">
-              <div className="adviser-dashboard__doc-item">
-                <div className="adviser-dashboard__doc-left">
-                  <FileText size={18} className="adviser-dashboard__doc-icon" />
-                  <span className="adviser-dashboard__doc-name">
-                    SF9 Report Card
-                  </span>
+              <div className="adviser-dashboard__quick-action-items">
+                <div className="adviser-dashboard__doc-item">
+                  <div className="adviser-dashboard__doc-left">
+                    <FileText size={18} className="adviser-dashboard__doc-icon" />
+                    <span className="adviser-dashboard__doc-name">
+                      SF9 Report Card
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className="adviser-dashboard__doc-download-btn"
+                    title="Download SF9 Report Card"
+                    onClick={() => handleDownloadDoc("SF9 Report Card")}
+                  >
+                    <Download size={15} />
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  className="adviser-dashboard__doc-download-btn"
-                  title="Download SF9 Report Card"
-                  onClick={() => handleDownloadDoc("SF9 Report Card")}
-                >
-                  <Download size={15} />
-                </button>
+
+                <div className="adviser-dashboard__doc-item">
+                  <div className="adviser-dashboard__doc-left">
+                    <FileText size={18} className="adviser-dashboard__doc-icon" />
+                    <span className="adviser-dashboard__doc-name">
+                      SF10 Permanent Record
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className="adviser-dashboard__doc-download-btn"
+                    title="Download SF10 Permanent Record"
+                    onClick={() => handleDownloadDoc("SF10 Permanent Record")}
+                  >
+                    <Download size={15} />
+                  </button>
+                </div>
               </div>
 
-              <div className="adviser-dashboard__doc-item">
-                <div className="adviser-dashboard__doc-left">
-                  <FileText size={18} className="adviser-dashboard__doc-icon" />
-                  <span className="adviser-dashboard__doc-name">
-                    SF10 Permanent Record
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  className="adviser-dashboard__doc-download-btn"
-                  title="Download SF10 Permanent Record"
-                  onClick={() => handleDownloadDoc("SF10 Permanent Record")}
-                >
-                  <Download size={15} />
-                </button>
-              </div>
+              <button
+                type="button"
+                className="adviser-dashboard__bulk-download-btn"
+                onClick={() => handleDownloadDoc("Bulk Documents")}
+              >
+                Bulk Download
+              </button>
             </div>
-
-            <button
-              type="button"
-              className="adviser-dashboard__bulk-download-btn"
-              onClick={() => handleDownloadDoc("Bulk Documents")}
-            >
-              Bulk Download
-            </button>
-          </div>
+          )}
 
           {/* Entry Progress Semi-Circle Gauge Card */}
           <AdviserEntryProgressGauge
@@ -351,8 +417,9 @@ export default function AdviserDashboard() {
             <div className="adviser-dashboard__class-cards-track">
               {assignedClasses.map((cls) => (
                 <AdviserClassCard
-                  key={cls.id || cls.section}
-                  section={cls.section}
+                  key={cls.id || cls.section_id || cls.section}
+                  cls={cls}
+                  section={cls.section || cls.sectionName}
                   subject={cls.subject}
                   studentCount={cls.studentCount}
                   entryProgress={cls.entryProgress}
@@ -397,6 +464,7 @@ export default function AdviserDashboard() {
           onTermChange={setRadarTerm}
           section={radarSection}
           onSectionChange={setRadarSection}
+          sections={availableSections}
           loading={loading}
         />
 
@@ -433,26 +501,29 @@ export default function AdviserDashboard() {
           onTermChange={setTestTerm}
           section={testSection}
           onSectionChange={setTestSection}
+          sections={availableSections}
           loading={loading}
         />
       </section>
 
-      {/* 6. Bottom Row: Subject Area Performance & Core Values Donut */}
-      <section className="adviser-dashboard__bottom-grid">
-        <AdviserSubjectAreaHBarChart
-          data={subjectAreaData}
-          term={subjectAreaTerm}
-          onTermChange={setSubjectAreaTerm}
-          loading={loading}
-        />
+      {/* 6. Bottom Row: Subject Area Performance & Core Values Donut (Advisers only) */}
+      {isAdviser && (
+        <section className="adviser-dashboard__bottom-grid">
+          <AdviserSubjectAreaHBarChart
+            data={subjectAreaData}
+            term={subjectAreaTerm}
+            onTermChange={setSubjectAreaTerm}
+            loading={loading}
+          />
 
-        <AdviserCoreValuesDonut
-          data={coreValuesData}
-          term={coreValuesTerm}
-          onTermChange={setCoreValuesTerm}
-          loading={loading}
-        />
-      </section>
+          <AdviserCoreValuesDonut
+            data={coreValuesData}
+            term={coreValuesTerm}
+            onTermChange={setCoreValuesTerm}
+            loading={loading}
+          />
+        </section>
+      )}
     </div>
   );
 }
