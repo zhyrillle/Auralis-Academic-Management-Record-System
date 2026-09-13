@@ -119,8 +119,9 @@ function getGradeDescriptor(grade, style = 'advancing') {
  * @param {Array} params.assessments - list of active assessments [{ assessment_id, component_code, max_score, activity_name }]
  * @param {Object} params.scores - map of assessment_id -> raw_score for this student
  * @param {Object} params.weights - component weights { WW: 20, PT: 50, EX: 30 }
+ * @param {Object} [params.examConfig] - optional examination sub-weights & HPS { st1Weight, st2Weight, teWeight }
  */
-function calculateStudentGrades({ assessments = [], scores = {}, weights = {} }) {
+function calculateStudentGrades({ assessments = [], scores = {}, weights = {}, examConfig = {} }) {
   const componentWeights = {
     WW: weights.WW !== undefined ? Number(weights.WW) : DEFAULT_JHS_WEIGHTS.WW,
     PT: weights.PT !== undefined ? Number(weights.PT) : DEFAULT_JHS_WEIGHTS.PT,
@@ -130,6 +131,22 @@ function calculateStudentGrades({ assessments = [], scores = {}, weights = {} })
       ? Number(weights.QA)
       : (weights.STE !== undefined ? Number(weights.STE) : DEFAULT_JHS_WEIGHTS.EX),
   };
+
+  const defaultExamConfig = {
+    st1Weight: 30,
+    st2Weight: 30,
+    teWeight: 40,
+  };
+  const effectiveExamConfig = { ...defaultExamConfig, ...(examConfig || {}) };
+  if (
+    Number(effectiveExamConfig.st1Weight) === 20 &&
+    Number(effectiveExamConfig.st2Weight) === 20 &&
+    Number(effectiveExamConfig.teWeight) === 60
+  ) {
+    effectiveExamConfig.st1Weight = 30;
+    effectiveExamConfig.st2Weight = 30;
+    effectiveExamConfig.teWeight = 40;
+  }
 
   const components = {
     WW: { totalRaw: 0, totalHps: 0, ps: 0, ws: 0, hasInput: false, isFailing: false },
@@ -170,12 +187,18 @@ function calculateStudentGrades({ assessments = [], scores = {}, weights = {} })
     }
 
     if (compCode === 'QA' && (isST1 || isST2 || isTE)) {
+      const subWeight = isST1
+        ? Number(effectiveExamConfig.st1Weight !== undefined ? effectiveExamConfig.st1Weight : 30)
+        : isST2
+        ? Number(effectiveExamConfig.st2Weight !== undefined ? effectiveExamConfig.st2Weight : 30)
+        : Number(effectiveExamConfig.teWeight !== undefined ? effectiveExamConfig.teWeight : 40);
+
       examItems.push({
         type: isST1 ? 'ST1' : isST2 ? 'ST2' : 'TE',
         raw: numRaw,
         hasVal,
         maxScore,
-        weight: isST1 ? 30 : isST2 ? 30 : 40,
+        weight: subWeight,
       });
     }
   });

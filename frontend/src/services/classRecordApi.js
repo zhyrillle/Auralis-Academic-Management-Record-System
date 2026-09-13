@@ -10,10 +10,13 @@ const parseResponse = async (response) => {
   return data;
 };
 
-export const getClassRecord = async (subjectOfferingId, term = "T1", sectionId = null) => {
+export const getClassRecord = async (subjectOfferingId, term = "T1", sectionId = null, mapehComponent = null) => {
   let url = `${API_BASE_URL}/class-record/${subjectOfferingId}?term=${encodeURIComponent(term)}`;
   if (sectionId) {
     url += `&section_id=${encodeURIComponent(sectionId)}`;
+  }
+  if (mapehComponent) {
+    url += `&mapeh_component=${encodeURIComponent(mapehComponent)}`;
   }
   const res = await fetch(url);
   return parseResponse(res);
@@ -44,34 +47,47 @@ export const deleteAssessment = async (assessmentId) => {
   return parseResponse(res);
 };
 
-export const saveScoresBatch = async ({ subject_offering_id, term = "T1", scores }) => {
+export const saveScoresBatch = async ({ subject_offering_id, term = "T1", scores, mapeh_component = null, examConfig = null }) => {
+  const payload = {
+    subject_offering_id,
+    term,
+    scores,
+  };
+  if (mapeh_component) {
+    payload.mapeh_component = mapeh_component;
+  }
+  if (examConfig) {
+    payload.examConfig = examConfig;
+  }
   const res = await fetch(`${API_BASE_URL}/scores/batch`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      subject_offering_id,
-      term,
-      scores,
-    }),
+    body: JSON.stringify(payload),
   });
   return parseResponse(res);
 };
 
-export const calculateAndSaveGrades = async (subject_offering_id, term = "T1") => {
+export const calculateAndSaveGrades = async (subject_offering_id, term = "T1", mapeh_component = null) => {
+  const payload = { subject_offering_id, term };
+  if (mapeh_component) payload.mapeh_component = mapeh_component;
   const res = await fetch(`${API_BASE_URL}/class-record/calculate-and-save`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ subject_offering_id, term }),
+    body: JSON.stringify(payload),
   });
   return parseResponse(res);
 };
 
-export const getExportClassRecordUrl = (subjectOfferingId, term = "T1") => {
-  return `${API_BASE_URL}/class-record/${subjectOfferingId}/export?term=${encodeURIComponent(term)}`;
+export const getExportClassRecordUrl = (subjectOfferingId, term = "T1", mapehComponent = null) => {
+  let url = `${API_BASE_URL}/class-record/${subjectOfferingId}/export?term=${encodeURIComponent(term)}`;
+  if (mapehComponent) {
+    url += `&mapeh_component=${encodeURIComponent(mapehComponent)}`;
+  }
+  return url;
 };
 
-export const downloadClassRecordExcel = async (subjectOfferingId, term = "T1") => {
-  const url = getExportClassRecordUrl(subjectOfferingId, term);
+export const downloadClassRecordExcel = async (subjectOfferingId, term = "T1", mapehComponent = null) => {
+  const url = getExportClassRecordUrl(subjectOfferingId, term, mapehComponent);
   const res = await fetch(url);
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
@@ -79,7 +95,7 @@ export const downloadClassRecordExcel = async (subjectOfferingId, term = "T1") =
   }
   const blob = await res.blob();
   const disposition = res.headers.get("content-disposition");
-  let filename = `Class_Record_${subjectOfferingId}_${term}.xlsx`;
+  let filename = `Class_Record_${subjectOfferingId}_${term}${mapehComponent ? `_${mapehComponent}` : ""}.xlsx`;
   if (disposition && disposition.includes("filename=")) {
     const match = disposition.match(/filename="?([^";]+)"?/);
     if (match && match[1]) filename = match[1];
