@@ -311,7 +311,8 @@ export function triggerClassRecordPrint({
     .replace(/^_+|_+$/g, "");
   const safeSubj = rawSubj || "subject";
 
-  const safeFilename = `class_record_${termCode}_${safeSec}_${safeSubj}`;
+  const mapehSuffix = metadata?.isMapeh ? `_${(metadata.mapehComponent || "MA").toLowerCase()}` : "";
+  const safeFilename = `class_record_${termCode}_${safeSec}_${safeSubj}${mapehSuffix}`;
 
   const wwHalf1 = Math.max(1, Math.floor((wwCols.length + 3) / 2));
   const wwHalf2 = Math.max(1, (wwCols.length + 3) - wwHalf1);
@@ -465,7 +466,7 @@ export function triggerClassRecordPrint({
       border: 1px solid #000 !important;
     }
     .term-title-cell {
-      font-size: 13pt;
+      font-size: ${metadata?.isMapeh ? "10pt" : "13pt"};
       font-weight: 800;
       text-transform: uppercase;
       letter-spacing: 0.5px;

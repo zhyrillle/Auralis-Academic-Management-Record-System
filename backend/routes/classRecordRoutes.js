@@ -83,6 +83,28 @@ function normalizeAssessmentType(rawType) {
 }
 
 /**
+ * Detects if a subject is MAPEH by checking subject_name or subject_code.
+ */
+function isMapehSubject(subjectName, subjectCode) {
+  const name = String(subjectName || '').toLowerCase();
+  const code = String(subjectCode || '').toLowerCase();
+  return name.includes('mapeh') || code.includes('mapeh');
+}
+
+/**
+ * Normalizes MAPEH component to 'MA' (Music & Arts) or 'PEH' (PE & Health).
+ * Defaults to 'MA'.
+ */
+function normalizeMapehComponent(rawComponent) {
+  if (!rawComponent) return 'MA';
+  const str = String(rawComponent).trim().toUpperCase();
+  if (str === 'PEH' || str === 'PE' || str.includes('HEALTH') || str.includes('PHYSICAL')) {
+    return 'PEH';
+  }
+  return 'MA';
+}
+
+/**
  * Resolves the school's currently active ACADEMIC_TERM.
  * 1. Query ACADEMIC_TERM where CURRENT_TIMESTAMP() falls between starts_at and ends_at for the school_year_id.
  * 2. Fallback to status = 'ongoing' or 'open'.
@@ -251,14 +273,25 @@ async function ensureGradeSheet(subjectOfferingId, schoolYearId, termName) {
  * Ensures default assessment columns exist for a grade sheet so every column
  * (Written Work, Performance Task, and Quarterly Assessment) always has a valid assessment_id in DB.
  */
-async function ensureDefaultActivitiesForSheet(gradeSheetId, subjectId, schoolYearId) {
+async function ensureDefaultActivitiesForSheet(gradeSheetId, subjectId, schoolYearId, mapehComponent = null) {
+  if (mapehComponent) {
+    // Safeguard: backfill any legacy unassigned activities for this grade sheet to 'MA'
+    await db.execute(
+      `UPDATE GRADE_ACTIVITY SET mapeh_component = 'MA' WHERE grade_sheet_id = ? AND mapeh_component IS NULL`,
+      [gradeSheetId]
+    );
+  }
+
+  const compCondition = mapehComponent ? 'ga.mapeh_component = ?' : 'ga.mapeh_component IS NULL';
+  const compParams = mapehComponent ? [gradeSheetId, mapehComponent] : [gradeSheetId];
+
   const [existing] = await db.execute(
     `SELECT ga.activity_id, ga.activity_name, ct.component_code
      FROM GRADE_ACTIVITY ga
      LEFT JOIN SUBJECT_COMPONENT_WEIGHT scw ON scw.subj_comp_weight_id = ga.subj_comp_weight_id
      LEFT JOIN COMPONENT_TYPE ct ON ct.component_type_id = scw.component_type_id
-     WHERE ga.grade_sheet_id = ? AND (ga.status = 'ACTIVE' OR ga.status IS NULL)`,
-    [gradeSheetId]
+     WHERE ga.grade_sheet_id = ? AND ${compCondition} AND (ga.status = 'ACTIVE' OR ga.status IS NULL)`,
+    compParams
   );
 
   let hasWW = false;
@@ -314,9 +347,9 @@ async function ensureDefaultActivitiesForSheet(gradeSheetId, subjectId, schoolYe
     ];
     for (const ww of defaultWW) {
       await db.execute(
-        `INSERT INTO GRADE_ACTIVITY (grade_sheet_id, subj_comp_weight_id, activity_name, highest_possible_score, activity_date, status)
-         VALUES (?, ?, ?, ?, ?, 'ACTIVE')`,
-        [gradeSheetId, wwWeightId, ww.name, ww.max, today]
+        `INSERT INTO GRADE_ACTIVITY (grade_sheet_id, subj_comp_weight_id, mapeh_component, activity_name, highest_possible_score, activity_date, status)
+         VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE')`,
+        [gradeSheetId, wwWeightId, mapehComponent || null, ww.name, ww.max, today]
       );
     }
   }
@@ -328,9 +361,9 @@ async function ensureDefaultActivitiesForSheet(gradeSheetId, subjectId, schoolYe
     ];
     for (const pt of defaultPT) {
       await db.execute(
-        `INSERT INTO GRADE_ACTIVITY (grade_sheet_id, subj_comp_weight_id, activity_name, highest_possible_score, activity_date, status)
-         VALUES (?, ?, ?, ?, ?, 'ACTIVE')`,
-        [gradeSheetId, ptWeightId, pt.name, pt.max, today]
+        `INSERT INTO GRADE_ACTIVITY (grade_sheet_id, subj_comp_weight_id, mapeh_component, activity_name, highest_possible_score, activity_date, status)
+         VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE')`,
+        [gradeSheetId, ptWeightId, mapehComponent || null, pt.name, pt.max, today]
       );
     }
   }
@@ -347,25 +380,25 @@ async function ensureDefaultActivitiesForSheet(gradeSheetId, subjectId, schoolYe
   // Ensure ST1, ST2, and TE all exist individually
   if (!hasST1) {
     await db.execute(
-      `INSERT INTO GRADE_ACTIVITY (grade_sheet_id, subj_comp_weight_id, activity_name, highest_possible_score, activity_date, status)
-       VALUES (?, ?, 'Summative Test 1', 25, ?, 'ACTIVE')`,
-      [gradeSheetId, qaWeightId, today]
+      `INSERT INTO GRADE_ACTIVITY (grade_sheet_id, subj_comp_weight_id, mapeh_component, activity_name, highest_possible_score, activity_date, status)
+       VALUES (?, ?, ?, 'Summative Test 1', 25, ?, 'ACTIVE')`,
+      [gradeSheetId, qaWeightId, mapehComponent || null, today]
     );
   }
 
   if (!hasST2) {
     await db.execute(
-      `INSERT INTO GRADE_ACTIVITY (grade_sheet_id, subj_comp_weight_id, activity_name, highest_possible_score, activity_date, status)
-       VALUES (?, ?, 'Summative Test 2', 25, ?, 'ACTIVE')`,
-      [gradeSheetId, qaWeightId, today]
+      `INSERT INTO GRADE_ACTIVITY (grade_sheet_id, subj_comp_weight_id, mapeh_component, activity_name, highest_possible_score, activity_date, status)
+       VALUES (?, ?, ?, 'Summative Test 2', 25, ?, 'ACTIVE')`,
+      [gradeSheetId, qaWeightId, mapehComponent || null, today]
     );
   }
 
   if (!hasTE) {
     await db.execute(
-      `INSERT INTO GRADE_ACTIVITY (grade_sheet_id, subj_comp_weight_id, activity_name, highest_possible_score, activity_date, status)
-       VALUES (?, ?, 'Term Exam', 50, ?, 'ACTIVE')`,
-      [gradeSheetId, qaWeightId, today]
+      `INSERT INTO GRADE_ACTIVITY (grade_sheet_id, subj_comp_weight_id, mapeh_component, activity_name, highest_possible_score, activity_date, status)
+       VALUES (?, ?, ?, 'Term Exam', 50, ?, 'ACTIVE')`,
+      [gradeSheetId, qaWeightId, mapehComponent || null, today]
     );
   }
 }
@@ -573,8 +606,13 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
       ? 'CLOSED_TERM'
       : (lockStatus === 'TERM_LOCKED' ? 'TERM_LOCKED' : (isLocked ? 'LOCKED' : null));
 
+    // MAPEH sub-component resolution
+    const isMapeh = isMapehSubject(classContext.subject_name, classContext.subject_code);
+    const rawComponent = req.query.mapeh_component || req.query.component;
+    const activeMapehComponent = isMapeh ? normalizeMapehComponent(rawComponent) : null;
+
     // Ensure default assessment activities (WW, PT, QA) exist for this sheet
-    await ensureDefaultActivitiesForSheet(gradeSheetId, subjectId, schoolYearId);
+    await ensureDefaultActivitiesForSheet(gradeSheetId, subjectId, schoolYearId, activeMapehComponent);
 
     // 3. Fetch component weights from SUBJECT_COMPONENT_WEIGHT + COMPONENT_TYPE
     let weights = { ...DEFAULT_JHS_WEIGHTS };
@@ -607,12 +645,16 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
     }
 
     // 4. Fetch active assessment columns from GRADE_ACTIVITY for this grade_sheet_id
+    const activityCondition = isMapeh ? 'ga.mapeh_component = ?' : 'ga.mapeh_component IS NULL';
+    const activityParams = isMapeh ? [gradeSheetId, activeMapehComponent] : [gradeSheetId];
+
     const [activityRows] = await db.execute(
       `SELECT 
          ga.activity_id,
          ga.activity_id AS assessment_id,
          ga.grade_sheet_id,
          ga.subj_comp_weight_id,
+         ga.mapeh_component,
          ga.activity_name,
          ga.highest_possible_score AS max_score,
          ga.activity_date,
@@ -623,9 +665,9 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
        FROM GRADE_ACTIVITY ga
        LEFT JOIN SUBJECT_COMPONENT_WEIGHT scw ON scw.subj_comp_weight_id = ga.subj_comp_weight_id
        LEFT JOIN COMPONENT_TYPE ct ON ct.component_type_id = scw.component_type_id
-       WHERE ga.grade_sheet_id = ? AND (ga.status = 'ACTIVE' OR ga.status IS NULL)
+       WHERE ga.grade_sheet_id = ? AND ${activityCondition} AND (ga.status = 'ACTIVE' OR ga.status IS NULL)
        ORDER BY ga.activity_id ASC`,
-      [gradeSheetId]
+      activityParams
     );
 
     const assessments = activityRows.map((a) => {
@@ -636,6 +678,7 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
         activity_id: a.activity_id,
         grade_sheet_id: a.grade_sheet_id,
         subj_comp_weight_id: a.subj_comp_weight_id,
+        mapeh_component: a.mapeh_component || activeMapehComponent,
         component_type_id: a.component_type_id,
         component_code: code,
         type: normType,
@@ -746,6 +789,7 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
     });
 
     // 8. Build student payload with computed DepEd grades
+    const gradesToAutoSync = [];
     const computedStudents = studentRows.map((student) => {
       const studentSecId = student.student_section_id;
       const studentId = student.student_id;
@@ -761,22 +805,42 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
         te: (teActId && rawScores[teActId] !== undefined && rawScores[teActId] !== null) ? rawScores[teActId] : (rawScores.te ?? rawScores.qa ?? ''),
       };
 
+      const defaultExamConfig = { st1Weight: 30, st2Weight: 30, teWeight: 40 };
       const summary = calculateStudentSummary({
         assessments,
         scores: rawScores,
         weights,
+        examConfig: defaultExamConfig,
       });
 
       const savedGrade = gradeMap[studentId];
-      const initialGrade = savedGrade?.initial_grade !== null && savedGrade?.initial_grade !== undefined
-        ? Number(savedGrade.initial_grade)
-        : summary.initialGrade;
+      // Single Source of Truth Alignment: computed summary from component scores is authoritative
+      const initialGrade = summary.initialGrade !== null
+        ? summary.initialGrade
+        : (savedGrade?.initial_grade !== null && savedGrade?.initial_grade !== undefined ? Number(savedGrade.initial_grade) : null);
 
-      const quarterlyGrade = savedGrade?.quarterly_grade !== null && savedGrade?.quarterly_grade !== undefined
-        ? Number(savedGrade.quarterly_grade)
-        : summary.quarterlyGrade;
+      const quarterlyGrade = summary.quarterlyGrade !== null
+        ? summary.quarterlyGrade
+        : (savedGrade?.quarterly_grade !== null && savedGrade?.quarterly_grade !== undefined ? Number(savedGrade.quarterly_grade) : null);
 
-      const remarks = savedGrade?.remarks || summary.remarks;
+      const remarks = summary.remarks || savedGrade?.remarks;
+
+      if (
+        summary.initialGrade !== null &&
+        (!savedGrade ||
+          Number(savedGrade.initial_grade) !== Number(summary.initialGrade) ||
+          Number(savedGrade.quarterly_grade) !== Number(summary.quarterlyGrade))
+      ) {
+        gradesToAutoSync.push({
+          subject_offering_id: actualOfferingId,
+          student_id: student.student_id,
+          student_section_id: student.student_section_id || null,
+          term: termCode,
+          initial_grade: summary.initialGrade,
+          quarterly_grade: summary.quarterlyGrade,
+          remarks: summary.remarks,
+        });
+      }
 
       return {
         student_id: student.student_id,
@@ -796,8 +860,27 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
       };
     });
 
+    if (gradesToAutoSync.length > 0) {
+      for (const g of gradesToAutoSync) {
+        await db.execute(
+          `INSERT INTO STUDENT_GRADE (
+            subject_offering_id, student_id, student_section_id, term, initial_grade, quarterly_grade, remarks, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, NOW(6), NOW(6))
+          ON DUPLICATE KEY UPDATE
+            student_section_id = VALUES(student_section_id),
+            initial_grade = VALUES(initial_grade),
+            quarterly_grade = VALUES(quarterly_grade),
+            remarks = VALUES(remarks),
+            updated_at = NOW(6)`,
+          [g.subject_offering_id, g.student_id, g.student_section_id, g.term, g.initial_grade, g.quarterly_grade, g.remarks]
+        );
+      }
+    }
+
     res.json({
       subject_offering_id: subjectOfferingId,
+      is_mapeh: isMapeh,
+      mapeh_component: activeMapehComponent,
       term: termCode,
       term_name: termName,
       active_term: activeOngoingTermCode,
@@ -842,6 +925,7 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
       component_weights: weights,
       component_types: componentTypes,
       total_highest_possible_scores: totalHps,
+      exam_config: { st1Weight: 30, st2Weight: 30, teWeight: 40 },
       assessments,
       students: computedStudents,
     });
@@ -868,6 +952,7 @@ async function handleCreateAssessment(req, res) {
       max_score,
       highest_possible_score,
       activity_date,
+      mapeh_component,
     } = req.body;
 
     if (!subject_offering_id) {
@@ -886,7 +971,10 @@ async function handleCreateAssessment(req, res) {
     );
 
     const [offering] = await db.execute(
-      'SELECT subject_id, section_id, school_year_id FROM SUBJECT_OFFERING WHERE subject_offering_id = ?',
+      `SELECT so.subject_id, so.section_id, so.school_year_id, s.subject_name, s.subject_code
+       FROM SUBJECT_OFFERING so
+       LEFT JOIN SUBJECT s ON s.subject_id = so.subject_id
+       WHERE so.subject_offering_id = ?`,
       [subject_offering_id]
     );
 
@@ -895,6 +983,9 @@ async function handleCreateAssessment(req, res) {
     }
 
     const { school_year_id, subject_id } = offering[0];
+    const isMapeh = isMapehSubject(offering[0].subject_name, offering[0].subject_code);
+    const finalMapehComponent = isMapeh ? normalizeMapehComponent(mapeh_component || req.body.component) : null;
+
     const activeTerm = await resolveActiveAcademicTerm(school_year_id);
     const sheetData = await ensureGradeSheet(subject_offering_id, school_year_id, termName);
     const { gradeSheetId, lockStatus, termId: sheetTermId } = sheetData;
@@ -949,24 +1040,59 @@ async function handleCreateAssessment(req, res) {
       }
     }
 
-    const defaultTitle = activity_name || title || `${defaultTypeName}`;
+    // Component-Aware Activity Counter: filter count strictly by active mapeh_component ('MA' vs 'PEH')
+    let componentActivityCount = 0;
+    if (isMapeh) {
+      const [countRows] = await db.execute(
+        `SELECT COUNT(*) AS total 
+         FROM GRADE_ACTIVITY 
+         WHERE grade_sheet_id = ? 
+           AND subj_comp_weight_id = ? 
+           AND mapeh_component = ? 
+           AND (status = 'ACTIVE' OR status IS NULL)`,
+        [gradeSheetId, targetSubjCompWeightId, finalMapehComponent]
+      );
+      componentActivityCount = Number(countRows[0]?.total || 0);
+    } else {
+      const [countRows] = await db.execute(
+        `SELECT COUNT(*) AS total 
+         FROM GRADE_ACTIVITY 
+         WHERE grade_sheet_id = ? 
+           AND subj_comp_weight_id = ? 
+           AND mapeh_component IS NULL 
+           AND (status = 'ACTIVE' OR status IS NULL)`,
+        [gradeSheetId, targetSubjCompWeightId]
+      );
+      componentActivityCount = Number(countRows[0]?.total || 0);
+    }
+
+    const nextActivityIndex = componentActivityCount + 1;
+    let defaultTitle = activity_name || title;
+    if (!defaultTitle || String(defaultTitle).trim() === '' || defaultTitle.trim().toLowerCase() === defaultTypeName.toLowerCase()) {
+      defaultTitle = `${defaultTypeName} ${nextActivityIndex}`;
+    }
+
     const parsedDate = (activity_date && String(activity_date).trim() !== '') ? String(activity_date).trim() : null;
 
     const [insertResult] = await db.execute(
       `INSERT INTO GRADE_ACTIVITY (
         grade_sheet_id, 
         subj_comp_weight_id, 
+        mapeh_component,
         activity_name, 
         highest_possible_score, 
         activity_date, 
         status
-      ) VALUES (?, ?, ?, ?, ?, 'ACTIVE')`,
-      [gradeSheetId, targetSubjCompWeightId, defaultTitle, numericMaxScore, parsedDate]
+      ) VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE')`,
+      [gradeSheetId, targetSubjCompWeightId, finalMapehComponent, defaultTitle, numericMaxScore, parsedDate]
     );
 
     const activityId = insertResult.insertId;
 
-    // Fetch updated component total HPS
+    // Fetch updated component total HPS for the active sub-component
+    const activityCondition = isMapeh ? 'ga.mapeh_component = ?' : 'ga.mapeh_component IS NULL';
+    const activityParams = isMapeh ? [gradeSheetId, finalMapehComponent] : [gradeSheetId];
+
     const [allActivities] = await db.execute(
       `SELECT 
          ga.activity_id,
@@ -976,8 +1102,8 @@ async function handleCreateAssessment(req, res) {
        FROM GRADE_ACTIVITY ga
        LEFT JOIN SUBJECT_COMPONENT_WEIGHT scw ON scw.subj_comp_weight_id = ga.subj_comp_weight_id
        LEFT JOIN COMPONENT_TYPE ct ON ct.component_type_id = scw.component_type_id
-       WHERE ga.grade_sheet_id = ? AND (ga.status = 'ACTIVE' OR ga.status IS NULL)`,
-      [gradeSheetId]
+       WHERE ga.grade_sheet_id = ? AND ${activityCondition} AND (ga.status = 'ACTIVE' OR ga.status IS NULL)`,
+      activityParams
     );
 
     const totalHps = { WW: 0, PT: 0, QA: 0 };
@@ -995,12 +1121,14 @@ async function handleCreateAssessment(req, res) {
         activity_id: activityId,
         grade_sheet_id: gradeSheetId,
         subj_comp_weight_id: targetSubjCompWeightId,
+        mapeh_component: finalMapehComponent,
         component_type_id: targetComponentTypeId,
         component_code: code,
         type: normalizedType,
         assessment_type: normalizedType,
         activity_name: defaultTitle,
         title: defaultTitle,
+        activity_number: nextActivityIndex,
         max_score: numericMaxScore,
         highest_possible_score: numericMaxScore,
         activity_date: parsedDate,
@@ -1107,6 +1235,12 @@ async function handleUpdateAssessment(req, res) {
       updateValues.push(status);
     }
 
+    if (req.body.mapeh_component !== undefined) {
+      const compVal = req.body.mapeh_component ? normalizeMapehComponent(req.body.mapeh_component) : null;
+      updateFields.push('mapeh_component = ?');
+      updateValues.push(compVal);
+    }
+
     if (updateFields.length === 0) {
       return res.status(400).json({ error: 'No fields to update.' });
     }
@@ -1127,6 +1261,7 @@ async function handleUpdateAssessment(req, res) {
       assessment: {
         assessment_id: rows[0].activity_id,
         activity_id: rows[0].activity_id,
+        mapeh_component: rows[0].mapeh_component || null,
         activity_name: rows[0].activity_name,
         max_score: Number(rows[0].highest_possible_score),
         highest_possible_score: Number(rows[0].highest_possible_score),
@@ -1199,7 +1334,7 @@ router.delete('/assessments/:id', async (req, res) => {
 async function handleBatchScores(req, res) {
   const connection = await db.getConnection();
   try {
-    const { subject_offering_id, term = 'T1', scores } = req.body;
+    const { subject_offering_id, term = 'T1', scores, examConfig } = req.body;
 
     if (!subject_offering_id) {
       return res.status(400).json({ error: 'subject_offering_id is required.' });
@@ -1208,7 +1343,10 @@ async function handleBatchScores(req, res) {
     const { termCode, termName } = normalizeTerm(term);
 
     const [offeringRows] = await connection.execute(
-      `SELECT subject_id, section_id, school_year_id FROM SUBJECT_OFFERING WHERE subject_offering_id = ?`,
+      `SELECT so.subject_id, so.section_id, so.school_year_id, s.subject_name, s.subject_code
+       FROM SUBJECT_OFFERING so
+       LEFT JOIN SUBJECT s ON s.subject_id = so.subject_id
+       WHERE so.subject_offering_id = ?`,
       [subject_offering_id]
     );
 
@@ -1217,6 +1355,10 @@ async function handleBatchScores(req, res) {
     }
 
     const { school_year_id, subject_id, section_id } = offeringRows[0];
+    const isMapeh = isMapehSubject(offeringRows[0].subject_name, offeringRows[0].subject_code);
+    const rawComponent = req.body.mapeh_component || req.body.component;
+    const activeMapehComponent = isMapeh ? normalizeMapehComponent(rawComponent) : null;
+
     const activeTerm = await resolveActiveAcademicTerm(school_year_id);
     const sheetData = await ensureGradeSheet(subject_offering_id, school_year_id, termName);
     const { gradeSheetId, lockStatus, termId: sheetTermId } = sheetData;
@@ -1272,13 +1414,16 @@ async function handleBatchScores(req, res) {
     }
 
     // Fetch active activities for this sheet to resolve QA/EX and match IDs
+    const actCondition = isMapeh ? 'ga.mapeh_component = ?' : 'ga.mapeh_component IS NULL';
+    const actParams = isMapeh ? [gradeSheetId, activeMapehComponent] : [gradeSheetId];
+
     const [sheetActivities] = await connection.execute(
       `SELECT ga.activity_id, ga.activity_name, ga.highest_possible_score, ct.component_code
        FROM GRADE_ACTIVITY ga
        LEFT JOIN SUBJECT_COMPONENT_WEIGHT scw ON scw.subj_comp_weight_id = ga.subj_comp_weight_id
        LEFT JOIN COMPONENT_TYPE ct ON ct.component_type_id = scw.component_type_id
-       WHERE ga.grade_sheet_id = ? AND (ga.status = 'ACTIVE' OR ga.status IS NULL)`,
-      [gradeSheetId]
+       WHERE ga.grade_sheet_id = ? AND ${actCondition} AND (ga.status = 'ACTIVE' OR ga.status IS NULL)`,
+      actParams
     );
 
     const hpsByActivityId = {};
@@ -1311,9 +1456,9 @@ async function handleBatchScores(req, res) {
 
       if (!st1ActivityId) {
         const [insSt1] = await connection.execute(
-          `INSERT INTO GRADE_ACTIVITY (grade_sheet_id, subj_comp_weight_id, activity_name, highest_possible_score, activity_date, status)
-           VALUES (?, ?, 'Summative Test 1', 25, NOW(), 'ACTIVE')`,
-          [gradeSheetId, targetWeightId]
+          `INSERT INTO GRADE_ACTIVITY (grade_sheet_id, subj_comp_weight_id, mapeh_component, activity_name, highest_possible_score, activity_date, status)
+           VALUES (?, ?, ?, 'Summative Test 1', 25, NOW(), 'ACTIVE')`,
+          [gradeSheetId, targetWeightId, activeMapehComponent]
         );
         st1ActivityId = insSt1.insertId;
         hpsByActivityId[st1ActivityId] = 25;
@@ -1321,9 +1466,9 @@ async function handleBatchScores(req, res) {
 
       if (!st2ActivityId) {
         const [insSt2] = await connection.execute(
-          `INSERT INTO GRADE_ACTIVITY (grade_sheet_id, subj_comp_weight_id, activity_name, highest_possible_score, activity_date, status)
-           VALUES (?, ?, 'Summative Test 2', 25, NOW(), 'ACTIVE')`,
-          [gradeSheetId, targetWeightId]
+          `INSERT INTO GRADE_ACTIVITY (grade_sheet_id, subj_comp_weight_id, mapeh_component, activity_name, highest_possible_score, activity_date, status)
+           VALUES (?, ?, ?, 'Summative Test 2', 25, NOW(), 'ACTIVE')`,
+          [gradeSheetId, targetWeightId, activeMapehComponent]
         );
         st2ActivityId = insSt2.insertId;
         hpsByActivityId[st2ActivityId] = 25;
@@ -1338,9 +1483,9 @@ async function handleBatchScores(req, res) {
           teActivityId = qaActivityId;
         } else {
           const [insTe] = await connection.execute(
-            `INSERT INTO GRADE_ACTIVITY (grade_sheet_id, subj_comp_weight_id, activity_name, highest_possible_score, activity_date, status)
-             VALUES (?, ?, 'Term Exam', 50, NOW(), 'ACTIVE')`,
-            [gradeSheetId, targetWeightId]
+            `INSERT INTO GRADE_ACTIVITY (grade_sheet_id, subj_comp_weight_id, mapeh_component, activity_name, highest_possible_score, activity_date, status)
+             VALUES (?, ?, ?, 'Term Exam', 50, NOW(), 'ACTIVE')`,
+            [gradeSheetId, targetWeightId, activeMapehComponent]
           );
           teActivityId = insTe.insertId;
           hpsByActivityId[teActivityId] = 50;
@@ -1470,6 +1615,25 @@ async function handleBatchScores(req, res) {
       }
     }
 
+    // Step 1: Commit score rows to database first so newly modified SCORE records are permanently committed
+    await connection.commit();
+
+    // Step 2: Begin transaction for recalculating and upserting STUDENT_GRADE summaries
+    await connection.beginTransaction();
+
+    let effectiveExamConfig = {
+      st1Weight: examConfig?.st1Weight !== undefined ? Number(examConfig.st1Weight) : 30,
+      st2Weight: examConfig?.st2Weight !== undefined ? Number(examConfig.st2Weight) : 30,
+      teWeight: examConfig?.teWeight !== undefined ? Number(examConfig.teWeight) : 40,
+    };
+    if (
+      effectiveExamConfig.st1Weight === 20 &&
+      effectiveExamConfig.st2Weight === 20 &&
+      effectiveExamConfig.teWeight === 60
+    ) {
+      effectiveExamConfig = { st1Weight: 30, st2Weight: 30, teWeight: 40 };
+    }
+
     let weights = { ...DEFAULT_JHS_WEIGHTS };
     const [weightRows] = await connection.execute(
       `SELECT scw.percentage AS weight_percentage, ct.component_code
@@ -1497,8 +1661,8 @@ async function handleBatchScores(req, res) {
        FROM GRADE_ACTIVITY ga
        LEFT JOIN SUBJECT_COMPONENT_WEIGHT scw ON scw.subj_comp_weight_id = ga.subj_comp_weight_id
        LEFT JOIN COMPONENT_TYPE ct ON ct.component_type_id = scw.component_type_id
-       WHERE ga.grade_sheet_id = ? AND (ga.status = 'ACTIVE' OR ga.status IS NULL)`,
-      [gradeSheetId]
+       WHERE ga.grade_sheet_id = ? AND ${actCondition} AND (ga.status = 'ACTIVE' OR ga.status IS NULL)`,
+      actParams
     );
 
     const [allStudents] = await connection.execute(
@@ -1532,6 +1696,41 @@ async function handleBatchScores(req, res) {
       });
     }
 
+    // For MAPEH, fetch other sub-component activities and scores to update STUDENT_GRADE with combined quarterly grade
+    let otherComponentAssessments = [];
+    let otherRawScores = {};
+    if (isMapeh) {
+      const otherComponent = activeMapehComponent === 'MA' ? 'PEH' : 'MA';
+      const [otherActs] = await connection.execute(
+        `SELECT ga.activity_id AS assessment_id, ga.activity_name, ga.highest_possible_score AS max_score, ct.component_code
+         FROM GRADE_ACTIVITY ga
+         LEFT JOIN SUBJECT_COMPONENT_WEIGHT scw ON scw.subj_comp_weight_id = ga.subj_comp_weight_id
+         LEFT JOIN COMPONENT_TYPE ct ON ct.component_type_id = scw.component_type_id
+         WHERE ga.grade_sheet_id = ? AND ga.mapeh_component = ? AND (ga.status = 'ACTIVE' OR ga.status IS NULL)`,
+        [gradeSheetId, otherComponent]
+      );
+      otherComponentAssessments = otherActs;
+
+      if (otherActs.length > 0) {
+        const otherActIds = otherActs.map((a) => a.assessment_id);
+        const [otherScoreData] = await connection.execute(
+          `SELECT activity_id, student_section_id, raw_score FROM SCORE WHERE activity_id IN (${otherActIds.map(() => '?').join(',')})`,
+          otherActIds
+        );
+        otherScoreData.forEach((s) => {
+          if (s.student_section_id) {
+            if (!otherRawScores[s.student_section_id]) otherRawScores[s.student_section_id] = {};
+            otherRawScores[s.student_section_id][s.activity_id] = s.raw_score !== null ? Number(s.raw_score) : null;
+            const sId = studentIdBySecId[s.student_section_id];
+            if (sId) {
+              if (!otherRawScores[`st_${sId}`]) otherRawScores[`st_${sId}`] = {};
+              otherRawScores[`st_${sId}`][s.activity_id] = s.raw_score !== null ? Number(s.raw_score) : null;
+            }
+          }
+        });
+      }
+    }
+
     const gradesToUpsert = [];
     const calculatedResults = {};
 
@@ -1546,11 +1745,14 @@ async function handleBatchScores(req, res) {
       const summary = calculateStudentSummary({
         assessments: assessments.map((a) => ({
           assessment_id: a.assessment_id,
+          activity_name: a.activity_name,
+          title: a.activity_name,
           component_code: normalizeAssessmentType(a.component_code || a.activity_name).code,
           max_score: Number(a.max_score || 0),
         })),
         scores: studentScores,
         weights,
+        examConfig: effectiveExamConfig,
       });
 
       calculatedResults[sId] = {
@@ -1563,14 +1765,44 @@ async function handleBatchScores(req, res) {
       };
 
       if (summary.initialGrade !== null) {
+        let finalInitial = summary.initialGrade;
+        let finalQuarterly = summary.quarterlyGrade;
+        let finalRemarks = summary.remarks;
+
+        if (isMapeh && otherComponentAssessments.length > 0) {
+          const otherStudentScores = {
+            ...(sSecId && otherRawScores[sSecId] ? otherRawScores[sSecId] : {}),
+            ...(sId && otherRawScores[`st_${sId}`] ? otherRawScores[`st_${sId}`] : {}),
+          };
+          const otherSummary = calculateStudentSummary({
+            assessments: otherComponentAssessments.map((a) => ({
+              assessment_id: a.assessment_id,
+              activity_name: a.activity_name,
+              title: a.activity_name,
+              component_code: normalizeAssessmentType(a.component_code || a.activity_name).code,
+              max_score: Number(a.max_score || 0),
+            })),
+            scores: otherStudentScores,
+            weights,
+            examConfig: effectiveExamConfig,
+          });
+
+          if (otherSummary.quarterlyGrade !== null && typeof otherSummary.quarterlyGrade === 'number') {
+            finalQuarterly = Math.round((summary.quarterlyGrade + otherSummary.quarterlyGrade) / 2);
+            finalRemarks = finalQuarterly >= 75 ? 'Passed' : 'Failed';
+          }
+        }
+
+        // Single Source of Truth Alignment:
+        // STUDENT_GRADE.initial_grade strictly equals WS_WW + WS_PT + WS_EX (summary.initialGrade = 88.76)
         gradesToUpsert.push({
           subject_offering_id,
           student_id: sId,
           student_section_id: sSecId,
           term: termCode,
           initial_grade: summary.initialGrade,
-          quarterly_grade: summary.quarterlyGrade,
-          remarks: summary.remarks,
+          quarterly_grade: finalQuarterly,
+          remarks: finalRemarks,
         });
       }
     });
@@ -1611,12 +1843,16 @@ async function handleBatchScores(req, res) {
     res.json({
       message: 'Scores batch saved and grades calculated successfully',
       subject_offering_id,
+      is_mapeh: isMapeh,
+      mapeh_component: activeMapehComponent,
       term: termCode,
       recalculated_grades_count: gradesToUpsert.length,
       students: calculatedResults,
     });
   } catch (err) {
-    await connection.rollback();
+    try {
+      await connection.rollback();
+    } catch (_) {}
     console.error('Error in POST /api/scores/batch:', err);
     res.status(500).json({ error: err.message });
   } finally {
@@ -1714,7 +1950,14 @@ router.get('/class-record/:subject_offering_id/export', async (req, res) => {
     }
 
     // 3. Fetch assessments
+    const isMapeh = isMapehSubject(ctx.subject_name, ctx.subject_code);
+    const rawComponent = req.query.mapeh_component || req.query.component;
+    const activeMapehComponent = isMapeh ? normalizeMapehComponent(rawComponent) : null;
+
     const { gradeSheetId } = await ensureGradeSheet(subjectOfferingId, schoolYearId, termName);
+    const actCondition = isMapeh ? 'ga.mapeh_component = ?' : 'ga.mapeh_component IS NULL';
+    const actParams = isMapeh ? [gradeSheetId, activeMapehComponent] : [gradeSheetId];
+
     const [activityRows] = await db.execute(
       `SELECT 
          ga.activity_id,
@@ -1724,9 +1967,9 @@ router.get('/class-record/:subject_offering_id/export', async (req, res) => {
        FROM GRADE_ACTIVITY ga
        LEFT JOIN SUBJECT_COMPONENT_WEIGHT scw ON scw.subj_comp_weight_id = ga.subj_comp_weight_id
        LEFT JOIN COMPONENT_TYPE ct ON ct.component_type_id = scw.component_type_id
-       WHERE ga.grade_sheet_id = ? AND (ga.status = 'ACTIVE' OR ga.status IS NULL)
+       WHERE ga.grade_sheet_id = ? AND ${actCondition} AND (ga.status = 'ACTIVE' OR ga.status IS NULL)
        ORDER BY ga.activity_id ASC`,
-      [gradeSheetId]
+      actParams
     );
 
     const wwCols = [];
@@ -1825,10 +2068,17 @@ router.get('/class-record/:subject_offering_id/export', async (req, res) => {
     workbook.created = new Date();
 
     const termNum = termCode.replace(/\D/g, '') || '1';
-    const termTitle = `CLASS RECORD - TERM ${termNum}`;
+    const compLabel = activeMapehComponent === 'PEH' ? 'PE & HEALTH' : 'MUSIC & ARTS';
+    const termTitle = isMapeh
+      ? `CLASS RECORD - MAPEH (${compLabel}) - TERM ${termNum}`
+      : `CLASS RECORD - TERM ${termNum}`;
     const termHeader = termCode === 'T1' ? 'FIRST TERM' : (termCode === 'T2' ? 'SECOND TERM' : (termCode === 'T3' ? 'THIRD TERM' : 'FOURTH TERM'));
 
-    const sheet = workbook.addWorksheet(termTitle, {
+    const sheetTabName = isMapeh
+      ? `MAPEH (${activeMapehComponent}) - T${termNum}`
+      : `Term ${termNum}`;
+
+    const sheet = workbook.addWorksheet(sheetTabName, {
       pageSetup: { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
     });
 

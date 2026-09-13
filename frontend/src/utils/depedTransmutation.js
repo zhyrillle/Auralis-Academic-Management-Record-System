@@ -192,9 +192,14 @@ export function calculateStudentGrades({
   const st1HPS = Number(examConfig?.st1HPS || 25);
   const st2HPS = Number(examConfig?.st2HPS || 25);
   const teHPS = Number(examConfig?.teHPS || 50);
-  const st1Weight = Number(examConfig?.st1Weight !== undefined ? examConfig.st1Weight : 30);
-  const st2Weight = Number(examConfig?.st2Weight !== undefined ? examConfig.st2Weight : 30);
-  const teWeight = Number(examConfig?.teWeight !== undefined ? examConfig.teWeight : 40);
+  let st1Weight = Number(examConfig?.st1Weight !== undefined ? examConfig.st1Weight : 30);
+  let st2Weight = Number(examConfig?.st2Weight !== undefined ? examConfig.st2Weight : 30);
+  let teWeight = Number(examConfig?.teWeight !== undefined ? examConfig.teWeight : 40);
+  if (st1Weight === 20 && st2Weight === 20 && teWeight === 60) {
+    st1Weight = 30;
+    st2Weight = 30;
+    teWeight = 40;
+  }
 
   // Extract student scores for ST1, ST2, and TE
   const rawST1 = examinations?.st1 !== undefined ? examinations.st1 : examinations?.ST1;
@@ -272,25 +277,25 @@ export function calculateStudentGrades({
     examinations: {
       st1: {
         score: hasST1 ? numST1 : "",
-        ws: wsST1 !== null ? (Number.isInteger(wsST1) ? String(wsST1) : wsST1.toString()) : "-",
+        ws: wsST1 !== null ? (Number.isInteger(wsST1) ? String(wsST1) : wsST1.toFixed(2)) : "-",
       },
       st2: {
         score: hasST2 ? numST2 : "",
-        ws: wsST2 !== null ? (Number.isInteger(wsST2) ? String(wsST2) : wsST2.toString()) : "-",
+        ws: wsST2 !== null ? (Number.isInteger(wsST2) ? String(wsST2) : wsST2.toFixed(2)) : "-",
       },
       te: {
         score: hasTE ? numTE : "",
-        ws: wsTE !== null ? (Number.isInteger(wsTE) ? String(wsTE) : wsTE.toString()) : "-",
+        ws: wsTE !== null ? (Number.isInteger(wsTE) ? String(wsTE) : wsTE.toFixed(2)) : "-",
       },
       totalRaw: exHasInput ? (numST1 + numST2 + numTE) : "-",
-      ps: exHasInput ? (Number.isInteger(exPS) ? String(exPS) : exPS.toString()) : "-",
-      ws: exHasInput ? (Number.isInteger(exWS) ? String(exWS) : exWS.toString()) : "-",
+      ps: exHasInput ? (Number.isInteger(exPS) ? String(exPS) : exPS.toFixed(2)) : "-",
+      ws: exHasInput ? (Number.isInteger(exWS) ? String(exWS) : exWS.toFixed(2)) : "-",
       isFailing: exHasInput && exPS < 60,
     },
     // Backwards-compatibility alias for quarterlyAssessment
     quarterlyAssessment: {
-      ps: exHasInput ? (Number.isInteger(exPS) ? String(exPS) : exPS.toString()) : "-",
-      ws: exHasInput ? (Number.isInteger(exWS) ? String(exWS) : exWS.toString()) : "-",
+      ps: exHasInput ? (Number.isInteger(exPS) ? String(exPS) : exPS.toFixed(2)) : "-",
+      ws: exHasInput ? (Number.isInteger(exWS) ? String(exWS) : exWS.toFixed(2)) : "-",
       isFailing: exHasInput && exPS < 60,
     },
     initialGrade: initialGrade !== null ? initialGrade.toFixed(2) : "-",
