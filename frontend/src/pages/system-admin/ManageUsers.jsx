@@ -1,4 +1,7 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import DropdownSelect from "../../components/common/DropdownSelect";
+import ManageUsersSkeleton from "./manage-users/ManageUsersSkeleton";
+import UserFormModal from "./manage-users/UserFormModal";
 import "../../styles/ManageUsers.css";
 
 const API_URL = "http://localhost:5000/api";
@@ -16,33 +19,11 @@ function Icon({ type, size = 22 }) {
   };
 
   switch (type) {
-    case "users":
-      return (
-        <svg {...common}>
-          <circle cx="9" cy="8" r="3" />
-          <path d="M3 19c0-3.5 2.7-5 6-5s6 1.5 6 5" />
-          <path d="M16 5.5a3 3 0 0 1 0 5.8" />
-          <path d="M18 14c2.1.5 3 2 3 4" />
-        </svg>
-      );
     case "search":
       return (
         <svg {...common}>
           <circle cx="11" cy="11" r="7" />
           <path d="m20 20-4-4" />
-        </svg>
-      );
-    case "check":
-      return (
-        <svg {...common}>
-          <circle cx="12" cy="12" r="9" />
-          <path d="m8 12 2.5 2.5L16 9" />
-        </svg>
-      );
-    case "shield":
-      return (
-        <svg {...common}>
-          <path d="M12 3 19 6v5c0 5-3 8-7 10-4-2-7-5-7-10V6l7-3z" />
         </svg>
       );
     case "eye":
@@ -93,6 +74,20 @@ const DISPLAY_TO_DB_ROLE = {
   "Subject Teacher": "subject teacher",
   Adviser: "subject teacher",
 };
+
+const ROLE_FILTER_OPTIONS = [
+  { value: "All Roles", label: "All Roles" },
+  { value: "Subject Teacher", label: "Subject Teacher" },
+  { value: "Principal", label: "Principal" },
+  { value: "Adviser", label: "Adviser" },
+  { value: "Department Head", label: "Department Head" },
+];
+
+const STATUS_FILTER_OPTIONS = [
+  { value: "All Status", label: "All Status" },
+  { value: "Active", label: "Active" },
+  { value: "Inactive", label: "Inactive" },
+];
 
 function getDisplayRole(user) {
   if (!user) return "";
@@ -181,6 +176,12 @@ export default function UserManagement() {
   const [savingUser, setSavingUser] = useState(false);
   const [deletingUser, setDeletingUser] = useState(false);
   const [formError, setFormError] = useState("");
+  const [loadingOptions, setLoadingOptions] = useState(true);
+  const [optionsError, setOptionsError] = useState("");
+  const [loadingDetails, setLoadingDetails] = useState(false);
+  const [detailsError, setDetailsError] = useState("");
+  const [editTarget, setEditTarget] = useState(null);
+  const formRequestId = useRef(0);
 
   const emptyForm = {
     user_id: null,
@@ -214,6 +215,8 @@ export default function UserManagement() {
   };
 
   const fetchFormOptions = async () => {
+    setLoadingOptions(true);
+    setOptionsError("");
     try {
       const response = await fetch(`${API_URL}/users/management-options`);
       const data = await response.json();
@@ -223,15 +226,20 @@ export default function UserManagement() {
       setSections(data.sections || []);
       setDepartments(data.departments || []);
       setSubjectOfferings(data.subjectOfferings || []);
+      return data;
     } catch (error) {
-      setFormError(error.message || "Failed to load options.");
+      setOptionsError(error.message || "Failed to load options.");
+      return null;
+    } finally {
+      setLoadingOptions(false);
     }
   };
 
   useEffect(() => {
-    fetchFormOptions().then(() => {
-      fetchUsers();
-    });
+    // The initial API synchronization intentionally populates page state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    Promise.all([fetchFormOptions(), fetchUsers()]);
+    return () => { formRequestId.current += 1; };
   }, []);
 
   const getUserDepartment = (user) => {
@@ -274,6 +282,10 @@ export default function UserManagement() {
   }, [users, search, roleFilter, statusFilter]);
 
   const handleAddUser = () => {
+    formRequestId.current += 1;
+    setLoadingDetails(false);
+    setDetailsError("");
+    setEditTarget(null);
     setSelectedUser(null);
     setFormMode("add");
     setFormError("");
@@ -295,6 +307,10 @@ export default function UserManagement() {
   };
 
   const handleEditUser = async (user) => {
+    const requestId = ++formRequestId.current;
+    setEditTarget(user);
+    setLoadingDetails(true);
+    setDetailsError("");
     try {
       setFormError("");
       setFormMode("edit");
@@ -302,7 +318,18 @@ export default function UserManagement() {
 
       // Fetch user details from API
       const response = await fetch(`${API_URL}/users/${user.user_id}`);
-      const fullUser = response.ok ? await response.json() : user;
+      if (!response.ok) throw new Error("User information could not be loaded.");
+      const fullUser = await response.json();
+      if (requestId !== formRequestId.current) return;
+      const options = await fetchFormOptions();
+      if (requestId !== formRequestId.current) return;
+      if (!options) {
+        setDetailsError("Load the assignment options before editing this user.");
+        return;
+      }
+      const availableOfferings = options.subjectOfferings || [];
+      const availableDepartments = options.departments || [];
+      const availableSections = options.sections || [];
 
       const currentDisplayRole = getDisplayRole(fullUser);
 
@@ -313,7 +340,7 @@ export default function UserManagement() {
           let sId = ta.section_id ? String(ta.section_id) : "";
 
           if ((!gId || !sId) && ta.subject_offering_id) {
-            const matchedOffering = subjectOfferings.find(
+            const matchedOffering = availableOfferings.find(
               (so) => String(so.subject_offering_id) === String(ta.subject_offering_id)
             );
             if (matchedOffering) {
@@ -321,7 +348,7 @@ export default function UserManagement() {
             }
           }
           if (!gId && sId) {
-            const matchedSec = sections.find((sec) => String(sec.section_id) === String(sId));
+            const matchedSec = availableSections.find((sec) => String(sec.section_id) === String(sId));
             if (matchedSec) {
               gId = String(matchedSec.grade_level_id);
             }
@@ -337,15 +364,15 @@ export default function UserManagement() {
 
       let resolvedGradeLevelId = fullUser.adviser_grade_level_id ? String(fullUser.adviser_grade_level_id) : "";
       if (!resolvedGradeLevelId && fullUser.adviser_section_id) {
-        const matchedSec = sections.find(
+        const matchedSec = availableSections.find(
           (s) => String(s.section_id) === String(fullUser.adviser_section_id)
         );
         if (matchedSec) resolvedGradeLevelId = String(matchedSec.grade_level_id);
       }
 
       let resolvedDeptId = fullUser.department_id ? String(fullUser.department_id) : "";
-      if (!resolvedDeptId && fullUser.department_name && departments.length > 0) {
-        const matched = departments.find((d) => d.department_name === fullUser.department_name);
+      if (!resolvedDeptId && fullUser.department_name && availableDepartments.length > 0) {
+        const matched = availableDepartments.find((d) => d.department_name === fullUser.department_name);
         if (matched) resolvedDeptId = String(matched.department_id);
       }
 
@@ -363,9 +390,21 @@ export default function UserManagement() {
         status: fullUser.account_status || "active",
       });
     } catch (error) {
-      setFormError("Failed to load user information.");
+      if (requestId === formRequestId.current) {
+        setDetailsError(error.message || "Failed to load user information.");
+      }
+    } finally {
+      if (requestId === formRequestId.current) setLoadingDetails(false);
     }
   };
+
+  const handleCloseForm = () => {
+    if (savingUser) return;
+    formRequestId.current += 1;
+    setFormMode(null);
+  };
+
+
 
   const handleConfirmDelete = async () => {
     if (!deleteUser) return;
@@ -443,6 +482,7 @@ export default function UserManagement() {
   };
 
   const handleSaveUser = async () => {
+    if (savingUser || loadingOptions || loadingDetails || optionsError || detailsError) return;
     setFormError("");
 
     if (!formData.first_name.trim() || !formData.last_name.trim() || !formData.email.trim() || !formData.role) {
@@ -537,100 +577,105 @@ export default function UserManagement() {
         <div className="page-header">
           <div>
             <h1>User Management</h1>
-            <p>Manage user assignments</p>
+            <p>Manage accounts, roles, departments, and teaching assignments.</p>
           </div>
-          <button className="add-user-btn" onClick={handleAddUser}>
-            <Icon type="plusPerson" size={24} /> Add User
+          <button type="button" className="add-user-btn" onClick={handleAddUser}>
+            <Icon type="plusPerson" size={20} /> Add User
           </button>
         </div>
 
-        {loadingUsers && <p>Loading users...</p>}
-        {userError && <p className="error-text">{userError}</p>}
+        {userError && <div className="users-state-message users-state-message--error" role="alert">{userError}</div>}
 
-        <div className="stats-grid">
-          <div className="stat-card">
-            <div className="stat-icon total"><Icon type="users" size={25} /></div>
-            <div className="stat-info"><span>Total Users</span><strong>{filteredUsers.length}</strong></div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-icon active-icon"><Icon type="check" size={25} /></div>
-            <div className="stat-info">
-              <span>Active</span>
-              <strong className="green-text">
-                {filteredUsers.filter((u) => String(u.account_status).toLowerCase() === "active").length}
-              </strong>
-            </div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-icon adviser-icon"><Icon type="shield" size={24} /></div>
-            <div className="stat-info">
-              <span>Advisers</span>
-              <strong>{filteredUsers.filter((u) => getDisplayRole(u) === "Adviser").length}</strong>
-            </div>
-          </div>
-        </div>
+        {loadingUsers && users.length === 0 ? (
+          <ManageUsersSkeleton />
+        ) : (
+          <>
+            <section className="users-panel" aria-busy={loadingUsers}>
+              <div className="users-panel-header">
+                <div>
+                  <h2>User Directory</h2>
+                  <p>View and maintain school personnel accounts.</p>
+                </div>
+                <span className="users-result-count">{filteredUsers.length} users</span>
+              </div>
 
-        <div className="filter-container">
-          <div className="search-box">
-            <Icon type="search" size={24} />
-            <input type="text" placeholder="Search" value={search} onChange={(e) => setSearch(e.target.value)} />
-          </div>
-          <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
-            <option>All Roles</option>
-            <option>Subject Teacher</option>
-            <option>Principal</option>
-            <option>Adviser</option>
-            <option>Department Head</option>
-          </select>
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-            <option>All Status</option>
-            <option>Active</option>
-            <option>Inactive</option>
-          </select>
-        </div>
+              <div className="filter-container">
+                <label className="search-box">
+                  <Icon type="search" size={18} />
+                  <span className="visually-hidden">Search users</span>
+                  <input type="text" placeholder="Search by name or email" value={search} onChange={(e) => setSearch(e.target.value)} />
+                </label>
+                <DropdownSelect
+                  label="Filter users by role"
+                  value={roleFilter}
+                  options={ROLE_FILTER_OPTIONS}
+                  onChange={setRoleFilter}
+                  disabled={loadingUsers}
+                  className="manage-users-filter-select"
+                />
+                <DropdownSelect
+                  label="Filter users by status"
+                  value={statusFilter}
+                  options={STATUS_FILTER_OPTIONS}
+                  onChange={setStatusFilter}
+                  disabled={loadingUsers}
+                  className="manage-users-filter-select"
+                />
+              </div>
 
-        <div className="table-container">
-          <table>
-            <thead>
-              <tr>
-                <th>User Name</th>
-                <th>Email</th>
-                <th>Role</th>
-                <th>Department</th>
-                <th>Status</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredUsers.map((user) => (
-                <tr key={user.user_id}>
-                  <td>
-                    <div className="user-name">
-                      <span>{getUsername(user)}</span>
-                    </div>
-                  </td>
-                  <td>{user.email}</td>
-                  <td><RoleBadge role={getDisplayRole(user)} /></td>
-                  <td>{getUserDepartment(user)}</td>
-                  <td><StatusBadge status={user.account_status} /></td>
-                  <td>
-                    <div className="actions">
-                      <button title="View" onClick={() => handleViewUser(user)}>
-                        <Icon type="eye" size={21} />
-                      </button>
-                      <button title="Edit" onClick={() => handleEditUser(user)}>
-                        <Icon type="edit" size={21} />
-                      </button>
-                      <button title="Delete" onClick={() => setDeleteUser(user)}>
-                        <Icon type="trash" size={21} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              <div className="table-container" role="region" aria-label="User directory" tabIndex="0">
+                <table className="users-table">
+                  <thead>
+                    <tr>
+                      <th>User Name</th>
+                      <th>Email</th>
+                      <th>Role</th>
+                      <th>Department</th>
+                      <th>Status</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredUsers.map((user) => (
+                      <tr key={user.user_id}>
+                        <td>
+                          <div className="user-name">
+                            <span>{getUsername(user)}</span>
+                          </div>
+                        </td>
+                        <td>{user.email}</td>
+                        <td><RoleBadge role={getDisplayRole(user)} /></td>
+                        <td>{getUserDepartment(user)}</td>
+                        <td><StatusBadge status={user.account_status} /></td>
+                        <td>
+                          <div className="actions">
+                            <button type="button" className="action-btn action-btn--view" title="View" aria-label={`View ${getUsername(user)}`} onClick={() => handleViewUser(user)}>
+                              <Icon type="eye" size={21} />
+                            </button>
+                            <button type="button" className="action-btn action-btn--edit" title="Edit" aria-label={`Edit ${getUsername(user)}`} onClick={() => handleEditUser(user)}>
+                              <Icon type="edit" size={21} />
+                            </button>
+                            <button type="button" className="action-btn action-btn--delete" title="Delete" aria-label={`Delete ${getUsername(user)}`} onClick={() => setDeleteUser(user)}>
+                              <Icon type="trash" size={21} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {!loadingUsers && filteredUsers.length === 0 && (
+                      <tr>
+                        <td className="users-table-empty" colSpan="6">
+                          <strong>No users found</strong>
+                          <span>Try changing the search term or filters.</span>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </>
+        )}
 
         {/* VIEW USER MODAL */}
         {selectedUser && (
@@ -776,214 +821,26 @@ export default function UserManagement() {
           </div>
         )}
 
-        {/* ADD / EDIT USER MODAL */}
         {formMode && (
-          <div className="modal-overlay" onClick={() => setFormMode(null)}>
-            <div className="add-user-modal" onClick={(e) => e.stopPropagation()}>
-              <div className="modal-header">
-                <h2>{formMode === "edit" ? "Edit User" : "Add New User"}</h2>
-                <p>{formMode === "edit" ? "Update user account information and role assignments" : "Create a new user account with role assignments"}</p>
-              </div>
-              {formError && <div className="form-error">{formError}</div>}
-
-              <div className="form-grid">
-                <div className="form-group">
-                  <label>First Name</label>
-                  <input type="text" name="first_name" value={formData.first_name} onChange={handleFormChange} placeholder="Enter first name" />
-                </div>
-                <div className="form-group">
-                  <label>Last Name</label>
-                  <input type="text" name="last_name" value={formData.last_name} onChange={handleFormChange} placeholder="Enter last name" />
-                </div>
-                <div className="form-group">
-                  <label>Email</label>
-                  <input type="email" name="email" value={formData.email} onChange={handleFormChange} placeholder="Enter email address" />
-                </div>
-                <div className="form-group">
-                  <label>Password</label>
-                  <input
-                    type="password"
-                    name="password"
-                    value={formData.password}
-                    onChange={handleFormChange}
-                    placeholder={formMode === "edit" ? "Leave blank to keep current" : "Enter password"}
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Role</label>
-                  <select name="role" value={formData.role} onChange={handleFormChange}>
-                    <option value="" disabled>Select Role</option>
-                    <option value="Subject Teacher">Subject Teacher</option>
-                    <option value="Principal">Principal</option>
-                    <option value="Adviser">Adviser</option>
-                    <option value="Department Head">Department Head</option>
-                  </select>
-                </div>
-
-                {/* DEPARTMENT DROPDOWN */}
-                {(formData.role === "Department Head" ||
-                  formData.role === "Subject Teacher" ||
-                  formData.role === "Adviser") && (
-                  <div className="form-group">
-                    <label>Department / Assigned Area</label>
-                    <select
-                      name="department_id"
-                      value={formData.department_id}
-                      onChange={handleFormChange}
-                    >
-                      <option value="">Select Department</option>
-                      {departments.map((dept) => (
-                        <option key={dept.department_id} value={dept.department_id}>
-                          {dept.department_name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-              </div>
-
-              {/* Adviser Advisory Section */}
-              {formData.role === "Adviser" && (
-                <div className="assignment-box">
-                  <div className="assignment-header">
-                    <h3>Adviser Advisory Section</h3>
-                  </div>
-                  <div className="form-grid">
-                    <div className="form-group">
-                      <label>Advisory Grade Level</label>
-                      <select
-                        name="adviser_grade_level_id"
-                        value={formData.adviser_grade_level_id}
-                        onChange={handleFormChange}
-                      >
-                        <option value="">Select Grade Level</option>
-                        {gradeLevels.map((gl) => (
-                          <option key={gl.grade_level_id} value={gl.grade_level_id}>
-                            {gl.grade_level_name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="form-group">
-                      <label>Advisory Section</label>
-                      <select
-                        name="adviser_section_id"
-                        value={formData.adviser_section_id}
-                        onChange={handleFormChange}
-                        disabled={!formData.adviser_grade_level_id}
-                      >
-                        <option value="">Select Section</option>
-                        {sections
-                          .filter((sec) => String(sec.grade_level_id) === String(formData.adviser_grade_level_id))
-                          .map((sec) => (
-                            <option key={sec.section_id} value={sec.section_id}>
-                              {sec.section_name}
-                            </option>
-                          ))}
-                      </select>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Teaching Assignments */}
-              {(formData.role === "Subject Teacher" || formData.role === "Adviser") && (
-                <div className="assignment-box">
-                  <div className="assignment-header">
-                    <div>
-                      <h3>Teaching Subject Assignments</h3>
-                      <p className="assignment-subtitle">Assign subject classes to this faculty member</p>
-                    </div>
-                    <button type="button" className="add-assignment-btn" onClick={handleAddTeachingAssignment}>
-                      <Icon type="plus" size={16} /> Add Subject Class
-                    </button>
-                  </div>
-
-                  {formData.teaching_assignments.length === 0 ? (
-                    <div className="assignment-empty-state">
-                      No subject classes assigned yet. Click <strong>+ Add Subject Class</strong> above to add assignments.
-                    </div>
-                  ) : (
-                    formData.teaching_assignments.map((assignment, index) => {
-                      const availSections = sections.filter(
-                        (sec) => String(sec.grade_level_id) === String(assignment.grade_level_id)
-                      );
-                      const availOfferings = subjectOfferings.filter(
-                        (so) => String(so.section_id) === String(assignment.section_id)
-                      );
-
-                      return (
-                        <div key={index} className="assignment-row">
-                          <div className="form-group">
-                            <label>Grade Level</label>
-                            <select
-                              value={assignment.grade_level_id}
-                              onChange={(e) => handleTeachingAssignmentChange(index, "grade_level_id", e.target.value)}
-                            >
-                              <option value="">Select Grade</option>
-                              {gradeLevels.map((gl) => (
-                                <option key={gl.grade_level_id} value={gl.grade_level_id}>
-                                  {gl.grade_level_name}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-
-                          <div className="form-group">
-                            <label>Section</label>
-                            <select
-                              value={assignment.section_id}
-                              onChange={(e) => handleTeachingAssignmentChange(index, "section_id", e.target.value)}
-                              disabled={!assignment.grade_level_id}
-                            >
-                              <option value="">Select Section</option>
-                              {availSections.map((sec) => (
-                                <option key={sec.section_id} value={sec.section_id}>
-                                  {sec.section_name}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-
-                          <div className="form-group">
-                            <label>Subject</label>
-                            <select
-                              value={assignment.subject_offering_id}
-                              onChange={(e) => handleTeachingAssignmentChange(index, "subject_offering_id", e.target.value)}
-                              disabled={!assignment.section_id}
-                            >
-                              <option value="">Select Subject</option>
-                              {availOfferings.map((so) => (
-                                <option key={so.subject_offering_id} value={so.subject_offering_id}>
-                                  {so.subject_name} {so.subject_code ? `(${so.subject_code})` : ""}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-
-                          <button
-                            type="button"
-                            className="remove-btn"
-                            title="Remove class assignment"
-                            onClick={() => handleRemoveTeachingAssignment(index)}
-                          >
-                            <Icon type="trash" size={17} />
-                          </button>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              )}
-
-              <div className="modal-actions">
-                <button type="button" className="modal-close-btn" onClick={() => setFormMode(null)}>Close</button>
-                <button type="button" className="modal-save-btn" onClick={handleSaveUser} disabled={savingUser}>
-                  {savingUser ? "Saving..." : formMode === "edit" ? "Save Changes" : "Create User"}
-                </button>
-              </div>
-            </div>
-          </div>
+          <UserFormModal
+            mode={formMode}
+            data={formData}
+            gradeLevels={gradeLevels}
+            sections={sections}
+            departments={departments}
+            subjectOfferings={subjectOfferings}
+            loading={loadingOptions || loadingDetails}
+            loadError={detailsError || optionsError}
+            error={formError}
+            saving={savingUser}
+            onRetry={() => editTarget ? handleEditUser(editTarget) : fetchFormOptions()}
+            onChange={handleFormChange}
+            onAddAssignment={handleAddTeachingAssignment}
+            onRemoveAssignment={handleRemoveTeachingAssignment}
+            onAssignmentChange={handleTeachingAssignmentChange}
+            onClose={handleCloseForm}
+            onSave={handleSaveUser}
+          />
         )}
       </div>
     </div>
