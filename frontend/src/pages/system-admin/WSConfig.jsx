@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   CheckCircle2,
@@ -12,6 +12,7 @@ import {
   X,
 } from "lucide-react";
 import DropdownSelect from "../../components/common/DropdownSelect";
+import { WSConfigSkeletonRows, WSConfigPlaceholder, WSConfigBusy } from "./ws-config/WSConfigSkeleton";
 import {
   getSchoolYears,
   getSubjectWeightConfiguration,
@@ -202,6 +203,7 @@ export default function WSConfig() {
   const [schoolYearId, setSchoolYearId] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [hasLoadedConfiguration, setHasLoadedConfiguration] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [requestError, setRequestError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
@@ -210,6 +212,10 @@ export default function WSConfig() {
   const [historyWeights, setHistoryWeights] = useState([]);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState("");
+  const [hasLoadedHistory, setHasLoadedHistory] = useState(false);
+  const [pendingHistoryYearId, setPendingHistoryYearId] = useState("");
+  const historyRequestId = useRef(0);
+  const isInitialLoading = isLoading && !hasLoadedConfiguration;
 
   const completedSchoolYears = useMemo(
     () =>
@@ -240,6 +246,7 @@ export default function WSConfig() {
       setSavedWeights(copyWeights(mappedWeights));
       setDraftWeights(copyWeights(mappedWeights));
       setIsEditing(false);
+      setHasLoadedConfiguration(true);
     } catch (error) {
       setRequestError(error.message || "The request could not be completed.");
     } finally {
@@ -264,6 +271,7 @@ export default function WSConfig() {
         setSchoolYearId(Number(result.currentSchoolYear.school_year_id));
         setSavedWeights(copyWeights(mappedWeights));
         setDraftWeights(copyWeights(mappedWeights));
+        setHasLoadedConfiguration(true);
       })
       .catch((error) => {
         if (isCurrent) {
@@ -280,6 +288,7 @@ export default function WSConfig() {
 
     return () => {
       isCurrent = false;
+      historyRequestId.current += 1;
     };
   }, []);
 
@@ -290,6 +299,8 @@ export default function WSConfig() {
 
     const handleKeyDown = (event) => {
       if (event.key === "Escape") {
+        historyRequestId.current += 1;
+        setIsHistoryLoading(false);
         setIsHistoryOpen(false);
       }
     };
@@ -450,42 +461,44 @@ export default function WSConfig() {
   };
 
   const loadHistoryConfiguration = async (selectedSchoolYearId) => {
-    setHistorySchoolYearId(String(selectedSchoolYearId));
+    const requestId = ++historyRequestId.current;
+    const nextYearId = String(selectedSchoolYearId);
+    setPendingHistoryYearId(nextYearId);
     setIsHistoryLoading(true);
     setHistoryError("");
 
     try {
-      const configuration =
-        await getSubjectWeightConfiguration(selectedSchoolYearId);
-      setHistoryWeights(
-        mapConfigurationRows(configuration.rows || [], {
-          useDefaults: false,
-          includeUnconfigured: false,
-        }),
-      );
+      const configuration = await getSubjectWeightConfiguration(nextYearId);
+      const nextWeights = mapConfigurationRows(configuration.rows || [], {
+        useDefaults: false,
+        includeUnconfigured: false,
+      });
+      if (requestId !== historyRequestId.current) return;
+      setHistoryWeights(nextWeights);
+      setHistorySchoolYearId(nextYearId);
+      setHasLoadedHistory(true);
     } catch (error) {
-      setHistoryWeights([]);
+      if (requestId !== historyRequestId.current) return;
+      const failedYear = schoolYears.find((year) => String(year.school_year_id) === nextYearId);
       setHistoryError(
-        error.message || "Historical weights could not be loaded.",
+        `Could not load ${formatSchoolYear(failedYear) || "the selected school year"}. ${error.message || "Please try again."}`,
       );
     } finally {
-      setIsHistoryLoading(false);
+      if (requestId === historyRequestId.current) setIsHistoryLoading(false);
     }
   };
 
   const handleOpenHistory = () => {
     setIsHistoryOpen(true);
     setHistoryError("");
-
     if (completedSchoolYears.length > 0) {
-      loadHistoryConfiguration(completedSchoolYears[0].school_year_id);
-    } else {
-      setHistorySchoolYearId("");
-      setHistoryWeights([]);
+      loadHistoryConfiguration(historySchoolYearId || completedSchoolYears[0].school_year_id);
     }
   };
 
   const handleCloseHistory = () => {
+    historyRequestId.current += 1;
+    setIsHistoryLoading(false);
     setIsHistoryOpen(false);
   };
 
@@ -545,6 +558,7 @@ export default function WSConfig() {
         </div>
 
         <div className="ws-config-actions">
+          {isInitialLoading && <WSConfigPlaceholder className="ws-config-skeleton-year" />}
           {currentSchoolYear && (
             <div
               className="ws-config-current-year"
@@ -560,7 +574,7 @@ export default function WSConfig() {
                 type="button"
                 className="ws-config-button ws-config-button--secondary"
                 onClick={handleCancel}
-                disabled={isSaving}
+                disabled={isSaving || isLoading}
               >
                 <X size={17} aria-hidden="true" />
                 Cancel
@@ -569,7 +583,7 @@ export default function WSConfig() {
                 type="button"
                 className="ws-config-button ws-config-button--primary"
                 onClick={handleSave}
-                disabled={!canSave}
+                disabled={!canSave || isLoading}
                 title={
                   !hasChanges && !hasUnpersistedDefaults
                     ? "Make a change before saving"
@@ -629,7 +643,7 @@ export default function WSConfig() {
         <div className="ws-config-request-error" role="alert">
           <AlertCircle size={18} aria-hidden="true" />
           <span>{requestError}</span>
-          <button type="button" onClick={loadConfiguration}>
+          <button type="button" onClick={loadConfiguration} disabled={isLoading || isSaving}>
             Try Again
           </button>
         </div>
@@ -638,6 +652,7 @@ export default function WSConfig() {
       <section
         className="ws-config-panel"
         aria-labelledby="ws-config-table-title"
+        aria-busy={isLoading}
       >
         <div className="ws-config-panel__heading">
           <div>
@@ -645,11 +660,13 @@ export default function WSConfig() {
             <p>Each subject’s component weights must add up to exactly 100%.</p>
           </div>
           <span className="ws-config-panel__count">
-            {displayedWeights.length} subjects
+            {isInitialLoading ? <WSConfigPlaceholder className="ws-config-skeleton-count" /> : hasLoadedConfiguration ? `${displayedWeights.length} subjects` : "Not loaded"}
           </span>
         </div>
 
-        <div className="ws-config-table-wrapper">
+        {isInitialLoading && <span className="ws-config-sr-only" role="status">Loading subject weights.</span>}
+        {isLoading && hasLoadedConfiguration && <WSConfigBusy />}
+        <div className="ws-config-table-wrapper" inert={(isLoading && hasLoadedConfiguration) || isSaving ? true : undefined}>
           <table className="ws-config-table">
             <thead>
               <tr>
@@ -662,15 +679,10 @@ export default function WSConfig() {
               </tr>
             </thead>
             <tbody>
-              {isLoading ? (
-                <tr>
-                  <td
-                    className="ws-config-table-state"
-                    colSpan={isEditing ? 6 : 5}
-                  >
-                    Loading subject weights...
-                  </td>
-                </tr>
+              {isInitialLoading ? (
+                <WSConfigSkeletonRows />
+              ) : !hasLoadedConfiguration && requestError ? (
+                <tr><td className="ws-config-table-state" colSpan={5}>Subject weights could not be loaded. Use Try Again above.</td></tr>
               ) : displayedWeights.length === 0 ? (
                 <tr>
                   <td
@@ -884,7 +896,7 @@ export default function WSConfig() {
                     <DropdownSelect
                       className="ws-config-history-dropdown"
                       label="Historical school year"
-                      value={historySchoolYearId}
+                      value={historySchoolYearId || pendingHistoryYearId}
                       onChange={loadHistoryConfiguration}
                       disabled={isHistoryLoading}
                       options={completedSchoolYears.map((schoolYear) => ({
@@ -896,29 +908,18 @@ export default function WSConfig() {
                   <span className="ws-config-history-badge">Read-only</span>
                 </div>
 
-                <div className="ws-config-history-table-wrapper">
-                  {historyError ? (
-                    <div className="ws-config-history-state ws-config-history-state--error">
-                      <AlertCircle size={19} aria-hidden="true" />
-                      <span>{historyError}</span>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          loadHistoryConfiguration(historySchoolYearId)
-                        }
-                      >
-                        Try Again
-                      </button>
-                    </div>
-                  ) : isHistoryLoading ? (
-                    <div className="ws-config-history-state">
-                      Loading historical configuration...
-                    </div>
-                  ) : historyWeights.length === 0 ? (
-                    <div className="ws-config-history-state">
-                      No component weights were recorded for this school year.
-                    </div>
-                  ) : (
+                {historyError && (
+                  <div className="ws-config-history-state ws-config-history-state--error" role="alert">
+                    <AlertCircle size={19} aria-hidden="true" />
+                    <span>{historyError}{hasLoadedHistory ? " The last loaded configuration is still shown." : ""}</span>
+                    <button type="button" disabled={isHistoryLoading}
+                      onClick={() => loadHistoryConfiguration(pendingHistoryYearId)}>Try Again</button>
+                  </div>
+                )}
+                <div className="ws-config-history-content" aria-busy={isHistoryLoading}>
+                  {isHistoryLoading && hasLoadedHistory && <WSConfigBusy />}
+                  {isHistoryLoading && !hasLoadedHistory && <span className="ws-config-sr-only" role="status">Loading historical configuration.</span>}
+                  <div className="ws-config-history-table-wrapper" inert={isHistoryLoading && hasLoadedHistory ? true : undefined}>
                     <table className="ws-config-history-table">
                       <thead>
                         <tr>
@@ -930,7 +931,12 @@ export default function WSConfig() {
                         </tr>
                       </thead>
                       <tbody>
-                        {historyWeights.map((weight) => {
+                        {isHistoryLoading && !hasLoadedHistory ? <WSConfigSkeletonRows /> :
+                          !hasLoadedHistory && historyError ? (
+                            <tr><td colSpan={5} className="ws-config-history-empty-cell">Historical weights could not be loaded.</td></tr>
+                          ) : historyWeights.length === 0 ? (
+                            <tr><td colSpan={5} className="ws-config-history-empty-cell">No component weights were recorded for this school year.</td></tr>
+                          ) : historyWeights.map((weight) => {
                           const values = weightFields.map((field) =>
                             getDisplayedWeight(weight, field),
                           );
@@ -954,7 +960,7 @@ export default function WSConfig() {
                         })}
                       </tbody>
                     </table>
-                  )}
+                  </div>
                 </div>
               </>
             ) : (

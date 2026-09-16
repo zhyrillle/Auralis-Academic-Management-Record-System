@@ -755,7 +755,8 @@
 
 .ws-config-history-table-wrapper {
   overflow: auto;
-  min-height: 220px;
+  min-height: 0;
+  flex: 1 1 auto;
   margin: 18px 20px 20px;
   background: #f8fafc;
   border: 1px solid #d7e0e9;
@@ -845,6 +846,10 @@
 
 .ws-config-history-state--error {
   color: #991b1b;
+  min-height: auto;
+  padding: 14px 20px;
+  flex-wrap: wrap;
+  flex: 0 0 auto;
 }
 
 .ws-config-history-state button {
@@ -1131,4 +1136,44 @@
     right: 16px;
     bottom: 16px;
   }
+}
+
+/* Loading shares the same cells and responsive row padding as real weights. */
+.ws-config-panel,
+.ws-config-history-content { position: relative; }
+.ws-config-history-content {
+  display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto;
+}
+.ws-config-history-header, .ws-config-history-toolbar { flex: 0 0 auto; }
+.ws-config-history-table .ws-config-history-empty-cell {
+  height: 220px; text-align: center; color: #64748b; font-size: 13px;
+}
+.ws-config-skeleton {
+  display: inline-block; vertical-align: middle; height: 12px; border-radius: 6px;
+  background: linear-gradient(90deg, #eef2f7 25%, #dfe7f1 40%, #eef2f7 65%);
+  background-size: 400% 100%; animation: ws-config-shimmer 1.4s ease infinite;
+}
+.ws-config-skeleton-subject { width: 100px; max-width: 100%; }
+.ws-config-skeleton-value { width: 45px; }
+.ws-config-skeleton-year { width: 150px; height: 40px; border-radius: 10px; }
+.ws-config-skeleton-count { width: 58px; height: 14px; }
+.ws-config-skeleton-row td { text-align: center; }
+.ws-config-skeleton-row td:first-child { text-align: left; }
+.ws-config-busy {
+  position: absolute; inset: 0; z-index: 10; display: flex; justify-content: center;
+  align-items: flex-start; padding-top: 100px; background: rgba(248, 250, 252, 0.65);
+  border-radius: inherit; cursor: progress;
+}
+.ws-config-busy-spinner {
+  display: block; width: 34px; height: 34px; border: 3px solid #d7e2f0;
+  border-top-color: #17376d; border-radius: 50%; animation: ws-config-spin 0.9s linear infinite;
+}
+.ws-config-sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden;
+  clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+@keyframes ws-config-shimmer { to { background-position: -100% 0; } }
+@keyframes ws-config-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .ws-config-skeleton, .ws-config-busy-spinner { animation: none; }
 }
