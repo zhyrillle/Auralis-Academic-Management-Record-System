@@ -20,9 +20,17 @@ export function formatClassRecordData({
   students = [],
   grades = {},
 }) {
-  const wwWeight = weights.WW !== undefined ? Number(weights.WW) : 20;
-  const ptWeight = weights.PT !== undefined ? Number(weights.PT) : 50;
-  const exWeight = weights.EX !== undefined ? Number(weights.EX) : (weights.QA !== undefined ? Number(weights.QA) : 30);
+  const isMapehSubject = Boolean(
+    metadata.isMapeh ||
+    examConfig?.isMapeh ||
+    (weights?.PT !== undefined && Number(weights.PT) === 60) ||
+    (metadata.subject && metadata.subject.toUpperCase().includes("MAPEH")) ||
+    (metadata.subject && (metadata.subject.toUpperCase().includes("MUSIC") || metadata.subject.toUpperCase().includes("PE & HEALTH")))
+  );
+
+  const wwWeight = isMapehSubject ? 20 : (weights.WW !== undefined ? Number(weights.WW) : 20);
+  const ptWeight = isMapehSubject ? 60 : (weights.PT !== undefined ? Number(weights.PT) : 50);
+  const exWeight = isMapehSubject ? 20 : (weights.EX !== undefined ? Number(weights.EX) : (weights.QA !== undefined ? Number(weights.QA) : 30));
 
   // 1. Calculate Highest Possible Scores (HPS)
   const totalWWHps = writtenWorkColumns.reduce((sum, col) => sum + Number(col.max_score || 0), 0);
@@ -30,7 +38,7 @@ export function formatClassRecordData({
 
   const st1HPS = Number(examConfig?.st1HPS || 25);
   const st2HPS = Number(examConfig?.st2HPS || 25);
-  const teHPS = Number(examConfig?.teHPS || quarterlyAssessmentHPS || 50);
+  const teHPS = Number(examConfig?.teHPS || (isMapehSubject ? 25 : quarterlyAssessmentHPS || 50));
   const st1Weight = Number(examConfig?.st1Weight || 30);
   const st2Weight = Number(examConfig?.st2Weight || 30);
   const teWeight = Number(examConfig?.teWeight || 40);
@@ -111,12 +119,24 @@ export function formatClassRecordData({
     const hasTE = rawTE !== "";
     const hasExInput = hasST1 || hasST2 || hasTE;
 
-    const wsST1 = hasST1 && st1HPS > 0 ? parseFloat(((rawST1 / st1HPS) * st1Weight).toFixed(2)) : 0;
-    const wsST2 = hasST2 && st2HPS > 0 ? parseFloat(((rawST2 / st2HPS) * st2Weight).toFixed(2)) : 0;
-    const wsTE = hasTE && teHPS > 0 ? parseFloat(((rawTE / teHPS) * teWeight).toFixed(2)) : 0;
+    let exPS = 0;
+    let exWS = 0;
+    let wsST1 = 0;
+    let wsST2 = 0;
+    let wsTE = 0;
 
-    const exPS = hasExInput ? parseFloat((wsST1 + wsST2 + wsTE).toFixed(2)) : 0;
-    const exWS = hasExInput ? parseFloat((exPS * (exWeight / 100)).toFixed(2)) : 0;
+    if (isMapehSubject) {
+      const exTotalRaw = (hasST1 ? Number(rawST1) : 0) + (hasST2 ? Number(rawST2) : 0) + (hasTE ? Number(rawTE) : 0);
+      const exTotalHps = st1HPS + st2HPS + teHPS;
+      exPS = hasExInput && exTotalHps > 0 ? parseFloat(((exTotalRaw / exTotalHps) * 100).toFixed(2)) : 0;
+      exWS = hasExInput ? parseFloat((exPS * (exWeight / 100)).toFixed(2)) : 0;
+    } else {
+      wsST1 = hasST1 && st1HPS > 0 ? parseFloat(((rawST1 / st1HPS) * st1Weight).toFixed(2)) : 0;
+      wsST2 = hasST2 && st2HPS > 0 ? parseFloat(((rawST2 / st2HPS) * st2Weight).toFixed(2)) : 0;
+      wsTE = hasTE && teHPS > 0 ? parseFloat(((rawTE / teHPS) * teWeight).toFixed(2)) : 0;
+      exPS = hasExInput ? parseFloat((wsST1 + wsST2 + wsTE).toFixed(2)) : 0;
+      exWS = hasExInput ? parseFloat((exPS * (exWeight / 100)).toFixed(2)) : 0;
+    }
     const exIsFailing = hasExInput && exPS < 60;
 
     // DepEd Initial Grade = WS_WW + WS_PT + WS_EX

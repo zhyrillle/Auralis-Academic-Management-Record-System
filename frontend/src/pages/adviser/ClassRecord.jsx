@@ -36,10 +36,6 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdat
   const location = useLocation();
   const params = useParams();
 
-  // Term state (defaults to T1, synchronized with DB active term on load)
-  const [activeTerm, setActiveTerm] = useState("T1");
-  const userSelectedTermRef = useRef(false);
-
   // Dynamic Class Context Resolution (from prop or router location state)
   const effectiveClass = useMemo(() => {
     return activeClass || location.state?.activeClass || {};
@@ -66,15 +62,30 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdat
     return (
       effectiveClass?.subject_offering_id ||
       effectiveClass?.offering_id ||
-      effectiveClass?.subject_id ||
       params.subjectOfferingId ||
-      params.subjectId ||
       params.offeringId ||
       location.state?.subject_offering_id ||
+      (effectiveClass?.subject_id && !effectiveClass?.section_id ? effectiveClass.subject_id : null) ||
       sectionId ||
       1
     );
   }, [effectiveClass, params, location, sectionId]);
+
+  const effectiveSubjectId = useMemo(() => {
+    return effectiveClass?.subject_id || params.subjectId || null;
+  }, [effectiveClass, params]);
+
+  // Term state (defaults to stored session term or T1, synchronized with DB active term on load)
+  const [activeTerm, setActiveTerm] = useState(() => {
+    try {
+      const stored = sessionStorage.getItem(`classRecord_activeTerm_${subjectOfferingId}`);
+      if (stored && ["T1", "T2", "T3"].includes(stored)) {
+        return stored;
+      }
+    } catch (_) {}
+    return "T1";
+  });
+  const userSelectedTermRef = useRef(Boolean(sessionStorage.getItem(`classRecord_activeTerm_${subjectOfferingId}`)));
 
   // Sync / Cloud state (Google Docs inspiration: "saved" | "saving" | "offline")
   const [syncStatus, setSyncStatus] = useState("saved");
@@ -107,7 +118,7 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdat
 
   const isMapeh = useMemo(() => {
     if (isMapehSubject) return true;
-    if (classContextData?.is_mapeh === true) return true;
+    if (classContextData?.is_mapeh === true || classContextData?.is_mapeh === 1 || classContextData?.is_mapeh === "1") return true;
     const name = classContextData?.subject_name || effectiveClass?.subject_name || effectiveClass?.subjectName || effectiveClass?.subject || "";
     const code = classContextData?.subject_code || effectiveClass?.subject_code || effectiveClass?.subjectCode || "";
     const str = `${name} ${code}`.toLowerCase();
@@ -133,14 +144,17 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdat
   // Component weights (WW 20%, PT 50%, EX 30%)
   const [weights, setWeights] = useState(DEFAULT_JHS_WEIGHTS);
 
-  // Assessment Columns (Default initial count: 1 per component)
-  const [writtenWorkColumns, setWrittenWorkColumns] = useState([
-    { id: "ww1", assessment_id: null, label: "1", activity_name: "Written Work 1", max_score: 30 },
-  ]);
+  // Effective weights dynamically resolving MAPEH 20/60/20 vs standard
+  const effectiveWeights = useMemo(() => {
+    if (isMapeh) {
+      return { WW: 20, PT: 60, QA: 20, EX: 20 };
+    }
+    return weights || DEFAULT_JHS_WEIGHTS;
+  }, [isMapeh, weights]);
 
-  const [performanceTaskColumns, setPerformanceTaskColumns] = useState([
-    { id: "pt1", assessment_id: null, label: "1", activity_name: "Performance Task 1", max_score: 50 },
-  ]);
+  // Assessment Columns (Loaded dynamically from database)
+  const [writtenWorkColumns, setWrittenWorkColumns] = useState([]);
+  const [performanceTaskColumns, setPerformanceTaskColumns] = useState([]);
 
   // Dynamic & Customizable Examinations (ST1: 25, ST2: 25, TE: 50, weights: 30, 30, 40)
   const [examConfig, setExamConfig] = useState({
@@ -246,7 +260,7 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdat
         subject_offering_id: subjectOfferingId,
         term: activeTerm,
         scores: payloadScores,
-        mapeh_component: isMapehRef.current ? mapehComponentRef.current : null,
+        mapeh_component: (isMapeh || isMapehRef.current) ? (mapehComponent || mapehComponentRef.current || "MA") : null,
         examConfig: examConfigRef.current,
       });
 
@@ -271,7 +285,7 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdat
         flushPendingScores();
       }
     }
-  }, [isLocked, subjectOfferingId, activeTerm]);
+  }, [isLocked, subjectOfferingId, activeTerm, isMapeh, mapehComponent]);
 
   const flushPendingScoresRef = useRef(flushPendingScores);
   flushPendingScoresRef.current = flushPendingScores;
@@ -319,7 +333,7 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdat
               subject_offering_id: subjectOfferingId,
               term: activeTerm,
               scores: payloadScores,
-              mapeh_component: isMapehRef.current ? mapehComponentRef.current : null,
+              mapeh_component: (isMapeh || isMapehRef.current) ? (mapehComponent || mapehComponentRef.current || "MA") : null,
               examConfig: examConfigRef.current,
             }),
             keepalive: true,
@@ -329,7 +343,7 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdat
         }
       }
     };
-  }, [subjectOfferingId, activeTerm]);
+  }, [subjectOfferingId, activeTerm, isMapeh, mapehComponent]);
 
   // Page reload / tab close beforeunload guard
   useEffect(() => {
@@ -340,7 +354,7 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdat
           subject_offering_id: subjectOfferingId,
           term: activeTerm,
           scores: payloadScores,
-          mapeh_component: isMapehRef.current ? mapehComponentRef.current : null,
+          mapeh_component: (isMapeh || isMapehRef.current) ? (mapehComponent || mapehComponentRef.current || "MA") : null,
           examConfig: examConfigRef.current,
         });
         const blob = new Blob([payload], { type: "application/json" });
@@ -350,7 +364,7 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdat
 
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [subjectOfferingId, activeTerm]);
+  }, [subjectOfferingId, activeTerm, isMapeh, mapehComponent]);
 
   // ============================================================
   // PARSE DATA PAYLOAD HELPER
@@ -364,25 +378,59 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdat
     const lockReason = data.lock_reason || (isSheetLocked ? "CLOSED_TERM" : "");
     const loadedTermName = data.current_term_name || data.term_name;
     const activeTermName = data.active_term_name;
-    const weights = data.component_weights || null;
+    const effectiveIsMapeh = Boolean(data?.is_mapeh ?? isMapeh);
+    let weights = data.component_weights || null;
+    if (effectiveIsMapeh) {
+      weights = { ...(weights || {}), WW: 20, PT: 60, QA: 20, EX: 20 };
+    }
+
+    const targetComp = data.mapeh_component || (effectiveIsMapeh ? (mapehComponentRef.current || "MA") : null);
 
     const wwCols = [];
     const ptCols = [];
     let st1Ass = null;
     let st2Ass = null;
     let teAss = null;
-    let qaHps = 50;
+    let qaHps = effectiveIsMapeh ? 25 : 50;
     let qaId = null;
 
     if (Array.isArray(data.assessments) && data.assessments.length > 0) {
       data.assessments.forEach((ass) => {
+        if (ass.status === "ARCHIVED") return;
+        if (effectiveIsMapeh && ass.mapeh_component && targetComp && ass.mapeh_component !== targetComp) {
+          return;
+        }
+
         const compCode = (ass.component_code || "").toUpperCase();
         const type = (ass.type || ass.assessment_type || "").toLowerCase();
         const name = String(ass.activity_name || ass.title || "").toUpperCase();
 
-        const isWW = compCode === "WW" || type === "writtenwork" || type === "writtenworks" || type.includes("written");
-        const isPT = compCode === "PT" || type === "performancetask" || type === "performancetasks" || type.includes("performance");
-        const isQA = compCode === "QA" || compCode === "STE" || compCode === "EX" || type === "quarterlyassessment" || type.includes("exam") || type.includes("summative");
+        const isWW =
+          compCode === "WW" ||
+          type === "writtenwork" ||
+          type === "writtenworks" ||
+          type.includes("written") ||
+          /\b(written|quiz|ww)\b/i.test(name);
+
+        const isPT =
+          !isWW && (
+            compCode === "PT" ||
+            type === "performancetask" ||
+            type === "performancetasks" ||
+            type.includes("performance") ||
+            /\b(performance|task|pt)\b/i.test(name)
+          );
+
+        const isQA =
+          !isWW && !isPT && (
+            compCode === "QA" ||
+            compCode === "STE" ||
+            compCode === "EX" ||
+            type === "quarterlyassessment" ||
+            type.includes("exam") ||
+            type.includes("summative") ||
+            /\b(summative|term\s*exam|quarterly|st1|st2|te|exam)\b/i.test(name)
+          );
 
         const aId = ass.assessment_id || ass.activity_id;
 
@@ -394,6 +442,9 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdat
             activity_name: ass.activity_name || ass.title || `Written Work ${wwCols.length + 1}`,
             max_score: Number(ass.max_score || ass.highest_possible_score || 30),
             date: ass.activity_date,
+            status: ass.status || "ACTIVE",
+            subj_comp_weight_id: ass.subj_comp_weight_id,
+            mapeh_component: ass.mapeh_component || targetComp,
           });
         } else if (isPT) {
           ptCols.push({
@@ -403,40 +454,55 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdat
             activity_name: ass.activity_name || ass.title || `Performance Task ${ptCols.length + 1}`,
             max_score: Number(ass.max_score || ass.highest_possible_score || 50),
             date: ass.activity_date,
+            status: ass.status || "ACTIVE",
+            subj_comp_weight_id: ass.subj_comp_weight_id,
+            mapeh_component: ass.mapeh_component || targetComp,
           });
         } else if (isQA) {
-          if (name.includes("ST1") || name.includes("SUMMATIVE TEST 1") || name.includes("SUMMATIVE 1")) {
+          if (/\b(st1|summative\s*test\s*1|summative\s*1)\b/i.test(name)) {
             st1Ass = ass;
-          } else if (name.includes("ST2") || name.includes("SUMMATIVE TEST 2") || name.includes("SUMMATIVE 2")) {
+          } else if (/\b(st2|summative\s*test\s*2|summative\s*2)\b/i.test(name)) {
             st2Ass = ass;
-          } else {
+          } else if (/\b(te|term\s*exam|quarterly|quarterly\s*assessment|exam)\b/i.test(name) || !teAss) {
             teAss = ass;
-            qaHps = Number(ass.max_score || ass.highest_possible_score || 50);
+            qaHps = Number(ass.max_score || ass.highest_possible_score || (effectiveIsMapeh ? 25 : 50));
             qaId = aId;
           }
+        } else {
+          wwCols.push({
+            id: `ww_${aId}`,
+            assessment_id: aId,
+            label: String(wwCols.length + 1),
+            activity_name: ass.activity_name || ass.title || `Written Work ${wwCols.length + 1}`,
+            max_score: Number(ass.max_score || ass.highest_possible_score || 30),
+            date: ass.activity_date,
+            status: ass.status || "ACTIVE",
+            subj_comp_weight_id: ass.subj_comp_weight_id,
+            mapeh_component: ass.mapeh_component || targetComp,
+          });
         }
       });
     }
 
-    let st1W = Number(data?.exam_config?.st1Weight !== undefined ? data.exam_config.st1Weight : 30);
-    let st2W = Number(data?.exam_config?.st2Weight !== undefined ? data.exam_config.st2Weight : 30);
-    let teW = Number(data?.exam_config?.teWeight !== undefined ? data.exam_config.teWeight : 40);
-    if (st1W === 20 && st2W === 20 && teW === 60) {
+    let st1W = Number(data?.exam_config?.st1Weight !== undefined ? data.exam_config.st1Weight : (effectiveIsMapeh ? 25 : 30));
+    let st2W = Number(data?.exam_config?.st2Weight !== undefined ? data.exam_config.st2Weight : (effectiveIsMapeh ? 25 : 30));
+    let teW = Number(data?.exam_config?.teWeight !== undefined ? data.exam_config.teWeight : (effectiveIsMapeh ? 25 : 40));
+    if (!effectiveIsMapeh && st1W === 20 && st2W === 20 && teW === 60) {
       st1W = 30;
       st2W = 30;
       teW = 40;
     }
 
     const examConfig = {
-      st1Weight: st1W,
-      st2Weight: st2W,
-      teWeight: teW,
-      st1HPS: Number(st1Ass?.max_score || st1Ass?.highest_possible_score || 25),
-      st1Id: st1Ass?.assessment_id || st1Ass?.activity_id || null,
-      st2HPS: Number(st2Ass?.max_score || st2Ass?.highest_possible_score || 25),
-      st2Id: st2Ass?.assessment_id || st2Ass?.activity_id || null,
-      teHPS: Number(teAss?.max_score || teAss?.highest_possible_score || 50),
-      teId: teAss?.assessment_id || teAss?.activity_id || null,
+      st1Weight: effectiveIsMapeh ? 6.67 : st1W,
+      st2Weight: effectiveIsMapeh ? 6.67 : st2W,
+      teWeight: effectiveIsMapeh ? 6.66 : teW,
+      st1HPS: Number(st1Ass?.max_score || st1Ass?.highest_possible_score || data?.exam_config?.st1HPS || (effectiveIsMapeh ? 25 : 30)),
+      st1Id: st1Ass?.assessment_id || st1Ass?.activity_id || data?.exam_config?.st1Id || null,
+      st2HPS: Number(st2Ass?.max_score || st2Ass?.highest_possible_score || data?.exam_config?.st2HPS || (effectiveIsMapeh ? 25 : 30)),
+      st2Id: st2Ass?.assessment_id || st2Ass?.activity_id || data?.exam_config?.st2Id || null,
+      teHPS: Number(teAss?.max_score || teAss?.highest_possible_score || data?.exam_config?.teHPS || (effectiveIsMapeh ? 25 : 40)),
+      teId: teAss?.assessment_id || teAss?.activity_id || data?.exam_config?.teId || null,
     };
 
     let loadedStudents = [];
@@ -470,26 +536,29 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdat
           ptGrades[col.id] = val !== undefined && val !== null ? val : "";
         });
 
+        const st1Id = st1Ass?.assessment_id || st1Ass?.activity_id || data?.exam_config?.st1Id;
         if (st.examinations?.st1 !== undefined && st.examinations?.st1 !== null && st.examinations?.st1 !== "") {
           exGrades.st1 = st.examinations.st1;
-        } else if (st1Ass && rawScores[st1Ass.assessment_id] !== undefined && rawScores[st1Ass.assessment_id] !== null) {
-          exGrades.st1 = rawScores[st1Ass.assessment_id];
+        } else if (st1Id && rawScores[st1Id] !== undefined && rawScores[st1Id] !== null) {
+          exGrades.st1 = rawScores[st1Id];
         } else if (rawScores.st1 !== undefined && rawScores.st1 !== null) {
           exGrades.st1 = rawScores.st1;
         }
 
+        const st2Id = st2Ass?.assessment_id || st2Ass?.activity_id || data?.exam_config?.st2Id;
         if (st.examinations?.st2 !== undefined && st.examinations?.st2 !== null && st.examinations?.st2 !== "") {
           exGrades.st2 = st.examinations.st2;
-        } else if (st2Ass && rawScores[st2Ass.assessment_id] !== undefined && rawScores[st2Ass.assessment_id] !== null) {
-          exGrades.st2 = rawScores[st2Ass.assessment_id];
+        } else if (st2Id && rawScores[st2Id] !== undefined && rawScores[st2Id] !== null) {
+          exGrades.st2 = rawScores[st2Id];
         } else if (rawScores.st2 !== undefined && rawScores.st2 !== null) {
           exGrades.st2 = rawScores.st2;
         }
 
+        const teId = teAss?.assessment_id || teAss?.activity_id || data?.exam_config?.teId;
         if (st.examinations?.te !== undefined && st.examinations?.te !== null && st.examinations?.te !== "") {
           exGrades.te = st.examinations.te;
-        } else if (teAss && rawScores[teAss.assessment_id] !== undefined && rawScores[teAss.assessment_id] !== null) {
-          exGrades.te = rawScores[teAss.assessment_id];
+        } else if (teId && rawScores[teId] !== undefined && rawScores[teId] !== null) {
+          exGrades.te = rawScores[teId];
         } else if (rawScores.te !== undefined && rawScores.te !== null) {
           exGrades.te = rawScores.te;
         } else if (rawScores.qa !== undefined && rawScores.qa !== null) {
@@ -567,7 +636,7 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdat
       const activeComp = targetComp || (isMapehRef.current ? mapehComponentRef.current : "MA");
 
       try {
-        const data = await getClassRecord(subjectOfferingId, termToLoad, sectionId, activeComp);
+        const data = await getClassRecord(subjectOfferingId, termToLoad, sectionId, activeComp, effectiveSubjectId);
 
         if (data && data.class_context) {
           const parsed = parseRecordPayload(data);
@@ -583,7 +652,8 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdat
           });
 
           // Sync active ongoing term on initial load if user hasn't explicitly chosen one
-          if (parsed.activeTerm && !userSelectedTermRef.current && parsed.activeTerm !== termToLoad) {
+          const hasUserChoice = userSelectedTermRef.current || sessionStorage.getItem(`classRecord_activeTerm_${subjectOfferingId}`);
+          if (parsed.activeTerm && !hasUserChoice && parsed.activeTerm !== termToLoad) {
             setActiveTerm(parsed.activeTerm);
             return;
           }
@@ -626,7 +696,7 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdat
             // Background pre-fetch the alternate sub-component (e.g. PEH if MA loaded, or MA if PEH loaded)
             const otherComp = compKey === "MA" ? "PEH" : "MA";
             if (!mapehDatasetsRef.current[otherComp]) {
-              getClassRecord(subjectOfferingId, termToLoad, sectionId, otherComp)
+              getClassRecord(subjectOfferingId, termToLoad, sectionId, otherComp, effectiveSubjectId)
                 .then((otherData) => {
                   if (otherData && otherData.class_context) {
                     const otherParsed = parseRecordPayload(otherData);
@@ -686,66 +756,35 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdat
     }
   }, [subjectOfferingId, sectionId, activeTerm]);
 
-  // MAPEH sub-component switch handler with instant cache restoration & immediate flush
+  // MAPEH sub-component switch handler with instant state switch & full backend hydration
   const handleMapehComponentChange = useCallback(
-    (targetComp) => {
+    async (targetComp) => {
       if (targetComp === mapehComponentRef.current) return;
 
       if (saveTimerRef.current) {
         clearTimeout(saveTimerRef.current);
         saveTimerRef.current = null;
       }
-      flushPendingScoresRef.current();
+      // 1. Immediately flush pending scores for the current component
+      await flushPendingScoresRef.current();
 
-      // Snapshot current state into cache ref
-      const currentComp = mapehComponentRef.current;
-      mapehDatasetsRef.current[currentComp] = {
-        writtenWorkColumns,
-        performanceTaskColumns,
-        examConfig,
-        quarterlyAssessmentHPS,
-        quarterlyAssessmentId,
-        grades: { ...gradesRef.current },
-        students,
-      };
-
+      // 2. Set active MAPEH component
       setMapehComponent(targetComp);
       mapehComponentRef.current = targetComp;
 
-      const cached = mapehDatasetsRef.current[targetComp];
-      if (cached) {
-        setWrittenWorkColumns(cached.writtenWorkColumns || []);
-        setPerformanceTaskColumns(cached.performanceTaskColumns || []);
-        setExamConfig(cached.examConfig || { st1Weight: 30, st2Weight: 30, teWeight: 40, st1HPS: 25, st2HPS: 25, teHPS: 50 });
-        setQuarterlyAssessmentHPS(cached.quarterlyAssessmentHPS || 50);
-        setQuarterlyAssessmentId(cached.quarterlyAssessmentId || null);
-        setGrades(cached.grades || {});
-        gradesRef.current = cached.grades || {};
-        if (cached.students && cached.students.length > 0) {
-          setStudents(cached.students);
-        }
-      } else {
-        setWrittenWorkColumns([]);
-        setPerformanceTaskColumns([]);
-        loadClassRecord(activeTerm, targetComp);
-      }
+      // 3. Immediately trigger backend reload for complete state and score hydration
+      await loadClassRecord(activeTerm, targetComp);
     },
-    [
-      writtenWorkColumns,
-      performanceTaskColumns,
-      examConfig,
-      quarterlyAssessmentHPS,
-      quarterlyAssessmentId,
-      students,
-      loadClassRecord,
-      activeTerm,
-    ]
+    [activeTerm, loadClassRecord]
   );
 
   // Term switch handler with immediate flush
   const handleTermChange = (newTerm) => {
     if (newTerm === activeTerm) return;
     userSelectedTermRef.current = true;
+    try {
+      sessionStorage.setItem(`classRecord_activeTerm_${subjectOfferingId}`, newTerm);
+    } catch (_) {}
     flushPendingScoresRef.current();
     mapehDatasetsRef.current = { MA: null, PEH: null };
     setActiveTerm(newTerm);
@@ -784,7 +823,9 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdat
         writtenWorkColumns,
         performanceTaskColumns,
         examConfig,
-        weights,
+        weights: effectiveWeights,
+        isMapeh: Boolean(isMapeh),
+        isMapehSubject: Boolean(isMapeh),
       });
 
       const qg = rowCalc.termGrade !== "-" ? rowCalc.termGrade : (rowCalc.quarterlyGrade !== "-" ? rowCalc.quarterlyGrade : "");
@@ -793,7 +834,7 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdat
       if (student.lrn) map[student.lrn] = qg;
     });
     return map;
-  }, [students, grades, writtenWorkColumns, performanceTaskColumns, examConfig, weights]);
+  }, [students, grades, writtenWorkColumns, performanceTaskColumns, examConfig, effectiveWeights, isMapeh]);
 
   useEffect(() => {
     if (typeof onUpdateQuarterlyGrades === "function" && Object.keys(studentQuarterlyGradesMap).length > 0) {
@@ -843,25 +884,20 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdat
   // ============================================================
   const exportMetadata = useMemo(() => {
     const termMap = {
-      T1: { termTitle: "CLASS RECORD - TERM 1", termHeader: "FIRST TERM", quarterLabel: "FIRST QUARTER" },
-      T2: { termTitle: "CLASS RECORD - TERM 2", termHeader: "SECOND TERM", quarterLabel: "SECOND QUARTER" },
-      T3: { termTitle: "CLASS RECORD - TERM 3", termHeader: "THIRD TERM", quarterLabel: "THIRD QUARTER" },
-      T4: { termTitle: "CLASS RECORD - TERM 4", termHeader: "FOURTH TERM", quarterLabel: "FOURTH QUARTER" },
+      T1: { termTitle: "CLASS RECORD - TERM 1", termHeader: "CLASS RECORD - TERM 1", quarterLabel: "FIRST QUARTER" },
+      T2: { termTitle: "CLASS RECORD - TERM 2", termHeader: "CLASS RECORD - TERM 2", quarterLabel: "SECOND QUARTER" },
+      T3: { termTitle: "CLASS RECORD - TERM 3", termHeader: "CLASS RECORD - TERM 3", quarterLabel: "THIRD QUARTER" },
+      T4: { termTitle: "CLASS RECORD - TERM 4", termHeader: "CLASS RECORD - TERM 4", quarterLabel: "FOURTH QUARTER" },
     };
     const tInfo = termMap[activeTerm] || {
       termTitle: `CLASS RECORD - ${activeTerm.toUpperCase()}`,
-      termHeader: `${activeTerm.toUpperCase()} TERM`,
+      termHeader: `CLASS RECORD - ${activeTerm.toUpperCase()}`,
       quarterLabel: `${activeTerm.toUpperCase()} QUARTER`,
     };
 
-    let termTitle = tInfo.termTitle;
-    let termHeader = tInfo.termHeader;
-    if (isMapeh) {
-      const compLabel = mapehComponent === "PEH" ? "PE & HEALTH" : "MUSIC & ARTS";
-      const termNum = activeTerm.replace(/[^0-9]/g, "") || activeTerm;
-      termTitle = `CLASS RECORD - MAPEH (${compLabel}) - TERM ${termNum}`;
-      termHeader = `CLASS RECORD - MAPEH (${compLabel}) - TERM ${termNum}`;
-    }
+    const termNum = activeTerm.replace(/[^0-9]/g, "") || activeTerm;
+    const termTitle = `CLASS RECORD - TERM ${termNum}`;
+    const termHeader = `CLASS RECORD - TERM ${termNum}`;
 
     const rawGradeLevel =
       classContextData?.grade_level_name ||
@@ -903,7 +939,10 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdat
       effectiveClass?.subjectName ||
       effectiveClass?.subject ||
       "";
-    const subjectName = rawSubject ? String(rawSubject).toUpperCase() : "0";
+    let subjectName = rawSubject ? String(rawSubject).toUpperCase() : "0";
+    if (isMapeh) {
+      subjectName = mapehComponent === "MA" ? "MUSIC & ARTS" : "PE & HEALTH";
+    }
 
     const region = (classContextData?.region || effectiveClass?.region || "Region X");
     const division = (classContextData?.division || effectiveClass?.division || "GINGOOG");
@@ -1036,13 +1075,15 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdat
       if (isLocked) return;
 
       const normalizedExamKey = examKey || (assessmentId === "st1" || assessmentId === "st2" || assessmentId === "te" ? assessmentId : null);
-      const key = `${studentId}_${normalizedExamKey || assessmentId}`;
+      const currentComp = (isMapeh || isMapehRef.current) ? (mapehComponent || mapehComponentRef.current || "MA") : null;
+      const key = `${studentId}_${normalizedExamKey || assessmentId}_${currentComp || "ALL"}`;
       const record = {
         assessment_id: assessmentId,
         exam_key: normalizedExamKey,
         student_id: studentId,
         student_section_id: studentSectionId,
         raw_score: rawScore === "" ? null : Number(rawScore),
+        mapeh_component: currentComp,
       };
 
       pendingQueueRef.current.set(key, record);
@@ -1054,7 +1095,7 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdat
         flushPendingScores();
       }, 700); // 700ms debounce ensures comfortable multi-digit score typing
     },
-    [isLocked, flushPendingScores]
+    [isLocked, isMapeh, mapehComponent, flushPendingScores]
   );
 
   const handleGradeChange = (studentId, category, columnId, value, colMaxScore, assessmentId) => {
@@ -1082,10 +1123,11 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdat
         },
       }));
 
+      const cleanAssessmentId = assessmentId || (columnId ? Number(String(columnId).replace(/^(ww_|pt_)/, '')) : null);
       const studentObj = students.find((s) => s.id === studentId || String(s.student_id) === studentId);
       if (studentObj) {
         queueScoreChange(
-          assessmentId || columnId,
+          cleanAssessmentId || columnId,
           studentObj.student_id,
           studentObj.student_section_id,
           ""
@@ -1109,10 +1151,11 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdat
       },
     }));
 
+    const cleanAssessmentId = assessmentId || (columnId ? Number(String(columnId).replace(/^(ww_|pt_)/, '')) : null);
     const studentObj = students.find((s) => s.id === studentId || String(s.student_id) === studentId);
     if (studentObj) {
       queueScoreChange(
-        assessmentId || columnId,
+        cleanAssessmentId || columnId,
         studentObj.student_id,
         studentObj.student_section_id,
         value
@@ -1206,7 +1249,13 @@ const formatToISODate = (val) => {
   const openAddColumnModal = (category) => {
     if (isLocked) return;
     const isWW = category === "WW" || category === "writtenWorks" || category === "writtenWork";
-    const currentCount = isWW ? writtenWorkColumns.length : performanceTaskColumns.length;
+    const currentComp = isMapeh ? (mapehComponent || mapehComponentRef.current || "MA") : null;
+    const currentCols = (isWW ? writtenWorkColumns : performanceTaskColumns).filter(
+      (c) =>
+        c.status !== "ARCHIVED" &&
+        (!isMapeh || !c.mapeh_component || c.mapeh_component === currentComp)
+    );
+    const nextIndex = currentCols.length + 1;
     setModalState({
       isOpen: true,
       mode: "add",
@@ -1214,7 +1263,7 @@ const formatToISODate = (val) => {
       categoryLabel: isWW ? "Written Work" : "Performance Task",
       columnId: null,
       assessmentId: null,
-      title: isWW ? `Written Work ${currentCount + 1}` : `Performance Task ${currentCount + 1}`,
+      title: isWW ? `Written Work ${nextIndex}` : `Performance Task ${nextIndex}`,
       maxScore: isWW ? "20" : "50",
       date: "",
     });
@@ -1315,19 +1364,26 @@ const formatToISODate = (val) => {
           max_score: numMax,
           highest_possible_score: numMax,
           activity_date: safeDate,
-          mapeh_component: isMapehRef.current ? mapehComponentRef.current : null,
+          mapeh_component: isMapeh ? (mapehComponent || mapehComponentRef.current || "MA") : null,
         });
 
         const newAss = res.assessment;
-        const currentCols = category === "WW" ? writtenWorkColumns : performanceTaskColumns;
-        const colNumber = newAss?.activity_number || currentCols.length + 1;
+        const currentComp = isMapeh ? (mapehComponent || mapehComponentRef.current || "MA") : null;
+        const activeCols = (category === "WW" ? writtenWorkColumns : performanceTaskColumns).filter(
+          (c) => c.status !== "ARCHIVED" && (!isMapeh || !c.mapeh_component || c.mapeh_component === currentComp)
+        );
+        const colNumber = activeCols.length + 1;
+        const safeTitle = title && title.trim() !== "" ? title.trim() : (category === "WW" ? `Written Work ${colNumber}` : `Performance Task ${colNumber}`);
         const newCol = {
           id: category === "WW" ? `ww_${newAss.assessment_id}` : `pt_${newAss.assessment_id}`,
           assessment_id: newAss.assessment_id,
           label: String(colNumber),
-          activity_name: title || newAss?.activity_name || (category === "WW" ? `Written Work ${colNumber}` : `Performance Task ${colNumber}`),
+          activity_name: safeTitle,
           max_score: numMax,
           date: safeDate,
+          status: "ACTIVE",
+          subj_comp_weight_id: newAss?.subj_comp_weight_id,
+          mapeh_component: currentComp,
         };
 
         if (category === "WW") {
@@ -1337,15 +1393,21 @@ const formatToISODate = (val) => {
         }
       } catch (err) {
         const isWW = category === "WW";
-        const currentCols = isWW ? writtenWorkColumns : performanceTaskColumns;
-        const colNumber = currentCols.length + 1;
+        const currentComp = isMapeh ? (mapehComponent || mapehComponentRef.current || "MA") : null;
+        const activeCols = (isWW ? writtenWorkColumns : performanceTaskColumns).filter(
+          (c) => c.status !== "ARCHIVED" && (!isMapeh || !c.mapeh_component || c.mapeh_component === currentComp)
+        );
+        const colNumber = activeCols.length + 1;
+        const safeTitle = title && title.trim() !== "" ? title.trim() : (isWW ? `Written Work ${colNumber}` : `Performance Task ${colNumber}`);
         const newCol = {
           id: isWW ? `ww${colNumber}` : `pt${colNumber}`,
           assessment_id: Date.now(),
           label: String(colNumber),
-          activity_name: title || (isWW ? `Written Work ${colNumber}` : `Performance Task ${colNumber}`),
+          activity_name: safeTitle,
           max_score: numMax,
           date: safeDate,
+          status: "ACTIVE",
+          mapeh_component: currentComp,
         };
 
         if (isWW) {
@@ -1671,7 +1733,7 @@ const formatToISODate = (val) => {
             {(() => {
               const wwColsCount = writtenWorkColumns.length + 3; // + Total, PS, WS
               const ptColsCount = performanceTaskColumns.length + 3; // + Total, PS, WS
-              const exColsCount = 8; // ST1, ST2, TE, WS ST1, WS ST2, WS TE, PS, WS
+              const exColsCount = isMapeh ? 6 : 8; // MAPEH: ST1, ST2, TE, Total, PS, WS. Standard: ST1, ST2, TE, WS ST1, WS ST2, WS TE, PS, WS
               const totalTableCols = 2 + wwColsCount + ptColsCount + exColsCount + 3; // + No + Name + Initial + Term + Descriptor
 
               const wwHalf1 = Math.max(1, Math.floor(wwColsCount / 2));
@@ -1681,7 +1743,7 @@ const formatToISODate = (val) => {
               const ptHalf2 = Math.max(1, ptColsCount - ptHalf1);
 
               // Subject & Teacher spans covering exactly the component widths
-              const subjColsCount = exColsCount + 3; // 8 EX columns + 3 Summary columns = 11 columns
+              const subjColsCount = exColsCount + 3;
               const subjHalf1 = 3;
               const subjHalf2 = Math.max(1, subjColsCount - subjHalf1);
 
@@ -1704,19 +1766,29 @@ const formatToISODate = (val) => {
                       <col style={{ width: "48px", minWidth: "48px" }} />
                       <col style={{ width: "48px", minWidth: "48px" }} />
                       <col style={{ width: "48px", minWidth: "48px" }} />
-                      <col style={{ width: "44px", minWidth: "44px" }} />
-                      <col style={{ width: "44px", minWidth: "44px" }} />
-                      <col style={{ width: "44px", minWidth: "44px" }} />
-                      <col style={{ width: "50px", minWidth: "50px" }} />
-                      <col style={{ width: "50px", minWidth: "50px" }} />
-                      <col style={{ width: "50px", minWidth: "50px" }} />
-                      <col style={{ width: "48px", minWidth: "48px" }} />
-                      <col style={{ width: "48px", minWidth: "48px" }} />
+                      {isMapeh ? (
+                        <>
+                          <col style={{ width: "48px", minWidth: "48px" }} />
+                          <col style={{ width: "48px", minWidth: "48px" }} />
+                          <col style={{ width: "48px", minWidth: "48px" }} />
+                        </>
+                      ) : (
+                        <>
+                          <col style={{ width: "50px", minWidth: "50px" }} />
+                          <col style={{ width: "50px", minWidth: "50px" }} />
+                          <col style={{ width: "50px", minWidth: "50px" }} />
+                          <col style={{ width: "48px", minWidth: "48px" }} />
+                          <col style={{ width: "48px", minWidth: "48px" }} />
+                        </>
+                      )}
                       <col style={{ width: "60px", minWidth: "60px" }} />
                       <col style={{ width: "60px", minWidth: "60px" }} />
                       <col style={{ width: "95px", minWidth: "95px" }} />
                     </colgroup>
 
+                    {/* =================================================
+                        TABLE HEADER
+                    ================================================= */}
                     <thead>
                       {/* ROW 1: TABLE INFORMATION HEADER */}
                       <tr>
@@ -1730,7 +1802,7 @@ const formatToISODate = (val) => {
                           GRADE LEVEL
                         </th>
 
-                        {/* Cell 3: 8 */}
+                        {/* Cell 3: Grade Level Value */}
                         <td colSpan={wwHalf2} className="cr-info-val">
                           {exportMetadata.gradeLevelDisplay || "0"}
                         </td>
@@ -1740,7 +1812,7 @@ const formatToISODate = (val) => {
                           TEACHER
                         </th>
 
-                        {/* Cell 5: HARVEY BABIA (Spans 2 rows and merges across teacher value block) */}
+                        {/* Cell 5: Teacher Name */}
                         <td rowSpan={2} colSpan={ptHalf2} className="cr-info-val">
                           {exportMetadata.teacherName || "0"}
                         </td>
@@ -1750,7 +1822,7 @@ const formatToISODate = (val) => {
                           SUBJECT
                         </th>
 
-                        {/* Cell 7: ENGLISH (Spans 2 rows vertically across EX and summary block) */}
+                        {/* Cell 7: Subject Name */}
                         <td rowSpan={2} colSpan={subjHalf2} className="cr-info-val">
                           {exportMetadata.subjectName || "0"}
                         </td>
@@ -1763,7 +1835,7 @@ const formatToISODate = (val) => {
                           SECTION
                         </th>
 
-                        {/* Cell 2: Carrots */}
+                        {/* Cell 2: Section Value */}
                         <td colSpan={wwHalf2} className="cr-info-val">
                           {exportMetadata.section || "0"}
                         </td>
@@ -1772,10 +1844,10 @@ const formatToISODate = (val) => {
 
                       {/* ROW 3: COMPONENT HEADERS */}
                       <tr>
-                        {/* Group 1 (WWs): WRITTEN / ORAL WORKS (WWs) */}
+                        {/* Group 1 (WWs): WRITTEN / ORAL WORKS */}
                         <th colSpan={wwColsCount} className="cr-comp-header">
                           <div className="cr-comp-title-wrap">
-                            <span>WRITTEN / ORAL WORKS (WWs)</span>
+                            <span>{isMapeh ? "WRITTEN / ORAL WORKS (20%)" : "WRITTEN / ORAL WORKS (WWs)"}</span>
                             {!isLocked && (
                               <button
                                 type="button"
@@ -1789,10 +1861,10 @@ const formatToISODate = (val) => {
                           </div>
                         </th>
 
-                        {/* Group 2 (PTs): PRODUCT / PERFORMANCE TASKS (PTS) */}
+                        {/* Group 2 (PTs): PRODUCT / PERFORMANCE TASKS */}
                         <th colSpan={ptColsCount} className="cr-comp-header">
                           <div className="cr-comp-title-wrap">
-                            <span>PRODUCT / PERFORMANCE TASKS (PTS)</span>
+                            <span>{isMapeh ? "PRODUCT / PERFORMANCE TASKS (60%)" : "PRODUCT / PERFORMANCE TASKS (PTS)"}</span>
                             {!isLocked && (
                               <button
                                 type="button"
@@ -1806,9 +1878,9 @@ const formatToISODate = (val) => {
                           </div>
                         </th>
 
-                        {/* Group 3 (EXs): EXAMINATIONS (EXs) */}
+                        {/* Group 3 (EXs): EXAMINATIONS */}
                         <th colSpan={exColsCount} className="cr-comp-header">
-                          <span>EXAMINATIONS (EXs)</span>
+                          <span>{isMapeh ? "SUMMATIVE TESTS AND TERM EXAMINATIONS (20%)" : "EXAMINATIONS (EXs)"}</span>
                         </th>
 
                         {/* Summary Headers */}
@@ -1873,15 +1945,25 @@ const formatToISODate = (val) => {
                         <th className="cr-sub-header">PS</th>
                         <th className="cr-sub-header">WS</th>
 
-                        {/* EX Column Headers: ST1, ST2, TE, WS ST1, WS ST2, WS TE, PS, WS */}
+                        {/* EX Column Headers */}
                         <th className="cr-sub-header">ST1</th>
                         <th className="cr-sub-header">ST2</th>
                         <th className="cr-sub-header">TE</th>
-                        <th className="cr-sub-header wide-sub">WS ST1</th>
-                        <th className="cr-sub-header wide-sub">WS ST2</th>
-                        <th className="cr-sub-header wide-sub">WS TE</th>
-                        <th className="cr-sub-header">PS</th>
-                        <th className="cr-sub-header">WS</th>
+                        {isMapeh ? (
+                          <>
+                            <th className="cr-sub-header">Total</th>
+                            <th className="cr-sub-header">PS</th>
+                            <th className="cr-sub-header">WS</th>
+                          </>
+                        ) : (
+                          <>
+                            <th className="cr-sub-header wide-sub">WS ST1</th>
+                            <th className="cr-sub-header wide-sub">WS ST2</th>
+                            <th className="cr-sub-header wide-sub">WS TE</th>
+                            <th className="cr-sub-header">PS</th>
+                            <th className="cr-sub-header">WS</th>
+                          </>
+                        )}
                       </tr>
 
                       {/* ROW 5 (HPS Row): HIGHEST POSSIBLE SCORE */}
@@ -1902,8 +1984,8 @@ const formatToISODate = (val) => {
                           </td>
                         ))}
                         <td className="cr-hps-cell">{totalWW_HPS}</td>
-                        <td className="cr-hps-cell">100</td>
-                        <td className="cr-hps-cell">{weights.WW || 20}%</td>
+                        <td className="cr-hps-cell">{isMapeh ? "100.00" : "100"}</td>
+                        <td className="cr-hps-cell">{effectiveWeights.WW || 20}%</td>
 
                         {/* PT HPS */}
                         {performanceTaskColumns.map((col) => (
@@ -1917,8 +1999,8 @@ const formatToISODate = (val) => {
                           </td>
                         ))}
                         <td className="cr-hps-cell">{totalPT_HPS}</td>
-                        <td className="cr-hps-cell">100</td>
-                        <td className="cr-hps-cell">{weights.PT || 50}%</td>
+                        <td className="cr-hps-cell">{isMapeh ? "100.00" : "100"}</td>
+                        <td className="cr-hps-cell">{effectiveWeights.PT || (isMapeh ? 60 : 50)}%</td>
 
                         {/* EX HPS & WEIGHTS */}
                         <td
@@ -1942,29 +2024,41 @@ const formatToISODate = (val) => {
                         >
                           {examConfig.teHPS}
                         </td>
-                        <td
-                          className="cr-hps-cell editable-hps"
-                          onClick={() => openEditSubWeightModal("st1Weight", "WS ST1 Weight", examConfig.st1Weight)}
-                          title="Click to edit WS ST1 Weight"
-                        >
-                          {examConfig.st1Weight}
-                        </td>
-                        <td
-                          className="cr-hps-cell editable-hps"
-                          onClick={() => openEditSubWeightModal("st2Weight", "WS ST2 Weight", examConfig.st2Weight)}
-                          title="Click to edit WS ST2 Weight"
-                        >
-                          {examConfig.st2Weight}
-                        </td>
-                        <td
-                          className="cr-hps-cell editable-hps"
-                          onClick={() => openEditSubWeightModal("teWeight", "WS TE Weight", examConfig.teWeight)}
-                          title="Click to edit WS TE Weight"
-                        >
-                          {examConfig.teWeight}
-                        </td>
-                        <td className="cr-hps-cell">100</td>
-                        <td className="cr-hps-cell">{weights.EX || weights.QA || 30}%</td>
+                        {isMapeh ? (
+                          <>
+                            <td className="cr-hps-cell">
+                              {Number(examConfig.st1HPS || 25) + Number(examConfig.st2HPS || 25) + Number(examConfig.teHPS || 25)}
+                            </td>
+                            <td className="cr-hps-cell">100.00</td>
+                            <td className="cr-hps-cell">{effectiveWeights.EX || 20}%</td>
+                          </>
+                        ) : (
+                          <>
+                            <td
+                              className="cr-hps-cell editable-hps"
+                              onClick={() => openEditSubWeightModal("st1Weight", "WS ST1 Weight", examConfig.st1Weight)}
+                              title="Click to edit WS ST1 Weight"
+                            >
+                              {examConfig.st1Weight}
+                            </td>
+                            <td
+                              className="cr-hps-cell editable-hps"
+                              onClick={() => openEditSubWeightModal("st2Weight", "WS ST2 Weight", examConfig.st2Weight)}
+                              title="Click to edit WS ST2 Weight"
+                            >
+                              {examConfig.st2Weight}
+                            </td>
+                            <td
+                              className="cr-hps-cell editable-hps"
+                              onClick={() => openEditSubWeightModal("teWeight", "WS TE Weight", examConfig.teWeight)}
+                              title="Click to edit WS TE Weight"
+                            >
+                              {examConfig.teWeight}
+                            </td>
+                            <td className="cr-hps-cell">100</td>
+                            <td className="cr-hps-cell">{effectiveWeights.EX || effectiveWeights.QA || 30}%</td>
+                          </>
+                        )}
 
                         {/* SUMMARY COLUMNS IN HPS ROW */}
                         <td className="cr-hps-cell" />
@@ -2010,7 +2104,8 @@ const formatToISODate = (val) => {
                               writtenWorkColumns={writtenWorkColumns}
                               performanceTaskColumns={performanceTaskColumns}
                               examConfig={examConfig}
-                              weights={weights}
+                              weights={effectiveWeights}
+                              isMapeh={Boolean(isMapeh)}
                               isLocked={isLocked}
                               errorTooltip={errorTooltip}
                               handleGradeChange={handleGradeChange}
@@ -2036,7 +2131,8 @@ const formatToISODate = (val) => {
                               writtenWorkColumns={writtenWorkColumns}
                               performanceTaskColumns={performanceTaskColumns}
                               examConfig={examConfig}
-                              weights={weights}
+                              weights={effectiveWeights}
+                              isMapeh={Boolean(isMapeh)}
                               isLocked={isLocked}
                               errorTooltip={errorTooltip}
                               handleGradeChange={handleGradeChange}
@@ -2174,6 +2270,7 @@ function StudentRow({
   performanceTaskColumns,
   examConfig,
   weights,
+  isMapeh,
   isLocked,
   errorTooltip,
   handleGradeChange,
@@ -2200,8 +2297,10 @@ function StudentRow({
       performanceTaskColumns,
       examConfig,
       weights,
+      isMapeh: Boolean(isMapeh),
+      isMapehSubject: Boolean(isMapeh),
     });
-  }, [studentWW, studentPT, studentEX, writtenWorkColumns, performanceTaskColumns, examConfig, weights]);
+  }, [studentWW, studentPT, studentEX, writtenWorkColumns, performanceTaskColumns, examConfig, weights, isMapeh]);
 
   return (
     <tr className="student-row">
@@ -2394,14 +2493,26 @@ function StudentRow({
         );
       })()}
 
-      {/* EX COMPUTED SUB-WEIGHTS */}
-      <td className="cr-calc-cell">{rowCalculation.examinations.st1.ws}</td>
-      <td className="cr-calc-cell">{rowCalculation.examinations.st2.ws}</td>
-      <td className="cr-calc-cell">{rowCalculation.examinations.te.ws}</td>
-      <td className={`cr-calc-cell ${rowCalculation.examinations.isFailing ? "failing-metric" : ""}`}>
-        {rowCalculation.examinations.ps}
-      </td>
-      <td className="cr-calc-cell">{rowCalculation.examinations.ws}</td>
+      {/* EX COMPUTED METRICS: MAPEH shows Total, PS, WS. Standard shows WS ST1, WS ST2, WS TE, PS, WS */}
+      {isMapeh ? (
+        <>
+          <td className="cr-calc-cell">{rowCalculation.examinations.totalRaw}</td>
+          <td className={`cr-calc-cell ${rowCalculation.examinations.isFailing ? "failing-metric" : ""}`}>
+            {rowCalculation.examinations.ps}
+          </td>
+          <td className="cr-calc-cell">{rowCalculation.examinations.ws}</td>
+        </>
+      ) : (
+        <>
+          <td className="cr-calc-cell">{rowCalculation.examinations.st1.ws}</td>
+          <td className="cr-calc-cell">{rowCalculation.examinations.st2.ws}</td>
+          <td className="cr-calc-cell">{rowCalculation.examinations.te.ws}</td>
+          <td className={`cr-calc-cell ${rowCalculation.examinations.isFailing ? "failing-metric" : ""}`}>
+            {rowCalculation.examinations.ps}
+          </td>
+          <td className="cr-calc-cell">{rowCalculation.examinations.ws}</td>
+        </>
+      )}
 
       {/* INITIAL GRADE */}
       <td className="cr-summary-cell">

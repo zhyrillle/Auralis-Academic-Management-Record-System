@@ -10,13 +10,22 @@ const parseResponse = async (response) => {
   return data;
 };
 
-export const getClassRecord = async (subjectOfferingId, term = "T1", sectionId = null, mapehComponent = null) => {
+export const getClassRecord = async (
+  subjectOfferingId,
+  term = "T1",
+  sectionId = null,
+  mapehComponent = null,
+  subjectId = null
+) => {
   let url = `${API_BASE_URL}/class-record/${subjectOfferingId}?term=${encodeURIComponent(term)}`;
   if (sectionId) {
     url += `&section_id=${encodeURIComponent(sectionId)}`;
   }
   if (mapehComponent) {
     url += `&mapeh_component=${encodeURIComponent(mapehComponent)}`;
+  }
+  if (subjectId) {
+    url += `&subject_id=${encodeURIComponent(subjectId)}`;
   }
   const res = await fetch(url);
   return parseResponse(res);
