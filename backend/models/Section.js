@@ -95,9 +95,13 @@ class Section {
 
     // Map section_id -> subject_name taught in that section
     const sectionSubjectMap = {};
+    const sectionTeacherMap = {};
     teacherRows.forEach((row) => {
       if (row.section_id && row.subject_name) {
         sectionSubjectMap[row.section_id] = row.subject_name;
+      }
+      if (row.section_id && !sectionTeacherMap[row.section_id]) {
+        sectionTeacherMap[row.section_id] = row;
       }
     });
 
@@ -117,7 +121,10 @@ class Section {
       if (!addedSectionAssignments.has(sectionAssignmentKey)) {
         addedSectionAssignments.add(sectionAssignmentKey);
         const gradeNum = parseInt(String(row.grade_level_name).replace(/\D/g, "")) || "";
-        const subjectName = sectionSubjectMap[row.section_id] || "Mathematics";
+        const teacherMatch = sectionTeacherMap[row.section_id];
+        const subjectName = teacherMatch?.subject_name || sectionSubjectMap[row.section_id] || "Mathematics";
+        const subjectOfferingId = teacherMatch?.subject_offering_id || null;
+        const subjectId = teacherMatch?.subject_id || null;
         const isSpecialized = checkIsSpecialized(row.is_specialized);
         result.push({
           id: `advisory-${row.adviser_assignment_id}`,
@@ -127,6 +134,8 @@ class Section {
           section_id: row.section_id,
           schoolYearId: Number(row.school_year_id),
           school_year_id: Number(row.school_year_id),
+          subject_id: subjectId,
+          subject_offering_id: subjectOfferingId,
           sectionName: row.section_name,
           gradeLevel: gradeNum ? `G${gradeNum}` : row.grade_level_name,
           grade_level_name: row.grade_level_name,
@@ -142,9 +151,13 @@ class Section {
 
     // 2. Process Regular Teaching Classes for other section/year assignments.
     for (const row of teacherRows) {
-      const sectionAssignmentKey = `${row.section_id}:${row.school_year_id}`;
-      if (!addedSectionAssignments.has(sectionAssignmentKey)) {
-        addedSectionAssignments.add(sectionAssignmentKey);
+      const teacherKey = `${row.section_id}:${row.school_year_id}:${row.subject_offering_id}`;
+      const teacherMatch = sectionTeacherMap[row.section_id];
+      const isRepresentedInAdvisory = advisoryRows.some(a => a.section_id === row.section_id && a.school_year_id === row.school_year_id)
+        && teacherMatch?.subject_offering_id === row.subject_offering_id;
+
+      if (!isRepresentedInAdvisory && !addedSectionAssignments.has(teacherKey)) {
+        addedSectionAssignments.add(teacherKey);
         const gradeNum = parseInt(String(row.grade_level_name).replace(/\D/g, "")) || "";
         const isSpecialized = checkIsSpecialized(row.is_specialized);
         result.push({

@@ -73,9 +73,7 @@ function normalizeAssessmentType(rawType) {
     lower.includes('assessment') ||
     lower.includes('exam') ||
     lower.includes('summative') ||
-    lower.includes('st1') ||
-    lower.includes('st2') ||
-    lower.includes('te')
+    /\b(st1|st2|te)\b/i.test(lower)
   ) {
     return { code: 'QA', type: 'quarterlyAssessment', name: 'Examinations' };
   }
@@ -86,9 +84,15 @@ function normalizeAssessmentType(rawType) {
  * Detects if a subject is MAPEH by checking subject_name or subject_code.
  */
 function isMapehSubject(subjectName, subjectCode) {
-  const name = String(subjectName || '').toLowerCase();
-  const code = String(subjectCode || '').toLowerCase();
-  return name.includes('mapeh') || code.includes('mapeh');
+  const str = `${subjectName || ''} ${subjectCode || ''}`.toLowerCase();
+  return (
+    str.includes('mapeh') ||
+    str.includes('music') ||
+    str.includes('arts') ||
+    str.includes('physical education') ||
+    str.includes('pe &') ||
+    str.includes('health')
+  );
 }
 
 /**
@@ -307,11 +311,11 @@ async function ensureDefaultActivitiesForSheet(gradeSheetId, subjectId, schoolYe
     if (code === 'WW') hasWW = true;
     if (code === 'PT') hasPT = true;
     if (code === 'QA' || code === 'EX') {
-      if (name.includes('ST1') || name.includes('SUMMATIVE TEST 1') || name.includes('SUMMATIVE 1')) {
+      if (/\b(ST1|SUMMATIVE\s*TEST\s*1|SUMMATIVE\s*1)\b/i.test(name)) {
         hasST1 = true;
-      } else if (name.includes('ST2') || name.includes('SUMMATIVE TEST 2') || name.includes('SUMMATIVE 2')) {
+      } else if (/\b(ST2|SUMMATIVE\s*TEST\s*2|SUMMATIVE\s*2)\b/i.test(name)) {
         hasST2 = true;
-      } else if (name.includes('TE') || name.includes('TERM EXAM')) {
+      } else if (/\b(TE|TERM\s*EXAM|QUARTERLY)\b/i.test(name)) {
         hasTE = true;
       } else {
         legacyQAActivity = a;
@@ -377,28 +381,32 @@ async function ensureDefaultActivitiesForSheet(gradeSheetId, subjectId, schoolYe
     hasTE = true;
   }
 
+  const defaultSt1Hps = mapehComponent ? 25 : 30;
+  const defaultSt2Hps = mapehComponent ? 25 : 30;
+  const defaultTeHps = mapehComponent ? 25 : 40;
+
   // Ensure ST1, ST2, and TE all exist individually
   if (!hasST1) {
     await db.execute(
       `INSERT INTO GRADE_ACTIVITY (grade_sheet_id, subj_comp_weight_id, mapeh_component, activity_name, highest_possible_score, activity_date, status)
-       VALUES (?, ?, ?, 'Summative Test 1', 25, ?, 'ACTIVE')`,
-      [gradeSheetId, qaWeightId, mapehComponent || null, today]
+       VALUES (?, ?, ?, 'Summative Test 1', ?, ?, 'ACTIVE')`,
+      [gradeSheetId, qaWeightId, mapehComponent || null, defaultSt1Hps, today]
     );
   }
 
   if (!hasST2) {
     await db.execute(
       `INSERT INTO GRADE_ACTIVITY (grade_sheet_id, subj_comp_weight_id, mapeh_component, activity_name, highest_possible_score, activity_date, status)
-       VALUES (?, ?, ?, 'Summative Test 2', 25, ?, 'ACTIVE')`,
-      [gradeSheetId, qaWeightId, mapehComponent || null, today]
+       VALUES (?, ?, ?, 'Summative Test 2', ?, ?, 'ACTIVE')`,
+      [gradeSheetId, qaWeightId, mapehComponent || null, defaultSt2Hps, today]
     );
   }
 
   if (!hasTE) {
     await db.execute(
       `INSERT INTO GRADE_ACTIVITY (grade_sheet_id, subj_comp_weight_id, mapeh_component, activity_name, highest_possible_score, activity_date, status)
-       VALUES (?, ?, ?, 'Term Exam', 50, ?, 'ACTIVE')`,
-      [gradeSheetId, qaWeightId, mapehComponent || null, today]
+       VALUES (?, ?, ?, 'Term Exam', ?, ?, 'ACTIVE')`,
+      [gradeSheetId, qaWeightId, mapehComponent || null, defaultTeHps, today]
     );
   }
 }
@@ -411,51 +419,13 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
   try {
     const subjectOfferingId = Number(req.params.subject_offering_id);
     const requestedSectionId = req.query.section_id ? Number(req.query.section_id) : null;
+    const requestedSubjectId = req.query.subject_id ? Number(req.query.subject_id) : null;
 
     // 1. Fetch class context from SUBJECT_OFFERING, SECTION, SUBJECT, GRADE_LEVEL, SCHOOL_YEAR
     let contextRows = [];
 
-    if (requestedSectionId) {
-      const [secMatchRows] = await db.execute(
-        `SELECT 
-           so.subject_offering_id,
-           so.subject_id,
-           so.section_id,
-           so.school_year_id,
-           s.subject_name,
-           s.subject_code,
-           sec.section_name,
-           sec.grade_level_id,
-           gl.grade_level_name,
-           sy.starts_on AS sy_starts_on,
-           sy.ends_on AS sy_ends_on,
-           sch.school_name,
-           sch.school_code,
-           sch.region,
-           sch.division,
-           COALESCE(
-             NULLIF(TRIM(CONCAT_WS(' ', u.first_name, u.middle_name, u.last_name, u.extension_name)), ''),
-             NULLIF(TRIM(CONCAT_WS(' ', u_adv.first_name, u_adv.middle_name, u_adv.last_name, u_adv.extension_name)), ''),
-             NULLIF(TRIM(CONCAT_WS(' ', u.first_name, u.last_name)), '')
-           ) AS teacher_name
-         FROM SUBJECT_OFFERING so
-         LEFT JOIN SUBJECT s ON s.subject_id = so.subject_id
-         LEFT JOIN SECTION sec ON sec.section_id = so.section_id
-         LEFT JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
-         LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = so.school_year_id
-         LEFT JOIN SCHOOL sch ON 1=1
-         LEFT JOIN TEACHER_ASSIGNMENT ta ON ta.subject_offering_id = so.subject_offering_id
-         LEFT JOIN USER u ON u.user_id = ta.user_id
-         LEFT JOIN SECTION_ADVISER_ASSIGNMENT saa ON saa.section_id = sec.section_id
-         LEFT JOIN USER u_adv ON u_adv.user_id = saa.user_id
-         WHERE so.section_id = ?
-         ORDER BY so.subject_offering_id ASC LIMIT 1`,
-        [requestedSectionId]
-      );
-      contextRows = secMatchRows;
-    }
-
-    if (!contextRows || contextRows.length === 0) {
+    // Step A: Priority 1 - Match by subject_offering_id if valid
+    if (subjectOfferingId && !isNaN(subjectOfferingId)) {
       const [offeringMatchRows] = await db.execute(
         `SELECT 
            so.subject_offering_id,
@@ -491,48 +461,97 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
          WHERE so.subject_offering_id = ?`,
         [subjectOfferingId]
       );
-      contextRows = offeringMatchRows;
+      if (offeringMatchRows && offeringMatchRows.length > 0) {
+        contextRows = offeringMatchRows;
+      }
     }
 
+    // Step B: If not found by offering ID, try matching by section (+ optional subject)
     if (!contextRows || contextRows.length === 0) {
-      // Fallback: check by section_id if param itself was section_id
-      const [secFallbackRows] = await db.execute(
-        `SELECT 
-           so.subject_offering_id,
-           so.subject_id,
-           so.section_id,
-           so.school_year_id,
-           s.subject_name,
-           s.subject_code,
-           sec.section_name,
-           sec.grade_level_id,
-           gl.grade_level_name,
-           sy.starts_on AS sy_starts_on,
-           sy.ends_on AS sy_ends_on,
-           sch.school_name,
-           sch.school_code,
-           sch.region,
-           sch.division,
-           COALESCE(
-             NULLIF(TRIM(CONCAT_WS(' ', u.first_name, u.middle_name, u.last_name, u.extension_name)), ''),
-             NULLIF(TRIM(CONCAT_WS(' ', u_adv.first_name, u_adv.middle_name, u_adv.last_name, u_adv.extension_name)), ''),
-             NULLIF(TRIM(CONCAT_WS(' ', u.first_name, u.last_name)), '')
-           ) AS teacher_name
-         FROM SUBJECT_OFFERING so
-         LEFT JOIN SUBJECT s ON s.subject_id = so.subject_id
-         LEFT JOIN SECTION sec ON sec.section_id = so.section_id
-         LEFT JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
-         LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = so.school_year_id
-         LEFT JOIN SCHOOL sch ON 1=1
-         LEFT JOIN TEACHER_ASSIGNMENT ta ON ta.subject_offering_id = so.subject_offering_id
-         LEFT JOIN USER u ON u.user_id = ta.user_id
-         LEFT JOIN SECTION_ADVISER_ASSIGNMENT saa ON saa.section_id = sec.section_id
-         LEFT JOIN USER u_adv ON u_adv.user_id = saa.user_id
-         WHERE so.section_id = ?
-         ORDER BY so.subject_offering_id ASC LIMIT 1`,
-        [subjectOfferingId]
-      );
-      contextRows = secFallbackRows;
+      const targetSecId = requestedSectionId || subjectOfferingId;
+      if (requestedSubjectId) {
+        const [secSubjMatchRows] = await db.execute(
+          `SELECT 
+             so.subject_offering_id,
+             so.subject_id,
+             so.section_id,
+             so.school_year_id,
+             s.subject_name,
+             s.subject_code,
+             sec.section_name,
+             sec.grade_level_id,
+             gl.grade_level_name,
+             sy.starts_on AS sy_starts_on,
+             sy.ends_on AS sy_ends_on,
+             sch.school_name,
+             sch.school_code,
+             sch.region,
+             sch.division,
+             COALESCE(
+               NULLIF(TRIM(CONCAT_WS(' ', u.first_name, u.middle_name, u.last_name, u.extension_name)), ''),
+               NULLIF(TRIM(CONCAT_WS(' ', u_adv.first_name, u_adv.middle_name, u_adv.last_name, u_adv.extension_name)), ''),
+               NULLIF(TRIM(CONCAT_WS(' ', u.first_name, u.last_name)), '')
+             ) AS teacher_name
+           FROM SUBJECT_OFFERING so
+           LEFT JOIN SUBJECT s ON s.subject_id = so.subject_id
+           LEFT JOIN SECTION sec ON sec.section_id = so.section_id
+           LEFT JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
+           LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = so.school_year_id
+           LEFT JOIN SCHOOL sch ON 1=1
+           LEFT JOIN TEACHER_ASSIGNMENT ta ON ta.subject_offering_id = so.subject_offering_id
+           LEFT JOIN USER u ON u.user_id = ta.user_id
+           LEFT JOIN SECTION_ADVISER_ASSIGNMENT saa ON saa.section_id = sec.section_id
+           LEFT JOIN USER u_adv ON u_adv.user_id = saa.user_id
+           WHERE so.section_id = ? AND so.subject_id = ?
+           ORDER BY so.subject_offering_id DESC LIMIT 1`,
+          [targetSecId, requestedSubjectId]
+        );
+        if (secSubjMatchRows && secSubjMatchRows.length > 0) {
+          contextRows = secSubjMatchRows;
+        }
+      }
+
+      if (!contextRows || contextRows.length === 0) {
+        const [secFallbackRows] = await db.execute(
+          `SELECT 
+             so.subject_offering_id,
+             so.subject_id,
+             so.section_id,
+             so.school_year_id,
+             s.subject_name,
+             s.subject_code,
+             sec.section_name,
+             sec.grade_level_id,
+             gl.grade_level_name,
+             sy.starts_on AS sy_starts_on,
+             sy.ends_on AS sy_ends_on,
+             sch.school_name,
+             sch.school_code,
+             sch.region,
+             sch.division,
+             COALESCE(
+               NULLIF(TRIM(CONCAT_WS(' ', u.first_name, u.middle_name, u.last_name, u.extension_name)), ''),
+               NULLIF(TRIM(CONCAT_WS(' ', u_adv.first_name, u_adv.middle_name, u_adv.last_name, u_adv.extension_name)), ''),
+               NULLIF(TRIM(CONCAT_WS(' ', u.first_name, u.last_name)), '')
+             ) AS teacher_name
+           FROM SUBJECT_OFFERING so
+           LEFT JOIN SUBJECT s ON s.subject_id = so.subject_id
+           LEFT JOIN SECTION sec ON sec.section_id = so.section_id
+           LEFT JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
+           LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = so.school_year_id
+           LEFT JOIN SCHOOL sch ON 1=1
+           LEFT JOIN TEACHER_ASSIGNMENT ta ON ta.subject_offering_id = so.subject_offering_id
+           LEFT JOIN USER u ON u.user_id = ta.user_id
+           LEFT JOIN SECTION_ADVISER_ASSIGNMENT saa ON saa.section_id = sec.section_id
+           LEFT JOIN USER u_adv ON u_adv.user_id = saa.user_id
+           WHERE so.section_id = ?
+           ORDER BY so.subject_offering_id ASC LIMIT 1`,
+          [targetSecId]
+        );
+        if (secFallbackRows && secFallbackRows.length > 0) {
+          contextRows = secFallbackRows;
+        }
+      }
     }
 
     if (!contextRows || contextRows.length === 0) {
@@ -644,8 +663,15 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
       componentTypes = allCt;
     }
 
+    if (isMapeh) {
+      weights.WW = 20;
+      weights.PT = 60;
+      weights.QA = 20;
+      weights.EX = 20;
+    }
+
     // 4. Fetch active assessment columns from GRADE_ACTIVITY for this grade_sheet_id
-    const activityCondition = isMapeh ? 'ga.mapeh_component = ?' : 'ga.mapeh_component IS NULL';
+    const activityCondition = isMapeh ? 'ga.mapeh_component = ?' : '(ga.mapeh_component IS NULL OR ga.mapeh_component = \'\')';
     const activityParams = isMapeh ? [gradeSheetId, activeMapehComponent] : [gradeSheetId];
 
     const [activityRows] = await db.execute(
@@ -665,7 +691,7 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
        FROM GRADE_ACTIVITY ga
        LEFT JOIN SUBJECT_COMPONENT_WEIGHT scw ON scw.subj_comp_weight_id = ga.subj_comp_weight_id
        LEFT JOIN COMPONENT_TYPE ct ON ct.component_type_id = scw.component_type_id
-       WHERE ga.grade_sheet_id = ? AND ${activityCondition} AND (ga.status = 'ACTIVE' OR ga.status IS NULL)
+       WHERE ga.grade_sheet_id = ? AND ${activityCondition} AND (ga.status = 'ACTIVE' OR ga.status IS NULL) AND ga.status != 'ARCHIVED'
        ORDER BY ga.activity_id ASC`,
       activityParams
     );
@@ -700,11 +726,11 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
       }
     });
 
-    // 5. Fetch enrolled students from STUDENT_SECTION table in the DB
+    // 5. Fetch enrolled students from STUDENT_SECTION + STUDENT
     const [studentRows] = await db.execute(
       `SELECT 
-         s.student_id,
          ss.student_section_id,
+         ss.student_id,
          s.LRN,
          s.first_name,
          s.middle_name,
@@ -731,22 +757,12 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
       const placeholders = activityIds.map(() => '?').join(',');
 
       const [scoreRows] = await db.execute(
-        `SELECT score_id, activity_id, student_section_id, raw_score, score_status
-         FROM SCORE
-         WHERE activity_id IN (${placeholders})`,
+        `SELECT sc.score_id, sc.activity_id, sc.student_section_id, sc.raw_score, sc.score_status, ss.student_id
+         FROM SCORE sc
+         LEFT JOIN STUDENT_SECTION ss ON ss.student_section_id = sc.student_section_id
+         WHERE sc.activity_id IN (${placeholders})`,
         activityIds
       );
-
-      const [secMap] = await db.execute(
-        'SELECT student_section_id, student_id FROM STUDENT_SECTION WHERE section_id = ?',
-        [sectionId]
-      );
-      const secToSt = {};
-      const stToSec = {};
-      secMap.forEach((m) => {
-        secToSt[m.student_section_id] = m.student_id;
-        stToSec[m.student_id] = m.student_section_id;
-      });
 
       scoreRows.forEach((sc) => {
         const val = sc.raw_score !== null ? Number(sc.raw_score) : null;
@@ -755,24 +771,33 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
             scoreMapByStudentSec[sc.student_section_id] = {};
           }
           scoreMapByStudentSec[sc.student_section_id][sc.activity_id] = val;
+        }
 
-          const sId = secToSt[sc.student_section_id];
-          if (sId) {
-            if (!scoreMapByStudentId[sId]) {
-              scoreMapByStudentId[sId] = {};
-            }
-            scoreMapByStudentId[sId][sc.activity_id] = val;
+        const sId = sc.student_id;
+        if (sId) {
+          if (!scoreMapByStudentId[sId]) {
+            scoreMapByStudentId[sId] = {};
           }
+          scoreMapByStudentId[sId][sc.activity_id] = val;
         }
       });
     }
 
-    // 7. Fetch existing grades from STUDENT_GRADE
-    const savedGrades = await StudentGrade.findByOfferingAndTerm(subjectOfferingId, termCode);
+    // 7. Fetch existing grades from STUDENT_GRADE scoped to active sub-component
+    const savedGrades = await StudentGrade.findByOfferingAndTerm(actualOfferingId, termCode, activeMapehComponent);
     const gradeMap = {};
     savedGrades.forEach((g) => {
       gradeMap[g.student_id] = g;
     });
+
+    let otherGradeMap = {};
+    if (isMapeh) {
+      const otherMapehComp = activeMapehComponent === 'MA' ? 'PEH' : 'MA';
+      const otherSaved = await StudentGrade.findByOfferingAndTerm(actualOfferingId, termCode, otherMapehComp);
+      otherSaved.forEach((g) => {
+        otherGradeMap[g.student_id] = g;
+      });
+    }
 
     // Resolve specific activity IDs for ST1, ST2, and TE
     let st1ActId = null;
@@ -782,9 +807,9 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
       const aName = String(a.activity_name || '').toUpperCase();
       const { code } = normalizeAssessmentType(a.component_code || a.activity_name);
       if (code === 'QA' || code === 'EX') {
-        if (aName.includes('ST1') || aName.includes('SUMMATIVE TEST 1') || aName.includes('SUMMATIVE 1')) st1ActId = a.assessment_id;
-        else if (aName.includes('ST2') || aName.includes('SUMMATIVE TEST 2') || aName.includes('SUMMATIVE 2')) st2ActId = a.assessment_id;
-        else if (aName.includes('TE') || aName.includes('TERM EXAM') || aName.includes('QUARTERLY ASSESSMENT')) teActId = a.assessment_id;
+        if (/\b(ST1|SUMMATIVE\s*TEST\s*1|SUMMATIVE\s*1)\b/i.test(aName)) st1ActId = a.assessment_id;
+        else if (/\b(ST2|SUMMATIVE\s*TEST\s*2|SUMMATIVE\s*2)\b/i.test(aName)) st2ActId = a.assessment_id;
+        else if (/\b(TE|TERM\s*EXAM|QUARTERLY\s*ASSESSMENT|QUARTERLY)\b/i.test(aName) || !teActId) teActId = a.assessment_id;
       }
     });
 
@@ -805,12 +830,16 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
         te: (teActId && rawScores[teActId] !== undefined && rawScores[teActId] !== null) ? rawScores[teActId] : (rawScores.te ?? rawScores.qa ?? ''),
       };
 
-      const defaultExamConfig = { st1Weight: 30, st2Weight: 30, teWeight: 40 };
+      const defaultExamConfig = isMapeh
+        ? { st1Weight: 25, st2Weight: 25, teWeight: 25, st1HPS: 25, st2HPS: 25, teHPS: 25 }
+        : { st1Weight: 30, st2Weight: 30, teWeight: 40 };
+
       const summary = calculateStudentSummary({
         assessments,
         scores: rawScores,
         weights,
         examConfig: defaultExamConfig,
+        isMapeh,
       });
 
       const savedGrade = gradeMap[studentId];
@@ -836,10 +865,34 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
           student_id: student.student_id,
           student_section_id: student.student_section_id || null,
           term: termCode,
+          mapeh_component: isMapeh ? activeMapehComponent : null,
           initial_grade: summary.initialGrade,
           quarterly_grade: summary.quarterlyGrade,
           remarks: summary.remarks,
         });
+      }
+
+      // Compute and auto-sync combined Final MAPEH Quarterly Grade if both components are available
+      let finalMapehQuarterly = null;
+      if (isMapeh) {
+        const otherSaved = otherGradeMap[studentId];
+        if (quarterlyGrade !== null && otherSaved && otherSaved.quarterly_grade !== null && otherSaved.quarterly_grade !== undefined) {
+          finalMapehQuarterly = Math.round((Number(quarterlyGrade) + Number(otherSaved.quarterly_grade)) / 2);
+          const finalInitial = otherSaved.initial_grade !== null && otherSaved.initial_grade !== undefined
+            ? parseFloat(((Number(initialGrade) + Number(otherSaved.initial_grade)) / 2).toFixed(2))
+            : initialGrade;
+
+          gradesToAutoSync.push({
+            subject_offering_id: actualOfferingId,
+            student_id: student.student_id,
+            student_section_id: student.student_section_id || null,
+            term: termCode,
+            mapeh_component: null, // Scoped to ALL / NULL for MasterSheet & SF9
+            initial_grade: finalInitial,
+            quarterly_grade: finalMapehQuarterly,
+            remarks: finalMapehQuarterly >= 75 ? 'Passed' : 'Failed',
+          });
+        }
       }
 
       return {
@@ -857,6 +910,7 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
         initial_grade: initialGrade,
         quarterly_grade: quarterlyGrade,
         remarks,
+        final_mapeh_quarterly_grade: finalMapehQuarterly,
       };
     });
 
@@ -864,15 +918,15 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
       for (const g of gradesToAutoSync) {
         await db.execute(
           `INSERT INTO STUDENT_GRADE (
-            subject_offering_id, student_id, student_section_id, term, initial_grade, quarterly_grade, remarks, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, NOW(6), NOW(6))
+            subject_offering_id, student_id, student_section_id, term, mapeh_component, initial_grade, quarterly_grade, remarks, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(6), NOW(6))
           ON DUPLICATE KEY UPDATE
             student_section_id = VALUES(student_section_id),
             initial_grade = VALUES(initial_grade),
             quarterly_grade = VALUES(quarterly_grade),
             remarks = VALUES(remarks),
             updated_at = NOW(6)`,
-          [g.subject_offering_id, g.student_id, g.student_section_id, g.term, g.initial_grade, g.quarterly_grade, g.remarks]
+          [g.subject_offering_id, g.student_id, g.student_section_id, g.term, g.mapeh_component || null, g.initial_grade, g.quarterly_grade, g.remarks]
         );
       }
     }
@@ -922,10 +976,12 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
         division: classContext.division || 'GINGOOG CITY',
         teacher_name: classContext.teacher_name || '',
       },
-      component_weights: weights,
+      component_weights: isMapeh ? { WW: 20, PT: 60, QA: 20, EX: 20 } : weights,
       component_types: componentTypes,
       total_highest_possible_scores: totalHps,
-      exam_config: { st1Weight: 30, st2Weight: 30, teWeight: 40 },
+      exam_config: isMapeh
+        ? { st1Weight: 25, st2Weight: 25, teWeight: 25, st1HPS: 25, st2HPS: 25, teHPS: 25, st1Id: st1ActId, st2Id: st2ActId, teId: teActId, isMapeh: true }
+        : { st1Weight: 30, st2Weight: 30, teWeight: 40, st1HPS: 30, st2HPS: 30, teHPS: 40, st1Id: st1ActId, st2Id: st2ActId, teId: teActId, isMapeh: false },
       assessments,
       students: computedStudents,
     });
@@ -1031,44 +1087,41 @@ async function handleCreateAssessment(req, res) {
     }
 
     if (!targetSubjCompWeightId) {
-      const [firstWeight] = await db.execute(
-        `SELECT subj_comp_weight_id FROM SUBJECT_COMPONENT_WEIGHT WHERE subject_id = ? LIMIT 1`,
-        [subject_id]
+      const [allWeights] = await db.execute(
+        `SELECT scw.subj_comp_weight_id, ct.component_code 
+         FROM SUBJECT_COMPONENT_WEIGHT scw
+         JOIN COMPONENT_TYPE ct ON ct.component_type_id = scw.component_type_id
+         WHERE scw.subject_id = ? AND scw.school_year_id = ?`,
+        [subject_id, school_year_id]
       );
-      if (firstWeight.length > 0) {
-        targetSubjCompWeightId = firstWeight[0].subj_comp_weight_id;
-      }
+      const match = allWeights.find(w => normalizeAssessmentType(w.component_code).code === code);
+      if (match) targetSubjCompWeightId = match.subj_comp_weight_id;
+      else if (allWeights.length > 0) targetSubjCompWeightId = allWeights[0].subj_comp_weight_id;
     }
 
-    // Component-Aware Activity Counter: filter count strictly by active mapeh_component ('MA' vs 'PEH')
+    // Component-Aware Activity Counter: filter count strictly by category (WW vs PT vs QA) and active mapeh_component ('MA' vs 'PEH')
     let componentActivityCount = 0;
-    if (isMapeh) {
-      const [countRows] = await db.execute(
-        `SELECT COUNT(*) AS total 
-         FROM GRADE_ACTIVITY 
-         WHERE grade_sheet_id = ? 
-           AND subj_comp_weight_id = ? 
-           AND mapeh_component = ? 
-           AND (status = 'ACTIVE' OR status IS NULL)`,
-        [gradeSheetId, targetSubjCompWeightId, finalMapehComponent]
-      );
-      componentActivityCount = Number(countRows[0]?.total || 0);
-    } else {
-      const [countRows] = await db.execute(
-        `SELECT COUNT(*) AS total 
-         FROM GRADE_ACTIVITY 
-         WHERE grade_sheet_id = ? 
-           AND subj_comp_weight_id = ? 
-           AND mapeh_component IS NULL 
-           AND (status = 'ACTIVE' OR status IS NULL)`,
-        [gradeSheetId, targetSubjCompWeightId]
-      );
-      componentActivityCount = Number(countRows[0]?.total || 0);
-    }
+    const actCompCondition = isMapeh ? 'ga.mapeh_component = ?' : '(ga.mapeh_component IS NULL OR ga.mapeh_component = \'\')';
+    const actCompParams = isMapeh ? [gradeSheetId, finalMapehComponent] : [gradeSheetId];
+
+    const [countRows] = await db.execute(
+      `SELECT COUNT(*) AS total 
+       FROM GRADE_ACTIVITY ga
+       LEFT JOIN SUBJECT_COMPONENT_WEIGHT scw ON scw.subj_comp_weight_id = ga.subj_comp_weight_id
+       LEFT JOIN COMPONENT_TYPE ct ON ct.component_type_id = scw.component_type_id
+       WHERE ga.grade_sheet_id = ? 
+         AND ${actCompCondition}
+         AND (ct.component_code = ? OR (ct.component_code IS NULL AND (ga.subj_comp_weight_id = ? OR ga.activity_name LIKE ?)))
+         AND (ga.status = 'ACTIVE' OR ga.status IS NULL)
+         AND ga.status != 'ARCHIVED'`,
+      [...actCompParams, code, targetSubjCompWeightId, `${defaultTypeName}%`]
+    );
+    componentActivityCount = Number(countRows[0]?.total || 0);
 
     const nextActivityIndex = componentActivityCount + 1;
     let defaultTitle = activity_name || title;
-    if (!defaultTitle || String(defaultTitle).trim() === '' || defaultTitle.trim().toLowerCase() === defaultTypeName.toLowerCase()) {
+    const genericPattern = new RegExp(`^${defaultTypeName}\\s*\\d*$`, 'i');
+    if (!defaultTitle || String(defaultTitle).trim() === '' || genericPattern.test(String(defaultTitle).trim())) {
       defaultTitle = `${defaultTypeName} ${nextActivityIndex}`;
     }
 
@@ -1413,82 +1466,100 @@ async function handleBatchScores(req, res) {
       }
     }
 
-    // Fetch active activities for this sheet to resolve QA/EX and match IDs
-    const actCondition = isMapeh ? 'ga.mapeh_component = ?' : 'ga.mapeh_component IS NULL';
-    const actParams = isMapeh ? [gradeSheetId, activeMapehComponent] : [gradeSheetId];
+    if (isMapeh) {
+      await connection.execute(
+        `UPDATE GRADE_ACTIVITY SET mapeh_component = 'MA' WHERE grade_sheet_id = ? AND mapeh_component IS NULL`,
+        [gradeSheetId]
+      );
+    }
 
+    // Fetch active activities for this sheet to resolve QA/EX and match IDs
     const [sheetActivities] = await connection.execute(
-      `SELECT ga.activity_id, ga.activity_name, ga.highest_possible_score, ct.component_code
+      `SELECT ga.activity_id, ga.activity_name, ga.highest_possible_score, ga.mapeh_component, ga.subj_comp_weight_id, ct.component_code
        FROM GRADE_ACTIVITY ga
        LEFT JOIN SUBJECT_COMPONENT_WEIGHT scw ON scw.subj_comp_weight_id = ga.subj_comp_weight_id
        LEFT JOIN COMPONENT_TYPE ct ON ct.component_type_id = scw.component_type_id
-       WHERE ga.grade_sheet_id = ? AND ${actCondition} AND (ga.status = 'ACTIVE' OR ga.status IS NULL)`,
-      actParams
+       WHERE ga.grade_sheet_id = ? AND (ga.status = 'ACTIVE' OR ga.status IS NULL) AND ga.status != 'ARCHIVED'`,
+      [gradeSheetId]
     );
 
     const hpsByActivityId = {};
-    let qaActivityId = null;
-    let st1ActivityId = null;
-    let st2ActivityId = null;
-    let teActivityId = null;
+    const compExamMap = {
+      MA: { st1: null, st2: null, te: null, qa: null },
+      PEH: { st1: null, st2: null, te: null, qa: null },
+      ALL: { st1: null, st2: null, te: null, qa: null },
+    };
 
     sheetActivities.forEach((a) => {
       hpsByActivityId[a.activity_id] = Number(a.highest_possible_score || 0);
       const { code } = normalizeAssessmentType(a.component_code || a.activity_name);
       const aName = String(a.activity_name || '').toUpperCase();
+      const compKey = a.mapeh_component ? a.mapeh_component : (isMapeh ? 'MA' : 'ALL');
+
+      if (!compExamMap[compKey]) compExamMap[compKey] = { st1: null, st2: null, te: null, qa: null };
+
       if (code === 'QA' || code === 'EX') {
-        if (!qaActivityId) qaActivityId = a.activity_id;
-        if (aName.includes('ST1') || aName.includes('SUMMATIVE TEST 1') || aName.includes('SUMMATIVE 1')) st1ActivityId = a.activity_id;
-        else if (aName.includes('ST2') || aName.includes('SUMMATIVE TEST 2') || aName.includes('SUMMATIVE 2')) st2ActivityId = a.activity_id;
-        else if (aName.includes('TE') || aName.includes('TERM EXAM')) teActivityId = a.activity_id;
+        if (!compExamMap[compKey].qa) compExamMap[compKey].qa = a.activity_id;
+        if (/\b(ST1|SUMMATIVE\s*TEST\s*1|SUMMATIVE\s*1)\b/i.test(aName)) compExamMap[compKey].st1 = a.activity_id;
+        else if (/\b(ST2|SUMMATIVE\s*TEST\s*2|SUMMATIVE\s*2)\b/i.test(aName)) compExamMap[compKey].st2 = a.activity_id;
+        else if (/\b(TE|TERM\s*EXAM|QUARTERLY)\b/i.test(aName)) compExamMap[compKey].te = a.activity_id;
       }
     });
 
-    // Ensure ST1, ST2, and TE exist in GRADE_ACTIVITY so they each have a distinct activity_id
-    if (!st1ActivityId || !st2ActivityId || !teActivityId) {
-      const [qaWeightRows] = await connection.execute(
-        `SELECT scw.subj_comp_weight_id FROM SUBJECT_COMPONENT_WEIGHT scw
-         JOIN COMPONENT_TYPE ct ON ct.component_type_id = scw.component_type_id
-         WHERE scw.subject_id = ? AND scw.school_year_id = ? AND (ct.component_code IN ('QA', 'STE', 'EX') OR ct.component_name LIKE '%Quarter%') LIMIT 1`,
-        [subject_id, school_year_id]
-      );
-      const targetWeightId = qaWeightRows.length > 0 ? qaWeightRows[0].subj_comp_weight_id : null;
+    const [qaWeightRows] = await connection.execute(
+      `SELECT scw.subj_comp_weight_id FROM SUBJECT_COMPONENT_WEIGHT scw
+       JOIN COMPONENT_TYPE ct ON ct.component_type_id = scw.component_type_id
+       WHERE scw.subject_id = ? AND scw.school_year_id = ? AND (ct.component_code IN ('QA', 'STE', 'EX') OR ct.component_name LIKE '%Quarter%') LIMIT 1`,
+      [subject_id, school_year_id]
+    );
+    const targetWeightId = qaWeightRows.length > 0 ? qaWeightRows[0].subj_comp_weight_id : null;
 
-      if (!st1ActivityId) {
+    // Ensure ST1, ST2, and TE exist in GRADE_ACTIVITY so they each have a distinct activity_id per component
+    const targetComps = isMapeh ? ['MA', 'PEH'] : ['ALL'];
+    for (const c of targetComps) {
+      const cKey = c;
+      const cMap = compExamMap[cKey] || (compExamMap[cKey] = { st1: null, st2: null, te: null, qa: null });
+      const cMapehComp = isMapeh ? c : null;
+      const defaultSt1Hps = isMapeh ? 25 : 30;
+      const defaultSt2Hps = isMapeh ? 25 : 30;
+      const defaultTeHps = isMapeh ? 25 : 40;
+
+      if (!cMap.st1) {
         const [insSt1] = await connection.execute(
           `INSERT INTO GRADE_ACTIVITY (grade_sheet_id, subj_comp_weight_id, mapeh_component, activity_name, highest_possible_score, activity_date, status)
-           VALUES (?, ?, ?, 'Summative Test 1', 25, NOW(), 'ACTIVE')`,
-          [gradeSheetId, targetWeightId, activeMapehComponent]
+           VALUES (?, ?, ?, 'Summative Test 1', ?, NOW(), 'ACTIVE')`,
+          [gradeSheetId, targetWeightId, cMapehComp, defaultSt1Hps]
         );
-        st1ActivityId = insSt1.insertId;
-        hpsByActivityId[st1ActivityId] = 25;
+        cMap.st1 = insSt1.insertId;
+        hpsByActivityId[cMap.st1] = defaultSt1Hps;
       }
 
-      if (!st2ActivityId) {
+      if (!cMap.st2) {
         const [insSt2] = await connection.execute(
           `INSERT INTO GRADE_ACTIVITY (grade_sheet_id, subj_comp_weight_id, mapeh_component, activity_name, highest_possible_score, activity_date, status)
-           VALUES (?, ?, ?, 'Summative Test 2', 25, NOW(), 'ACTIVE')`,
-          [gradeSheetId, targetWeightId, activeMapehComponent]
+           VALUES (?, ?, ?, 'Summative Test 2', ?, NOW(), 'ACTIVE')`,
+          [gradeSheetId, targetWeightId, cMapehComp, defaultSt2Hps]
         );
-        st2ActivityId = insSt2.insertId;
-        hpsByActivityId[st2ActivityId] = 25;
+        cMap.st2 = insSt2.insertId;
+        hpsByActivityId[cMap.st2] = defaultSt2Hps;
       }
 
-      if (!teActivityId) {
-        if (qaActivityId && qaActivityId !== st1ActivityId && qaActivityId !== st2ActivityId) {
+      if (!cMap.te) {
+        if (cMap.qa && cMap.qa !== cMap.st1 && cMap.qa !== cMap.st2) {
           await connection.execute(
-            `UPDATE GRADE_ACTIVITY SET activity_name = 'Term Exam' WHERE activity_id = ?`,
-            [qaActivityId]
+            `UPDATE GRADE_ACTIVITY SET activity_name = 'Term Exam', highest_possible_score = ? WHERE activity_id = ?`,
+            [defaultTeHps, cMap.qa]
           );
-          teActivityId = qaActivityId;
+          cMap.te = cMap.qa;
+          hpsByActivityId[cMap.te] = defaultTeHps;
         } else {
           const [insTe] = await connection.execute(
             `INSERT INTO GRADE_ACTIVITY (grade_sheet_id, subj_comp_weight_id, mapeh_component, activity_name, highest_possible_score, activity_date, status)
-             VALUES (?, ?, ?, 'Term Exam', 50, NOW(), 'ACTIVE')`,
-            [gradeSheetId, targetWeightId, activeMapehComponent]
+             VALUES (?, ?, ?, 'Term Exam', ?, NOW(), 'ACTIVE')`,
+            [gradeSheetId, targetWeightId, cMapehComp, defaultTeHps]
           );
-          teActivityId = insTe.insertId;
-          hpsByActivityId[teActivityId] = 50;
+          cMap.te = insTe.insertId;
+          hpsByActivityId[cMap.te] = defaultTeHps;
         }
       }
     }
@@ -1524,14 +1595,23 @@ async function handleBatchScores(req, res) {
     for (const item of scoreEntries) {
       const rawAssId = String(item.assessment_id || item.activity_id || '').toLowerCase();
       const examKey = String(item.exam_key || '').toLowerCase();
-      let assessmentId = Number(item.assessment_id || item.activity_id);
+      const cleanNumericStr = rawAssId.replace(/^(ww_|pt_)/, '');
+      let assessmentId = !isNaN(Number(cleanNumericStr)) && cleanNumericStr !== '' ? Number(cleanNumericStr) : null;
+
+      const itemComp = item.mapeh_component ? normalizeMapehComponent(item.mapeh_component) : (isMapeh ? activeMapehComponent : null);
+      const cKey = isMapeh ? (itemComp || 'MA') : 'ALL';
+      const cMap = compExamMap[cKey] || compExamMap['ALL'] || { st1: null, st2: null, te: null, qa: null };
 
       if (examKey === 'st1' || rawAssId === 'st1' || rawAssId.includes('st1')) {
-        assessmentId = st1ActivityId;
+        assessmentId = cMap.st1;
       } else if (examKey === 'st2' || rawAssId === 'st2' || rawAssId.includes('st2')) {
-        assessmentId = st2ActivityId;
+        assessmentId = cMap.st2;
       } else if (examKey === 'te' || rawAssId === 'te' || rawAssId.includes('termexam') || rawAssId === 'qa' || item.type === 'quarterlyAssessment') {
-        assessmentId = teActivityId;
+        assessmentId = cMap.te || cMap.qa;
+      } else if (isMapeh && assessmentId) {
+        if (assessmentId === compExamMap['MA']?.st1 || assessmentId === compExamMap['PEH']?.st1) assessmentId = cMap.st1;
+        else if (assessmentId === compExamMap['MA']?.st2 || assessmentId === compExamMap['PEH']?.st2) assessmentId = cMap.st2;
+        else if (assessmentId === compExamMap['MA']?.te || assessmentId === compExamMap['PEH']?.te) assessmentId = cMap.te;
       }
 
       let studentSectionId = item.student_section_id ? Number(item.student_section_id) : null;
@@ -1621,12 +1701,15 @@ async function handleBatchScores(req, res) {
     // Step 2: Begin transaction for recalculating and upserting STUDENT_GRADE summaries
     await connection.beginTransaction();
 
-    let effectiveExamConfig = {
-      st1Weight: examConfig?.st1Weight !== undefined ? Number(examConfig.st1Weight) : 30,
-      st2Weight: examConfig?.st2Weight !== undefined ? Number(examConfig.st2Weight) : 30,
-      teWeight: examConfig?.teWeight !== undefined ? Number(examConfig.teWeight) : 40,
-    };
+    let effectiveExamConfig = isMapeh
+      ? { st1Weight: 25, st2Weight: 25, teWeight: 25, st1HPS: 25, st2HPS: 25, teHPS: 25 }
+      : {
+          st1Weight: examConfig?.st1Weight !== undefined ? Number(examConfig.st1Weight) : 30,
+          st2Weight: examConfig?.st2Weight !== undefined ? Number(examConfig.st2Weight) : 30,
+          teWeight: examConfig?.teWeight !== undefined ? Number(examConfig.teWeight) : 40,
+        };
     if (
+      !isMapeh &&
       effectiveExamConfig.st1Weight === 20 &&
       effectiveExamConfig.st2Weight === 20 &&
       effectiveExamConfig.teWeight === 60
@@ -1634,7 +1717,7 @@ async function handleBatchScores(req, res) {
       effectiveExamConfig = { st1Weight: 30, st2Weight: 30, teWeight: 40 };
     }
 
-    let weights = { ...DEFAULT_JHS_WEIGHTS };
+    let weights = isMapeh ? { WW: 20, PT: 60, QA: 20, EX: 20 } : { ...DEFAULT_JHS_WEIGHTS };
     const [weightRows] = await connection.execute(
       `SELECT scw.percentage AS weight_percentage, ct.component_code
        FROM SUBJECT_COMPONENT_WEIGHT scw
@@ -1643,7 +1726,7 @@ async function handleBatchScores(req, res) {
       [subject_id, school_year_id]
     );
 
-    if (weightRows.length > 0) {
+    if (weightRows.length > 0 && !isMapeh) {
       weightRows.forEach((w) => {
         const { code } = normalizeAssessmentType(w.component_code);
         if (code === 'WW' || code === 'PT' || code === 'QA') {
@@ -1651,6 +1734,9 @@ async function handleBatchScores(req, res) {
         }
       });
     }
+
+    const actCondition = isMapeh ? 'ga.mapeh_component = ?' : '(ga.mapeh_component IS NULL OR ga.mapeh_component = \'\')';
+    const actParams = isMapeh ? [gradeSheetId, activeMapehComponent] : [gradeSheetId];
 
     const [assessments] = await connection.execute(
       `SELECT 
@@ -1661,7 +1747,7 @@ async function handleBatchScores(req, res) {
        FROM GRADE_ACTIVITY ga
        LEFT JOIN SUBJECT_COMPONENT_WEIGHT scw ON scw.subj_comp_weight_id = ga.subj_comp_weight_id
        LEFT JOIN COMPONENT_TYPE ct ON ct.component_type_id = scw.component_type_id
-       WHERE ga.grade_sheet_id = ? AND ${actCondition} AND (ga.status = 'ACTIVE' OR ga.status IS NULL)`,
+       WHERE ga.grade_sheet_id = ? AND ${actCondition} AND (ga.status = 'ACTIVE' OR ga.status IS NULL) AND ga.status != 'ARCHIVED'`,
       actParams
     );
 
@@ -1678,7 +1764,10 @@ async function handleBatchScores(req, res) {
       const actIds = assessments.map((a) => a.assessment_id);
       const ph = actIds.map(() => '?').join(',');
       const [scoreData] = await connection.execute(
-        `SELECT activity_id, student_section_id, raw_score FROM SCORE WHERE activity_id IN (${ph})`,
+        `SELECT sc.activity_id, sc.student_section_id, sc.raw_score, ss.student_id
+         FROM SCORE sc
+         LEFT JOIN STUDENT_SECTION ss ON ss.student_section_id = sc.student_section_id
+         WHERE sc.activity_id IN (${ph})`,
         actIds
       );
 
@@ -1686,12 +1775,12 @@ async function handleBatchScores(req, res) {
         if (s.student_section_id) {
           if (!allRawScores[s.student_section_id]) allRawScores[s.student_section_id] = {};
           allRawScores[s.student_section_id][s.activity_id] = s.raw_score !== null ? Number(s.raw_score) : null;
+        }
 
-          const sId = studentIdBySecId[s.student_section_id];
-          if (sId) {
-            if (!allRawScores[`st_${sId}`]) allRawScores[`st_${sId}`] = {};
-            allRawScores[`st_${sId}`][s.activity_id] = s.raw_score !== null ? Number(s.raw_score) : null;
-          }
+        const sId = s.student_id || studentIdBySecId[s.student_section_id];
+        if (sId) {
+          if (!allRawScores[`st_${sId}`]) allRawScores[`st_${sId}`] = {};
+          allRawScores[`st_${sId}`][s.activity_id] = s.raw_score !== null ? Number(s.raw_score) : null;
         }
       });
     }
@@ -1699,6 +1788,7 @@ async function handleBatchScores(req, res) {
     // For MAPEH, fetch other sub-component activities and scores to update STUDENT_GRADE with combined quarterly grade
     let otherComponentAssessments = [];
     let otherRawScores = {};
+    let otherGradeMap = {};
     if (isMapeh) {
       const otherComponent = activeMapehComponent === 'MA' ? 'PEH' : 'MA';
       const [otherActs] = await connection.execute(
@@ -1706,7 +1796,7 @@ async function handleBatchScores(req, res) {
          FROM GRADE_ACTIVITY ga
          LEFT JOIN SUBJECT_COMPONENT_WEIGHT scw ON scw.subj_comp_weight_id = ga.subj_comp_weight_id
          LEFT JOIN COMPONENT_TYPE ct ON ct.component_type_id = scw.component_type_id
-         WHERE ga.grade_sheet_id = ? AND ga.mapeh_component = ? AND (ga.status = 'ACTIVE' OR ga.status IS NULL)`,
+         WHERE ga.grade_sheet_id = ? AND ga.mapeh_component = ? AND (ga.status = 'ACTIVE' OR ga.status IS NULL) AND ga.status != 'ARCHIVED'`,
         [gradeSheetId, otherComponent]
       );
       otherComponentAssessments = otherActs;
@@ -1714,21 +1804,35 @@ async function handleBatchScores(req, res) {
       if (otherActs.length > 0) {
         const otherActIds = otherActs.map((a) => a.assessment_id);
         const [otherScoreData] = await connection.execute(
-          `SELECT activity_id, student_section_id, raw_score FROM SCORE WHERE activity_id IN (${otherActIds.map(() => '?').join(',')})`,
+          `SELECT sc.activity_id, sc.student_section_id, sc.raw_score, ss.student_id
+           FROM SCORE sc
+           LEFT JOIN STUDENT_SECTION ss ON ss.student_section_id = sc.student_section_id
+           WHERE sc.activity_id IN (${otherActIds.map(() => '?').join(',')})`,
           otherActIds
         );
         otherScoreData.forEach((s) => {
           if (s.student_section_id) {
             if (!otherRawScores[s.student_section_id]) otherRawScores[s.student_section_id] = {};
             otherRawScores[s.student_section_id][s.activity_id] = s.raw_score !== null ? Number(s.raw_score) : null;
-            const sId = studentIdBySecId[s.student_section_id];
-            if (sId) {
-              if (!otherRawScores[`st_${sId}`]) otherRawScores[`st_${sId}`] = {};
-              otherRawScores[`st_${sId}`][s.activity_id] = s.raw_score !== null ? Number(s.raw_score) : null;
-            }
+          }
+
+          const sId = s.student_id || studentIdBySecId[s.student_section_id];
+          if (sId) {
+            if (!otherRawScores[`st_${sId}`]) otherRawScores[`st_${sId}`] = {};
+            otherRawScores[`st_${sId}`][s.activity_id] = s.raw_score !== null ? Number(s.raw_score) : null;
           }
         });
       }
+
+      const [otherGradeRows] = await connection.execute(
+        `SELECT student_id, initial_grade, quarterly_grade, remarks
+         FROM STUDENT_GRADE
+         WHERE subject_offering_id = ? AND term = ? AND mapeh_component = ?`,
+        [subject_offering_id, termCode, otherComponent]
+      );
+      otherGradeRows.forEach((r) => {
+        otherGradeMap[r.student_id] = r;
+      });
     }
 
     const gradesToUpsert = [];
@@ -1753,57 +1857,87 @@ async function handleBatchScores(req, res) {
         scores: studentScores,
         weights,
         examConfig: effectiveExamConfig,
+        isMapeh,
       });
 
+      const activeCKey = isMapeh ? activeMapehComponent : 'ALL';
+      const activeCMap = compExamMap[activeCKey] || compExamMap['ALL'] || {};
       calculatedResults[sId] = {
         ...summary,
         examinations: {
-          st1: st1ActivityId && studentScores[st1ActivityId] !== undefined ? studentScores[st1ActivityId] : '',
-          st2: st2ActivityId && studentScores[st2ActivityId] !== undefined ? studentScores[st2ActivityId] : '',
-          te: teActivityId && studentScores[teActivityId] !== undefined ? studentScores[teActivityId] : '',
+          st1: activeCMap.st1 && studentScores[activeCMap.st1] !== undefined ? studentScores[activeCMap.st1] : '',
+          st2: activeCMap.st2 && studentScores[activeCMap.st2] !== undefined ? studentScores[activeCMap.st2] : '',
+          te: activeCMap.te && studentScores[activeCMap.te] !== undefined ? studentScores[activeCMap.te] : '',
         },
       };
 
       if (summary.initialGrade !== null) {
-        let finalInitial = summary.initialGrade;
-        let finalQuarterly = summary.quarterlyGrade;
-        let finalRemarks = summary.remarks;
+        let otherQuarterly = null;
+        let otherInitial = null;
 
-        if (isMapeh && otherComponentAssessments.length > 0) {
-          const otherStudentScores = {
-            ...(sSecId && otherRawScores[sSecId] ? otherRawScores[sSecId] : {}),
-            ...(sId && otherRawScores[`st_${sId}`] ? otherRawScores[`st_${sId}`] : {}),
-          };
-          const otherSummary = calculateStudentSummary({
-            assessments: otherComponentAssessments.map((a) => ({
-              assessment_id: a.assessment_id,
-              activity_name: a.activity_name,
-              title: a.activity_name,
-              component_code: normalizeAssessmentType(a.component_code || a.activity_name).code,
-              max_score: Number(a.max_score || 0),
-            })),
-            scores: otherStudentScores,
-            weights,
-            examConfig: effectiveExamConfig,
-          });
+        if (isMapeh) {
+          if (otherComponentAssessments.length > 0) {
+            const otherStudentScores = {
+              ...(sSecId && otherRawScores[sSecId] ? otherRawScores[sSecId] : {}),
+              ...(sId && otherRawScores[`st_${sId}`] ? otherRawScores[`st_${sId}`] : {}),
+            };
+            const otherSummary = calculateStudentSummary({
+              assessments: otherComponentAssessments.map((a) => ({
+                assessment_id: a.assessment_id,
+                activity_name: a.activity_name,
+                title: a.activity_name,
+                component_code: normalizeAssessmentType(a.component_code || a.activity_name).code,
+                max_score: Number(a.max_score || 0),
+              })),
+              scores: otherStudentScores,
+              weights,
+              examConfig: effectiveExamConfig,
+              isMapeh: true,
+            });
 
-          if (otherSummary.quarterlyGrade !== null && typeof otherSummary.quarterlyGrade === 'number') {
-            finalQuarterly = Math.round((summary.quarterlyGrade + otherSummary.quarterlyGrade) / 2);
-            finalRemarks = finalQuarterly >= 75 ? 'Passed' : 'Failed';
+            if (otherSummary.quarterlyGrade !== null && typeof otherSummary.quarterlyGrade === 'number') {
+              otherQuarterly = otherSummary.quarterlyGrade;
+              otherInitial = otherSummary.initialGrade;
+            }
+          }
+
+          if (otherQuarterly === null && otherGradeMap[sId]?.quarterly_grade !== null && otherGradeMap[sId]?.quarterly_grade !== undefined) {
+            otherQuarterly = Number(otherGradeMap[sId].quarterly_grade);
+            otherInitial = otherGradeMap[sId].initial_grade !== null && otherGradeMap[sId].initial_grade !== undefined
+              ? Number(otherGradeMap[sId].initial_grade)
+              : null;
           }
         }
 
-        // Single Source of Truth Alignment:
-        // STUDENT_GRADE.initial_grade strictly equals WS_WW + WS_PT + WS_EX (summary.initialGrade = 88.76)
+        // Sub-component row for MAPEH, or standard row for non-MAPEH
         gradesToUpsert.push({
           subject_offering_id,
           student_id: sId,
           student_section_id: sSecId,
           term: termCode,
+          mapeh_component: isMapeh ? activeMapehComponent : null,
           initial_grade: summary.initialGrade,
-          quarterly_grade: finalQuarterly,
-          remarks: finalRemarks,
+          quarterly_grade: summary.quarterlyGrade,
+          remarks: summary.remarks,
         });
+
+        // Combined summary row for MAPEH (mapeh_component = null)
+        if (isMapeh && otherQuarterly !== null) {
+          const finalQuarterly = Math.round((summary.quarterlyGrade + otherQuarterly) / 2);
+          const finalInitial = otherInitial !== null
+            ? parseFloat(((summary.initialGrade + otherInitial) / 2).toFixed(2))
+            : summary.initialGrade;
+          gradesToUpsert.push({
+            subject_offering_id,
+            student_id: sId,
+            student_section_id: sSecId,
+            term: termCode,
+            mapeh_component: null,
+            initial_grade: finalInitial,
+            quarterly_grade: finalQuarterly,
+            remarks: finalQuarterly >= 75 ? 'Passed' : 'Failed',
+          });
+        }
       }
     });
 
@@ -1814,12 +1948,13 @@ async function handleBatchScores(req, res) {
           student_id,
           student_section_id,
           term,
+          mapeh_component,
           initial_grade,
           quarterly_grade,
           remarks,
           created_at,
           updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, NOW(6), NOW(6))
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(6), NOW(6))
         ON DUPLICATE KEY UPDATE
           student_section_id = VALUES(student_section_id),
           initial_grade = VALUES(initial_grade),
@@ -1831,6 +1966,7 @@ async function handleBatchScores(req, res) {
           g.student_id,
           g.student_section_id || null,
           g.term,
+          g.mapeh_component || null,
           g.initial_grade,
           g.quarterly_grade,
           g.remarks,
@@ -1951,6 +2087,12 @@ router.get('/class-record/:subject_offering_id/export', async (req, res) => {
 
     // 3. Fetch assessments
     const isMapeh = isMapehSubject(ctx.subject_name, ctx.subject_code);
+    if (isMapeh) {
+      weights.WW = 20;
+      weights.PT = 60;
+      weights.EX = 20;
+      weights.QA = 20;
+    }
     const rawComponent = req.query.mapeh_component || req.query.component;
     const activeMapehComponent = isMapeh ? normalizeMapehComponent(rawComponent) : null;
 
@@ -2069,10 +2211,8 @@ router.get('/class-record/:subject_offering_id/export', async (req, res) => {
 
     const termNum = termCode.replace(/\D/g, '') || '1';
     const compLabel = activeMapehComponent === 'PEH' ? 'PE & HEALTH' : 'MUSIC & ARTS';
-    const termTitle = isMapeh
-      ? `CLASS RECORD - MAPEH (${compLabel}) - TERM ${termNum}`
-      : `CLASS RECORD - TERM ${termNum}`;
-    const termHeader = termCode === 'T1' ? 'FIRST TERM' : (termCode === 'T2' ? 'SECOND TERM' : (termCode === 'T3' ? 'THIRD TERM' : 'FOURTH TERM'));
+    const termTitle = `CLASS RECORD - TERM ${termNum}`;
+    const termHeader = `CLASS RECORD - TERM ${termNum}`;
 
     const sheetTabName = isMapeh
       ? `MAPEH (${activeMapehComponent}) - T${termNum}`
@@ -2479,12 +2619,24 @@ router.get('/class-record/:subject_offering_id/export', async (req, res) => {
         const numST2 = hasST2 ? Number(rawST2) : 0;
         const numTE = hasTE ? Number(rawTE) : 0;
 
-        const wsST1 = hasST1 && st1HPS > 0 ? parseFloat(((numST1 / st1HPS) * 30).toFixed(2)) : 0;
-        const wsST2 = hasST2 && st2HPS > 0 ? parseFloat(((numST2 / st2HPS) * 30).toFixed(2)) : 0;
-        const wsTE = hasTE && teHPS > 0 ? parseFloat(((numTE / teHPS) * 40).toFixed(2)) : 0;
+        let exPS = 0;
+        let exWS = 0;
+        let wsST1 = 0;
+        let wsST2 = 0;
+        let wsTE = 0;
 
-        const exPS = hasEx ? parseFloat((wsST1 + wsST2 + wsTE).toFixed(2)) : 0;
-        const exWS = hasEx ? parseFloat((exPS * ((weights.EX || weights.QA || 30) / 100)).toFixed(2)) : 0;
+        if (isMapeh) {
+          const exTotalRaw = numST1 + numST2 + numTE;
+          const exTotalHps = (st1HPS || 25) + (st2HPS || 25) + (teHPS || 25);
+          exPS = hasEx && exTotalHps > 0 ? parseFloat(((exTotalRaw / exTotalHps) * 100).toFixed(2)) : 0;
+          exWS = hasEx ? parseFloat((exPS * (20 / 100)).toFixed(2)) : 0;
+        } else {
+          wsST1 = hasST1 && st1HPS > 0 ? parseFloat(((numST1 / st1HPS) * 30).toFixed(2)) : 0;
+          wsST2 = hasST2 && st2HPS > 0 ? parseFloat(((numST2 / st2HPS) * 30).toFixed(2)) : 0;
+          wsTE = hasTE && teHPS > 0 ? parseFloat(((numTE / teHPS) * 40).toFixed(2)) : 0;
+          exPS = hasEx ? parseFloat((wsST1 + wsST2 + wsTE).toFixed(2)) : 0;
+          exWS = hasEx ? parseFloat((exPS * ((weights.EX || weights.QA || 30) / 100)).toFixed(2)) : 0;
+        }
 
         // Initial Grade, Term Grade, Descriptor
         const hasAny = hasWw || hasPt || hasEx;
