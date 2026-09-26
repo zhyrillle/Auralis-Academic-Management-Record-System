@@ -28,6 +28,11 @@ export const sidebarConfig = {
       icon: Users,
     },
     {
+      title: "Student Section Management",
+      path: "/system-admin/student-section-management",
+      icon: BookOpen,
+    },
+    {
       title: "Academic Periods",
       path: "/system-admin/grading-periods",
       icon: CalendarClock,
@@ -49,6 +54,11 @@ export const sidebarConfig = {
       title: "Manage Users",
       path: "/system-admin/manage-users",
       icon: Users,
+    },
+    {
+      title: "Student Section Management",
+      path: "/system-admin/student-section-management",
+      icon: BookOpen,
     },
     {
       title: "Academic Periods",
