@@ -1,61 +1,10 @@
-﻿import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import DropdownSelect from "../../components/common/DropdownSelect";
-import "../../styles/ManageUsers.css"; // Reuse existing styles for consistency
+import { Plus, X, Edit, Users, Eye, MoreVertical } from "lucide-react";
+import "../../styles/ManageUsers.css";
 import "../../styles/StudentSectionManagement.css";
 
 const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api";
-
-function Icon({ type, size = 22 }) {
-  const common = {
-    width: size,
-    height: size,
-    viewBox: "0 0 24 24",
-    fill: "none",
-    stroke: "currentColor",
-    strokeWidth: "2",
-    strokeLinecap: "round",
-    strokeLinejoin: "round",
-  };
-  switch (type) {
-    case "search":
-      return (
-        <svg {...common}>
-          <circle cx="11" cy="11" r="7" />
-          <path d="m20 20-4-4" />
-        </svg>
-      );
-    case "plus":
-      return (
-        <svg {...common}>
-          <path d="M12 5v14M5 12h14" />
-        </svg>
-      );
-    case "edit":
-      return (
-        <svg {...common}>
-          <path d="M4 20h4L19 9l-4-4L4 16v4z" />
-          <path d="m13.5 6.5 4 4" />
-        </svg>
-      );
-    case "trash":
-      return (
-        <svg {...common}>
-          <path d="M4 7h16" />
-          <path d="M10 11v6M14 11v6" />
-          <path d="M6 7l1 14h10l1-14" />
-          <path d="M9 7V4h6v3" />
-        </svg>
-      );
-    case "close":
-      return (
-        <svg {...common}>
-          <path d="M18 6 6 18M6 6l12 12" />
-        </svg>
-      );
-    default:
-      return null;
-  }
-}
 
 function StatusBadge({ status }) {
   const isActive = String(status).toLowerCase() === "active";
@@ -67,46 +16,78 @@ function StatusBadge({ status }) {
   );
 }
 
+// Custom dropdown for Section Actions
+function ActionMenu({ section, onEdit, onManageStudents, onViewStudents }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+    if (isOpen) document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isOpen]);
+
+  return (
+    <div className="actions" ref={menuRef} style={{ position: 'relative' }}>
+      <button className="action-btn action-btn--edit" onClick={() => setIsOpen(!isOpen)} title="Actions" type="button">
+        <Edit size={21} />
+      </button>
+      {isOpen && (
+        <div className="section-action-dropdown">
+          <button onClick={() => { setIsOpen(false); onEdit(section); }}>
+            <Edit size={14} /> Edit Section
+          </button>
+          <button onClick={() => { setIsOpen(false); onManageStudents(section); }}>
+            <Users size={14} /> Manage Students
+          </button>
+          <button onClick={() => { setIsOpen(false); onViewStudents(section); }}>
+            <Eye size={14} /> View Students
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 export default function StudentSectionManagement() {
   const [sections, setSections] = useState([]);
   const [students, setStudents] = useState([]);
-  const [gradeLevels, setGradeLevels] = useState([
+  const [gradeLevels] = useState([
     { value: "Grade 7", label: "Grade 7" },
     { value: "Grade 8", label: "Grade 8" },
     { value: "Grade 9", label: "Grade 9" },
     { value: "Grade 10", label: "Grade 10" },
   ]);
 
-  const [loading, setLoading] = useState(false);
-  
-  // Section filters
   const [sectionLevelFilter, setSectionLevelFilter] = useState("All Levels");
-  
-  // Student filters
   const [studentSearch, setStudentSearch] = useState("");
   const [studentSectionFilter, setStudentSectionFilter] = useState("All Sections");
   const [studentStatusFilter, setStudentStatusFilter] = useState("All Students");
-
-  // Selection state for bulk assign
   const [selectedStudentIds, setSelectedStudentIds] = useState(new Set());
 
   // Modal states
-  const [isSectionModalOpen, setIsSectionModalOpen] = useState(false);
-  const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
-  const [assigningStudent, setAssigningStudent] = useState(null); // null means bulk
+  const [activeModal, setActiveModal] = useState(null); // 'createSection', 'editSection', 'assignSelected', 'manageStudents', 'removeStudent'
   
-  const [sectionFormData, setSectionFormData] = useState({ name: "", level: "Grade 7" });
+  // Modal context data
+  const [sectionFormData, setSectionFormData] = useState({ id: null, name: "", level: "Grade 7" });
   const [assignFormData, setAssignFormData] = useState({ section_id: "" });
+  const [targetSection, setTargetSection] = useState(null); // For Manage Students
+  const [targetStudent, setTargetStudent] = useState(null); // For Remove single student confirmation
+  const [manageSearch, setManageSearch] = useState("");
 
-  // Dummy data initialization to show UI functionality before actual backend wiring
+  // Dummy data init
   useEffect(() => {
     setSections([
-      { id: 1, name: "Gemelina", level: "Grade 7", students: 50, status: "Active" },
-      { id: 2, name: "Mahogany", level: "Grade 7", students: 50, status: "Active" },
-      { id: 3, name: "Narra", level: "Grade 8", students: 48, status: "Active" },
-      { id: 4, name: "Tanguile", level: "Grade 9", students: 52, status: "Active" },
+      { id: 1, name: "Gemelina", level: "Grade 7", status: "Active" },
+      { id: 2, name: "Mahogany", level: "Grade 7", status: "Active" },
+      { id: 3, name: "Narra", level: "Grade 8", status: "Active" },
+      { id: 4, name: "Tanguile", level: "Grade 9", status: "Active" },
     ]);
-    
     setStudents([
       { id: 101, name: "Juan Dela Cruz", lrn: "123456789012", gradeLevel: "Grade 7", section_id: 1, section: "Gemelina", status: "Active" },
       { id: 102, name: "Maria Santos", lrn: "123456789013", gradeLevel: "Grade 7", section_id: 2, section: "Mahogany", status: "Active" },
@@ -115,89 +96,119 @@ export default function StudentSectionManagement() {
     ]);
   }, []);
 
+  // Get student count for a section dynamically
+  const getSectionStudentCount = (sectionId) => students.filter(s => s.section_id === sectionId).length;
+
   const filteredSections = useMemo(() => {
-    return sections.filter(sec => 
-      sectionLevelFilter === "All Levels" || sec.level === sectionLevelFilter
-    );
+    return sections.filter(sec => sectionLevelFilter === "All Levels" || sec.level === sectionLevelFilter);
   }, [sections, sectionLevelFilter]);
 
   const filteredStudents = useMemo(() => {
     return students.filter(student => {
-      const searchMatch = student.name.toLowerCase().includes(studentSearch.toLowerCase()) || 
-                          student.lrn.includes(studentSearch);
-      
+      const searchMatch = student.name.toLowerCase().includes(studentSearch.toLowerCase()) || student.lrn.includes(studentSearch);
       let sectionMatch = true;
       if (studentSectionFilter !== "All Sections") {
-        if (studentSectionFilter === "Unassigned") {
-          sectionMatch = !student.section_id;
-        } else {
-          sectionMatch = student.section === studentSectionFilter;
-        }
+        if (studentSectionFilter === "Unassigned") sectionMatch = !student.section_id;
+        else sectionMatch = student.section === studentSectionFilter;
       }
-      
       let statusMatch = true;
       if (studentStatusFilter !== "All Students") {
         if (studentStatusFilter === "Assigned") statusMatch = !!student.section_id;
         if (studentStatusFilter === "Unassigned") statusMatch = !student.section_id;
       }
-      
       return searchMatch && sectionMatch && statusMatch;
     });
   }, [students, studentSearch, studentSectionFilter, studentStatusFilter]);
 
   const toggleStudentSelection = (id) => {
     const newSelected = new Set(selectedStudentIds);
-    if (newSelected.has(id)) {
-      newSelected.delete(id);
-    } else {
-      newSelected.add(id);
-    }
+    if (newSelected.has(id)) newSelected.delete(id);
+    else newSelected.add(id);
     setSelectedStudentIds(newSelected);
   };
 
   const toggleAllStudents = () => {
-    if (selectedStudentIds.size === filteredStudents.length && filteredStudents.length > 0) {
-      setSelectedStudentIds(new Set());
-    } else {
-      setSelectedStudentIds(new Set(filteredStudents.map(s => s.id)));
+    if (selectedStudentIds.size === filteredStudents.length && filteredStudents.length > 0) setSelectedStudentIds(new Set());
+    else setSelectedStudentIds(new Set(filteredStudents.map(s => s.id)));
+  };
+
+  const handleSaveSection = (e) => {
+    e.preventDefault();
+    if (activeModal === 'createSection') {
+      const newSection = {
+        id: sections.length + 1,
+        name: sectionFormData.name,
+        level: sectionFormData.level,
+        status: "Active"
+      };
+      setSections([...sections, newSection]);
+    } else if (activeModal === 'editSection') {
+      setSections(sections.map(s => s.id === sectionFormData.id ? { ...s, name: sectionFormData.name, level: sectionFormData.level } : s));
+      
+      // Update student grade levels if section level changed
+      setStudents(students.map(st => st.section_id === sectionFormData.id ? { ...st, section: sectionFormData.name, gradeLevel: sectionFormData.level } : st));
     }
+    closeModal();
   };
 
-  const handleCreateSection = (e) => {
+  const handleBulkAssign = (e) => {
     e.preventDefault();
-    const newSection = {
-      id: sections.length + 1,
-      name: sectionFormData.name,
-      level: sectionFormData.level,
-      students: 0,
-      status: "Active"
-    };
-    setSections([...sections, newSection]);
-    setIsSectionModalOpen(false);
-    setSectionFormData({ name: "", level: "Grade 7" });
-  };
-
-  const handleAssignSubmit = (e) => {
-    e.preventDefault();
-    const targetSection = sections.find(s => String(s.id) === String(assignFormData.section_id));
-    if (!targetSection) return;
-
-    setStudents(prev => prev.map(student => {
-      if (assigningStudent) {
-        if (student.id === assigningStudent.id) {
-          return { ...student, section_id: targetSection.id, section: targetSection.name, gradeLevel: targetSection.level };
-        }
-      } else {
-        if (selectedStudentIds.has(student.id)) {
-          return { ...student, section_id: targetSection.id, section: targetSection.name, gradeLevel: targetSection.level };
-        }
+    const ts = sections.find(s => String(s.id) === String(assignFormData.section_id));
+    if (!ts) return;
+    setStudents(prev => prev.map(st => {
+      if (selectedStudentIds.has(st.id)) {
+        return { ...st, section_id: ts.id, section: ts.name, gradeLevel: ts.level };
       }
-      return student;
+      return st;
     }));
-    
-    setIsAssignModalOpen(false);
     setSelectedStudentIds(new Set());
-    setAssigningStudent(null);
+    closeModal();
+  };
+
+  const openCreateSection = () => {
+    setSectionFormData({ id: null, name: "", level: "Grade 7" });
+    setActiveModal('createSection');
+  };
+
+  const openEditSection = (section) => {
+    setSectionFormData({ id: section.id, name: section.name, level: section.level });
+    setActiveModal('editSection');
+  };
+
+  const openManageStudents = (section) => {
+    setTargetSection(section);
+    setManageSearch("");
+    setActiveModal('manageStudents');
+  };
+
+  const openViewStudents = (section) => {
+    // Navigate main student table by applying filter
+    setStudentSectionFilter(section.name);
+    // Ensure view is scrolled
+    window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+  };
+
+  const removeStudentFromSection = (student) => {
+    setTargetStudent(student);
+    setActiveModal('removeStudent');
+  };
+
+  const confirmRemoveStudent = () => {
+    if (!targetStudent) return;
+    setStudents(students.map(s => s.id === targetStudent.id ? { ...s, section_id: null, section: "Unassigned" } : s));
+    setActiveModal('manageStudents');
+    setTargetStudent(null);
+  };
+
+  const assignStudentToSection = (studentId, sectionId) => {
+    const ts = sections.find(s => s.id === sectionId);
+    if (!ts) return;
+    setStudents(students.map(s => s.id === studentId ? { ...s, section_id: ts.id, section: ts.name, gradeLevel: ts.level } : s));
+  };
+
+  const closeModal = () => {
+    setActiveModal(null);
+    setTargetStudent(null);
   };
 
   return (
@@ -208,8 +219,8 @@ export default function StudentSectionManagement() {
             <h1>Student Section Management</h1>
             <p>Create and manage sections and assign students to their respective sections.</p>
           </div>
-          <button type="button" className="add-user-btn" onClick={() => setIsSectionModalOpen(true)}>
-            <Icon type="plus" size={20} /> Create Section
+          <button type="button" className="add-user-btn" onClick={openCreateSection}>
+            <Plus size={20} /> Create Section
           </button>
         </div>
 
@@ -241,7 +252,7 @@ export default function StudentSectionManagement() {
                   <th>Level</th>
                   <th>Students</th>
                   <th>Status</th>
-                  <th className="action-column">Actions</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -253,10 +264,15 @@ export default function StudentSectionManagement() {
                       </div>
                     </td>
                     <td><span className="role-badge">{sec.level}</span></td>
-                    <td>{sec.students}</td>
+                    <td>{getSectionStudentCount(sec.id)}</td>
                     <td><StatusBadge status={sec.status} /></td>
-                    <td className="action-column">
-                      <button className="icon-btn edit" title="Edit Section"><Icon type="edit" size={16}/></button>
+                    <td style={{ overflow: 'visible' }}>
+                      <ActionMenu 
+                        section={sec} 
+                        onEdit={openEditSection} 
+                        onManageStudents={openManageStudents} 
+                        onViewStudents={openViewStudents} 
+                      />
                     </td>
                   </tr>
                 ))}
@@ -283,7 +299,7 @@ export default function StudentSectionManagement() {
               <span>{selectedStudentIds.size} students selected</span>
               <button 
                 className="add-user-btn" 
-                onClick={() => { setAssigningStudent(null); setIsAssignModalOpen(true); }}
+                onClick={() => setActiveModal('assignSelected')}
                 style={{ padding: '6px 12px', fontSize: '0.85rem' }}
               >
                 Assign Selected
@@ -293,7 +309,7 @@ export default function StudentSectionManagement() {
 
           <div className="filter-container">
             <label className="search-box">
-              <Icon type="search" size={18} />
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>
               <input type="text" placeholder="Search by name or LRN" value={studentSearch} onChange={(e) => setStudentSearch(e.target.value)} />
             </label>
             <DropdownSelect
@@ -325,29 +341,20 @@ export default function StudentSectionManagement() {
               <thead>
                 <tr>
                   <th style={{ width: '40px' }}>
-                    <input 
-                      type="checkbox" 
-                      checked={selectedStudentIds.size === filteredStudents.length && filteredStudents.length > 0}
-                      onChange={toggleAllStudents}
-                    />
+                    <input type="checkbox" checked={selectedStudentIds.size === filteredStudents.length && filteredStudents.length > 0} onChange={toggleAllStudents} />
                   </th>
                   <th>Student</th>
                   <th>LRN</th>
                   <th>Grade Level</th>
                   <th>Section</th>
                   <th>Status</th>
-                  <th className="action-column">Action</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredStudents.map(student => (
                   <tr key={student.id}>
                     <td>
-                      <input 
-                        type="checkbox" 
-                        checked={selectedStudentIds.has(student.id)}
-                        onChange={() => toggleStudentSelection(student.id)}
-                      />
+                      <input type="checkbox" checked={selectedStudentIds.has(student.id)} onChange={() => toggleStudentSelection(student.id)} />
                     </td>
                     <td>
                       <div className="user-info">
@@ -364,110 +371,220 @@ export default function StudentSectionManagement() {
                       )}
                     </td>
                     <td><StatusBadge status={student.status} /></td>
-                    <td className="action-column">
-                      <button 
-                        className="btn-text" 
-                        onClick={() => { setAssigningStudent(student); setIsAssignModalOpen(true); }}
-                        style={{ color: 'var(--mu-navy)', fontWeight: '600', cursor: 'pointer', background: 'none', border: 'none' }}
-                      >
-                        {student.section_id ? 'Reassign' : 'Assign Section'}
-                      </button>
-                    </td>
                   </tr>
                 ))}
                 {filteredStudents.length === 0 && (
-                  <tr><td colSpan="7" className="users-empty-state">No students found.</td></tr>
+                  <tr><td colSpan="6" className="users-empty-state">No students found.</td></tr>
                 )}
               </tbody>
             </table>
           </div>
         </section>
 
-        {/* Modals */}
-        {isSectionModalOpen && (
-          <div className="modal-overlay">
-            <div className="modal-content" style={{ maxWidth: '400px' }}>
-              <div className="modal-header">
-                <h2>Create Section</h2>
-                <button type="button" className="close-btn" onClick={() => setIsSectionModalOpen(false)}>
-                  <Icon type="close" size={20} />
-                </button>
-              </div>
-              <form onSubmit={handleCreateSection} className="modal-form-body">
-                <div className="form-group">
-                  <label>Section Name</label>
-                  <input 
-                    type="text" 
-                    required 
-                    value={sectionFormData.name}
-                    onChange={(e) => setSectionFormData({ ...sectionFormData, name: e.target.value })}
-                    className="form-input"
-                    placeholder="e.g. Gemelina"
-                  />
+        {/* MODALS */}
+        {/* Create / Edit Section Modal */}
+        {(activeModal === 'createSection' || activeModal === 'editSection') && (
+          <div className="user-form-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) closeModal(); }}>
+            <section className="user-form-modal" role="dialog" style={{ maxWidth: '500px' }}>
+              <header className="user-form-header">
+                <div className="user-form-heading">
+                  <div>
+                    <h2 id="user-form-title">{activeModal === 'createSection' ? 'Create Section' : 'Edit Section'}</h2>
+                  </div>
                 </div>
-                <div className="form-group">
-                  <label>Section Level</label>
-                  <select 
-                    className="form-input" 
-                    value={sectionFormData.level}
-                    onChange={(e) => setSectionFormData({ ...sectionFormData, level: e.target.value })}
-                  >
-                    {gradeLevels.map(lvl => (
-                      <option key={lvl.value} value={lvl.value}>{lvl.label}</option>
-                    ))}
-                  </select>
+                <button className="user-form-close" type="button" onClick={closeModal}><X size={20}/></button>
+              </header>
+              <form className="user-form-layout" onSubmit={handleSaveSection}>
+                <div className="user-form-body">
+                  <fieldset className="user-form-fields">
+                    <section className="user-form-section">
+                      <div className="user-form-section-heading">
+                        <h3>Section Details</h3>
+                        <p>{activeModal === 'createSection' ? 'Create a new student section.' : 'Modify existing section details.'}</p>
+                      </div>
+                      <div className="user-form-grid" style={{ gridTemplateColumns: '1fr' }}>
+                        <div className="user-form-field">
+                          <label className="user-form-label">Section Name <span aria-hidden="true">*</span></label>
+                          <input type="text" className="user-form-placeholder-input" required value={sectionFormData.name} onChange={e => setSectionFormData({ ...sectionFormData, name: e.target.value })} style={{ backgroundColor: 'white', border: '1px solid #cbd5e1', color: '#1e293b' }} placeholder="Enter section name" />
+                        </div>
+                        <div className="user-form-field">
+                          <label className="user-form-label">Section Level <span aria-hidden="true">*</span></label>
+                          <DropdownSelect
+                            label="Section Level"
+                            value={sectionFormData.level}
+                            options={gradeLevels}
+                            onChange={(val) => setSectionFormData({ ...sectionFormData, level: val })}
+                            className="user-form-select"
+                          />
+                        </div>
+                      </div>
+                    </section>
+                  </fieldset>
                 </div>
-                <div className="modal-footer">
-                  <button type="button" className="btn-secondary" onClick={() => setIsSectionModalOpen(false)}>Cancel</button>
-                  <button type="submit" className="btn-primary">Create Section</button>
-                </div>
+                <footer className="user-form-footer">
+                  <span>Review section details before saving.</span>
+                  <div>
+                    <button type="button" className="user-form-cancel" onClick={closeModal}>Cancel</button>
+                    <button type="submit" className="user-form-submit">{activeModal === 'createSection' ? 'Create Section' : 'Save Changes'}</button>
+                  </div>
+                </footer>
               </form>
-            </div>
+            </section>
           </div>
         )}
 
-        {isAssignModalOpen && (
-          <div className="modal-overlay">
-            <div className="modal-content" style={{ maxWidth: '400px' }}>
-              <div className="modal-header">
-                <h2>{assigningStudent ? 'Assign Student to Section' : 'Assign Students to Section'}</h2>
-                <button type="button" className="close-btn" onClick={() => { setIsAssignModalOpen(false); setAssigningStudent(null); }}>
-                  <Icon type="close" size={20} />
-                </button>
-              </div>
-              <form onSubmit={handleAssignSubmit} className="modal-form-body">
-                {assigningStudent ? (
-                  <div style={{ marginBottom: '16px', fontSize: '0.9rem', color: '#475569' }}>
-                    <p><strong>Student:</strong> {assigningStudent.name}</p>
-                    <p><strong>Grade Level:</strong> {assigningStudent.gradeLevel}</p>
-                    <p><strong>Current Section:</strong> {assigningStudent.section}</p>
+        {/* Assign Selected Modal */}
+        {activeModal === 'assignSelected' && (
+          <div className="user-form-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) closeModal(); }}>
+            <section className="user-form-modal" role="dialog" style={{ maxWidth: '500px' }}>
+              <header className="user-form-header">
+                <div className="user-form-heading">
+                  <div>
+                    <h2 id="user-form-title">Assign Students to Section</h2>
                   </div>
-                ) : (
-                  <div style={{ marginBottom: '16px', fontSize: '0.9rem', color: '#475569' }}>
-                    <p>Assigning <strong>{selectedStudentIds.size}</strong> selected students.</p>
+                </div>
+                <button className="user-form-close" type="button" onClick={closeModal}><X size={20}/></button>
+              </header>
+              <form className="user-form-layout" onSubmit={handleBulkAssign}>
+                <div className="user-form-body">
+                  <fieldset className="user-form-fields">
+                    <section className="user-form-section">
+                      <div className="user-form-section-heading">
+                        <h3>{selectedStudentIds.size} students selected</h3>
+                        <p>These students will be assigned to the selected section.</p>
+                      </div>
+                      <div className="user-form-grid" style={{ gridTemplateColumns: '1fr' }}>
+                        <div className="user-form-field">
+                          <label className="user-form-label">Select Section <span aria-hidden="true">*</span></label>
+                          <DropdownSelect
+                            label="Select Section"
+                            value={assignFormData.section_id}
+                            options={[
+                              { value: "", label: "Select Section..." },
+                              ...sections.map(sec => ({ value: sec.id, label: `${sec.name} — ${sec.level}` }))
+                            ]}
+                            onChange={(val) => setAssignFormData({ section_id: val })}
+                            className="user-form-select"
+                          />
+                        </div>
+                      </div>
+                    </section>
+                  </fieldset>
+                </div>
+                <footer className="user-form-footer">
+                  <span>Review assignment details before saving.</span>
+                  <div>
+                    <button type="button" className="user-form-cancel" onClick={closeModal}>Cancel</button>
+                    <button type="submit" className="user-form-submit">Assign Selected</button>
                   </div>
-                )}
-                
-                <div className="form-group">
-                  <label>Assign Section</label>
-                  <select 
-                    className="form-input" 
-                    required
-                    value={assignFormData.section_id}
-                    onChange={(e) => setAssignFormData({ section_id: e.target.value })}
-                  >
-                    <option value="" disabled>Select Section</option>
-                    {sections.map(sec => (
-                      <option key={sec.id} value={sec.id}>{sec.name} — {sec.level}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="modal-footer">
-                  <button type="button" className="btn-secondary" onClick={() => { setIsAssignModalOpen(false); setAssigningStudent(null); }}>Cancel</button>
-                  <button type="submit" className="btn-primary">Save Assignment</button>
-                </div>
+                </footer>
               </form>
-            </div>
+            </section>
+          </div>
+        )}
+
+        {/* Manage Students Modal */}
+        {activeModal === 'manageStudents' && targetSection && (
+          <div className="user-form-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) closeModal(); }}>
+            <section className="user-form-modal" role="dialog" style={{ maxWidth: '650px', maxHeight: '90vh' }}>
+              <header className="user-form-header">
+                <div className="user-form-heading">
+                  <div>
+                    <h2 id="user-form-title">Manage Students — {targetSection.name}</h2>
+                    <p style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '2px' }}>{targetSection.level}</p>
+                  </div>
+                </div>
+                <button className="user-form-close" type="button" onClick={closeModal}><X size={20}/></button>
+              </header>
+              <div className="user-form-layout">
+                <div className="user-form-body" style={{ padding: '0', overflowY: 'auto' }}>
+                  
+                  {/* Current Students */}
+                  <div style={{ padding: '24px 32px', borderBottom: '1px solid var(--mu-border)' }}>
+                    <h3 style={{ fontSize: '1rem', color: 'var(--mu-navy)', marginBottom: '12px' }}>Current Students</h3>
+                    <div className="manage-student-list">
+                      {students.filter(s => s.section_id === targetSection.id).map(student => (
+                        <div key={student.id} className="manage-student-item">
+                          <div>
+                            <strong>{student.name}</strong>
+                            <span>{student.lrn}</span>
+                          </div>
+                          <button type="button" onClick={() => removeStudentFromSection(student)} className="btn-text btn-danger">Remove</button>
+                        </div>
+                      ))}
+                      {students.filter(s => s.section_id === targetSection.id).length === 0 && (
+                        <p className="users-empty-state" style={{ padding: '16px 0', border: 'none' }}>No students assigned to this section yet.</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Add Students */}
+                  <div style={{ padding: '24px 32px' }}>
+                    <h3 style={{ fontSize: '1rem', color: 'var(--mu-navy)', marginBottom: '12px' }}>Add Students</h3>
+                    <div className="search-box" style={{ marginBottom: '16px', maxWidth: '100%' }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>
+                      <input type="text" placeholder="Search unassigned students..." value={manageSearch} onChange={(e) => setManageSearch(e.target.value)} />
+                    </div>
+                    
+                    <div className="manage-student-list">
+                      {students.filter(s => s.section_id !== targetSection.id && s.gradeLevel === targetSection.level && s.name.toLowerCase().includes(manageSearch.toLowerCase())).slice(0, 5).map(student => (
+                        <div key={student.id} className="manage-student-item">
+                          <div>
+                            <strong>{student.name}</strong>
+                            <span>{student.lrn} • {student.section_id ? `Currently in ${student.section}` : 'Unassigned'}</span>
+                          </div>
+                          <button type="button" onClick={() => assignStudentToSection(student.id, targetSection.id)} className="add-user-btn" style={{ padding: '4px 10px', fontSize: '0.8rem' }}>Add</button>
+                        </div>
+                      ))}
+                      {students.filter(s => s.section_id !== targetSection.id && s.gradeLevel === targetSection.level && s.name.toLowerCase().includes(manageSearch.toLowerCase())).length === 0 && (
+                        <p className="users-empty-state" style={{ padding: '16px 0', border: 'none' }}>No eligible students found to add.</p>
+                      )}
+                    </div>
+                  </div>
+
+                </div>
+                <footer className="user-form-footer">
+                  <span>Changes are applied immediately.</span>
+                  <div>
+                    <button type="button" className="user-form-cancel" onClick={closeModal}>Done</button>
+                  </div>
+                </footer>
+              </div>
+            </section>
+          </div>
+        )}
+
+        {/* Remove Student Confirmation Modal */}
+        {activeModal === 'removeStudent' && targetStudent && (
+          <div className="user-form-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) setActiveModal('manageStudents'); }} style={{ zIndex: 1100 }}>
+            <section className="user-form-modal" role="dialog" style={{ maxWidth: '400px' }}>
+              <header className="user-form-header">
+                <div className="user-form-heading">
+                  <div>
+                    <h2 id="user-form-title">Remove Student?</h2>
+                  </div>
+                </div>
+                <button className="user-form-close" type="button" onClick={() => setActiveModal('manageStudents')}><X size={20}/></button>
+              </header>
+              <div className="user-form-layout">
+                <div className="user-form-body">
+                  <fieldset className="user-form-fields">
+                    <section className="user-form-section">
+                      <p style={{ color: '#334155', margin: '0' }}>
+                        <strong>{targetStudent.name}</strong> will be removed from <strong>{targetSection.name}</strong> and become Unassigned.
+                      </p>
+                    </section>
+                  </fieldset>
+                </div>
+                <footer className="user-form-footer">
+                  <span>This does not delete the student record.</span>
+                  <div>
+                    <button type="button" className="user-form-cancel" onClick={() => setActiveModal('manageStudents')}>Cancel</button>
+                    <button type="button" className="user-form-submit" onClick={confirmRemoveStudent} style={{ backgroundColor: '#ef4444' }}>Remove Student</button>
+                  </div>
+                </footer>
+              </div>
+            </section>
           </div>
         )}
 

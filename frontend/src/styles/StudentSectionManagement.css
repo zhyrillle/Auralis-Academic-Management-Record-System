@@ -1,4 +1,4 @@
-﻿
+
 .section-management-page .bulk-action-bar {
   display: flex;
   align-items: center;
@@ -18,4 +18,97 @@
   height: 16px;
   cursor: pointer;
   accent-color: var(--mu-navy);
+}
+
+.section-action-menu {
+  position: relative;
+  display: inline-block;
+}
+
+.section-action-dropdown {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  margin-top: 4px;
+  background: white;
+  border: 1px solid var(--mu-border);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  border-radius: 6px;
+  padding: 4px 0;
+  z-index: 50;
+  min-width: 160px;
+}
+
+.section-action-dropdown button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 16px;
+  background: none;
+  border: none;
+  text-align: left;
+  font-size: 0.85rem;
+  color: var(--mu-text);
+  cursor: pointer;
+}
+
+.section-action-dropdown button:hover {
+  background-color: #f1f5f9;
+}
+
+.manage-student-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.manage-student-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid var(--mu-border);
+  border-radius: 6px;
+  background: #f8fafc;
+}
+
+.manage-student-item div {
+  display: flex;
+  flex-direction: column;
+}
+
+.manage-student-item strong {
+  font-size: 0.9rem;
+  color: var(--mu-navy);
+}
+
+.manage-student-item span {
+  font-size: 0.8rem;
+  color: var(--mu-muted);
+}
+
+.btn-danger {
+  color: #ef4444;
+  font-weight: 600;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.btn-danger:hover {
+  text-decoration: underline;
+}
+
+.section-management-page .users-panel {
+  overflow: visible !important;
+}
+
+/* Ensure the table responsive container doesn't hide dropdowns either if it had overflow-x auto */
+.section-management-page .table-responsive {
+  overflow: visible !important;
+}
+
+.section-management-page .filter-container {
+  overflow: visible !important;
 }
