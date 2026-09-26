@@ -1,30 +1,101 @@
 const db = require('../config/db');
 
 class Section {
+  static async resolveGradeLevelId(gradeLevelId, level) {
+    if (gradeLevelId && !isNaN(Number(gradeLevelId))) {
+      const [rows] = await db.execute('SELECT grade_level_id FROM GRADE_LEVEL WHERE grade_level_id = ? LIMIT 1', [Number(gradeLevelId)]);
+      if (rows.length > 0) return rows[0].grade_level_id;
+    }
+    const searchVal = level || gradeLevelId;
+    if (!searchVal) return 1;
+    const num = parseInt(String(searchVal).replace(/\D/g, ''), 10);
+    const [rows] = await db.execute(
+      `SELECT grade_level_id FROM GRADE_LEVEL 
+       WHERE grade_level_id = ? 
+          OR UPPER(grade_level_name) = UPPER(?) 
+          OR UPPER(grade_level_name) = UPPER(?) 
+          OR UPPER(grade_level_name) = UPPER(?) 
+       LIMIT 1`,
+      [num || 0, String(searchVal).trim(), `G${num}`, `Grade ${num}`]
+    );
+    if (rows.length > 0) return rows[0].grade_level_id;
+    const [fallbackRows] = await db.execute('SELECT grade_level_id FROM GRADE_LEVEL ORDER BY grade_level_id ASC LIMIT 1');
+    return fallbackRows[0]?.grade_level_id || 1;
+  }
+
   static async findAll() {
-    const [rows] = await db.execute('SELECT * FROM SECTION');
+    const [rows] = await db.execute(`
+      SELECT 
+        sec.section_id,
+        sec.section_id AS id,
+        sec.section_name,
+        sec.section_name AS name,
+        sec.grade_level_id,
+        COALESCE(gl.grade_level_name, 'G7') AS grade_level_name,
+        COALESCE(gl.grade_level_name, 'G7') AS level,
+        'Active' AS status,
+        COUNT(DISTINCT ss.student_id) AS student_count
+      FROM SECTION sec
+      LEFT JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
+      LEFT JOIN STUDENT_SECTION ss ON ss.section_id = sec.section_id
+      GROUP BY sec.section_id, sec.section_name, sec.grade_level_id, gl.grade_level_name
+      ORDER BY sec.grade_level_id ASC, sec.section_name ASC
+    `);
     return rows;
   }
 
   static async findById(id) {
-    const [rows] = await db.execute('SELECT * FROM SECTION WHERE section_id = ?', [id]);
+    const [rows] = await db.execute(`
+      SELECT 
+        sec.section_id,
+        sec.section_id AS id,
+        sec.section_name,
+        sec.section_name AS name,
+        sec.grade_level_id,
+        COALESCE(gl.grade_level_name, 'G7') AS grade_level_name,
+        COALESCE(gl.grade_level_name, 'G7') AS level,
+        'Active' AS status,
+        COUNT(DISTINCT ss.student_id) AS student_count
+      FROM SECTION sec
+      LEFT JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
+      LEFT JOIN STUDENT_SECTION ss ON ss.section_id = sec.section_id
+      WHERE sec.section_id = ?
+      GROUP BY sec.section_id, sec.section_name, sec.grade_level_id, gl.grade_level_name
+    `, [id]);
     return rows[0];
   }
 
   static async create(data) {
-    const { section_name, grade_level_id } = data;
+    let { section_name, name, grade_level_id, level } = data;
+    const finalName = (section_name || name || '').trim();
+    const finalGradeLevelId = await this.resolveGradeLevelId(grade_level_id, level);
+
     const [result] = await db.execute(
       `INSERT INTO SECTION (section_name, grade_level_id) VALUES (?, ?)`,
-      [section_name, grade_level_id]
+      [finalName, finalGradeLevelId]
     );
     return result.insertId;
   }
 
   static async update(id, data) {
-    const keys = Object.keys(data);
-    const values = Object.values(data);
-    const setClause = keys.map(key => `${key} = ?`).join(', ');
-    await db.execute(`UPDATE SECTION SET ${setClause} WHERE section_id = ?`, [...values, id]);
+    let { section_name, name, grade_level_id, level } = data;
+    const finalName = (section_name || name || '').trim();
+    
+    const updates = [];
+    const values = [];
+    if (finalName) {
+      updates.push('section_name = ?');
+      values.push(finalName);
+    }
+    if (grade_level_id !== undefined || level !== undefined) {
+      const finalGradeLevelId = await this.resolveGradeLevelId(grade_level_id, level);
+      updates.push('grade_level_id = ?');
+      values.push(finalGradeLevelId);
+    }
+    if (updates.length > 0) {
+      values.push(id);
+      await db.execute(`UPDATE SECTION SET ${updates.join(', ')} WHERE section_id = ?`, values);
+    }
     return this.findById(id);
   }
 
