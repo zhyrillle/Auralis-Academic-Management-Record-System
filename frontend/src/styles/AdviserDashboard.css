@@ -93,7 +93,6 @@
   position: relative;
   min-height: 130px;
   box-shadow: 0 4px 12px rgba(245, 206, 88, 0.2);
-  margin-top: 48px; /* space for the teacher's head to pop out */
 }
 
 .adviser-dashboard__banner-content {
@@ -120,16 +119,19 @@
   position: absolute;
   right: 28px;
   bottom: 0;
+  height: 100%;
+  max-height: 140px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
   pointer-events: none;
-  z-index: 1;
 }
 
 .adviser-dashboard__banner-img {
-  height: 200px;
+  height: 180px;
   width: auto;
   object-fit: contain;
-  display: block;
-  /* The lower portion merges naturally since the background is transparent */
+  margin-bottom: 0;
   filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.08));
 }
 
@@ -403,8 +405,8 @@
   font-weight: 600;
   padding: 4px 10px;
   border-radius: 6px;
-  background-color: #FBBF24;
-  color: #78350F;
+  background-color: #F59E0B;
+  color: #FFFFFF;
 }
 
 .adviser-dashboard__class-subject {
