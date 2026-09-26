@@ -16,8 +16,16 @@ export default function AdviserCoreValuesDonut({
     { key: "makabansa", label: "Makabansa", color: "#F6D339" },
   ];
 
-  const segments = Array.isArray(data) ? data : [];
-  const total = segments.reduce((sum, s) => sum + (s.percent || 0), 0);
+  const segments = Array.isArray(data) ? data.map((seg, idx) => {
+    const defaultColor = defaultLegend[idx]?.color || "#ccc";
+    return {
+      ...seg,
+      value: seg.value || seg.percent || seg.count || 0,
+      color: seg.color || defaultColor
+    };
+  }) : [];
+  
+  const total = segments.reduce((sum, s) => sum + s.value, 0);
   const hasData = total > 0;
 
   // Donut SVG parameters
@@ -29,11 +37,11 @@ export default function AdviserCoreValuesDonut({
 
   let cumulativePercent = 0;
   const paths = segments.map((seg) => {
-    const pct = hasData ? (seg.percent / total) * 100 : 0;
+    const pct = hasData ? (seg.value / total) * 100 : 0;
     const strokeDasharray = `${(pct / 100) * circumference} ${circumference}`;
     const strokeDashoffset = -((cumulativePercent / 100) * circumference);
     cumulativePercent += pct;
-    return { ...seg, pct, strokeDasharray, strokeDashoffset };
+    return { ...seg, pct: pct.toFixed(1), strokeDasharray, strokeDashoffset };
   });
 
   return (
@@ -105,7 +113,7 @@ export default function AdviserCoreValuesDonut({
               <span className="adviser-dashboard__core-center-term">{term}</span>
               {hasData && hoveredIdx !== null && (
                 <span className="adviser-dashboard__core-center-sub">
-                  {segments[hoveredIdx]?.percent}%
+                  {paths[hoveredIdx]?.pct}%
                 </span>
               )}
             </div>
