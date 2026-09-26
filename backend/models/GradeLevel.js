@@ -2,7 +2,7 @@ const db = require('../config/db');
 
 class GradeLevel {
   static async findAll() {
-    const [rows] = await db.execute('SELECT * FROM GRADE_LEVEL');
+    const [rows] = await db.execute('SELECT * FROM GRADE_LEVEL ORDER BY grade_level_id ASC');
     return rows;
   }
 
