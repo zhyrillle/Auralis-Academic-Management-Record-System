@@ -346,8 +346,6 @@ router.get('/student/:identifier', async (req, res) => {
       }
     }
 
-    // Map Master Sheet grades to frontend 10 subjects template
-    const gradesList = FRONTEND_SUBJECT_MAPPING.map(tmpl => {
     // Build subject list dynamically based on program specialization
     const subjectMapping = [...FRONTEND_SUBJECT_MAPPING];
     if (rawProgCode === "STE") {
@@ -358,7 +356,7 @@ router.get('/student/:identifier', async (req, res) => {
       subjectMapping.push({ code: "spa_spec", name: "SPA Specialization", msKey: "spa_spec", isHeader: false, isSubSubject: false });
     }
 
-    // Map Master Sheet grades to subjects list
+    // Map Master Sheet grades & MAPEH sub-components to subjects list
     const gradesList = subjectMapping.map(tmpl => {
       let t1 = "";
       let t2 = "";
