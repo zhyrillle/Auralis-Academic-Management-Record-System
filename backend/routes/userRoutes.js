@@ -177,9 +177,10 @@ const getManagementUsers = async () => {
         ORDER BY saa.adviser_assignment_id DESC LIMIT 1
       ) AS adviser_grade_level_id,
       (
-        SELECT sec.is_specialized
+        SELECT COALESCE(p.is_specialized, 0)
         FROM SECTION_ADVISER_ASSIGNMENT saa
         INNER JOIN SECTION sec ON sec.section_id = saa.section_id
+        LEFT JOIN PROGRAM p ON p.program_id = sec.program_id
         LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = saa.school_year_id
         WHERE saa.user_id = u.user_id AND (sy.status IS NULL OR LOWER(sy.status) IN ('active', 'ongoing'))
         ORDER BY saa.adviser_assignment_id DESC LIMIT 1
@@ -198,7 +199,10 @@ const getManagementUsers = async () => {
         so.subject_id,
         so.section_id,
         sec.grade_level_id,
-        sec.is_specialized,
+        sec.program_id,
+        p.program_code,
+        p.program_name,
+        COALESCE(p.is_specialized, 0) AS is_specialized,
         s.subject_name,
         s.subject_code,
         sec.section_name,
@@ -206,6 +210,7 @@ const getManagementUsers = async () => {
       FROM TEACHER_ASSIGNMENT ta
       INNER JOIN SUBJECT_OFFERING so ON so.subject_offering_id = ta.subject_offering_id
       INNER JOIN SECTION sec ON sec.section_id = so.section_id
+      LEFT JOIN PROGRAM p ON p.program_id = sec.program_id
       INNER JOIN SUBJECT s ON s.subject_id = so.subject_id
       INNER JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
       LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = so.school_year_id
@@ -266,14 +271,18 @@ router.post("/login", async (req, res) => {
         saa.adviser_assignment_id,
         saa.section_id,
         sec.section_name,
-        sec.is_specialized,
+        sec.program_id,
+        p.program_code,
+        p.program_name,
+        COALESCE(p.is_specialized, 0) AS is_specialized,
         gl.grade_level_id,
         gl.grade_level_name
       FROM SECTION_ADVISER_ASSIGNMENT saa
       INNER JOIN SECTION sec ON sec.section_id = saa.section_id
+      LEFT JOIN PROGRAM p ON p.program_id = sec.program_id
       INNER JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
       LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = saa.school_year_id
-      WHERE saa.user_id = ? AND (sy.status IN ('ACTIVE', 'ONGOING') OR sy.school_year_id IS NULL)
+      WHERE saa.user_id = ?
       ORDER BY saa.adviser_assignment_id DESC
       LIMIT 1
       `,
@@ -541,6 +550,7 @@ router.get("/management-options", async (req, res) => {
     const [gradeLevels] = await db.execute("SELECT grade_level_id, grade_level_name FROM GRADE_LEVEL ORDER BY grade_level_id ASC");
     const [departments] = await db.execute("SELECT department_id, department_name FROM DEPARTMENT ORDER BY department_name ASC");
     const [sections] = await db.execute("SELECT section_id, section_name, grade_level_id FROM SECTION ORDER BY section_name ASC");
+    const [programs] = await db.execute("SELECT program_id, program_code, program_name, is_specialized FROM PROGRAM ORDER BY is_specialized DESC, program_code ASC");
     
     const [subjectOfferings] = await db.execute(`
       SELECT 
@@ -561,7 +571,7 @@ router.get("/management-options", async (req, res) => {
       ORDER BY gl.grade_level_id ASC, sec.section_name ASC, s.subject_name ASC
     `);
 
-    res.json({ gradeLevels, sections, departments, subjectOfferings, schoolYear });
+    res.json({ gradeLevels, sections, departments, programs, subjectOfferings, schoolYear });
   } catch (err) {
     console.error("GET MANAGEMENT OPTIONS ERROR:", err);
     res.status(500).json({ error: err.message });

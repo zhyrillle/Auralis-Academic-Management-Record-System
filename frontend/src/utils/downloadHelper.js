@@ -552,13 +552,21 @@ export async function exportClassRecordExcel({
     { id: "pt3", label: "3", max_score: 50 },
   ];
 
-  const wwWeight = Number(weights.WW || 20);
-  const ptWeight = Number(weights.PT || 50);
-  const exWeight = Number(weights.EX || weights.QA || 30);
+  const isMapehSubject = Boolean(
+    metadata.isMapeh ||
+    examConfig?.isMapeh ||
+    (weights?.PT !== undefined && Number(weights.PT) === 60) ||
+    (metadata.subjectName && metadata.subjectName.toUpperCase().includes("MAPEH")) ||
+    (metadata.subjectName && (metadata.subjectName.toUpperCase().includes("MUSIC") || metadata.subjectName.toUpperCase().includes("PE & HEALTH")))
+  );
 
-  const st1HPS = Number(examConfig?.st1HPS || 25);
-  const st2HPS = Number(examConfig?.st2HPS || 25);
-  const teHPS = Number(examConfig?.teHPS || 50);
+  const wwWeight = isMapehSubject ? 20 : Number(weights.WW || 20);
+  const ptWeight = isMapehSubject ? 60 : Number(weights.PT || 50);
+  const exWeight = isMapehSubject ? 20 : Number(weights.EX || weights.QA || 30);
+
+  const st1HPS = Number(examConfig?.st1HPS || (isMapehSubject ? 25 : 25));
+  const st2HPS = Number(examConfig?.st2HPS || (isMapehSubject ? 25 : 25));
+  const teHPS = Number(examConfig?.teHPS || (isMapehSubject ? 25 : 50));
   const st1Weight = Number(examConfig?.st1Weight || 30);
   const st2Weight = Number(examConfig?.st2Weight || 30);
   const teWeight = Number(examConfig?.teWeight || 40);
@@ -985,12 +993,24 @@ export async function exportClassRecordExcel({
       const hasTE = rawTE !== "";
       const hasEx = hasST1 || hasST2 || hasTE;
 
-      const wsST1 = hasST1 && st1HPS > 0 ? parseFloat(((rawST1 / st1HPS) * st1Weight).toFixed(2)) : 0;
-      const wsST2 = hasST2 && st2HPS > 0 ? parseFloat(((rawST2 / st2HPS) * st2Weight).toFixed(2)) : 0;
-      const wsTE = hasTE && teHPS > 0 ? parseFloat(((rawTE / teHPS) * teWeight).toFixed(2)) : 0;
+      let exPS = 0;
+      let exWS = 0;
+      let wsST1 = 0;
+      let wsST2 = 0;
+      let wsTE = 0;
 
-      const exPS = hasEx ? parseFloat((wsST1 + wsST2 + wsTE).toFixed(2)) : 0;
-      const exWS = hasEx ? parseFloat((exPS * (exWeight / 100)).toFixed(2)) : 0;
+      if (isMapehSubject) {
+        const exTotalRaw = (hasST1 ? Number(rawST1) : 0) + (hasST2 ? Number(rawST2) : 0) + (hasTE ? Number(rawTE) : 0);
+        const exTotalHps = st1HPS + st2HPS + teHPS;
+        exPS = hasEx && exTotalHps > 0 ? parseFloat(((exTotalRaw / exTotalHps) * 100).toFixed(2)) : 0;
+        exWS = hasEx ? parseFloat((exPS * (exWeight / 100)).toFixed(2)) : 0;
+      } else {
+        wsST1 = hasST1 && st1HPS > 0 ? parseFloat(((rawST1 / st1HPS) * st1Weight).toFixed(2)) : 0;
+        wsST2 = hasST2 && st2HPS > 0 ? parseFloat(((rawST2 / st2HPS) * st2Weight).toFixed(2)) : 0;
+        wsTE = hasTE && teHPS > 0 ? parseFloat(((rawTE / teHPS) * teWeight).toFixed(2)) : 0;
+        exPS = hasEx ? parseFloat((wsST1 + wsST2 + wsTE).toFixed(2)) : 0;
+        exWS = hasEx ? parseFloat((exPS * (exWeight / 100)).toFixed(2)) : 0;
+      }
 
       // Initial Grade, Term Grade, Descriptor
       const hasAny = hasWw || hasPt || hasEx;

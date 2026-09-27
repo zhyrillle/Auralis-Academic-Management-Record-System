@@ -2,7 +2,7 @@
 :root {
   --sidebar-bg: #112d61;
   --sidebar-bg-hover: #1e3e78;
-  --sidebar-width-expanded: 260px;
+  --sidebar-width-expanded: 270px;
   --sidebar-width-collapsed: 80px;
   --navbar-height: 70px;
   --active-text: #112d61;
@@ -159,7 +159,9 @@
 .sidebar-item-content {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
+  min-width: 0;
+  flex: 1;
 }
 
 .sidebar-item-icon {
@@ -168,6 +170,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
   transition: transform var(--transition-speed);
 }
 
@@ -177,6 +180,9 @@
 
 .sidebar-item-label {
   opacity: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   transition: opacity var(--transition-speed);
 }
 

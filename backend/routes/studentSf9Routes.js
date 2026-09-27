@@ -132,7 +132,10 @@ router.get('/student/:identifier', async (req, res) => {
     let studentSectionId = null;
 
     const [stRows] = await db.execute(
-      `SELECT * FROM STUDENT WHERE student_id = ? OR LRN = ? LIMIT 1`,
+      `SELECT st.*, p.program_code, p.program_name, COALESCE(p.is_specialized, 0) AS is_specialized
+       FROM STUDENT st
+       LEFT JOIN PROGRAM p ON p.program_id = st.program_id
+       WHERE st.student_id = ? OR st.LRN = ? LIMIT 1`,
       [cleanId, cleanId]
     );
 
@@ -140,9 +143,10 @@ router.get('/student/:identifier', async (req, res) => {
       student = stRows[0];
     } else {
       const [ssCheck] = await db.execute(
-        `SELECT st.*, ss.student_section_id 
+        `SELECT st.*, p.program_code, p.program_name, COALESCE(p.is_specialized, 0) AS is_specialized, ss.student_section_id 
          FROM STUDENT_SECTION ss 
          JOIN STUDENT st ON ss.student_id = st.student_id 
+         LEFT JOIN PROGRAM p ON p.program_id = st.program_id
          WHERE ss.student_section_id = ? LIMIT 1`,
         [cleanId]
       );
@@ -161,11 +165,13 @@ router.get('/student/:identifier', async (req, res) => {
     if (studentSectionId) {
       const [secRows] = await db.execute(
         `SELECT ss.student_section_id, ss.section_id, ss.school_year_id,
-                sec.section_name,
+                sec.section_name, sec.program_id,
+                p.program_code, p.program_name, COALESCE(p.is_specialized, 0) AS is_specialized,
                 gl.grade_level_name,
                 sy.starts_on, sy.ends_on
          FROM STUDENT_SECTION ss
          JOIN SECTION sec ON ss.section_id = sec.section_id
+         LEFT JOIN PROGRAM p ON p.program_id = sec.program_id
          LEFT JOIN GRADE_LEVEL gl ON sec.grade_level_id = gl.grade_level_id
          LEFT JOIN SCHOOL_YEAR sy ON ss.school_year_id = sy.school_year_id
          WHERE ss.student_section_id = ? LIMIT 1`,
@@ -177,11 +183,13 @@ router.get('/student/:identifier', async (req, res) => {
     if (!sectionInfo) {
       const [secRows] = await db.execute(
         `SELECT ss.student_section_id, ss.section_id, ss.school_year_id,
-                sec.section_name,
+                sec.section_name, sec.program_id,
+                p.program_code, p.program_name, COALESCE(p.is_specialized, 0) AS is_specialized,
                 gl.grade_level_name,
                 sy.starts_on, sy.ends_on
          FROM STUDENT_SECTION ss
          JOIN SECTION sec ON ss.section_id = sec.section_id
+         LEFT JOIN PROGRAM p ON p.program_id = sec.program_id
          LEFT JOIN GRADE_LEVEL gl ON sec.grade_level_id = gl.grade_level_id
          LEFT JOIN SCHOOL_YEAR sy ON ss.school_year_id = sy.school_year_id
          WHERE ss.student_id = ?
@@ -226,12 +234,25 @@ router.get('/student/:identifier', async (req, res) => {
       principalName = ext ? `${baseName}, ${ext}` : baseName;
     }
 
-    // 4. Student Profile Demographics
+    // 4. Student Profile Demographics & Program formatting
     const gradeLevelRaw = sectionInfo?.grade_level_name || "";
     const gradeNumMatch = gradeLevelRaw.match(/\d+/);
     const gradeNum = gradeNumMatch ? gradeNumMatch[0] : "";
     const sectionNameStr = sectionInfo?.section_name || "";
     const sexFull = (student.sex === 'M' || student.sex === 'Male') ? 'Male' : (student.sex === 'F' || student.sex === 'Female') ? 'Female' : (student.sex || '');
+
+    const rawProgCode = (student.program_code || sectionInfo?.program_code || "").toUpperCase();
+    const rawProgName = student.program_name || sectionInfo?.program_name || "";
+    let programDisplay = "";
+    if (rawProgName && rawProgCode && rawProgCode !== "EBEC") {
+      programDisplay = `${rawProgName} (${rawProgCode})`;
+    } else if (rawProgName) {
+      programDisplay = rawProgName;
+    } else if (rawProgCode && rawProgCode !== "EBEC") {
+      programDisplay = rawProgCode;
+    } else if (rawProgCode === "EBEC") {
+      programDisplay = "Enhanced Basic Education Curriculum (EBEC)";
+    }
 
     const studentProfile = {
       studentId: student.student_id,
@@ -241,7 +262,7 @@ router.get('/student/:identifier', async (req, res) => {
       gradeLevel: gradeLevelRaw && sectionNameStr ? `${gradeLevelRaw} ${sectionNameStr}` : (gradeLevelRaw || sectionNameStr || ""),
       grade: gradeNum,
       section: sectionNameStr,
-      program: "", // Blank as instructed
+      program: programDisplay,
       sex: sexFull,
       age: calculateAge(student.birthdate),
       schoolYear: formatSchoolYear(sectionInfo?.starts_on, sectionInfo?.ends_on),
@@ -327,6 +348,18 @@ router.get('/student/:identifier', async (req, res) => {
 
     // Map Master Sheet grades to frontend 10 subjects template
     const gradesList = FRONTEND_SUBJECT_MAPPING.map(tmpl => {
+    // Build subject list dynamically based on program specialization
+    const subjectMapping = [...FRONTEND_SUBJECT_MAPPING];
+    if (rawProgCode === "STE") {
+      subjectMapping.push({ code: "research", name: "Research", msKey: "research", isHeader: false, isSubSubject: false });
+    } else if (rawProgCode === "SPJ") {
+      subjectMapping.push({ code: "journalism", name: "Journalism", msKey: "journalism", isHeader: false, isSubSubject: false });
+    } else if (rawProgCode === "SPA") {
+      subjectMapping.push({ code: "spa_spec", name: "SPA Specialization", msKey: "spa_spec", isHeader: false, isSubSubject: false });
+    }
+
+    // Map Master Sheet grades to subjects list
+    const gradesList = subjectMapping.map(tmpl => {
       let t1 = "";
       let t2 = "";
       let t3 = "";

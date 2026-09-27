@@ -11,6 +11,7 @@ export default function AdviserTestExamAnalysis({
   loading = false,
 }) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [hoveredSlice, setHoveredSlice] = useState(null);
   const terms = ["T1", "T2", "T3"];
 
   const currentData = data || {
@@ -29,15 +30,17 @@ export default function AdviserTestExamAnalysis({
     { key: "TE", label: "TE", color: "#5F83AA" },
   ];
 
-  const renderPolarSlice = (cx, cy, innerR, outerR, startAngleDeg, endAngleDeg, color) => {
+  const renderPolarSlice = (cx, cy, innerR, outerR, startAngleDeg, endAngleDeg, color, isHovered, onEnter, onLeave) => {
     const toRad = (deg) => ((deg - 90) * Math.PI) / 180;
     const startRad = toRad(startAngleDeg);
     const endRad = toRad(endAngleDeg);
 
-    const x1 = cx + outerR * Math.cos(startRad);
-    const y1 = cy + outerR * Math.sin(startRad);
-    const x2 = cx + outerR * Math.cos(endRad);
-    const y2 = cy + outerR * Math.sin(endRad);
+    const effOuterR = isHovered ? outerR + 4 : outerR;
+
+    const x1 = cx + effOuterR * Math.cos(startRad);
+    const y1 = cy + effOuterR * Math.sin(startRad);
+    const x2 = cx + effOuterR * Math.cos(endRad);
+    const y2 = cy + effOuterR * Math.sin(endRad);
 
     const x3 = cx + innerR * Math.cos(endRad);
     const y3 = cy + innerR * Math.sin(endRad);
@@ -48,13 +51,27 @@ export default function AdviserTestExamAnalysis({
 
     const pathData = [
       `M ${x1} ${y1}`,
-      `A ${outerR} ${outerR} 0 ${largeArc} 1 ${x2} ${y2}`,
+      `A ${effOuterR} ${effOuterR} 0 ${largeArc} 1 ${x2} ${y2}`,
       `L ${x3} ${y3}`,
       `A ${innerR} ${innerR} 0 ${largeArc} 0 ${x4} ${y4}`,
       `Z`,
     ].join(" ");
 
-    return <path key={startAngleDeg} d={pathData} fill={color} />;
+    return (
+      <path
+        key={startAngleDeg}
+        d={pathData}
+        fill={color}
+        opacity={isHovered ? 1 : 0.95}
+        onMouseEnter={onEnter}
+        onMouseLeave={onLeave}
+        style={{
+          cursor: "pointer",
+          transition: "all 0.2s ease",
+          filter: isHovered ? "drop-shadow(0 2px 6px rgba(0,0,0,0.25))" : "none",
+        }}
+      />
+    );
   };
 
   const renderChart = (slices, title) => {
@@ -63,12 +80,13 @@ export default function AdviserTestExamAnalysis({
     const innerR = 26;
 
     const arcAngles = [
-      { start: 5, end: 115 },
-      { start: 125, end: 235 },
-      { start: 245, end: 355 },
+      { start: 10, end: 110 },
+      { start: 130, end: 230 },
+      { start: 250, end: 350 },
     ];
 
     const hasSlices = slices && slices.length > 0;
+    const activeHover = hoveredSlice?.chart === title ? hoveredSlice : null;
 
     return (
       <div className="adviser-dashboard__test-chart-item">
@@ -78,8 +96,9 @@ export default function AdviserTestExamAnalysis({
         >
           {hasSlices ? (
             slices.map((slice, idx) => {
-              const angle = arcAngles[idx] || { start: 0, end: 110 };
-              const outerR = 35 + (slice.radius || 70) * 0.45;
+              const angle = arcAngles[idx] || { start: 0, end: 100 };
+              const outerR = 38 + ((slice.percent ?? 50) / 100) * 44;
+              const isHovered = activeHover?.label === (slice.label || legendItems[idx].key);
               return renderPolarSlice(
                 cx,
                 cy,
@@ -88,6 +107,9 @@ export default function AdviserTestExamAnalysis({
                 angle.start,
                 angle.end,
                 slice.color || legendItems[idx].color,
+                isHovered,
+                () => setHoveredSlice({ chart: title, label: slice.label || legendItems[idx].key, percent: slice.percent ?? 0, count: slice.count ?? 0, total: slice.total ?? 0 }),
+                () => setHoveredSlice(null)
               );
             })
           ) : (
@@ -100,9 +122,44 @@ export default function AdviserTestExamAnalysis({
               strokeWidth="24"
             />
           )}
-          <circle cx={cx} cy={cy} r={innerR - 2} fill="#FFFFFF" />
+
+          {/* Central hole & interactive hover state */}
+          <circle cx={cx} cy={cy} r={innerR - 1} fill="#FFFFFF" />
+          {activeHover && (
+            <g pointerEvents="none">
+              <text
+                x={cx}
+                y={cy - 2}
+                textAnchor="middle"
+                fill="#183256"
+                fontSize="11"
+                fontWeight="700"
+              >
+                {activeHover.label}
+              </text>
+              <text
+                x={cx}
+                y={cy + 10}
+                textAnchor="middle"
+                fill="#2563EB"
+                fontSize="10"
+                fontWeight="700"
+              >
+                {activeHover.percent}%
+              </text>
+            </g>
+          )}
         </svg>
-        <div className="adviser-dashboard__test-chart-caption">{title}</div>
+
+        <div className="adviser-dashboard__test-chart-caption">
+          {activeHover ? (
+            <span className="adviser-dashboard__test-chart-hover-text">
+              {activeHover.label}: {activeHover.count} students ({activeHover.percent}%)
+            </span>
+          ) : (
+            title
+          )}
+        </div>
       </div>
     );
   };

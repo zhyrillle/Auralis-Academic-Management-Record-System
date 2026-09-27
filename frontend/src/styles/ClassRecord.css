@@ -209,6 +209,76 @@
 }
 
 /* ============================================================
+   MAPEH SUB-COMPONENT TOGGLE
+   ============================================================ */
+
+.class-record-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.class-record-actions-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.class-record-right-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.mapeh-component-toggle {
+  display: inline-flex;
+  align-items: center;
+  background: #ffffff;
+  padding: 3px;
+  border-radius: 9999px;
+  border: 1.5px solid #102f55;
+  box-shadow: 0 1px 4px rgba(16, 47, 85, 0.08);
+}
+
+.mapeh-toggle-btn {
+  height: 32px;
+  padding: 0 16px;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  border: none;
+  border-radius: 9999px;
+  background: transparent;
+  color: #102f55;
+  cursor: pointer;
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
+  user-select: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.mapeh-toggle-btn:hover:not(.active) {
+  background: rgba(16, 47, 85, 0.08);
+  color: #0b223e;
+}
+
+.mapeh-toggle-btn.active {
+  background: #102f55;
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(16, 47, 85, 0.35);
+}
+
+.mapeh-toggle-btn:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 1px;
+}
+
+/* ============================================================
    TERM BUTTONS
    ============================================================ */
 
@@ -1614,6 +1684,12 @@
   width: 280px;
   min-width: 280px;
   max-width: 280px;
+}
+
+.cr-term-col.mapeh-term-col {
+  font-size: 15px !important;
+  line-height: 1.25 !important;
+  padding: 6px 8px !important;
 }
 
 /* Stacked Info Label & Value Cells */

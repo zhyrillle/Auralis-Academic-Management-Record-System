@@ -85,7 +85,7 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
       gradeLevel: fetched.gradeLevel || student?.gradeLevel || "",
       grade: fetched.grade || student?.grade || "",
       section: fetched.section || student?.section || "",
-      program: "", // Blank as requested
+      program: fetched.program || student?.program || "",
       age: sf9Data ? (fetched.age ?? "") : (student?.age ?? ""),
       schoolYear: fetched.schoolYear || student?.schoolYear || "",
       dateOfBirth: fetched.dateOfBirth || student?.dateOfBirth || "",
