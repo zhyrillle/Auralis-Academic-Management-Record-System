@@ -158,7 +158,58 @@ class Section {
     return result;
   }
 
-  static async findStudentsBySection(sectionId) {
+  static async findStudentsBySection(sectionId, subjectOfferingId = null, subjectId = null, subjectName = null) {
+    let cleanSectionId = typeof sectionId === "number" ? sectionId : (parseInt(String(sectionId).replace(/\D/g, ""), 10) || null);
+    let cleanOfferingId = null;
+    let cleanSubjectId = subjectId && !isNaN(Number(subjectId)) ? Number(subjectId) : null;
+
+    if (subjectOfferingId && !isNaN(Number(subjectOfferingId)) && !String(subjectOfferingId).includes("-")) {
+      cleanOfferingId = Number(subjectOfferingId);
+    } else if (typeof subjectOfferingId === "string" && subjectOfferingId.startsWith("offering-")) {
+      cleanOfferingId = parseInt(subjectOfferingId.replace("offering-", ""), 10) || null;
+    }
+
+    // If cleanOfferingId is missing, resolve matching offering from SUBJECT_OFFERING by section_id + subject_id or subject_name
+    if (!cleanOfferingId && cleanSectionId) {
+      try {
+        let offeringQuery = `
+          SELECT so.subject_offering_id 
+          FROM SUBJECT_OFFERING so
+          LEFT JOIN SUBJECT s ON s.subject_id = so.subject_id
+          WHERE so.section_id = ?`;
+        let params = [cleanSectionId];
+
+        if (cleanSubjectId) {
+          offeringQuery += ` AND so.subject_id = ?`;
+          params.push(cleanSubjectId);
+        } else if (subjectName) {
+          offeringQuery += ` AND (UPPER(s.subject_name) = UPPER(?) OR UPPER(s.subject_code) = UPPER(?))`;
+          params.push(String(subjectName).trim(), String(subjectName).trim());
+        }
+
+        offeringQuery += ` ORDER BY so.subject_offering_id ASC LIMIT 1`;
+        const [offeringRows] = await db.execute(offeringQuery, params);
+        if (offeringRows.length > 0) {
+          cleanOfferingId = offeringRows[0].subject_offering_id;
+        }
+      } catch (err) {
+        console.warn('Could not resolve cleanOfferingId for section:', err.message);
+      }
+    }
+
+    let sgJoinCondition = `sg.student_id = s.student_id`;
+    let queryParams = [];
+
+    if (cleanOfferingId) {
+      sgJoinCondition += ` AND sg.subject_offering_id = ?`;
+      queryParams.push(cleanOfferingId);
+    } else {
+      sgJoinCondition += ` AND sg.subject_offering_id IN (SELECT subject_offering_id FROM SUBJECT_OFFERING WHERE section_id = ?)`;
+      queryParams.push(cleanSectionId || 1);
+    }
+
+    queryParams.push(cleanSectionId || 1);
+
     const [rows] = await db.execute(
       `SELECT 
          s.student_id AS id,
@@ -168,22 +219,34 @@ class Section {
          s.last_name AS lastName,
          s.middle_name AS middleName,
          s.sex,
-         MAX(CASE WHEN UPPER(sg.term) IN ('T1', '1ST TERM', 'QUARTER 1', 'TERM 1', '1', 'QUARTER1', 'TERM1', 'FIRST TERM') THEN sg.quarterly_grade END) AS term1,
-         MAX(CASE WHEN UPPER(sg.term) IN ('T2', '2ND TERM', 'QUARTER 2', 'TERM 2', '2', 'QUARTER2', 'TERM2', 'SECOND TERM') THEN sg.quarterly_grade END) AS term2,
-         MAX(CASE WHEN UPPER(sg.term) IN ('T3', '3RD TERM', 'QUARTER 3', 'TERM 3', '3', 'QUARTER3', 'TERM3', 'THIRD TERM') THEN sg.quarterly_grade END) AS term3
+         MAX(CASE WHEN UPPER(sg.term) IN ('T1', '1ST TERM', 'QUARTER 1', 'TERM 1', '1', 'QUARTER1', 'TERM1', 'FIRST TERM') AND (sg.mapeh_component IS NULL OR sg.mapeh_component = 'ALL') THEN sg.quarterly_grade END) AS term1,
+         MAX(CASE WHEN UPPER(sg.term) IN ('T2', '2ND TERM', 'QUARTER 2', 'TERM 2', '2', 'QUARTER2', 'TERM2', 'SECOND TERM') AND (sg.mapeh_component IS NULL OR sg.mapeh_component = 'ALL') THEN sg.quarterly_grade END) AS term2,
+         MAX(CASE WHEN UPPER(sg.term) IN ('T3', '3RD TERM', 'QUARTER 3', 'TERM 3', '3', 'QUARTER3', 'TERM3', 'THIRD TERM') AND (sg.mapeh_component IS NULL OR sg.mapeh_component = 'ALL') THEN sg.quarterly_grade END) AS term3,
+         MAX(CASE WHEN UPPER(sg.term) IN ('T1', '1ST TERM', 'QUARTER 1', 'TERM 1', '1', 'QUARTER1', 'TERM1', 'FIRST TERM') AND sg.mapeh_component = 'MA' THEN sg.quarterly_grade END) AS term1_ma,
+         MAX(CASE WHEN UPPER(sg.term) IN ('T2', '2ND TERM', 'QUARTER 2', 'TERM 2', '2', 'QUARTER2', 'TERM2', 'SECOND TERM') AND sg.mapeh_component = 'MA' THEN sg.quarterly_grade END) AS term2_ma,
+         MAX(CASE WHEN UPPER(sg.term) IN ('T3', '3RD TERM', 'QUARTER 3', 'TERM 3', '3', 'QUARTER3', 'TERM3', 'THIRD TERM') AND sg.mapeh_component = 'MA' THEN sg.quarterly_grade END) AS term3_ma,
+         MAX(CASE WHEN UPPER(sg.term) IN ('T1', '1ST TERM', 'QUARTER 1', 'TERM 1', '1', 'QUARTER1', 'TERM1', 'FIRST TERM') AND sg.mapeh_component = 'PEH' THEN sg.quarterly_grade END) AS term1_peh,
+         MAX(CASE WHEN UPPER(sg.term) IN ('T2', '2ND TERM', 'QUARTER 2', 'TERM 2', '2', 'QUARTER2', 'TERM2', 'SECOND TERM') AND sg.mapeh_component = 'PEH' THEN sg.quarterly_grade END) AS term2_peh,
+         MAX(CASE WHEN UPPER(sg.term) IN ('T3', '3RD TERM', 'QUARTER 3', 'TERM 3', '3', 'QUARTER3', 'TERM3', 'THIRD TERM') AND sg.mapeh_component = 'PEH' THEN sg.quarterly_grade END) AS term3_peh
        FROM STUDENT_SECTION ss
        INNER JOIN STUDENT s ON s.student_id = ss.student_id
-       LEFT JOIN STUDENT_GRADE sg ON sg.student_id = s.student_id
+       LEFT JOIN STUDENT_GRADE sg ON ${sgJoinCondition}
        WHERE ss.section_id = ?
        GROUP BY s.student_id, s.LRN, s.first_name, s.last_name, s.middle_name, s.sex
        ORDER BY s.last_name ASC, s.first_name ASC`,
-      [sectionId]
+      queryParams
     );
     return rows.map((r) => ({
       ...r,
       term1: r.term1 !== null && r.term1 !== undefined ? Number(r.term1) : "",
       term2: r.term2 !== null && r.term2 !== undefined ? Number(r.term2) : "",
       term3: r.term3 !== null && r.term3 !== undefined ? Number(r.term3) : "",
+      term1_ma: r.term1_ma !== null && r.term1_ma !== undefined ? Number(r.term1_ma) : "",
+      term2_ma: r.term2_ma !== null && r.term2_ma !== undefined ? Number(r.term2_ma) : "",
+      term3_ma: r.term3_ma !== null && r.term3_ma !== undefined ? Number(r.term3_ma) : "",
+      term1_peh: r.term1_peh !== null && r.term1_peh !== undefined ? Number(r.term1_peh) : "",
+      term2_peh: r.term2_peh !== null && r.term2_peh !== undefined ? Number(r.term2_peh) : "",
+      term3_peh: r.term3_peh !== null && r.term3_peh !== undefined ? Number(r.term3_peh) : "",
     }));
   }
 }

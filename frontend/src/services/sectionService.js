@@ -132,10 +132,20 @@ export const getAdviserSections = async (userId) => {
  * Fetch students enrolled in a specific section from backend.
  * @param {string|number} sectionId
  */
-export const getStudentsBySection = async (sectionId) => {
+export const getStudentsBySection = async (sectionId, subjectOfferingId = null, subjectId = null, subjectName = null) => {
   if (!sectionId) return [];
   try {
-    const response = await fetch(`${API_BASE_URL}/sections/${sectionId}/students`);
+    let url = `${API_BASE_URL}/sections/${sectionId}/students`;
+    const params = [];
+    if (subjectOfferingId && !String(subjectOfferingId).startsWith("sec-")) {
+      params.push(`subject_offering_id=${encodeURIComponent(subjectOfferingId)}`);
+    }
+    if (subjectId) params.push(`subject_id=${encodeURIComponent(subjectId)}`);
+    if (subjectName) params.push(`subject_name=${encodeURIComponent(subjectName)}`);
+    if (params.length > 0) {
+      url += `?${params.join("&")}`;
+    }
+    const response = await fetch(url);
     if (response.ok) {
       return await response.json();
     }

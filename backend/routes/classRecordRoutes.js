@@ -2033,5 +2033,36 @@ router.post('/class-record/export-grading-sheet', async (req, res) => {
   }
 });
 
+async function syncOfferingGradesInternal(subjectOfferingId, termCode = 'T1') {
+  if (!subjectOfferingId) return;
+  let cleanOfferingId = typeof subjectOfferingId === 'number' ? subjectOfferingId : (parseInt(String(subjectOfferingId).replace(/\D/g, ''), 10) || null);
+
+  if (!cleanOfferingId) {
+    try {
+      const rawSecId = parseInt(String(subjectOfferingId).replace(/\D/g, ''), 10) || subjectOfferingId;
+      const [offRows] = await db.execute(
+        `SELECT subject_offering_id FROM SUBJECT_OFFERING WHERE section_id = ? LIMIT 1`,
+        [rawSecId]
+      );
+      if (offRows.length > 0) {
+        cleanOfferingId = offRows[0].subject_offering_id;
+      }
+    } catch (_) {}
+  }
+
+  if (!cleanOfferingId) return;
+
+  try {
+    const fakeRes = {
+      status: () => ({ json: () => {} }),
+      json: () => {},
+    };
+    await handleBatchScores({ body: { subject_offering_id: cleanOfferingId, term: termCode, scores: [] } }, fakeRes);
+  } catch (err) {
+    console.warn('syncOfferingGradesInternal warning:', err.message);
+  }
+}
+
+router.syncOfferingGradesInternal = syncOfferingGradesInternal;
 module.exports = router;
 
