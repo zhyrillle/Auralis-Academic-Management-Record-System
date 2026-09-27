@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import {
   MessageSquarePlus,
@@ -16,60 +16,30 @@ import {
   ChevronRight,
 } from "lucide-react";
 import "../../styles/gradeReopeningRequest.css";
+import { getStoredUser } from "../../utils/auth";
 
-const INITIAL_REQUESTS = [
-  {
-    id: "#REQ-2026-003",
-    status: "Pending",
-    subject: "English",
-    term: "2nd Term",
-    requestType: "Grade Reopening",
-    requestedDate: "May 20, 2026 9:30 AM",
-    accessUntil: "May 25, 2026 5:00 PM",
-    reason:
-      "Requesting access to update Quarter 2 raw scores for transferee students who recently submitted their missing performance tasks.",
-    file: "Transferee_Grade_Records.pdf (1.2 MB)",
-  },
-  {
-    id: "#REQ-2026-002",
-    status: "Approved",
-    subject: "English",
-    term: "1st Term",
-    requestType: "Grade Reopening",
-    requestedDate: "April 25, 2026 2:15 PM",
-    accessUntil: "April 28, 2026 5:00 PM",
-    reason:
-      "Need to encode late submission project grades for Grade 10 - Sampaguita.",
-    file: "Approved_Form_137.pdf (850 KB)",
-    adminNote: "Approved by Admin | April 25, 2026 03:40 PM",
-    adminRemarks: "Granted 3 days reopening access for Grade 10 - Sampaguita.",
-  },
-  {
-    id: "#REQ-2026-001",
-    status: "Approved",
-    subject: "English",
-    term: "1st Term",
-    requestType: "Grade Reopening",
-    requestedDate: "January 30, 2026 10:16 AM",
-    accessUntil: "February 02, 2026 5:00 PM",
-    reason:
-      "Correction of encoded quiz scores for 5 students due to item key adjustment.",
-    file: null,
-    adminNote: "Approved by Admin | January 30, 2026 01:15 PM",
-    adminRemarks: "Approved as requested.",
-  },
-];
+const INITIAL_REQUESTS = [];
 
 export default function GradeReopeningRequest() {
+  const currentUser = getStoredUser();
+
+  // Handled Subjects / Sections State
+  const [handledSections, setHandledSections] = useState([]);
+  const [alreadyRequestedSections, setAlreadyRequestedSections] = useState(new Set());
+
   // Form State
   const [subject, setSubject] = useState("");
-  const [term, setTerm] = useState("");
-  const [requestType, setRequestType] = useState("");
+  const [currentTeacherAssignmentId, setCurrentTeacherAssignmentId] = useState(null);
+  const [currentGradeSheetId, setCurrentGradeSheetId] = useState(null);
+  const [term, setTerm] = useState("1st Term");
+  const [termId, setTermId] = useState(1);
+  const [requestType, setRequestType] = useState("Grade Reopening");
   const [requestDate, setRequestDate] = useState("2026-05-20T09:30");
   const [requestAccessUntil, setRequestAccessUntil] = useState("2026-05-25T17:00");
   const [reason, setReason] = useState("");
-  const [selectedFile, setSelectedFile] = useState(null);
+  const [selectedFiles, setSelectedFiles] = useState([]);
   const [formError, setFormError] = useState("");
+  const [isDragOver, setIsDragOver] = useState(false);
 
   // Requests Data & Modals State
   const [requests, setRequests] = useState(INITIAL_REQUESTS);
@@ -78,81 +48,279 @@ export default function GradeReopeningRequest() {
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
   const [lastSubmittedRequest, setLastSubmittedRequest] = useState(null);
 
+  // Fetch handled subjects and past requests
+  useEffect(() => {
+    if (!currentUser?.user_id) return;
+
+    // 1. Fetch user's handled subjects/sections
+    fetch(`http://localhost:5000/api/teacher-assignments/user/${currentUser.user_id}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          const list = data.map((item) => ({
+            id: item.section_id || item.subject_offering_id || item.subject_name,
+            teacherAssignmentId: item.teacher_assignment_id || item.id,
+            gradeSheetId: item.grade_sheet_id || item.gradesheet_id || null,
+            sectionName: item.section_name || item.subject_name,
+            subjectName: item.subject_name || item.section_name,
+            label: `${item.section_name} (${item.subject_name || 'Subject'})`
+          }));
+          setHandledSections(list);
+        } else if (currentUser.adviser_assignment?.section_name) {
+          setHandledSections([{
+            id: currentUser.adviser_assignment.section_id || currentUser.adviser_assignment.section_name,
+            teacherAssignmentId: currentUser.adviser_assignment.teacher_assignment_id || null,
+            gradeSheetId: currentUser.adviser_assignment.grade_sheet_id || null,
+            sectionName: currentUser.adviser_assignment.section_name,
+            subjectName: "Advisory Class",
+            label: currentUser.adviser_assignment.section_name
+          }]);
+        }
+      })
+      .catch((err) => console.error("Error fetching handled sections:", err));
+
+    // 2. Fetch existing grade reopening requests for logged in user
+    fetch(`http://localhost:5000/api/reopen-requests/user/${currentUser.user_id}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          const requestedSet = new Set();
+          const mapped = data.map((item) => {
+            const secName = item.section_name || item.subject_name || "Section";
+            if (secName) requestedSet.add(secName);
+            return {
+              id: item.request_id ? `#REQ-${String(item.request_id).padStart(3, "0")}` : `#REQ-${item.id}`,
+              status: item.status ? (item.status.charAt(0).toUpperCase() + item.status.slice(1).toLowerCase()) : "Pending",
+              subject: secName,
+              term: item.term || "1st",
+              requestType: item.request_type || "Grade Reopening",
+              requestedDate: item.requested_at ? new Date(item.requested_at).toLocaleString("en-US") : "May 20, 2026",
+              accessUntil: item.access_until || item.reopen_until || "May 25, 2026",
+              reason: item.reason || "",
+              file: item.file_name ? `${item.file_name} (${(item.file_size ? item.file_size / 1024 : 100).toFixed(0)} KB)` : null,
+              adminNote: item.admin_note,
+              adminRemarks: item.admin_remarks
+            };
+          });
+          setRequests(mapped);
+          setAlreadyRequestedSections(requestedSet);
+        }
+      })
+      .catch((err) => console.error("Error fetching user requests:", err));
+  }, [currentUser?.user_id]);
+
   // Compute Stats
   const totalCount = requests.length;
   const pendingCount = requests.filter((r) => r.status === "Pending").length;
   const approvedCount = requests.filter((r) => r.status === "Approved").length;
-  const rejectedCount = requests.filter((r) => r.status === "Rejected").length;
+  const rejectedCount = requests.filter((r) => r.status === "Rejected" || r.status === "Declined").length;
 
-  // File Upload Handlers
+  // File Upload Handlers (10MB per-file limit)
+  const validateAndAddFiles = (newFiles) => {
+    const oversized = Array.from(newFiles).filter(
+      (f) => f.size > 10 * 1024 * 1024
+    );
+    if (oversized.length > 0) {
+      setFormError(`File "${oversized[0].name}" exceeds the 10MB limit.`);
+      return;
+    }
+    setFormError("");
+    setSelectedFiles((prev) => {
+      const existingNames = new Set(prev.map((f) => f.name));
+      const unique = Array.from(newFiles).filter(
+        (f) => !existingNames.has(f.name)
+      );
+      return [...prev, ...unique];
+    });
+  };
+
   const handleFileChange = (e) => {
-    if (e.target.files && e.target.files[0]) {
-      setSelectedFile(e.target.files[0]);
+    if (e.target.files && e.target.files.length > 0) {
+      validateAndAddFiles(e.target.files);
+      // Defer reset so browser doesn't cancel the file selection
+      const input = e.target;
+      setTimeout(() => { input.value = ""; }, 0);
     }
   };
 
   const handleDrop = (e) => {
     e.preventDefault();
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      setSelectedFile(e.dataTransfer.files[0]);
+    setIsDragOver(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      validateAndAddFiles(e.dataTransfer.files);
     }
+  };
+
+  const handleDragEnter = (e) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  };
+
+  const handleRemoveFile = (index) => {
+    setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleClear = () => {
     setSubject("");
-    setTerm("");
-    setRequestType("");
+    setCurrentTeacherAssignmentId(null);
+    setCurrentGradeSheetId(null);
+    setTerm("1st");
+    setTermId(1);
+    setRequestType("Grade Reopening");
     setRequestDate("2026-05-20T09:30");
     setRequestAccessUntil("2026-05-25T17:00");
     setReason("");
-    setSelectedFile(null);
+    setSelectedFiles([]);
     setFormError("");
   };
 
+  // Handle Dropdown Change for Subject/Section
+  const handleSubjectSelect = (e) => {
+    const selectedVal = e.target.value;
+    setSubject(selectedVal);
+
+    if (!selectedVal) {
+      setCurrentTeacherAssignmentId(null);
+      setCurrentGradeSheetId(null);
+      return;
+    }
+
+    const matchingSection = handledSections.find(
+      (sec) => sec.sectionName === selectedVal || sec.label === selectedVal
+    );
+
+    if (matchingSection) {
+      setCurrentTeacherAssignmentId(matchingSection.teacherAssignmentId);
+      setCurrentGradeSheetId(matchingSection.gradeSheetId);
+    } else {
+      // Fallback for hardcoded/default options (Honesty, Mahogany, Molave, etc.)
+      setCurrentTeacherAssignmentId(null);
+      setCurrentGradeSheetId(null);
+    }
+  };
+
+  const getTermId = (termVal) => {
+    if (!termVal) return 1;
+    if (typeof termVal === "number") return termVal;
+    const str = String(termVal).trim().toLowerCase();
+    if (str.includes("1")) return 1;
+    if (str.includes("2")) return 2;
+    if (str.includes("3")) return 3;
+    if (str.includes("4")) return 4;
+    const parsed = parseInt(str, 10);
+    return isNaN(parsed) ? 1 : parsed;
+  };
+
   // Submit Handler
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setFormError("");
 
-    if (!subject || !term || !requestType || !reason.trim()) {
+    // Validation
+    if (!subject || !requestType || !reason.trim()) {
       setFormError("Please fill in all required fields marked with *");
       return;
     }
 
-    const newId = `#REQ-2026-${String(requests.length + 1).padStart(3, "0")}`;
-    const formattedReqDate = new Date(requestDate).toLocaleString("en-US", {
-      month: "short",
-      day: "2-digit",
-      year: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: true,
-    });
-    const formattedUntilDate = new Date(requestAccessUntil).toLocaleString("en-US", {
-      month: "short",
-      day: "2-digit",
-      year: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: true,
-    });
+    if (!currentTeacherAssignmentId) {
+      setFormError(
+        "Unable to locate teacher assignment details for the selected section."
+      );
+      return;
+    }
 
-    const newReq = {
-      id: newId,
-      status: "Pending",
-      subject,
-      term,
-      requestType,
-      requestedDate: formattedReqDate,
-      accessUntil: formattedUntilDate,
-      reason,
-      file: selectedFile ? `${selectedFile.name} (${(selectedFile.size / 1024).toFixed(0)} KB)` : null,
-    };
+    if (alreadyRequestedSections.has(subject)) {
+      setFormError(
+        "You have already submitted a reopening request for this section."
+      );
+      return;
+    }
 
-    setRequests([newReq, ...requests]);
-    setLastSubmittedRequest(newReq);
-    setIsSuccessModalOpen(true);
-    handleClear();
+    try {
+      // Create FormData
+      const formData = new FormData();
+
+      formData.append("user_id", currentUser.user_id);
+      formData.append("section_name", subject);
+      formData.append(
+        "teacher_assignment_id",
+        currentTeacherAssignmentId
+      );
+      formData.append("reason", reason);
+      formData.append("status", "PENDING");
+
+      // Append each selected file under the same field name
+      selectedFiles.forEach((file) => {
+        formData.append("supporting_file", file);
+      });
+
+      // IMPORTANT:
+      // Do NOT manually set Content-Type.
+      // Browser automatically sets multipart/form-data boundary.
+      const res = await fetch(
+        "http://localhost:5000/api/reopen-requests",
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setFormError(
+          data.error || "Failed to submit reopening request."
+        );
+        return;
+      }
+
+      console.log("Request submitted:", data);
+
+      // Create the request displayed in the frontend
+      const newReq = {
+        id: `#REQ-${String(
+          data.request_id || data.id
+        ).padStart(3, "0")}`,
+
+        status: "Pending",
+        subject,
+        term,
+        requestType,
+
+        requestedDate: new Date().toLocaleString("en-US"),
+
+        accessUntil: requestAccessUntil,
+
+        reason,
+
+        file: selectedFiles.length > 0
+          ? selectedFiles.map((f) => `${f.name} (${(f.size / 1024).toFixed(0)} KB)`).join(", ")
+          : null,
+      };
+
+      setRequests((prev) => [newReq, ...prev]);
+
+      setAlreadyRequestedSections(
+        (prev) => new Set([...prev, subject])
+      );
+
+      setLastSubmittedRequest(newReq);
+      setIsSuccessModalOpen(true);
+
+      handleClear();
+
+    } catch (err) {
+      console.error("Submit error:", err);
+
+      setFormError(
+        "An error occurred while connecting to the server."
+      );
+    }
   };
 
   // View Details Modal Handler
@@ -226,90 +394,30 @@ export default function GradeReopeningRequest() {
             <div className="grr-form-row three-col">
               <div className="grr-field-group">
                 <label className="grr-label">
-                  Subject <span className="required">*</span>
+                  Section / Handled Subject <span className="required">*</span>
                 </label>
                 <select
                   className="grr-select"
                   value={subject}
-                  onChange={(e) => setSubject(e.target.value)}
+                  onChange={handleSubjectSelect}
                 >
-                  <option value="">Subject</option>
-                  <option value="English">English</option>
-                  <option value="Mathematics">Mathematics</option>
-                  <option value="Science">Science</option>
-                  <option value="Filipino">Filipino</option>
-                  <option value="Araling Panlipunan">Araling Panlipunan</option>
-                  <option value="MAPEH">MAPEH</option>
-                  <option value="TLE">TLE</option>
-                  <option value="ESP">ESP</option>
+                  <option value="">Select Section / Handled Subject</option>
+                  {handledSections.length > 0 ? (
+                    handledSections
+                      .filter((sec) => !alreadyRequestedSections.has(sec.sectionName))
+                      .map((sec) => (
+                        <option key={sec.id} value={sec.sectionName}>
+                          {sec.label}
+                        </option>
+                      ))
+                  ) : (
+                    <>
+                      <option value="Honesty">Honesty</option>
+                      <option value="Mahogany">Mahogany</option>
+                      <option value="Molave">Molave</option>
+                    </>
+                  )}
                 </select>
-              </div>
-
-              <div className="grr-field-group">
-                <label className="grr-label">
-                  Term <span className="required">*</span>
-                </label>
-                <select
-                  className="grr-select"
-                  value={term}
-                  onChange={(e) => setTerm(e.target.value)}
-                >
-                  <option value="">Term</option>
-                  <option value="1st Term">1st Term</option>
-                  <option value="2nd Term">2nd Term</option>
-                  <option value="3rd Term">3rd Term</option>
-                  <option value="4th Term">4th Term</option>
-                </select>
-              </div>
-
-              <div className="grr-field-group">
-                <label className="grr-label">
-                  Request Type <span className="required">*</span>
-                </label>
-                <select
-                  className="grr-select"
-                  value={requestType}
-                  onChange={(e) => setRequestType(e.target.value)}
-                >
-                  <option value="">Request Type</option>
-                  <option value="Grade Reopening">Grade Reopening</option>
-                  <option value="Grade Edit Access">Grade Edit Access</option>
-                  <option value="Late Grade Submission">Late Grade Submission</option>
-                  <option value="Score Correction">Score Correction</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Row 2: Date Pickers */}
-            <div className="grr-form-row two-col">
-              <div className="grr-field-group">
-                <label className="grr-label">
-                  Date of Request <span className="required">*</span>
-                </label>
-                <div className="grr-input-with-icon">
-                  <Calendar className="grr-input-icon" size={18} />
-                  <input
-                    type="datetime-local"
-                    className="grr-input"
-                    value={requestDate}
-                    onChange={(e) => setRequestDate(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              <div className="grr-field-group">
-                <label className="grr-label">
-                  Request Access Until <span className="required">*</span>
-                </label>
-                <div className="grr-input-with-icon">
-                  <Calendar className="grr-input-icon" size={18} />
-                  <input
-                    type="datetime-local"
-                    className="grr-input"
-                    value={requestAccessUntil}
-                    onChange={(e) => setRequestAccessUntil(e.target.value)}
-                  />
-                </div>
               </div>
             </div>
 
@@ -338,44 +446,49 @@ export default function GradeReopeningRequest() {
               <label className="grr-label">Supporting Documents (Optional)</label>
               <span className="grr-sublabel">You may upload files that support your request.</span>
 
-              <div
-                className="grr-dropzone"
+              <label
+                htmlFor="file-upload-input"
+                className={`grr-dropzone${isDragOver ? " grr-dropzone--active" : ""}`}
                 onDragOver={(e) => e.preventDefault()}
+                onDragEnter={handleDragEnter}
+                onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
-                onClick={() => document.getElementById("file-upload-input").click()}
               >
                 <UploadCloud className="grr-dropzone-icon" />
                 <div className="grr-dropzone-text">
                   <span className="grr-dropzone-title">Drag and drop files here or</span>
-                  <span className="grr-dropzone-subtitle">PDF, JPG, PNG (Max. 10MB)</span>
+                  <span className="grr-dropzone-subtitle">PDF, JPG, PNG (Max. 10MB each)</span>
                 </div>
-                <button type="button" className="grr-choose-btn">
-                  Choose File
-                </button>
+                <span className="grr-choose-btn">Choose Files</span>
                 <input
                   id="file-upload-input"
                   type="file"
                   hidden
+                  multiple
                   onChange={handleFileChange}
                   accept=".pdf,.png,.jpg,.jpeg"
                 />
-              </div>
+              </label>
 
-              {selectedFile && (
-                <div className="grr-file-preview">
-                  <div className="grr-file-info">
-                    <FileText size={16} color="#112d61" />
-                    <span>
-                      {selectedFile.name} ({(selectedFile.size / 1024).toFixed(0)} KB)
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    className="grr-remove-file-btn"
-                    onClick={() => setSelectedFile(null)}
-                  >
-                    <X size={16} />
-                  </button>
+              {selectedFiles.length > 0 && (
+                <div className="grr-file-list">
+                  {selectedFiles.map((file, idx) => (
+                    <div key={idx} className="grr-file-preview">
+                      <div className="grr-file-info">
+                        <FileText size={16} color="#112d61" />
+                        <span>
+                          {file.name} ({(file.size / 1024).toFixed(0)} KB)
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        className="grr-remove-file-btn"
+                        onClick={() => handleRemoveFile(idx)}
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
@@ -404,72 +517,91 @@ export default function GradeReopeningRequest() {
           <h2 className="grr-card-title">My Requests</h2>
 
           <div className="grr-timeline">
-            {requests.map((item) => {
-              const isPending = item.status === "Pending";
-              const isApproved = item.status === "Approved";
-              const isRejected = item.status === "Rejected";
+            {requests.length === 0 ? (
+              <div style={{ padding: "40px 20px", textAlign: "center", color: "#64748b", fontSize: "14px" }}>
+                No reopen requests submitted yet.
+              </div>
+            ) : (
+              requests.map((item) => {
+                const statusUpper = String(item.status || "").toUpperCase();
+                const isPending = statusUpper === "PENDING";
+                const isApproved = statusUpper === "APPROVED";
+                const isRejected = !isPending && !isApproved;
 
-              return (
-                <div key={item.id} className="grr-timeline-item">
-                  <div className="grr-timeline-track" />
+                return (
+                  <div key={item.id} className="grr-timeline-item">
+                    <div className="grr-timeline-track" />
 
-                  {/* Icon Circle */}
-                  <div
-                    className={`grr-timeline-icon-circle ${
-                      isPending ? "pending" : isApproved ? "approved" : "rejected"
-                    }`}
-                  >
-                    {isPending && <Clock size={18} />}
-                    {isApproved && <CheckCircle2 size={18} />}
-                    {isRejected && <XCircle size={18} />}
-                  </div>
-
-                  {/* Content */}
-                  <div className="grr-timeline-content">
-                    <div className="grr-timeline-top">
-                      <span
-                        className={`grr-badge ${
-                          isPending ? "pending" : isApproved ? "approved" : "rejected"
+                    {/* Icon Circle */}
+                    <div
+                      className={`grr-timeline-icon-circle ${isPending ? "pending" : isApproved ? "approved" : "rejected"
                         }`}
-                      >
-                        {item.status}
-                      </span>
-                      <button
-                        className="grr-view-details-btn"
-                        onClick={() => handleOpenDetails(item)}
-                      >
-                        View Details
-                      </button>
-                    </div>
-
-                    <div className="grr-timeline-details">
-                      <div className="grr-detail-line">
-                        <BookOpen className="grr-detail-icon" />
-                        <span>{item.subject}</span>
-                      </div>
-                      <div className="grr-detail-line">
-                        <Calendar className="grr-detail-icon" />
-                        <span>{item.term}</span>
-                      </div>
-                      <div className="grr-detail-line">
-                        <Clock className="grr-detail-icon" />
-                        <span>Requested: {item.requestedDate}</span>
-                      </div>
-
-                      {item.adminNote && (
-                        <span
-                          className={`grr-admin-note ${
-                            isApproved ? "approved" : "rejected"
-                          }`}
-                        >
-                          {item.adminNote}
-                        </span>
+                    >
+                      {isPending && (
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="12" cy="12" r="9" />
+                          <polyline points="12 7 12 12 16.2 14.2" />
+                        </svg>
+                      )}
+                      {isApproved && (
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                      )}
+                      {isRejected && (
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="12" cy="12" r="9" />
+                          <line x1="15" y1="9" x2="9" y2="15" />
+                          <line x1="9" y1="9" x2="15" y2="15" />
+                        </svg>
                       )}
                     </div>
+
+                    {/* Content */}
+                    <div className="grr-timeline-content">
+                      <div className="grr-timeline-top">
+                        <span
+                          className={`grr-badge ${isPending ? "pending" : isApproved ? "approved" : "rejected"
+                            }`}
+                        >
+                          {item.status}
+                        </span>
+                        <button
+                          className="grr-view-details-btn"
+                          onClick={() => handleOpenDetails(item)}
+                        >
+                          View Details
+                        </button>
+                      </div>
+
+                      <div className="grr-timeline-details">
+                        <div className="grr-detail-line">
+                          <BookOpen className="grr-detail-icon" />
+                          <span>{item.subject}</span>
+                        </div>
+                        <div className="grr-detail-line">
+                          <Calendar className="grr-detail-icon" />
+                          <span>{item.term}</span>
+                        </div>
+                        <div className="grr-detail-line">
+                          <Clock className="grr-detail-icon" />
+                          <span>Requested: {item.requestedDate}</span>
+                        </div>
+
+                        {item.adminNote && (
+                          <span
+                            className={`grr-admin-note ${isApproved ? "approved" : "rejected"
+                              }`}
+                          >
+                            {item.adminNote}
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })
+            )}
           </div>
         </div>
       </div>
@@ -485,13 +617,12 @@ export default function GradeReopeningRequest() {
               <div className="grr-modal-title-group">
                 <h3 className="grr-modal-title">Request Details</h3>
                 <span
-                  className={`grr-badge ${
-                    activeModalRequest.status === "Pending"
-                      ? "pending"
-                      : activeModalRequest.status === "Approved"
+                  className={`grr-badge ${activeModalRequest.status === "Pending"
+                    ? "pending"
+                    : activeModalRequest.status === "Approved"
                       ? "approved"
                       : "rejected"
-                  }`}
+                    }`}
                 >
                   {activeModalRequest.status}
                 </span>
@@ -512,7 +643,7 @@ export default function GradeReopeningRequest() {
                   <span className="grr-info-item-value">{activeModalRequest.id}</span>
                 </div>
                 <div className="grr-info-item">
-                  <span className="grr-info-item-label">Subject</span>
+                  <span className="grr-info-item-label">Section</span>
                   <span className="grr-info-item-value">{activeModalRequest.subject}</span>
                 </div>
                 <div className="grr-info-item">
@@ -522,14 +653,6 @@ export default function GradeReopeningRequest() {
                 <div className="grr-info-item">
                   <span className="grr-info-item-label">Request Type</span>
                   <span className="grr-info-item-value">{activeModalRequest.requestType}</span>
-                </div>
-                <div className="grr-info-item">
-                  <span className="grr-info-item-label">Date of Request</span>
-                  <span className="grr-info-item-value">{activeModalRequest.requestedDate}</span>
-                </div>
-                <div className="grr-info-item">
-                  <span className="grr-info-item-label">Access Requested Until</span>
-                  <span className="grr-info-item-value">{activeModalRequest.accessUntil}</span>
                 </div>
               </div>
 
@@ -573,9 +696,8 @@ export default function GradeReopeningRequest() {
                   <div
                     style={{
                       background: activeModalRequest.status === "Approved" ? "#f0fdf4" : "#fef2f2",
-                      border: `1px solid ${
-                        activeModalRequest.status === "Approved" ? "#bbf7d0" : "#fecaca"
-                      }`,
+                      border: `1px solid ${activeModalRequest.status === "Approved" ? "#bbf7d0" : "#fecaca"
+                        }`,
                       borderRadius: "10px",
                       padding: "14px",
                       fontSize: "13px",

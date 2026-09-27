@@ -1,18 +1,18 @@
-/* src/styles/attendanceSheet.css */
+/* src/styles/attendanceSheet.css - Learner Attendance Conversion Tool (DepEd SF2 Layout) */
 
 .attendance-sheet-container {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 20px;
   width: 100%;
   padding-bottom: 40px;
-  animation: attFadeIn 0.4s ease-out;
+  animation: attFadeIn 0.3s ease-out;
 }
 
 @keyframes attFadeIn {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
@@ -25,33 +25,84 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
+  flex-wrap: wrap;
+  gap: 16px;
 }
 
 .att-title-area {
   display: flex;
   align-items: center;
-  gap: 15px;
+  gap: 14px;
 }
 
 .att-title {
-  font-family: var(--font-dm-sans);
-  font-size: var(--fs-h2);
+  font-family: var(--font-dm-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
+  font-size: 22px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0;
+  letter-spacing: -0.3px;
+}
+
+.att-subtitle {
+  font-family: var(--font-dm-sans, sans-serif);
+  font-size: 13px;
+  color: #64748b;
+  font-weight: 500;
+  display: block;
+  margin-top: 2px;
+}
+
+/* Month Stepper */
+.att-month-stepper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background-color: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 4px 8px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+}
+
+.att-month-step-btn {
+  background: transparent;
+  border: none;
+  color: #475569;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.att-month-step-btn:hover {
+  background-color: #f1f5f9;
+  color: #0f172a;
+}
+
+.att-current-month-label {
+  font-family: var(--font-dm-sans, sans-serif);
+  font-size: 13px;
   font-weight: 700;
   color: #1e293b;
-  margin: 0;
+  min-width: 130px;
+  text-align: center;
 }
 
 /* Calendar Date Selector Wrapper */
 .att-calendar-wrapper {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   background-color: #ffffff;
   border: 1px solid #cbd5e1;
-  border-radius: 12px;
+  border-radius: 10px;
   padding: 6px 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
 }
 
 .att-calendar-icon-btn {
@@ -68,192 +119,435 @@
 .att-date-input {
   border: none;
   outline: none;
-  font-family: var(--font-dm-sans);
-  font-size: var(--fs-subtext);
+  font-family: var(--font-dm-sans, sans-serif);
+  font-size: 13px;
   font-weight: 600;
-  color: #475569;
+  color: #334155;
   cursor: pointer;
   background: transparent;
 }
 
-/* Edit / Lock Mode Indicators */
+/* Save button */
+.att-save-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  background: #112d61;
+  color: #ffffff;
+  border: none;
+  border-radius: 9px;
+  font-family: var(--font-dm-sans, sans-serif);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(17, 45, 97, 0.2);
+  transition: all 0.2s ease;
+}
+
+.att-save-btn:hover:not(:disabled) {
+  background: #1e3a8a;
+  transform: translateY(-1px);
+}
+
+.att-save-btn:disabled {
+  background: #94a3b8;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* Mode indicator row */
 .att-mode-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 4px;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
 .att-section-label {
-  font-family: var(--font-dm-sans);
-  font-size: 16px;
+  font-family: var(--font-dm-sans, sans-serif);
+  font-size: 15px;
+  color: #334155;
+  font-weight: 500;
+}
+
+.att-section-label strong {
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.att-stats-summary-pill {
+  font-family: var(--font-dm-sans, sans-serif);
+  font-size: 13px;
   color: #475569;
-  font-weight: var(--fw-semibold);
+  background: #f1f5f9;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
 }
 
 .att-mode-badge {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 14px;
+  padding: 5px 14px;
   border-radius: 20px;
-  font-size: 13px;
-  font-weight: var(--fw-bold);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
+  font-size: 12px;
+  font-weight: 700;
+  font-family: var(--font-dm-sans, sans-serif);
 }
 
 .att-mode-badge.editable {
-  background-color: #d1fae5;
-  color: #065f46;
-  border: 1px solid rgba(6, 95, 70, 0.15);
+  background-color: #dcfce7;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
 }
 
 .att-mode-badge.readonly {
   background-color: #fee2e2;
-  color: #991b1b;
-  border: 1px solid rgba(153, 27, 27, 0.15);
+  color: #b91c1c;
+  border: 1px solid #fecaca;
 }
 
-/* Spreadsheet Grid Table Layout */
-.att-table-wrapper {
+/* ════════════════ SF2 SPREADSHEET TABLE ════════════════ */
+.sf2-table-wrapper {
   background-color: #ffffff;
-  border: 1px solid #eef2f6;
-  border-radius: 15px;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+  border: 2px solid #334155;
+  border-radius: 8px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.07);
   overflow-x: auto;
   width: 100%;
 }
 
-.att-table {
+.sf2-table {
   width: 100%;
   border-collapse: collapse;
-  font-family: var(--font-inter);
+  font-family: var(--font-inter, "Inter", -apple-system, BlinkMacSystemFont, sans-serif);
   font-size: 12px;
   text-align: center;
+  border: 1px solid #000000;
 }
 
-/* Headers */
-.att-table th {
-  background-color: #f8fafc;
-  color: #475569;
+/* Header cells */
+.sf2-table th {
+  border: 1px solid #000000;
+  padding: 4px 3px;
   font-weight: 700;
-  padding: 10px 6px;
-  border: 1px solid #e2e8f0;
+  vertical-align: middle;
+  box-sizing: border-box;
+}
+
+/* No Column */
+.sf2-th-no {
+  width: 32px;
+  min-width: 32px;
+  max-width: 38px;
+  background-color: #f8fafc;
+  color: #0f172a;
+  font-size: 11px;
+}
+
+/* Name Column (Yellow Header in DepEd SF2) */
+.sf2-th-name {
+  width: 240px;
+  min-width: 220px;
+  max-width: 260px;
+  background-color: #fff9b1 !important;
+  color: #000000;
+  text-align: left;
+  padding-left: 10px;
+  position: sticky;
+  left: 0;
+  z-index: 4;
+  border-right: 2px solid #000000 !important;
+}
+
+.sf2-name-hdr-content {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.sf2-name-hdr-content span:first-child {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+.sf2-name-subtext {
+  font-size: 9.5px;
+  font-weight: 600;
+  color: #475569;
+  margin-top: 1px;
+}
+
+/* Date super-header */
+.sf2-th-date-title {
+  background-color: #ffffff;
+  color: #000000;
+  font-weight: 800;
+  font-size: 12px;
+  letter-spacing: 1px;
+  text-align: left;
+  padding-left: 8px;
+}
+
+/* Total for the Month (Light green header) */
+.sf2-th-month-total {
+  background-color: #bbf7d0 !important;
+  color: #14532d;
+  font-weight: 800;
+  font-size: 11px;
+  min-width: 80px;
+}
+
+.sf2-th-substat {
+  background-color: #f0fdf4;
+  color: #166534;
+  font-size: 10px;
+  font-weight: 700;
+  width: 44px;
+  min-width: 44px;
+}
+
+/* Remarks header (Light orange/yellow) */
+.sf2-th-remarks {
+  background-color: #fed7aa !important;
+  color: #7c2d12;
+  width: 180px;
+  min-width: 160px;
+  text-align: left;
+  padding: 6px 8px;
+}
+
+.sf2-remarks-hdr-content {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.sf2-remarks-hdr-content span:first-child {
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.sf2-remarks-subtext {
+  font-size: 8.5px;
+  font-weight: 600;
+  color: #7c2d12;
+  margin-top: 2px;
+  line-height: 1.15;
+}
+
+/* Date Numbers Row Header */
+.sf2-date-num-th {
+  border-top: 1px solid #000000;
+  box-sizing: border-box;
+}
+
+.sf2-date-num-th.active-date-th {
+  background-color: #fef08a !important;
+  color: #854d0e !important;
+  outline: 2px solid #ca8a04;
+  outline-offset: -2px;
+}
+
+/* ════════════════ BODY ROWS ════════════════ */
+.sf2-table td {
+  border: 1px solid #cbd5e1;
+  padding: 3px 2px;
+  vertical-align: middle;
+  box-sizing: border-box;
+}
+
+.sf2-student-row:hover td {
+  background-color: #f8fafc;
+}
+
+.sf2-td-no {
+  font-weight: 600;
+  color: #64748b;
+  font-size: 11px;
+  text-align: center;
+  background-color: #ffffff;
+  border-right: 1px solid #000000 !important;
+}
+
+.sf2-td-name {
+  text-align: left;
+  padding-left: 8px !important;
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background-color: #ffffff;
+  border-right: 2px solid #000000 !important;
   white-space: nowrap;
 }
 
-.att-table th.name-header {
-  text-align: left;
-  padding-left: 16px;
-  width: 180px;
-  min-width: 180px;
-  position: sticky;
-  left: 0;
-  background-color: #f8fafc;
-  z-index: 2;
-  border-right: 2px solid #cbd5e1;
-}
-
-.att-table td {
-  padding: 8px 4px;
-  border: 1px solid #e2e8f0;
-  vertical-align: middle;
-}
-
-/* Sticky First Column for Student Names */
-.att-table td.student-name-cell {
-  text-align: left;
-  padding-left: 16px;
-  font-weight: 600;
-  color: #1e293b;
-  position: sticky;
-  left: 0;
-  background-color: #ffffff;
-  z-index: 1;
-  border-right: 2px solid #cbd5e1;
-}
-
-/* Highlight columns */
-.att-table tr:hover td {
-  background-color: #f8fafc;
-}
-.att-table tr:hover td.student-name-cell {
+.sf2-student-row:hover .sf2-td-name {
   background-color: #f1f5f9;
 }
 
-/* Active Highlight Column for Selected Date */
-.att-table td.active-date-cell {
-  background-color: #fbf8eb;
-}
-.att-table th.active-date-header {
-  background-color: #fef08a;
-  color: #854d0e;
+.sf2-name-cell-wrap {
+  display: inline-flex;
+  align-items: baseline;
+  font-size: 11.5px;
 }
 
-/* Attendance Status Badge styling inside cells */
-.att-status-badge {
+.sf2-last-name {
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.sf2-first-name {
+  color: #1e293b;
+  font-weight: 500;
+  margin-left: 2px;
+  font-style: italic;
+}
+
+.sf2-mi {
+  color: #475569;
+  font-weight: 600;
+  margin-left: 4px;
+}
+
+/* Daily Attendance Cells */
+.sf2-td-att-cell {
+  width: 28px;
+  min-width: 28px;
+  max-width: 32px;
+  padding: 2px 1px !important;
+  background-color: #ffffff;
+}
+
+.sf2-active-col-cell {
+  background-color: #fefce8 !important;
+}
+
+.sf2-editable-cell {
+  cursor: pointer;
+}
+
+.sf2-editable-cell:hover {
+  background-color: #fef08a !important;
+}
+
+/* Badge in Cell */
+.sf2-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 4px;
+  width: 20px;
+  height: 20px;
+  border-radius: 3px;
   font-size: 11px;
   font-weight: 800;
   user-select: none;
 }
 
-/* Editable click states */
-.editable-cell {
-  cursor: pointer;
-  transition: background-color 0.15s ease;
-}
-.editable-cell:hover {
-  background-color: #f1f5f9 !important;
+.sf2-badge.p {
+  background-color: #dcfce7;
+  color: #15803d;
+  font-weight: 800;
 }
 
-/* Badge colors matching visual indicators */
-.att-status-badge.p {
-  background-color: #10b981;
-  color: #ffffff;
-}
-
-.att-status-badge.l {
+.sf2-badge.l {
   background-color: #f59e0b;
   color: #ffffff;
 }
 
-.att-status-badge.a {
+.sf2-badge.a {
   background-color: #ef4444;
   color: #ffffff;
 }
 
-.att-status-badge.empty {
-  background-color: #e2e8f0;
-  color: #94a3b8;
+/* Stats cells */
+.sf2-td-stat {
+  font-weight: 700;
+  color: #0f172a;
+  background-color: #f0fdf4;
+  font-size: 11.5px;
+  border-left: 1px solid #000000 !important;
 }
 
-/* Summary stats cells */
-.att-table td.summary-stat-cell {
-  font-weight: 600;
-  color: #334155;
-  background-color: #f8fafc;
-}
-
-.att-table td.remarks-cell {
+.sf2-td-remarks {
   text-align: left;
-  padding-left: 12px;
-  color: #475569;
-  font-style: italic;
+  padding-left: 8px !important;
   font-size: 11px;
-  background-color: #f8fafc;
+  color: #475569;
+  background-color: #fffbeb;
+  border-left: 1px solid #000000 !important;
 }
 
-/* BOTTOM PANELS - Summary Stats & Legend */
+/* ════════════════ SUB-TOTAL ROWS (Yellow Highlight as in SF2) ════════════════ */
+.sf2-subtotal-row td {
+  border-top: 2px solid #000000 !important;
+  border-bottom: 2px solid #000000 !important;
+  padding: 5px 2px;
+  font-weight: 800;
+}
+
+.sf2-subtotal-label {
+  background-color: #fff9b1 !important;
+  color: #000000;
+  text-align: right;
+  padding-right: 12px !important;
+  font-size: 12px;
+  letter-spacing: 0.5px;
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  border-right: 2px solid #000000 !important;
+}
+
+.sf2-subtotal-cell {
+  background-color: #fff9b1 !important;
+  color: #000000;
+  font-size: 12px;
+  border: 1px solid #000000 !important;
+}
+
+.sf2-subtotal-sum {
+  background-color: #fff9b1 !important;
+  color: #000000;
+  font-size: 13px;
+  font-weight: 900;
+  border: 1px solid #000000 !important;
+}
+
+.sf2-subtotal-blank {
+  background-color: #fff9b1 !important;
+  border: 1px solid #000000 !important;
+}
+
+/* Combined row accent */
+.sf2-subtotal-row.combined-total-row td {
+  background-color: #fef08a !important;
+  border-top: 3px double #000000 !important;
+}
+
+.sf2-subtotal-label.combined {
+  background-color: #fef08a !important;
+  color: #1e293b;
+}
+
+.sf2-subtotal-cell.combined {
+  background-color: #fef08a !important;
+}
+
+.sf2-subtotal-sum.combined {
+  background-color: #fef08a !important;
+  color: #112d61;
+}
+
+/* ════════════════ BOTTOM SUMMARY & LEGEND ════════════════ */
 .att-bottom-grid {
   display: grid;
   grid-template-columns: 6.5fr 3.5fr;
-  gap: 24px;
+  gap: 20px;
+  margin-top: 8px;
 }
 
 @media (max-width: 992px) {
@@ -262,89 +556,82 @@
   }
 }
 
-/* Summary widget card */
 .att-summary-card {
   background-color: #ffffff;
-  border: 1px solid #eef2f6;
-  border-radius: 15px;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
-  padding: 24px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.05);
+  padding: 20px 24px;
 }
 
 .att-card-header {
-  font-family: var(--font-dm-sans);
-  font-size: 16px;
-  font-weight: 700;
-  color: #1e293b;
-  margin: 0 0 16px 0;
+  font-family: var(--font-dm-sans, sans-serif);
+  font-size: 15px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0 0 12px 0;
 }
 
 .att-summary-table {
   width: 100%;
   border-collapse: collapse;
-  margin-top: 12px;
-  font-family: var(--font-inter);
-  font-size: 13px;
+  font-family: var(--font-inter, "Inter", sans-serif);
+  font-size: 12.5px;
   text-align: center;
 }
 
 .att-summary-table th,
 .att-summary-table td {
-  padding: 12px 8px;
+  padding: 10px 8px;
   border-bottom: 1px solid #f1f5f9;
 }
 
 .att-summary-table th {
-  color: #64748b;
-  font-weight: 600;
-  text-align: center;
+  color: #475569;
+  font-weight: 700;
+  background-color: #f8fafc;
 }
 
 .att-summary-table td {
   color: #1e293b;
-  font-weight: 700;
+  font-weight: 600;
 }
 
-.att-summary-table td.row-month {
-  color: #475569;
-  font-weight: 500;
-  text-align: center;
-}
-
-/* Legend Indicator card */
 .att-legend-card {
   background-color: #ffffff;
-  border: 1px solid #eef2f6;
-  border-radius: 15px;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
-  padding: 24px;
-  display: flex;
-  flex-direction: column;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.05);
+  padding: 20px 24px;
 }
 
 .att-legend-list {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  margin-top: 8px;
+  gap: 12px;
 }
 
 .att-legend-item {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
 }
 
 .legend-badge-box {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 24px;
-  border-radius: 6px;
+  width: 28px;
+  height: 22px;
+  border-radius: 4px;
   font-size: 11px;
   font-weight: 800;
   color: #ffffff;
+}
+
+.legend-badge-box.blank {
+  background-color: #ffffff;
+  border: 1px solid #94a3b8;
 }
 
 .legend-badge-box.p {
@@ -360,8 +647,8 @@
 }
 
 .att-legend-text {
-  font-family: var(--font-dm-sans);
-  font-size: 14px;
+  font-family: var(--font-dm-sans, sans-serif);
+  font-size: 13px;
   font-weight: 600;
-  color: #475569;
+  color: #334155;
 }

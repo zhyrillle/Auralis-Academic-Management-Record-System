@@ -1,0 +1,360 @@
+.upcoming-school-year {
+  overflow: hidden;
+  background: #ffffff;
+  border: 1px solid #cfd9e5;
+  border-radius: 15px;
+  box-shadow: 0 9px 24px rgba(15, 23, 42, 0.065);
+}
+
+.upcoming-school-year__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 20px 22px;
+  border-bottom: 1px solid #e7edf4;
+}
+
+.upcoming-school-year__identity,
+.upcoming-school-year__title-row,
+.upcoming-school-year__review-button,
+.upcoming-school-year__badge,
+.upcoming-period__heading,
+.upcoming-period__heading > div,
+.upcoming-period__reset,
+.upcoming-school-year__actions,
+.upcoming-school-year__actions > div,
+.upcoming-school-year__actions button {
+  display: flex;
+  align-items: center;
+}
+
+.upcoming-school-year__identity {
+  gap: 13px;
+  min-width: 0;
+}
+
+.upcoming-school-year__icon {
+  display: grid;
+  flex: 0 0 auto;
+  width: 42px;
+  height: 42px;
+  color: #17477d;
+  background: #eaf2fb;
+  border-radius: 11px;
+  place-items: center;
+}
+
+.upcoming-school-year__title-row {
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.upcoming-school-year h2 {
+  color: var(--grade-lock-navy);
+  font-size: 19px;
+}
+
+.upcoming-school-year__header p {
+  max-width: 720px;
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.upcoming-school-year__badge {
+  gap: 5px;
+  padding: 5px 8px;
+  color: #805b10;
+  background: #fff6d8;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.upcoming-school-year__review-button {
+  flex: 0 0 auto;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 15px;
+  color: #ffffff;
+  background: var(--grade-lock-navy);
+  border: 1px solid var(--grade-lock-navy);
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.upcoming-school-year__summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  background: #e7edf4;
+}
+
+.upcoming-school-year__summary > div {
+  padding: 15px 22px;
+  background: #f8fafc;
+}
+
+.upcoming-school-year__summary span,
+.upcoming-school-year__summary strong {
+  display: block;
+}
+
+.upcoming-school-year__summary span {
+  color: #7a8ba3;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+
+.upcoming-school-year__summary strong {
+  margin-top: 5px;
+  color: #162f55;
+  font-size: 13px;
+}
+
+.upcoming-school-year__editor {
+  padding: 18px 22px 20px;
+  border-top: 1px solid #e7edf4;
+}
+
+.upcoming-school-year__notice {
+  padding: 10px 12px;
+  color: #52657d;
+  background: #f5f8fc;
+  border-left: 3px solid #315b91;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.upcoming-school-year__rules {
+  margin-top: 12px;
+  padding: 12px 14px;
+  color: #41546d;
+  background: #f8fafc;
+  border: 1px solid #dce5ef;
+  border-radius: 9px;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.upcoming-school-year__rules > div {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #17477d;
+}
+
+.upcoming-school-year__rules ul {
+  display: grid;
+  gap: 3px;
+  margin: 8px 0 0;
+  padding-left: 20px;
+}
+
+.upcoming-school-year__periods {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.upcoming-period {
+  padding: 15px;
+  background: #fbfcfe;
+  border: 1px solid #dce5ef;
+  border-radius: 11px;
+}
+
+.upcoming-period__heading {
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 13px;
+}
+
+.upcoming-period__heading > div {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.upcoming-period h3 {
+  color: #112f5f;
+  font-size: 14px;
+}
+
+.upcoming-period__state {
+  padding: 4px 7px;
+  color: #5f7188;
+  background: #e9eef5;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
+
+.upcoming-period__state.is-modified {
+  color: #805b10;
+  background: #fff0bd;
+}
+
+.upcoming-period__reset {
+  gap: 6px;
+  padding: 6px 8px;
+  color: #315b91;
+  background: transparent;
+  border: 0;
+  font-size: 11px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.upcoming-period__reset:disabled {
+  color: #a7b2c1;
+  cursor: default;
+}
+
+.upcoming-period__fields {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.upcoming-period__fields label,
+.upcoming-period__fields label > span {
+  display: block;
+}
+
+.upcoming-period__fields label > span {
+  margin-bottom: 6px;
+  color: #63758c;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
+
+.upcoming-period__fields input {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 10px;
+  color: #172f52;
+  background: #ffffff;
+  border: 1px solid #cbd7e5;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 12px;
+}
+
+.upcoming-period__fields input:focus-visible,
+.upcoming-school-year button:focus-visible {
+  outline: 2px solid #315b91;
+  outline-offset: 2px;
+}
+
+.upcoming-school-year__validation {
+  margin-top: 12px;
+  color: #b42318;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.upcoming-school-year__actions {
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 18px;
+  padding-top: 15px;
+  border-top: 1px solid #e4ebf3;
+}
+
+.upcoming-school-year__utility-actions,
+.upcoming-school-year__commit-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.upcoming-school-year__actions button {
+  justify-content: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 0 13px;
+  color: #31445e;
+  background: #ffffff;
+  border: 1px solid #cbd7e5;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.upcoming-school-year__commit-actions button:last-child {
+  color: #ffffff;
+  background: var(--grade-lock-navy);
+  border-color: var(--grade-lock-navy);
+}
+
+.upcoming-school-year__actions .upcoming-school-year__reset-changes {
+  color: #8a5200;
+  background: #fff7e6;
+  border-color: #e8b85d;
+}
+
+.upcoming-school-year__actions .upcoming-school-year__reset-changes:hover:not(:disabled) {
+  color: #6f4300;
+  background: #ffedc7;
+  border-color: #d69a2d;
+}
+
+.upcoming-school-year__actions button:disabled {
+  color: #a7b2c1;
+  background: #f5f7fa;
+  cursor: default;
+}
+
+@media (max-width: 980px) {
+  .upcoming-period__fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .upcoming-school-year__header,
+  .upcoming-school-year__actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .upcoming-school-year__review-button {
+    width: 100%;
+  }
+
+  .upcoming-school-year__summary {
+    grid-template-columns: 1fr;
+  }
+
+  .upcoming-school-year__header,
+  .upcoming-school-year__summary > div,
+  .upcoming-school-year__editor {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  .upcoming-period__fields {
+    grid-template-columns: 1fr;
+  }
+
+  .upcoming-school-year__utility-actions,
+  .upcoming-school-year__commit-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+}

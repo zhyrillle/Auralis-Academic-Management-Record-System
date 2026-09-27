@@ -1,4 +1,5 @@
-import { Calendar, TrendingDown, FileText } from "lucide-react";
+import React from "react";
+import { Calendar, TrendingDown, FileText, User } from "lucide-react";
 
 const FLAG_ICONS = {
   calendar: Calendar,
@@ -6,45 +7,33 @@ const FLAG_ICONS = {
   document: FileText,
 };
 
-/**
- * @typedef {Object} StudentFlag
- * @property {string} icon
- * @property {string} label
- */
-
-/**
- * @typedef {Object} StudentRiskCardProps
- * @property {string} name
- * @property {number} grade
- * @property {string} section
- * @property {string} adviser
- * @property {number} riskScore
- * @property {StudentFlag[]} flags
- * @property {string} riskLevel - "low" | "medium" | "high"
- * @property {boolean} [loading]
- */
-
 const RISK_CONFIG = {
   low: {
     accent: "#16A34A",
-    pillBg: "#dcfce7",
-    pillText: "#166534",
+    titleColor: "#15803d",
+    flagColor: "#166534",
     badgeBg: "#dcfce7",
     badgeText: "#166534",
+    avatarBg: "#112d61",
+    avatarColor: "#ffffff",
   },
   medium: {
     accent: "#F4B400",
-    pillBg: "#fef3c7",
-    pillText: "#92400e",
+    titleColor: "#d97706",
+    flagColor: "#92400e",
     badgeBg: "#fef3c7",
     badgeText: "#92400e",
+    avatarBg: "#112d61",
+    avatarColor: "#ffffff",
   },
   high: {
     accent: "#EF4444",
-    pillBg: "#fee2e2",
-    pillText: "#991b1b",
+    titleColor: "#dc2626",
+    flagColor: "#991b1b",
     badgeBg: "#fee2e2",
     badgeText: "#991b1b",
+    avatarBg: "#112d61",
+    avatarColor: "#ffffff",
   },
 };
 
@@ -67,29 +56,31 @@ export default function StudentRiskCard({ name, grade, section, adviser, riskSco
   }
 
   return (
-    <div className="ar-student-card" style={{ borderLeftColor: config.accent }}>
+    <div className="ar-student-card" style={{ borderLeft: `5px solid ${config.accent}` }}>
       <div className="ar-student-main">
-        <div className="ar-student-avatar" style={{ background: `${config.accent}14`, color: config.accent }}>
-          {name.charAt(0).toUpperCase()}
+        <div className="ar-student-avatar" style={{ backgroundColor: "#112d61", color: "#ffffff" }}>
+          <User size={22} />
         </div>
         <div className="ar-student-info">
           <div className="ar-student-name">{name}</div>
           <div className="ar-student-meta">
-            Grade {grade} · Section {section} · Adviser: {adviser}
+            Grade {grade} • Section {section} • Adviser: {adviser}
           </div>
         </div>
       </div>
+
       <div className="ar-student-flags">
-        {flags.map((flag, idx) => {
+        {flags && flags.map((flag, idx) => {
           const Icon = FLAG_ICONS[flag.icon] || FileText;
           return (
-            <span key={idx} className="ar-flag" style={{ color: config.accent }}>
-              <Icon size={14} />
-              {flag.label}
-            </span>
+            <div key={idx} className="ar-flag-row" style={{ color: config.flagColor }}>
+              <Icon size={14} className="ar-flag-icon" />
+              <span className="ar-flag-text">{flag.label}</span>
+            </div>
           );
         })}
       </div>
+
       <div className="ar-student-score" style={{ background: config.badgeBg, color: config.badgeText }}>
         <span className="ar-score-value">{riskScore}</span>
         <span className="ar-score-label">risk score</span>

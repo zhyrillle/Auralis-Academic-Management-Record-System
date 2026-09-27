@@ -2,6 +2,15 @@ const express = require('express');
 const router = express.Router();
 const AuditEvent = require('../models/AuditEvent');
 
+router.get('/summary', async (req, res) => {
+  try {
+    const summary = await AuditEvent.getAccountSummary();
+    res.json(summary);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/', async (req, res) => {
   try {
     const events = await AuditEvent.findAll();

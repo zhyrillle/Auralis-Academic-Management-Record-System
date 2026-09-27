@@ -11,6 +11,47 @@ router.get('/', async (req, res) => {
   }
 });
 
+// GET all sheets for a specific adviser assignment (for building the date grid)
+router.get('/adviser/:adviserAssignmentId', async (req, res) => {
+  try {
+    const sheets = await AttendanceSheet.findByAdviserAssignmentId(req.params.adviserAssignmentId);
+    res.json(sheets);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET all sheets for a specific section
+router.get('/section/:sectionId', async (req, res) => {
+  try {
+    const sheets = await AttendanceSheet.findBySectionId(req.params.sectionId);
+    res.json(sheets);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST find or create a sheet for a given date + adviser assignment or section
+router.post('/find-or-create', async (req, res) => {
+  try {
+    const { section_id, adviser_assignment_id, teacher_assignment_id, attendance_scope = 'SECTION', attendance_date, user_id } = req.body;
+    if ((!section_id && !adviser_assignment_id && !teacher_assignment_id) || !attendance_date) {
+      return res.status(400).json({ error: 'section_id or adviser_assignment_id and attendance_date are required' });
+    }
+    const result = await AttendanceSheet.findOrCreate({
+      section_id,
+      adviser_assignment_id,
+      teacher_assignment_id,
+      attendance_scope,
+      attendance_date,
+      user_id,
+    });
+    res.status(result.created ? 201 : 200).json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/:id', async (req, res) => {
   try {
     const sheet = await AttendanceSheet.findById(req.params.id);

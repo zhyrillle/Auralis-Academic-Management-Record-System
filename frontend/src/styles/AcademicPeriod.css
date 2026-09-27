@@ -1,0 +1,1269 @@
+/* ACADEMIC PERIOD PAGE FOUNDATION */
+.grade-lock-page {
+  --grade-lock-navy: var(--sidebar-bg, #112d61);
+  --grade-lock-navy-hover: var(--sidebar-bg-hover, #1e3e78);
+  --grade-lock-border: #ccd7e4;
+  --grade-lock-muted: #586b83;
+  --grade-lock-surface: #ffffff;
+  max-width: 1440px;
+  width: calc(100% - 32px);
+  min-width: 0;
+  margin: 0 auto;
+  padding-bottom: 32px;
+  overflow-x: clip;
+  color: #1e293b;
+  animation: grade-lock-fade-in 0.35s ease-out;
+}
+
+.grade-lock-page-loading,
+.grade-lock-page-error {
+  display: grid;
+  min-height: 10rem;
+  place-items: center;
+  border: 1px solid #dce4ef;
+  border-radius: 0.875rem;
+  background: #fff;
+  color: #5c6f89;
+}
+
+.grade-lock-page-error {
+  min-height: auto;
+  padding: 0.875rem 1rem;
+  border-color: #f2c3c3;
+  color: #a52a2a;
+}
+
+@keyframes grade-lock-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.grade-lock-page h1,
+.grade-lock-page h2,
+.grade-lock-page h3,
+.grade-lock-page p,
+.grade-lock-page dl,
+.grade-lock-page dd {
+  margin: 0;
+}
+
+.grade-lock-page button,
+.grade-lock-page input,
+.grade-lock-page select,
+.grade-lock-page textarea {
+  font: inherit;
+}
+
+.grade-lock-page button:focus-visible,
+.grade-lock-page input:focus-visible,
+.grade-lock-page select:focus-visible,
+.grade-lock-page textarea:focus-visible,
+.reopening-requests:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.2);
+  outline-offset: 2px;
+}
+
+.grade-lock-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Loading, error, and empty states */
+.grade-lock-school-year-skeleton,
+.grading-period-skeleton__block,
+.grading-period-skeleton__term-card,
+.grading-period-skeleton__operations {
+  background-image: linear-gradient(
+    90deg,
+    #f2f5f9 25%,
+    #e4eaf1 37%,
+    #f2f5f9 63%
+  );
+  background-size: 400% 100%;
+  animation: grade-lock-skeleton-shimmer 1.25s ease infinite;
+}
+
+.grade-lock-school-year-skeleton {
+  width: 10.75rem;
+  height: 2.75rem;
+  border: 1px solid #d8e1ec;
+  border-radius: 0.75rem;
+}
+
+
+.grade-lock-feedback {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1rem;
+  min-height: 12rem;
+  padding: 1.5rem;
+  border: 1px solid #dce4ee;
+  border-radius: 1rem;
+  background: #fff;
+  box-shadow: 0 0.5rem 1.5rem rgba(15, 23, 42, 0.04);
+}
+
+.grade-lock-feedback > svg { color: #58708f; }
+.grade-lock-feedback h2 { color: #112d61; font-size: 1.05rem; }
+.grade-lock-feedback p { margin-top: 0.35rem; color: #64748b; line-height: 1.55; }
+
+.grade-lock-feedback button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 2.6rem;
+  padding: 0.7rem 1rem;
+  border: 1px solid #112d61;
+  border-radius: 0.7rem;
+  color: #fff;
+  background: #112d61;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.grade-lock-feedback--error { border-color: #f2c3c3; }
+.grade-lock-feedback--error > svg { color: #b42318; }
+
+.grade-lock-content-frame {
+  position: relative;
+  min-height: 12rem;
+}
+
+.grade-lock-content-frame > :not(.grade-lock-year-change-overlay) {
+  transition: opacity 160ms ease;
+}
+
+.grade-lock-content-frame--background > :not(.grade-lock-year-change-overlay) {
+  opacity: 0.76;
+}
+
+.grade-lock-content-frame--year-change > :not(.grade-lock-year-change-overlay) {
+  opacity: 0.55;
+  pointer-events: none;
+  user-select: none;
+}
+
+.grade-lock-content-frame--year-change::after {
+  position: absolute;
+  z-index: 4;
+  inset: 0;
+  border-radius: 1rem;
+  background: rgba(248, 250, 252, 0.28);
+  content: "";
+}
+
+.grade-lock-year-change-overlay {
+  position: absolute;
+  z-index: 5;
+  top: 1.25rem;
+  left: 50%;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 2.65rem;
+  padding: 0.65rem 0.95rem;
+  transform: translateX(-50%);
+  border: 1px solid #cfdae8;
+  border-radius: 999px;
+  color: #112d61;
+  background: #fff;
+  box-shadow: 0 0.65rem 1.5rem rgba(15, 23, 42, 0.12);
+  font-size: 0.82rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.grade-lock-year-change-overlay svg {
+  animation: grade-lock-loading-spin 0.8s linear infinite;
+}
+
+@keyframes grade-lock-skeleton-shimmer {
+  to { background-position: -100% 0; }
+}
+
+@keyframes grade-lock-loading-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 900px) {
+  .grading-period-skeleton__term-grid { grid-template-columns: 1fr; }
+  .grading-period-skeleton__term-card { min-height: 15rem; }
+  .grading-period-skeleton__operations-header,
+  .grading-period-skeleton__summary { align-items: flex-start; flex-direction: column; }
+  .grading-period-skeleton__tabs,
+  .grading-period-skeleton__summary-progress { width: 100%; }
+  .timeline-skeleton__workspace { grid-template-columns: 1fr; }
+  .timeline-skeleton__periods { border-right: 0; border-bottom: 1px solid #e5eaf1; }
+}
+
+@media (max-width: 640px) {
+  .grade-lock-feedback { grid-template-columns: auto 1fr; }
+  .grade-lock-feedback button { grid-column: 1 / -1; width: 100%; }
+  .grade-lock-school-year-skeleton { width: 100%; }
+  .timeline-skeleton__scope,
+  .timeline-skeleton__upcoming { align-items: flex-start; grid-template-columns: 1fr; }
+  .timeline-skeleton__scope-copy { width: 100%; }
+  .timeline-skeleton__fields { grid-template-columns: 1fr; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .grade-lock-school-year-skeleton,
+  .grading-period-skeleton__block,
+  .grading-period-skeleton__term-card,
+  .grading-period-skeleton__operations {
+    animation: none;
+  }
+
+  .grade-lock-year-change-overlay svg {
+    animation: none;
+  }
+}
+
+/* PAGE HEADER AND FILTERS */
+.grade-lock-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 28px;
+  margin-bottom: 22px;
+}
+
+.grade-lock-header__copy {
+  min-width: 270px;
+}
+
+.grade-lock-header,
+.grade-lock-header__copy,
+.grade-lock-header__controls {
+  min-width: 0;
+}
+
+.grade-lock-eyebrow,
+.grade-lock-surface__eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 7px;
+  color: #b7791f;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.grade-lock-header h1 {
+  color: var(--grade-lock-navy);
+  font-size: clamp(26px, 3vw, 32px);
+  line-height: 1.2;
+}
+
+.grade-lock-header__copy > p {
+  margin-top: 7px;
+  color: var(--grade-lock-muted);
+  font-size: 14px;
+}
+
+.grade-lock-header__controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.grade-lock-header__filter-label {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.grade-lock-field {
+  display: grid;
+  gap: 7px;
+}
+
+.grade-lock-field > span,
+.grade-lock-label-row label,
+.reminder-settings legend {
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* SCHOOL YEAR DROPDOWN */
+.grade-lock-school-year {
+  position: relative;
+  width: 175px;
+  flex: 0 0 175px;
+}
+
+.grade-lock-school-year__trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  height: 42px;
+  padding: 9px 12px;
+  color: #334155;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  font-size: 12px;
+  cursor: pointer;
+  transition:
+    color 0.2s ease,
+    background-color 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.grade-lock-school-year__trigger:hover,
+.grade-lock-school-year--open .grade-lock-school-year__trigger {
+  color: var(--grade-lock-navy);
+  background: #f8fafc;
+  border-color: #94a3b8;
+}
+
+.grade-lock-school-year__trigger:focus-visible {
+  outline: none;
+  border-color: #64748b;
+  box-shadow: none;
+}
+
+.grade-lock-school-year__chevron {
+  flex: 0 0 auto;
+  color: #64748b;
+  transition:
+    color 0.2s ease,
+    transform 0.24s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.grade-lock-school-year--open .grade-lock-school-year__chevron {
+  color: var(--grade-lock-navy);
+  transform: rotate(180deg);
+}
+
+.grade-lock-school-year__menu {
+  position: absolute;
+  top: calc(100% + 7px);
+  right: 0;
+  z-index: 30;
+  display: grid;
+  width: 100%;
+  padding: 5px;
+  visibility: hidden;
+  opacity: 0;
+  background: #ffffff;
+  border: 1px solid #dbe3ec;
+  border-radius: 10px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.14);
+  pointer-events: none;
+  transform: translateY(-7px) scale(0.98);
+  transform-origin: top center;
+  transition:
+    opacity 0.18s ease,
+    transform 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+    visibility 0s linear 0.22s;
+}
+
+.grade-lock-school-year--open .grade-lock-school-year__menu {
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0) scale(1);
+  transition-delay: 0s;
+}
+
+.grade-lock-school-year__option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 34px;
+  padding: 8px 9px;
+  color: #475569;
+  opacity: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transform: translateY(-5px);
+  transition:
+    color 0.16s ease,
+    background-color 0.16s ease,
+    opacity 0.16s ease,
+    transform 0.18s ease;
+}
+
+.grade-lock-school-year--open .grade-lock-school-year__option {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.grade-lock-school-year--open .grade-lock-school-year__option:nth-child(2) {
+  transition-delay: 0.035s;
+}
+
+.grade-lock-school-year--open .grade-lock-school-year__option:nth-child(3) {
+  transition-delay: 0.07s;
+}
+
+.grade-lock-school-year--open .grade-lock-school-year__option:nth-child(4) {
+  transition-delay: 0.105s;
+}
+
+.grade-lock-school-year--open .grade-lock-school-year__option:nth-child(5) {
+  transition-delay: 0.14s;
+}
+
+.grade-lock-school-year--open .grade-lock-school-year__option:nth-child(6) {
+  transition-delay: 0.175s;
+}
+
+.grade-lock-school-year__option:hover,
+.grade-lock-school-year__option[aria-selected="true"] {
+  color: var(--grade-lock-navy);
+  background: #eef4fb;
+}
+
+.grade-lock-school-year__option:focus-visible {
+  outline: none;
+  background: #eef4fb;
+  box-shadow: inset 0 0 0 1px #94a3b8;
+}
+
+.grade-lock-school-year__option svg {
+  flex: 0 0 auto;
+  color: var(--grade-lock-navy);
+}
+
+.grade-lock-field select,
+.grade-lock-field input,
+.grade-lock-page textarea {
+  width: 100%;
+  min-height: 42px;
+  padding: 9px 12px;
+  color: #334155;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  font-size: 13px;
+  outline: none;
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.grade-lock-field select {
+  cursor: pointer;
+}
+
+.grade-lock-field select:focus,
+.grade-lock-field input:focus,
+.grade-lock-page textarea:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.custom-duration-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120px;
+  gap: 8px;
+}
+
+.custom-duration-control input,
+.custom-duration-control select {
+  min-width: 0;
+}
+
+.grade-lock-page textarea {
+  min-height: 108px;
+  resize: vertical;
+}
+
+.grade-lock-field input:disabled,
+.grade-lock-field select:disabled {
+  color: #64748b;
+  background: #f1f5f9;
+  border-color: #e2e8f0;
+  cursor: not-allowed;
+}
+
+/* PAGE VIEW SWITCHER */
+.grade-lock-view-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 30px;
+}
+
+.grade-lock-view-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 0;
+  padding: 5px;
+  background: #e9eef5;
+  border: 1px solid #dde5ee;
+  border-radius: 11px;
+}
+
+.grade-lock-view-switcher button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 8px 14px;
+  color: #64748b;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  transition:
+    color 0.18s ease,
+    background-color 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.grade-lock-view-switcher button:hover {
+  color: var(--grade-lock-navy);
+}
+
+.grade-lock-view-switcher button.is-active {
+  color: var(--grade-lock-navy);
+  background: #ffffff;
+  border-color: #cbd5e1;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
+}
+
+.grade-lock-view {
+  min-width: 0;
+  animation: grade-lock-view-enter 0.22s ease-out;
+}
+
+@keyframes grade-lock-view-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* BUTTONS AND BADGES */
+.grade-lock-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 9px 13px;
+  color: #334155;
+  background: #ffffff;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
+}
+
+.grade-lock-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.grade-lock-button--primary {
+  color: #ffffff;
+  background: var(--grade-lock-navy);
+  box-shadow: 0 4px 12px rgba(17, 45, 97, 0.14);
+}
+
+.grade-lock-button--primary:hover:not(:disabled) {
+  background: var(--grade-lock-navy-hover);
+}
+
+.grade-lock-button--secondary {
+  color: #334155;
+  background: #ffffff;
+  border-color: #d7e0ea;
+}
+
+.grade-lock-button--secondary:hover:not(:disabled) {
+  color: var(--grade-lock-navy);
+  background: #f8fafc;
+  border-color: #bccadc;
+}
+
+.grade-lock-button--ghost {
+  padding-right: 6px;
+  padding-left: 6px;
+  color: #475569;
+  background: transparent;
+}
+
+.grade-lock-button--ghost:hover:not(:disabled) {
+  color: var(--grade-lock-navy);
+  background: #f1f5f9;
+}
+
+.grade-lock-button--danger-outline {
+  color: #b91c1c;
+  background: #ffffff;
+  border-color: #fecaca;
+}
+
+.grade-lock-button--danger-outline:hover:not(:disabled) {
+  background: #fff5f5;
+  border-color: #fca5a5;
+}
+
+.grade-lock-button--danger {
+  color: #ffffff;
+  background: #b91c1c;
+}
+
+.grade-lock-button--danger:hover:not(:disabled) {
+  background: #991b1b;
+}
+
+.grade-lock-button:disabled {
+  color: #94a3b8;
+  background: #e2e8f0;
+  border-color: #e2e8f0;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.grade-lock-page .badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.015em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.grade-lock-page .badge--open {
+  color: #047857;
+  background: #d1fae5;
+}
+
+.grade-lock-page .badge--finalized {
+  color: #1d4ed8;
+  background: #dbeafe;
+}
+
+.grade-lock-page .badge--locked {
+  color: #475569;
+  background: #e2e8f0;
+}
+
+.grade-lock-page .badge--upcoming {
+  color: #475569;
+  background: #f1f5f9;
+}
+
+.grade-lock-page .badge--automation {
+  color: #047857;
+  background: #d1fae5;
+}
+
+.grade-lock-page .badge--attention,
+.grade-lock-page .badge--temporary {
+  color: #9a5b0a;
+  background: #fef3c7;
+}
+
+
+
+
+/* DRAWERS AND MODALS */
+.grade-lock-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(15, 23, 42, 0.42);
+  backdrop-filter: blur(2px);
+  animation: grade-lock-overlay-in 0.18s ease-out;
+}
+
+.grade-lock-overlay--centered {
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+@keyframes grade-lock-overlay-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.grade-lock-drawer,
+.grade-lock-modal {
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  box-shadow: -18px 0 50px rgba(15, 23, 42, 0.16);
+}
+
+.grade-lock-drawer {
+  width: min(480px, 94vw);
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  max-height: 100dvh;
+  overflow: hidden;
+  animation: grade-lock-drawer-in 0.24s ease-out;
+}
+
+.grade-lock-drawer--compact {
+  width: min(430px, 94vw);
+}
+
+@keyframes grade-lock-drawer-in {
+  from {
+    transform: translateX(25px);
+  }
+
+  to {
+    transform: translateX(0);
+  }
+}
+
+.grade-lock-modal {
+  width: min(590px, 96vw);
+  max-height: calc(100vh - 40px);
+  overflow: auto;
+  border-radius: 16px;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.22);
+}
+
+.grade-lock-modal--small {
+  width: min(480px, 96vw);
+}
+
+.grade-lock-modal--settings {
+  width: min(760px, 96vw);
+  max-height: min(820px, 92vh);
+}
+
+.grade-lock-modal--confirmation {
+  align-items: center;
+  width: min(430px, 96vw);
+  padding: 26px 26px 22px;
+  text-align: center;
+}
+
+.grade-lock-surface__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 21px 23px;
+  border-bottom: 1px solid #e9eef5;
+}
+
+.grade-lock-drawer > .grade-lock-surface__header,
+.grade-lock-drawer > .grade-lock-surface__footer {
+  flex: 0 0 auto;
+}
+
+.grade-lock-surface__header h2 {
+  color: var(--grade-lock-navy);
+  font-size: 19px;
+}
+
+.grade-lock-surface__eyebrow {
+  margin-bottom: 5px;
+  font-size: 12px;
+}
+
+.grade-lock-icon-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  padding: 0;
+  color: #64748b;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  cursor: pointer;
+}
+
+.grade-lock-icon-button:hover {
+  color: #1e293b;
+  background: #f1f5f9;
+}
+
+.grade-lock-drawer__body,
+.grade-lock-modal__body {
+  display: grid;
+  gap: 24px;
+  padding: 22px 23px;
+  overflow-y: auto;
+}
+
+.grade-lock-drawer__body {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overscroll-behavior: contain;
+}
+
+.grade-lock-form-title {
+  margin-bottom: 13px !important;
+  color: #334155;
+  font-size: 12px;
+  letter-spacing: 0.025em;
+  text-transform: uppercase;
+}
+
+.grade-lock-surface__footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 9px;
+  padding: 16px 23px;
+  background: #fbfdff;
+  border-top: 1px solid #e9eef5;
+}
+
+
+
+/* FORMS AND SETTINGS */
+.grade-lock-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.automation-policy-grid,
+.automation-settings-grid,
+.automation-defaults-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.automation-setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-width: 0;
+  padding: 15px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+}
+
+.automation-setting-row strong,
+.automation-timezone strong {
+  color: #334155;
+  font-size: 14px;
+}
+
+.automation-setting-row p {
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.automation-enabled-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 9px;
+  color: #047857;
+  background: #d1fae5;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.reminder-settings {
+  display: grid;
+  gap: 9px;
+  min-width: 0;
+  padding: 15px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+}
+
+.reminder-settings legend {
+  padding: 0 5px;
+  color: #334155;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.reminder-settings > p {
+  margin: 0 0 4px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.reminder-settings label {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #475569;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.reminder-settings input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--grade-lock-navy);
+}
+
+.automation-select-field {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.automation-select-field > span {
+  color: #334155;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.automation-select-field > small {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.automation-select-field .dropdown-select__trigger {
+  min-height: 42px;
+  font-size: 13px;
+}
+
+.automation-timezone {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 15px 0 0;
+  border-top: 1px solid #edf2f7;
+  border-bottom: 0;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.term-details-list {
+  display: grid;
+  gap: 0;
+  border: 1px solid #e7edf4;
+  border-radius: 11px;
+}
+
+.term-details-list div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 12px 14px;
+  border-bottom: 1px solid #edf2f7;
+}
+
+.term-details-list div:last-child {
+  border-bottom: 0;
+}
+
+.term-details-list dt {
+  margin: 0;
+  color: #475569;
+  font-size: 12px;
+}
+
+.term-details-info-box {
+  padding: 15px;
+}
+
+.term-details-info-box p {
+  color: #365f8d;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.term-details-info-box svg {
+  width: 22px;
+  height: 22px;
+}
+
+.deadline-reminder-preview {
+  padding: 15px;
+}
+
+.deadline-reminder-preview strong {
+  font-size: 14px;
+}
+
+.deadline-reminder-preview p {
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+
+
+
+/* CONFIRMATION MODALS */
+.confirmation-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  margin-bottom: 15px;
+  color: var(--grade-lock-navy);
+  background: #eaf1fa;
+  border-radius: 14px;
+}
+
+.confirmation-icon--danger {
+  color: #b91c1c;
+  background: #fee2e2;
+}
+
+.grade-lock-modal--confirmation h2 {
+  color: var(--grade-lock-navy);
+  font-size: 18px;
+}
+
+.grade-lock-modal--confirmation > p {
+  max-width: 345px;
+  margin-top: 9px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.grade-lock-modal--confirmation > p strong {
+  color: #334155;
+}
+
+.grade-lock-modal--confirmation .grade-lock-surface__footer {
+  width: calc(100% + 52px);
+  margin: 22px -26px -22px;
+  padding: 16px 26px;
+}
+
+
+/* RESPONSIVE LAYOUT */
+@media (max-height: 820px) and (min-width: 561px) {
+  .grade-lock-drawer > .grade-lock-surface__header {
+    padding: 16px 20px;
+  }
+
+  .grade-lock-drawer > .grade-lock-drawer__body {
+    gap: 18px;
+    padding: 18px 20px;
+  }
+
+  .grade-lock-drawer > .grade-lock-surface__footer {
+    padding: 13px 20px;
+  }
+}
+
+@media (min-width: 1121px) and (max-width: 1600px) {
+  .grade-lock-page {
+    padding-bottom: 22px;
+  }
+
+  .grade-lock-header {
+    gap: 20px;
+    margin-bottom: 16px;
+  }
+
+  .grade-lock-eyebrow,
+  .grade-lock-surface__eyebrow {
+    margin-bottom: 5px;
+    font-size: 11px;
+  }
+
+  .grade-lock-header h1 {
+    font-size: 27px;
+  }
+
+  .grade-lock-header__copy > p {
+    margin-top: 5px;
+    font-size: 13px;
+  }
+
+  .grade-lock-view-toolbar {
+    margin-bottom: 26px;
+  }
+
+  .grade-lock-view-switcher button {
+    min-height: 34px;
+    padding: 7px 12px;
+  }
+
+}
+
+@media (max-width: 1120px) {
+  .grade-lock-page {
+    width: calc(100% - 24px);
+    padding-bottom: 28px;
+  }
+}
+
+@media (max-width: 980px) {
+  .grade-lock-header__copy {
+    min-width: 0;
+  }
+
+  .grade-lock-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .grade-lock-header__controls {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 760px) {
+  .grade-lock-page {
+    width: 100%;
+    padding-bottom: 28px;
+  }
+  .grade-lock-view-switcher {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .grade-lock-view-switcher button {
+    min-width: 0;
+  }
+
+  .grade-lock-view-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 560px) {
+  .grade-lock-drawer,
+  .grade-lock-drawer--compact {
+    width: 100vw;
+    max-width: none;
+  }
+
+  .grade-lock-drawer > .grade-lock-surface__header {
+    padding: 18px;
+  }
+
+  .grade-lock-drawer > .grade-lock-drawer__body {
+    padding: 18px;
+  }
+
+  .grade-lock-drawer > .grade-lock-surface__footer {
+    padding: 14px 18px max(14px, env(safe-area-inset-bottom));
+  }
+  .grade-lock-header {
+    margin-bottom: 18px;
+  }
+
+  .grade-lock-header h1 {
+    font-size: 23px;
+  }
+
+  .grade-lock-header__copy > p {
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .grade-lock-header__controls {
+    width: 100%;
+  }
+
+  .grade-lock-header__filter-label {
+    width: 100%;
+  }
+
+  .grade-lock-school-year {
+    min-width: 0;
+    width: 100%;
+    flex: 1 1 100%;
+  }
+  .grade-lock-school-year__trigger {
+    width: 100%;
+  }
+
+  .custom-duration-control {
+    grid-template-columns: 1fr;
+  }
+  .review-details,
+  .grade-lock-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .grade-lock-surface__footer {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+
+  .grade-lock-surface__footer .grade-lock-button {
+    width: 100%;
+  }
+  .grade-lock-modal--confirmation .grade-lock-surface__footer {
+    flex-direction: column-reverse;
+  }
+}

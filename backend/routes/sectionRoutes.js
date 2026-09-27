@@ -1,11 +1,40 @@
 const express = require('express');
 const router = express.Router();
 const Section = require('../models/Section');
+const classRecordRoutes = require('./classRecordRoutes');
 
 router.get('/', async (req, res) => {
   try {
     const sections = await Section.findAll();
     res.json(sections);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/adviser/:userId', async (req, res) => {
+  try {
+    const sections = await Section.findAdviserSections(req.params.userId);
+    res.json(sections);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/:id/students', async (req, res) => {
+  try {
+    const subjectOfferingId = req.query.subject_offering_id || req.query.subjectOfferingId || null;
+    const subjectId = req.query.subject_id || req.query.subjectId || null;
+    const subjectName = req.query.subject_name || req.query.subjectName || req.query.subject || null;
+
+    if (subjectOfferingId && classRecordRoutes.syncOfferingGradesInternal) {
+      await classRecordRoutes.syncOfferingGradesInternal(subjectOfferingId, 'T1');
+      await classRecordRoutes.syncOfferingGradesInternal(subjectOfferingId, 'T2');
+      await classRecordRoutes.syncOfferingGradesInternal(subjectOfferingId, 'T3');
+    }
+
+    const students = await Section.findStudentsBySection(req.params.id, subjectOfferingId, subjectId, subjectName);
+    res.json(students);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

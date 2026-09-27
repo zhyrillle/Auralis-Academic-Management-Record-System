@@ -11,6 +11,16 @@ router.get('/', async (req, res) => {
   }
 });
 
+router.get('/user/:userId', async (req, res) => {
+  try {
+    const UserAssignment = require('../models/UserAssignment');
+    const assignments = await UserAssignment.getTeacherAssignments(req.params.userId);
+    res.json(assignments);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/:id', async (req, res) => {
   try {
     const assignment = await TeacherAssignment.findById(req.params.id);

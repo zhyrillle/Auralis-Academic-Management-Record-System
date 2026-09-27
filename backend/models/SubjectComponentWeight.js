@@ -18,15 +18,8 @@ class SubjectComponentWeight {
          ON scw.subject_id = s.subject_id
         AND scw.component_type_id = ct.component_type_id
         AND scw.school_year_id = ?
-       WHERE s.status = 'ACTIVE'
-          OR EXISTS (
-            SELECT 1
-            FROM SUBJECT_COMPONENT_WEIGHT AS historical_scw
-            WHERE historical_scw.subject_id = s.subject_id
-              AND historical_scw.school_year_id = ?
-          )
        ORDER BY s.subject_name, ct.component_type_id`,
-      [schoolYearId, schoolYearId]
+      [schoolYearId]
     );
     return rows;
   }
@@ -111,9 +104,6 @@ class SubjectComponentWeight {
            ?,
            source_scw.percentage
          FROM SUBJECT_COMPONENT_WEIGHT AS source_scw
-         JOIN SUBJECT AS s
-           ON s.subject_id = source_scw.subject_id
-          AND s.status = 'ACTIVE'
          WHERE source_scw.school_year_id = ?
            AND NOT EXISTS (
              SELECT 1
