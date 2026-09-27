@@ -5,44 +5,135 @@ import "../../styles/studentSF9.css";
 import depedLogo from "../../assets/deped_logo.png";
 import gccnhsLogo from "../../assets/gccnhs_logo.png";
 import backIconUrl from "../../assets/backButton.svg";
+import { getStoredUser, normalizeRole } from "../../utils/auth";
+import { getStudentSF9Details } from "../../services/studentSf9Service";
+import Toast from "../../components/common/Toast.jsx";
 
-export default function StudentSF9Page({ student, onBack }) {
-  const [activeTab, setActiveTab] = useState("sf9");
+export default function StudentSF9Page({ student, onBack, userRole: propUserRole, initialTab }) {
+  const storedUser = useMemo(() => getStoredUser(), []);
+  const normRole = useMemo(() => normalizeRole(storedUser?.role, storedUser), [storedUser]);
+  const userRole = propUserRole || (normRole === "adviser" ? "adviser" : normRole === "principal" ? "principal" : "teacher");
+  const isAdviser = userRole === "adviser" || userRole === "principal";
 
-  // Mock student detailed records matching mockups exactly
-  const studentProfile = {
-    name: "CRUZ, ALEX MATTHEW",
-    lrn: "145783920614",
-    gradeLevel: "Grade 8 Mahogany",
-    section: "Mahogany",
-    sex: "Male",
-    age: 13,
-    schoolYear: "2026-2027",
-    curriculum: "K to 12 Basic Education",
-    dateOfBirth: "January 15, 2010",
-    address: "123 Rizal Street, Brgy. San Isidro, Manila",
-    termGrade: 92,
-    honorStatus: "With Honor",
-    daysPresent: 20,
-    daysAbsent: 2,
-    missingActivities: 2
+  const [activeTab, setActiveTab] = useState(initialTab || (isAdviser ? "sf9" : "personal"));
+  const [viewMode, setViewMode] = useState("spread"); // "spread", "front", "back"
+  const [sf9Data, setSf9Data] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  // Teacher Comments/Remarks state for terms with frontend localStorage persistence
+  const studentKey = student?.lrn || student?.student_id || student?.studentId || student?.id || "default";
+  const storageKey = `sf9_comments_${studentKey}`;
+
+  const [comments, setComments] = useState({
+    term1: "",
+    term2: "",
+    term3: ""
+  });
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
+        setComments(JSON.parse(saved));
+        return;
+      }
+    } catch (e) {
+      console.error("Error loading saved SF9 comments:", e);
+    }
+    setComments({ term1: "", term2: "", term3: "" });
+  }, [storageKey]);
+
+  const handleCommentChange = (term, val) => {
+    setComments(prev => {
+      const updated = { ...prev, [term]: val };
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(updated));
+      } catch (e) {
+        console.error("Error saving SF9 comments:", e);
+      }
+      return updated;
+    });
   };
 
-  // Mock Academic Grades for SF9 table
-  const [grades] = useState([
-    { area: "Filipino", t1: 90, t2: 91, t3: 92, final: 91, remark: "PASSED" },
-    { area: "English", t1: 92, t2: 93, t3: 94, final: 93, remark: "PASSED" },
-    { area: "Mathematics", t1: 91, t2: 92, t3: 93, final: 92, remark: "PASSED" },
-    { area: "Science", t1: 93, t2: 94, t3: 95, final: 94, remark: "PASSED" },
-    { area: "Araling Panlipunan", t1: 89, t2: 90, t3: 91, final: 90, remark: "PASSED" },
-    { area: "Values Education", t1: 92, t2: 93, t3: 94, final: 93, remark: "PASSED" },
-    { area: "Technology and Livelihood", t1: 91, t2: 92, t3: 93, final: 92, remark: "PASSED" },
-    { area: "MAPEH", t1: 90, t2: 91, t3: 92, final: 91, remark: "PASSED", isHeader: true },
-    { area: "Music & Arts", t1: 90, t2: 91, t3: 92, final: "", remark: "", isSubSubject: true },
-    { area: "PE & Health", t1: 91, t2: 92, t3: 93, final: "", remark: "", isSubSubject: true },
-    { area: "HGP", t1: 91, t2: 92, t3: 93, final: 92, remark: "PASSED" },
-    { area: "ALIVE", t1: 91, t2: 92, t3: 93, final: 92, remark: "PASSED" },
-  ]);
+  useEffect(() => {
+    let isMounted = true;
+    const identifier = student?.student_id || student?.studentId || student?.student_section_id || student?.studentSectionId || student?.lrn || student?.id;
+    if (identifier) {
+      setLoading(true);
+      getStudentSF9Details(identifier)
+        .then((data) => {
+          if (isMounted && data) {
+            setSf9Data(data);
+          }
+        })
+        .catch((err) => {
+          console.error("Failed to load dynamic SF9 data:", err);
+        })
+        .finally(() => {
+          if (isMounted) setLoading(false);
+        });
+    }
+    return () => { isMounted = false; };
+  }, [student]);
+
+  // Dynamic student records matching official layout
+  const studentProfile = useMemo(() => {
+    const fetched = sf9Data?.studentProfile || {};
+    return {
+      name: fetched.name || student?.name || "",
+      lrn: fetched.lrn || student?.lrn || "",
+      gradeLevel: fetched.gradeLevel || student?.gradeLevel || "",
+      grade: fetched.grade || student?.grade || "",
+      section: fetched.section || student?.section || "",
+      program: fetched.program || student?.program || "",
+      sex: fetched.sex || student?.sex || student?.gender || "",
+      age: sf9Data ? (fetched.age ?? "") : (student?.age ?? ""),
+      schoolYear: fetched.schoolYear || student?.schoolYear || "",
+      dateOfBirth: fetched.dateOfBirth || student?.dateOfBirth || "",
+      address: fetched.address || student?.address || "",
+      termGrade: fetched.termGrade ?? student?.grade ?? "",
+      honorStatus: fetched.honorStatus || student?.honorStatus || "",
+      daysPresent: fetched.daysPresent ?? student?.daysPresent ?? 0,
+      daysAbsent: fetched.daysAbsent ?? student?.daysAbsent ?? 0,
+      missingActivities: fetched.missingActivities ?? student?.missingActivities ?? 0,
+      adviserName: fetched.adviserName || student?.adviserName || "",
+      principalName: (() => {
+        const raw = fetched.principalName || student?.principalName || "";
+        if (!raw) return "";
+        return (raw.toUpperCase().includes("PH.D") || raw.toUpperCase().includes("PHD")) ? raw : `${raw}, Ph.D.`;
+      })(),
+      admittedToGrade: "", // Leave blank as requested
+      eligibleForAdmission: "" // Leave blank as requested
+    };
+  }, [sf9Data, student]);
+
+  // Official SF9 Subjects
+  const grades = useMemo(() => {
+    if (sf9Data?.grades && sf9Data.grades.length > 0) {
+      return sf9Data.grades;
+    }
+    return [
+      { code: "fil", name: "Filipino", t1: "", t2: "", t3: "", final: "", remark: "" },
+      { code: "eng", name: "English", t1: "", t2: "", t3: "", final: "", remark: "" },
+      { code: "math", name: "Mathematics", t1: "", t2: "", t3: "", final: "", remark: "" },
+      { code: "sci", name: "Science", t1: "", t2: "", t3: "", final: "", remark: "" },
+      { code: "ap", name: "Araling Panlipunan (AP)", t1: "", t2: "", t3: "", final: "", remark: "" },
+      { code: "ve", name: "Values Education", t1: "", t2: "", t3: "", final: "", remark: "" },
+      { code: "tle", name: "TLE", t1: "", t2: "", t3: "", final: "", remark: "" },
+      { code: "mapeh", name: "MAPEH", t1: "", t2: "", t3: "", final: "", remark: "", isHeader: true },
+      { code: "music_arts", name: "Music and Arts", t1: "", t2: "", t3: "", final: "", remark: "", isSubSubject: true },
+      { code: "pe_health", name: "Physical Education and Health", t1: "", t2: "", t3: "", final: "", remark: "", isSubSubject: true },
+    ];
+  }, [sf9Data]);
+
+  // Performance Descriptors matching the official layout
+  const performanceDescriptors = [
+    { scale: "90-100", desc: "Advancing", remarks: "Passed" },
+    { scale: "80-89", desc: "Benchmarking", remarks: "Passed" },
+    { scale: "75-79", desc: "Connecting", remarks: "Passed" },
+    { scale: "65-74", desc: "Developing", remarks: "Passed" },
+    { scale: "0-64", desc: "Emerging", remarks: "Passed" }
+  ];
 
   // Mock Attendance Calendar Days
   const attendanceData = {
@@ -509,107 +600,83 @@ export default function StudentSF9Page({ student, onBack }) {
           <div className="profile-info-column">
             {/* Section heading – outside the card */}
             <div className="profile-info-header">
-              <h3 className="profile-info-title">Student Profile</h3>
+              <h3 className="profile-info-title">Student Profile Information</h3>
               <p className="profile-info-subtitle">Student demographic and enrollment details</p>
             </div>
 
-            {/* Card */}
-            <div className="profile-info-card sf9-card">
-              {/* Profile Data Fields */}
+            <div className="profile-info-card">
               <div className="profile-fields-list">
                 <div className="profile-field-group">
                   <span className="profile-field-label">Full Name</span>
-                  <span className="profile-field-value">{studentProfile.name}</span>
+                  <span className="profile-field-value">{studentProfile.name || "CRUZ, ALEX MATTHEW"}</span>
                 </div>
 
                 <div className="profile-field-group">
                   <span className="profile-field-label">Learner Reference Number</span>
-                  <span className="profile-field-value">{studentProfile.lrn}</span>
+                  <span className="profile-field-value">{studentProfile.lrn || "145783920614"}</span>
                 </div>
 
                 <div className="profile-field-group">
                   <span className="profile-field-label">Sex</span>
-                  <span className="profile-field-value">{studentProfile.sex}</span>
+                  <span className="profile-field-value">{studentProfile.sex || "Male"}</span>
                 </div>
 
                 <div className="profile-field-group">
                   <span className="profile-field-label">Date of Birth</span>
-                  <span className="profile-field-value">{studentProfile.dateOfBirth}</span>
+                  <span className="profile-field-value">{studentProfile.dateOfBirth || "January 15, 2010"}</span>
                 </div>
 
                 <div className="profile-field-group">
                   <span className="profile-field-label">Address</span>
-                  <span className="profile-field-value">{studentProfile.address}</span>
+                  <span className="profile-field-value">{studentProfile.address || "123 Rizal Street, Brgy. San Isidro, Manila"}</span>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Right Column (2 spans): Documents Section */}
-          <div className="documents-section">
-            {/* Section heading – outside the cards */}
-            <h3 className="documents-section-title">Documents</h3>
+          {/* Right Column: Documents Section (Adviser ONLY) */}
+          {isAdviser && (
+            <div className="documents-section">
+              <div className="profile-info-header">
+                <h3 className="documents-section-title">Documents</h3>
+                <p className="profile-info-subtitle" style={{ visibility: "hidden" }}>&nbsp;</p>
+              </div>
 
-            {/* Document Cards Grid (2-column card grid) */}
-            <div className="documents-grid">
-              {/* Form 10 - Permanent Record Card */}
-              <div className="doc-card">
-                <div className="doc-card-top">
-                  <div className="doc-icon-box">
-                    <FileText size={20} />
-                  </div>
-                  <div className="doc-details">
-                    <h4 className="doc-title">Form 10 - Permanent Record</h4>
-                    <p className="doc-subtitle">Official cumulative student record</p>
-                    <span className="doc-status-badge">Available</span>
-                    <div className="doc-actions">
-                      <button className="btn-doc-action preview" title="Preview Document">
-                        <Eye size={14} />
-                        <span>Preview</span>
-                      </button>
-                      <button className="btn-doc-action download" title="Download Document">
-                        <Download size={14} />
-                        <span>Download</span>
-                      </button>
+              <div className="documents-grid">
+                {/* Form 10 Card */}
+                <div className="doc-card">
+                  <div className="doc-card-top">
+                    <div className="doc-icon-box">
+                      <FileText size={22} />
+                    </div>
+                    <div className="doc-details">
+                      <div className="doc-details-content">
+                        <h4 className="doc-title">Form 10 - Permanent Record</h4>
+                        <p className="doc-subtitle">Official cumulative student record</p>
+                        <span className="doc-status-badge">Available</span>
+                      </div>
+                      <div className="doc-actions">
+                        <button className="btn-doc-action preview" title="Preview Document">
+                          <Eye size={14} />
+                          <span>Preview</span>
+                        </button>
+                        <button className="btn-doc-action download" title="Download Document">
+                          <Download size={14} />
+                          <span>Download</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Form 9 - Report Card Card */}
-              <div className="doc-card">
-                <div className="doc-card-top">
-                  <div className="doc-icon-box">
-                    <FileText size={20} />
-                  </div>
+                {/* Bulk Actions Card */}
+                <div className="doc-card">
                   <div className="doc-details">
-                    <h4 className="doc-title">Form 9 - Report Card</h4>
-                    <p className="doc-subtitle">Per term performance report</p>
-                    <span className="doc-status-badge">Available</span>
-                    <div className="doc-actions">
-                      <button className="btn-doc-action preview" title="Preview Document">
-                        <Eye size={14} />
-                        <span>Preview</span>
-                      </button>
-                      <button className="btn-doc-action download" title="Download Document">
-                        <Download size={14} />
-                        <span>Download</span>
-                      </button>
+                    <div className="doc-details-content">
+                      <h4 className="doc-title">Bulk Actions</h4>
+                      <p className="doc-subtitle">Perform actions on multiple documents</p>
+                      <span className="doc-status-badge">Available</span>
                     </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Bulk Actions Card */}
-              <div className="doc-card">
-                <div className="doc-card-top">
-                  <div className="doc-icon-box">
-                    <FileText size={20} />
-                  </div>
-                  <div className="doc-details">
-                    <h4 className="doc-title">Bulk Actions</h4>
-                    <p className="doc-subtitle">Perform actions on multiple documents</p>
-                    <span className="doc-status-badge">Available</span>
                     <div className="doc-actions">
                       <button className="btn-doc-action zip-download" title="Download All Documents (ZIP)">
                         <Download size={14} />
@@ -618,10 +685,36 @@ export default function StudentSF9Page({ student, onBack }) {
                     </div>
                   </div>
                 </div>
+
+                {/* Form 9 Card */}
+                <div className="doc-card">
+                  <div className="doc-card-top">
+                    <div className="doc-icon-box">
+                      <FileText size={22} />
+                    </div>
+                    <div className="doc-details">
+                      <div className="doc-details-content">
+                        <h4 className="doc-title">Form 9 - Report Card</h4>
+                        <p className="doc-subtitle">Per term performance report</p>
+                        <span className="doc-status-badge">Available</span>
+                      </div>
+                      <div className="doc-actions">
+                        <button className="btn-doc-action preview" onClick={() => setActiveTab("sf9")} title="Preview SF9">
+                          <Eye size={14} />
+                          <span>Preview</span>
+                        </button>
+                        <button className="btn-doc-action download" onClick={handlePrint} title="Download SF9">
+                          <Download size={14} />
+                          <span>Download</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
               </div>
             </div>
-          </div>
-
+          )}
         </div>
       )}
     </div>

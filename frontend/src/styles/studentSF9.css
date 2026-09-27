@@ -783,11 +783,18 @@
 /* Main 2-Column Grid Container */
 .personal-info-grid {
   display: grid;
+  grid-template-columns: 360px 1fr;
   grid-template-columns: 1fr 2fr;
   /* Left column 1x, Right column 2x width */
   gap: 24px;
   align-items: start;
   width: 100%;
+}
+
+@media (max-width: 1100px) {
+  .personal-info-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ---------------------------------------------------------
@@ -836,6 +843,7 @@
 .profile-fields-list {
   display: flex;
   flex-direction: column;
+  gap: 20px;
   gap: 20px;
 }
 
@@ -914,6 +922,8 @@
   display: flex;
   align-items: flex-start;
   gap: 14px;
+  align-items: stretch;
+  height: 100%;
 }
 
 .doc-icon-container,
@@ -982,6 +992,7 @@
 .btn-doc-action {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   border-radius: 30px;
   padding: 6px 14px;
@@ -1015,6 +1026,8 @@
 .btn-download:hover {
   background-color: #e2b82d;
   color: #ffffff;
+  width: 100%;
+  padding: 9px 14px;
 }
 
 .btn-doc-action.zip-download,
