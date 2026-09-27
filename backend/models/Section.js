@@ -31,14 +31,19 @@ class Section {
         sec.section_name,
         sec.section_name AS name,
         sec.grade_level_id,
+        sec.program_id,
+        p.program_code,
+        p.program_name,
+        COALESCE(p.is_specialized, 0) AS is_specialized,
         COALESCE(gl.grade_level_name, 'G7') AS grade_level_name,
         COALESCE(gl.grade_level_name, 'G7') AS level,
         'Active' AS status,
         COUNT(DISTINCT ss.student_id) AS student_count
       FROM SECTION sec
+      LEFT JOIN PROGRAM p ON p.program_id = sec.program_id
       LEFT JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
       LEFT JOIN STUDENT_SECTION ss ON ss.section_id = sec.section_id
-      GROUP BY sec.section_id, sec.section_name, sec.grade_level_id, gl.grade_level_name
+      GROUP BY sec.section_id, sec.section_name, sec.grade_level_id, sec.program_id, p.program_code, p.program_name, p.is_specialized, gl.grade_level_name
       ORDER BY sec.grade_level_id ASC, sec.section_name ASC
     `);
     return rows;
@@ -52,33 +57,38 @@ class Section {
         sec.section_name,
         sec.section_name AS name,
         sec.grade_level_id,
+        sec.program_id,
+        p.program_code,
+        p.program_name,
+        COALESCE(p.is_specialized, 0) AS is_specialized,
         COALESCE(gl.grade_level_name, 'G7') AS grade_level_name,
         COALESCE(gl.grade_level_name, 'G7') AS level,
         'Active' AS status,
         COUNT(DISTINCT ss.student_id) AS student_count
       FROM SECTION sec
+      LEFT JOIN PROGRAM p ON p.program_id = sec.program_id
       LEFT JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
       LEFT JOIN STUDENT_SECTION ss ON ss.section_id = sec.section_id
       WHERE sec.section_id = ?
-      GROUP BY sec.section_id, sec.section_name, sec.grade_level_id, gl.grade_level_name
+      GROUP BY sec.section_id, sec.section_name, sec.grade_level_id, sec.program_id, p.program_code, p.program_name, p.is_specialized, gl.grade_level_name
     `, [id]);
     return rows[0];
   }
 
   static async create(data) {
-    let { section_name, name, grade_level_id, level } = data;
+    let { section_name, name, grade_level_id, level, program_id } = data;
     const finalName = (section_name || name || '').trim();
     const finalGradeLevelId = await this.resolveGradeLevelId(grade_level_id, level);
 
     const [result] = await db.execute(
-      `INSERT INTO SECTION (section_name, grade_level_id) VALUES (?, ?)`,
-      [finalName, finalGradeLevelId]
+      `INSERT INTO SECTION (section_name, grade_level_id, program_id) VALUES (?, ?, ?)`,
+      [finalName, finalGradeLevelId, program_id || null]
     );
     return result.insertId;
   }
 
   static async update(id, data) {
-    let { section_name, name, grade_level_id, level } = data;
+    let { section_name, name, grade_level_id, level, program_id } = data;
     const finalName = (section_name || name || '').trim();
     
     const updates = [];
@@ -91,6 +101,10 @@ class Section {
       const finalGradeLevelId = await this.resolveGradeLevelId(grade_level_id, level);
       updates.push('grade_level_id = ?');
       values.push(finalGradeLevelId);
+    }
+    if (program_id !== undefined) {
+      updates.push('program_id = ?');
+      values.push(program_id || null);
     }
     if (updates.length > 0) {
       values.push(id);
@@ -114,13 +128,17 @@ class Section {
            sec.section_id,
            saa.school_year_id,
            sec.section_name,
-           sec.is_specialized,
+           sec.program_id,
+           p.program_code,
+           p.program_name,
+           COALESCE(p.is_specialized, 0) AS is_specialized,
            gl.grade_level_id,
            gl.grade_level_name,
            'Advisory Class' AS class_type,
            sy.ends_on AS school_year_end
          FROM SECTION_ADVISER_ASSIGNMENT saa
          INNER JOIN SECTION sec ON sec.section_id = saa.section_id
+         LEFT JOIN PROGRAM p ON p.program_id = sec.program_id
          INNER JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
          LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = saa.school_year_id
          WHERE saa.user_id = ?
@@ -143,7 +161,10 @@ class Section {
            sec.section_id,
            so.school_year_id,
            sec.section_name,
-           sec.is_specialized,
+           sec.program_id,
+           p.program_code,
+           p.program_name,
+           COALESCE(p.is_specialized, 0) AS is_specialized,
            gl.grade_level_id,
            gl.grade_level_name,
            s.subject_name,
@@ -152,6 +173,7 @@ class Section {
          FROM TEACHER_ASSIGNMENT ta
          INNER JOIN SUBJECT_OFFERING so ON so.subject_offering_id = ta.subject_offering_id
          INNER JOIN SECTION sec ON sec.section_id = so.section_id
+         LEFT JOIN PROGRAM p ON p.program_id = sec.program_id
          INNER JOIN SUBJECT s ON s.subject_id = so.subject_id
          INNER JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
          LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = so.school_year_id
@@ -197,12 +219,20 @@ class Section {
         const subjectOfferingId = teacherMatch?.subject_offering_id || null;
         const subjectId = teacherMatch?.subject_id || null;
         const isSpecialized = checkIsSpecialized(row.is_specialized);
+        const progCode = row.program_code && String(row.program_code).toUpperCase() !== "EBEC" ? String(row.program_code).toUpperCase() : null;
+        const displayClassType = isSpecialized && progCode
+          ? `Advisory Class - ${progCode}`
+          : "Advisory Class";
+
         result.push({
           id: `advisory-${row.adviser_assignment_id}`,
           assignmentType: "advisory",
           assignmentId: Number(row.adviser_assignment_id),
           adviser_assignment_id: Number(row.adviser_assignment_id),
           section_id: row.section_id,
+          program_id: row.program_id || null,
+          program_code: row.program_code || null,
+          program_name: row.program_name || null,
           schoolYearId: Number(row.school_year_id),
           school_year_id: Number(row.school_year_id),
           subject_id: subjectId,
@@ -211,7 +241,7 @@ class Section {
           gradeLevel: gradeNum ? `G${gradeNum}` : row.grade_level_name,
           grade_level_name: row.grade_level_name,
           subject: subjectName,
-          classType: isSpecialized ? "Special Program" : "Advisory Class",
+          classType: displayClassType,
           is_specialized: isSpecialized ? 1 : 0,
           isAdviser: true,
           deadline: row.school_year_end ? String(row.school_year_end).slice(0, 10) : "2026-07-31",
@@ -231,12 +261,22 @@ class Section {
         addedSectionAssignments.add(teacherKey);
         const gradeNum = parseInt(String(row.grade_level_name).replace(/\D/g, "")) || "";
         const isSpecialized = checkIsSpecialized(row.is_specialized);
+        const progCode = row.program_code && String(row.program_code).toUpperCase() !== "EBEC" ? String(row.program_code).toUpperCase() : null;
+        const displayClassType = isSpecialized && progCode
+          ? `Special Program - ${progCode}`
+          : isSpecialized
+          ? "Special Program"
+          : "Regular Class";
+
         result.push({
           id: `teaching-${row.teacher_assignment_id}`,
           assignmentType: "teaching",
           assignmentId: Number(row.teacher_assignment_id),
           teacher_assignment_id: Number(row.teacher_assignment_id),
           section_id: row.section_id,
+          program_id: row.program_id || null,
+          program_code: row.program_code || null,
+          program_name: row.program_name || null,
           schoolYearId: Number(row.school_year_id),
           school_year_id: Number(row.school_year_id),
           subject_id: row.subject_id,
@@ -245,7 +285,7 @@ class Section {
           gradeLevel: gradeNum ? `G${gradeNum}` : row.grade_level_name,
           grade_level_name: row.grade_level_name,
           subject: row.subject_name || "Mathematics",
-          classType: isSpecialized ? "Special Program" : "Regular Class",
+          classType: displayClassType,
           is_specialized: isSpecialized ? 1 : 0,
           isAdviser: false,
           deadline: row.school_year_end ? String(row.school_year_end).slice(0, 10) : "2026-08-15",
