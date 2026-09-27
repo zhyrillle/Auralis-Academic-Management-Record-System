@@ -36,17 +36,28 @@ export const getAdviserSections = async (userId) => {
       const data = await response.json();
       if (Array.isArray(data) && data.length > 0) {
         const mapped = data.map((item) => {
-          const isSpecialized = checkIsSpecialized(item.is_specialized) || item.classType === "Special Program";
+          const isSpecialized = checkIsSpecialized(item.is_specialized) || (item.classType && String(item.classType).startsWith("Special Program"));
           const isAdviser = item.isAdviser ?? (item.classType === "Advisory Class");
+          const progCode = item.program_code || item.programCode || null;
+          const validProgCode = progCode && String(progCode).toUpperCase() !== "EBEC" ? String(progCode).toUpperCase() : null;
+
+          let formattedClassType = item.classType;
+          if (isAdviser && isSpecialized) {
+            formattedClassType = validProgCode ? `Advisory Class - ${validProgCode}` : "Advisory Class";
+          } else if (isSpecialized) {
+            formattedClassType = validProgCode ? `Special Program - ${validProgCode}` : "Special Program";
+          } else if (isAdviser) {
+            formattedClassType = "Advisory Class";
+          } else {
+            formattedClassType = "Regular Class";
+          }
+
           return {
             ...item,
+            program_code: item.program_code || null,
             is_specialized: isSpecialized ? 1 : 0,
             isAdviser: isAdviser,
-            classType: isSpecialized
-              ? "Special Program"
-              : isAdviser
-              ? "Advisory Class"
-              : "Regular Class",
+            classType: formattedClassType,
           };
         });
         return mapped;

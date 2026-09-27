@@ -38,7 +38,10 @@ async function getTeacherClasses(userId) {
        sec.section_id,
        so.school_year_id,
        sec.section_name,
-       sec.is_specialized,
+       sec.program_id,
+       p.program_code,
+       p.program_name,
+       COALESCE(p.is_specialized, 0) AS is_specialized,
        gl.grade_level_id,
        gl.grade_level_name,
        s.subject_name,
@@ -47,6 +50,7 @@ async function getTeacherClasses(userId) {
      FROM TEACHER_ASSIGNMENT ta
      INNER JOIN SUBJECT_OFFERING so ON so.subject_offering_id = ta.subject_offering_id
      INNER JOIN SECTION sec ON sec.section_id = so.section_id
+     LEFT JOIN PROGRAM p ON p.program_id = sec.program_id
      INNER JOIN SUBJECT s ON s.subject_id = so.subject_id
      INNER JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
      WHERE ta.user_id = ?
@@ -64,12 +68,16 @@ async function getTeacherClasses(userId) {
        sec.section_id,
        saa.school_year_id,
        sec.section_name,
-       sec.is_specialized,
+       sec.program_id,
+       p.program_code,
+       p.program_name,
+       COALESCE(p.is_specialized, 0) AS is_specialized,
        gl.grade_level_id,
        gl.grade_level_name,
        'Advisory Class' AS class_type
      FROM SECTION_ADVISER_ASSIGNMENT saa
      INNER JOIN SECTION sec ON sec.section_id = saa.section_id
+     LEFT JOIN PROGRAM p ON p.program_id = sec.program_id
      INNER JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
      WHERE saa.user_id = ?
      ORDER BY gl.grade_level_id ASC, sec.section_name ASC`,
@@ -92,6 +100,12 @@ async function getTeacherAssignedClasses(userId) {
   // Add advisory sections
   advisoryRows.forEach((row) => {
     const key = `sec-${row.section_id}`;
+    const progCode = row.program_code && String(row.program_code).toUpperCase() !== 'EBEC' ? String(row.program_code).toUpperCase() : null;
+    const isSpec = Boolean(row.is_specialized);
+    const displayClassType = isSpec && progCode
+      ? `Advisory Class - ${progCode}`
+      : 'Advisory Class';
+
     classMap.set(key, {
       id: key,
       section_id: row.section_id,
@@ -105,7 +119,11 @@ async function getTeacherAssignedClasses(userId) {
       assignmentType: 'advisory',
       assignmentId: row.adviser_assignment_id,
       adviser_assignment_id: row.adviser_assignment_id,
-      classType: row.is_specialized ? 'Special Program' : 'Advisory Class',
+      program_id: row.program_id || null,
+      program_code: row.program_code || null,
+      program_name: row.program_name || null,
+      classType: displayClassType,
+      is_specialized: isSpec ? 1 : 0,
       studentCount: 0,
       entryProgress: 0,
       status: 'In Progress',
@@ -116,6 +134,14 @@ async function getTeacherAssignedClasses(userId) {
   // Add or merge teaching sections
   teachingRows.forEach((row) => {
     const key = `sec-${row.section_id}`;
+    const progCode = row.program_code && String(row.program_code).toUpperCase() !== 'EBEC' ? String(row.program_code).toUpperCase() : null;
+    const isSpec = Boolean(row.is_specialized);
+    const displayClassType = isSpec && progCode
+      ? `Special Program - ${progCode}`
+      : isSpec
+      ? 'Special Program'
+      : 'Regular Class';
+
     if (classMap.has(key)) {
       const existing = classMap.get(key);
       existing.subject = row.subject_name || existing.subject;
@@ -141,7 +167,11 @@ async function getTeacherAssignedClasses(userId) {
         assignmentType: 'teaching',
         assignmentId: row.teacher_assignment_id,
         teacher_assignment_id: row.teacher_assignment_id,
-        classType: row.is_specialized ? 'Special Program' : 'Regular Class',
+        program_id: row.program_id || null,
+        program_code: row.program_code || null,
+        program_name: row.program_name || null,
+        classType: displayClassType,
+        is_specialized: isSpec ? 1 : 0,
         studentCount: 0,
         entryProgress: 0,
         status: 'In Progress',
