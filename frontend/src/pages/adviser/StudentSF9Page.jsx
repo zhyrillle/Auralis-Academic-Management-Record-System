@@ -135,12 +135,26 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
     { scale: "0-64", desc: "Emerging", remarks: "Passed" }
   ];
 
-  // Mock Attendance Calendar Days
-  const attendanceData = {
-    months: ["June", "July", "August", "September", "October", "November", "December", "January", "February", "March"],
-    schoolDays: [3, 21, 22, 19, 10, 21, 21, 19, 21, 22],
-    daysPresent: [3, 21, 22, 19, 10, 21, 21, 19, 21, 21],
-    daysAbsent: [0, 0, 0, 0, 0, 0, 0, 0, 0, 1]
+  // Official Attendance Record Data (11 months: Jun - Apr)
+  const attendanceData = useMemo(() => {
+    if (sf9Data?.attendanceData) {
+      return sf9Data.attendanceData;
+    }
+    return {
+      months: ["Jun", "Jul", "Aug", "Sept", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr"],
+      classDays: new Array(11).fill(0),
+      daysPresent: new Array(11).fill(0),
+      daysAbsent: new Array(11).fill(0)
+    };
+  }, [sf9Data]);
+
+  const [toast, setToast] = useState({ message: "", variant: "success" });
+
+  const showToast = (message, variant = "success") => {
+    setToast({ message, variant });
+    setTimeout(() => {
+      setToast({ message: "", variant: "success" });
+    }, 4000);
   };
 
   const getAttendanceTotal = (arr) => arr.reduce((acc, curr) => acc + curr, 0);
@@ -629,7 +643,7 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
               <p className="profile-info-subtitle">Student demographic and enrollment details</p>
             </div>
 
-            <div className="profile-info-card sf9-card">
+            <div className="profile-info-card">
               <div className="profile-fields-list">
                 <div className="profile-field-group">
                   <span className="profile-field-label">Full Name</span>
@@ -675,29 +689,6 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
                       <FileText size={22} />
                     </div>
                     <div className="doc-details">
-                      <div className="doc-details-content">
-                        <h4 className="doc-title">Form 10 - Permanent Record</h4>
-                        <p className="doc-subtitle">Official cumulative student record</p>
-                        <span className="doc-status-badge">Available</span>
-                      </div>
-                      <div className="doc-actions">
-                        <button className="btn-doc-action preview" title="Preview Document">
-                          <Eye size={14} />
-                          <span>Preview</span>
-                        </button>
-                        <button className="btn-doc-action download" title="Download Document">
-                          <Download size={14} />
-                          <span>Download</span>
-              <h3 className="documents-section-title">Documents</h3>
-
-              <div className="documents-grid">
-                {/* Form 10 Card */}
-                <div className="doc-card">
-                  <div className="doc-card-top">
-                    <div className="doc-icon-box">
-                      <FileText size={20} />
-                    </div>
-                    <div className="doc-details">
                       <h4 className="doc-title">Form 10 - Permanent Record</h4>
                       <p className="doc-subtitle">Official cumulative student record</p>
                       <span className="doc-status-badge">Available</span>
@@ -715,46 +706,17 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
                   </div>
                 </div>
 
-                {/* Form 9 Card */}
-                <div className="doc-card">
-                  <div className="doc-card-top">
-                    <div className="doc-icon-box">
-                      <FileSpreadsheet size={20} />
-                    </div>
-                    <div className="doc-details">
-                      <h4 className="doc-title">Form 9 - Report Card (Official)</h4>
-                      <p className="doc-subtitle">Per term performance report</p>
-                      <span className="doc-status-badge">Available</span>
-                      <div className="doc-actions">
-                        <button className="btn-doc-action preview" onClick={() => setActiveTab("sf9")} title="View Official SF9">
-                          <Eye size={14} />
-                          <span>View SF9</span>
-                        </button>
-                        <button className="btn-doc-action download" onClick={handlePrint} title="Print/Export SF9">
-                          <Download size={14} />
-                          <span>Print/PDF</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
                 {/* Bulk Actions Card */}
                 <div className="doc-card">
-                  <div className="doc-card-top">
-                    <div className="doc-icon-box">
-                      <FileText size={20} />
-                    </div>
-                    <div className="doc-details">
-                      <h4 className="doc-title">Bulk Actions</h4>
-                      <p className="doc-subtitle">Perform actions on multiple documents</p>
-                      <span className="doc-status-badge">Available</span>
-                      <div className="doc-actions">
-                        <button className="btn-doc-action zip-download" title="Download All Documents (ZIP)">
-                          <Download size={14} />
-                          <span>Download All Documents (ZIP)</span>
-                        </button>
-                      </div>
+                  <div className="doc-details">
+                    <h4 className="doc-title">Bulk Actions</h4>
+                    <p className="doc-subtitle">Perform actions on multiple documents</p>
+                    <span className="doc-status-badge">Available</span>
+                    <div className="doc-actions">
+                      <button className="btn-doc-action zip-download" title="Download All Documents (ZIP)">
+                        <Download size={14} />
+                        <span>Download All Documents (ZIP)</span>
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -766,11 +728,9 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
                       <FileText size={22} />
                     </div>
                     <div className="doc-details">
-                      <div className="doc-details-content">
-                        <h4 className="doc-title">Form 9 - Report Card</h4>
-                        <p className="doc-subtitle">Per term performance report</p>
-                        <span className="doc-status-badge">Available</span>
-                      </div>
+                      <h4 className="doc-title">Form 9 - Report Card</h4>
+                      <p className="doc-subtitle">Per term performance report</p>
+                      <span className="doc-status-badge">Available</span>
                       <div className="doc-actions">
                         <button className="btn-doc-action preview" onClick={() => setActiveTab("sf9")} title="Preview SF9">
                           <Eye size={14} />
