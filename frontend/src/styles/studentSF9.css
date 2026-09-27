@@ -860,6 +860,7 @@
    ========================================================= */
 .personal-info-grid {
   display: grid;
+  grid-template-columns: 360px 1fr;
   grid-template-columns: 1fr 2fr;
   gap: 24px;
   align-items: start;
@@ -957,6 +958,8 @@
 .doc-card-top {
   display: flex;
   gap: 14px;
+  align-items: stretch;
+  height: 100%;
 }
 
 .doc-icon-box {
@@ -1012,6 +1015,7 @@
 .btn-doc-action {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   padding: 6px 12px;
   border-radius: 6px;
