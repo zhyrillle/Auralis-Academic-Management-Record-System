@@ -259,14 +259,69 @@ router.get('/student/:identifier', async (req, res) => {
       try {
         const msData = await MasterSheetService.getMasterSheet(adviserAssignmentId, adviserUserId);
         if (msData && msData.students) {
-          masterSheetStudent = msData.students.find(s => 
-            Number(s.studentId) === Number(student.student_id) || 
+          masterSheetStudent = msData.students.find(s =>
+            Number(s.studentId) === Number(student.student_id) ||
             Number(s.studentSectionId) === Number(studentSectionId) ||
             String(s.lrn) === String(student.LRN)
           );
         }
       } catch (msErr) {
         console.error("MasterSheet calculation error:", msErr);
+      }
+    }
+
+    // 5b. Fetch direct STUDENT_GRADE records for MAPEH components (MA and PEH)
+    let studentGradeRows = [];
+    if (studentSectionId || student.student_id) {
+      try {
+        const [sgRows] = await db.execute(
+          `SELECT sg.subject_offering_id, sg.term, sg.mapeh_component, sg.quarterly_grade, sg.remarks,
+                  s.subject_code, s.subject_name
+           FROM STUDENT_GRADE sg
+           INNER JOIN SUBJECT_OFFERING so ON so.subject_offering_id = sg.subject_offering_id
+           INNER JOIN SUBJECT s ON s.subject_id = so.subject_id
+           WHERE sg.student_section_id = ? OR sg.student_id = ?`,
+          [studentSectionId || 0, student.student_id || 0]
+        );
+        studentGradeRows = sgRows;
+      } catch (sgErr) {
+        console.warn("STUDENT_GRADE query error:", sgErr.message);
+      }
+    }
+
+    const termIndex = (termStr) => {
+      const str = String(termStr || '').toUpperCase();
+      if (str.includes('1')) return 0;
+      if (str.includes('2')) return 1;
+      if (str.includes('3')) return 2;
+      return null;
+    };
+
+    const mapehMA = [null, null, null];
+    const mapehPEH = [null, null, null];
+    const mapehCombined = [null, null, null];
+
+    studentGradeRows.forEach(row => {
+      const isMapehSubject = String(row.subject_code || '').toUpperCase().includes('MAPEH') ||
+        String(row.subject_name || '').toUpperCase().includes('MAPEH');
+      if (isMapehSubject) {
+        const idx = termIndex(row.term);
+        if (idx !== null && row.quarterly_grade !== null && row.quarterly_grade !== undefined) {
+          const val = Math.round(Number(row.quarterly_grade));
+          if (row.mapeh_component === 'MA') {
+            mapehMA[idx] = val;
+          } else if (row.mapeh_component === 'PEH') {
+            mapehPEH[idx] = val;
+          } else if (!row.mapeh_component) {
+            mapehCombined[idx] = val;
+          }
+        }
+      }
+    });
+
+    for (let i = 0; i < 3; i++) {
+      if (mapehMA[i] !== null && mapehPEH[i] !== null) {
+        mapehCombined[i] = Math.round((mapehMA[i] + mapehPEH[i]) / 2);
       }
     }
 
@@ -278,20 +333,33 @@ router.get('/student/:identifier', async (req, res) => {
       let finalVal = "";
       let remark = "";
 
+      if (tmpl.code === "music_arts") {
+        t1 = mapehMA[0] !== null ? mapehMA[0] : "";
+        t2 = mapehMA[1] !== null ? mapehMA[1] : "";
+        t3 = mapehMA[2] !== null ? mapehMA[2] : "";
+      } else if (tmpl.code === "pe_health") {
+        t1 = mapehPEH[0] !== null ? mapehPEH[0] : "";
+        t2 = mapehPEH[1] !== null ? mapehPEH[1] : "";
+        t3 = mapehPEH[2] !== null ? mapehPEH[2] : "";
+      } else if (tmpl.code === "mapeh") {
+        t1 = mapehCombined[0] !== null ? mapehCombined[0] : "";
+        t2 = mapehCombined[1] !== null ? mapehCombined[1] : "";
+        t3 = mapehCombined[2] !== null ? mapehCombined[2] : "";
+      }
+
       if (masterSheetStudent && masterSheetStudent.grades) {
         const g = masterSheetStudent.grades[tmpl.msKey];
         if (g && Array.isArray(g.terms)) {
-          t1 = Number.isFinite(g.terms[0]) ? Math.round(g.terms[0]) : "";
-          t2 = Number.isFinite(g.terms[1]) ? Math.round(g.terms[1]) : "";
-          t3 = Number.isFinite(g.terms[2]) ? Math.round(g.terms[2]) : "";
+          if (t1 === "" && Number.isFinite(g.terms[0])) t1 = Math.round(g.terms[0]);
+          if (t2 === "" && Number.isFinite(g.terms[1])) t2 = Math.round(g.terms[1]);
+          if (t3 === "" && Number.isFinite(g.terms[2])) t3 = Math.round(g.terms[2]);
         }
-        // ONLY display finalGrade if all 3 terms are complete on MasterSheet
-        if (g && Number.isFinite(g.finalGrade)) {
+        if (g && Number.isFinite(g.finalGrade) && tmpl.code !== "music_arts" && tmpl.code !== "pe_health") {
           finalVal = Math.round(g.finalGrade);
         }
       }
 
-      // Strictly DO NOT compute a subject's final grade if not all terms are complete
+      // Compute final grade when terms are complete
       if (typeof t1 === 'number' && typeof t2 === 'number' && typeof t3 === 'number') {
         if (finalVal === "") {
           finalVal = Math.round((t1 + t2 + t3) / 3);
