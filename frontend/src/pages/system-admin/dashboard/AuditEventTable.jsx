@@ -92,7 +92,10 @@ export default function AuditEventTable({
                     <td className="audit-trail__user">{event.actorName}</td>
                     <td>
                       <span className="audit-trail__context">{event.actorRole}</span>
-                      {event.actingAs && <small>{event.actingAs}</small>}
+                      {event.actingAs &&
+                        event.actingAs.toLowerCase() !== event.actorRole.toLowerCase() && (
+                          <small>{event.actingAs}</small>
+                        )}
                     </td>
                     <td><Badge variant="module">{event.module}</Badge></td>
                     <td className="audit-trail__action">

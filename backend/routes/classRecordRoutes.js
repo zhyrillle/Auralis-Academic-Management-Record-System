@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
 const StudentGrade = require('../models/StudentGrade');
+const AuditEvent = require('../models/AuditEvent');
 const {
   DEFAULT_JHS_WEIGHTS,
   calculateStudentSummary,
@@ -2816,6 +2817,44 @@ router.post('/class-record/submit', async (req, res) => {
             }
           }
         }
+      }
+      // Audit log the submission
+      try {
+        const actorUserId = req.headers['x-auralis-user-id'] || req.body.user_id || null;
+        const [targetInfo] = await connection.execute(
+          `SELECT sub.subject_name, sec.section_name, sy.starts_on, sy.ends_on
+           FROM SUBJECT_OFFERING so
+           LEFT JOIN SUBJECT sub ON so.subject_id = sub.subject_id
+           LEFT JOIN SECTION sec ON so.section_id = sec.section_id
+           LEFT JOIN SCHOOL_YEAR sy ON so.school_year_id = sy.school_year_id
+           WHERE so.subject_offering_id = ?`,
+          [offId]
+        );
+        const subjName = targetInfo[0]?.subject_name || 'Subject';
+        const secName = targetInfo[0]?.section_name || 'Section';
+        const syLabel = targetInfo[0]?.starts_on && targetInfo[0]?.ends_on ? `${targetInfo[0].starts_on}–${targetInfo[0].ends_on}` : null;
+        const targetStr = `${subjName} — ${secName}`;
+
+        await AuditEvent.create({
+          user_id: actorUserId ? Number(actorUserId) : null,
+          actor_context: { source: 'user', acting_as: 'Subject Teacher', role: 'subject_teacher' },
+          event_type: 'GRADE_SHEET_SUBMITTED',
+          module_name: 'GRADING',
+          entity_type: 'GRADE_SHEET',
+          entity_id: gradeSheetId,
+          after_data: { workflow_status: 'SUBMITTED', term: termName },
+          metadata: {
+            school_year: syLabel,
+            term: termName,
+            subject: subjName,
+            section: secName,
+            target: targetStr,
+            summary: `Submitted ${termName} ${subjName} grade sheet for ${secName}.`,
+            impact: 'Medium',
+          }
+        }, connection);
+      } catch (auditErr) {
+        console.error('Failed to log grade sheet submission audit:', auditErr.message);
       }
     }
 
