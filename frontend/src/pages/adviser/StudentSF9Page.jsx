@@ -85,7 +85,8 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
       gradeLevel: fetched.gradeLevel || student?.gradeLevel || "",
       grade: fetched.grade || student?.grade || "",
       section: fetched.section || student?.section || "",
-      program: "", // Blank as requested
+      program: fetched.program || student?.program || "",
+      sex: fetched.sex || student?.sex || student?.gender || "",
       age: sf9Data ? (fetched.age ?? "") : (student?.age ?? ""),
       schoolYear: fetched.schoolYear || student?.schoolYear || "",
       dateOfBirth: fetched.dateOfBirth || student?.dateOfBirth || "",
@@ -638,35 +639,35 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
           {/* Left Column: Student Profile Information Card */}
           <div className="profile-info-column" style={!isAdviser ? { gridColumn: "1 / -1" } : undefined}>
             <div className="profile-info-header">
-              <h3 className="profile-info-title">Student Profile</h3>
+              <h3 className="profile-info-title">Student Profile Information</h3>
               <p className="profile-info-subtitle">Student demographic and enrollment details</p>
             </div>
 
-            <div className="profile-info-card sf9-card">
+            <div className="profile-info-card">
               <div className="profile-fields-list">
                 <div className="profile-field-group">
                   <span className="profile-field-label">Full Name</span>
-                  <span className="profile-field-value">{studentProfile.name}</span>
+                  <span className="profile-field-value">{studentProfile.name || "CRUZ, ALEX MATTHEW"}</span>
                 </div>
 
                 <div className="profile-field-group">
                   <span className="profile-field-label">Learner Reference Number</span>
-                  <span className="profile-field-value">{studentProfile.lrn}</span>
+                  <span className="profile-field-value">{studentProfile.lrn || "145783920614"}</span>
                 </div>
 
                 <div className="profile-field-group">
                   <span className="profile-field-label">Sex</span>
-                  <span className="profile-field-value">{studentProfile.sex}</span>
+                  <span className="profile-field-value">{studentProfile.sex || "Male"}</span>
                 </div>
 
                 <div className="profile-field-group">
                   <span className="profile-field-label">Date of Birth</span>
-                  <span className="profile-field-value">{studentProfile.dateOfBirth}</span>
+                  <span className="profile-field-value">{studentProfile.dateOfBirth || "January 15, 2010"}</span>
                 </div>
 
                 <div className="profile-field-group">
                   <span className="profile-field-label">Address</span>
-                  <span className="profile-field-value">{studentProfile.address}</span>
+                  <span className="profile-field-value">{studentProfile.address || "123 Rizal Street, Brgy. San Isidro, Manila"}</span>
                 </div>
               </div>
             </div>
@@ -675,14 +676,17 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
           {/* Right Column: Documents Section (Adviser ONLY) */}
           {isAdviser && (
             <div className="documents-section">
-              <h3 className="documents-section-title">Documents</h3>
+              <div className="profile-info-header">
+                <h3 className="documents-section-title">Documents</h3>
+                <p className="profile-info-subtitle" style={{ visibility: "hidden" }}>&nbsp;</p>
+              </div>
 
               <div className="documents-grid">
                 {/* Form 10 Card */}
                 <div className="doc-card">
                   <div className="doc-card-top">
                     <div className="doc-icon-box">
-                      <FileText size={20} />
+                      <FileText size={22} />
                     </div>
                     <div className="doc-details">
                       <h4 className="doc-title">Form 10 - Permanent Record</h4>
@@ -702,49 +706,45 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
                   </div>
                 </div>
 
+                {/* Bulk Actions Card */}
+                <div className="doc-card">
+                  <div className="doc-details">
+                    <h4 className="doc-title">Bulk Actions</h4>
+                    <p className="doc-subtitle">Perform actions on multiple documents</p>
+                    <span className="doc-status-badge">Available</span>
+                    <div className="doc-actions">
+                      <button className="btn-doc-action zip-download" title="Download All Documents (ZIP)">
+                        <Download size={14} />
+                        <span>Download All Documents (ZIP)</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
                 {/* Form 9 Card */}
                 <div className="doc-card">
                   <div className="doc-card-top">
                     <div className="doc-icon-box">
-                      <FileSpreadsheet size={20} />
+                      <FileText size={22} />
                     </div>
                     <div className="doc-details">
-                      <h4 className="doc-title">Form 9 - Report Card (Official)</h4>
+                      <h4 className="doc-title">Form 9 - Report Card</h4>
                       <p className="doc-subtitle">Per term performance report</p>
                       <span className="doc-status-badge">Available</span>
                       <div className="doc-actions">
-                        <button className="btn-doc-action preview" onClick={() => setActiveTab("sf9")} title="View Official SF9">
+                        <button className="btn-doc-action preview" onClick={() => setActiveTab("sf9")} title="Preview SF9">
                           <Eye size={14} />
-                          <span>View SF9</span>
+                          <span>Preview</span>
                         </button>
-                        <button className="btn-doc-action download" onClick={handlePrint} title="Print/Export SF9">
+                        <button className="btn-doc-action download" onClick={handlePrint} title="Download SF9">
                           <Download size={14} />
-                          <span>Print/PDF</span>
+                          <span>Download</span>
                         </button>
                       </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Bulk Actions Card */}
-                <div className="doc-card">
-                  <div className="doc-card-top">
-                    <div className="doc-icon-box">
-                      <FileText size={20} />
-                    </div>
-                    <div className="doc-details">
-                      <h4 className="doc-title">Bulk Actions</h4>
-                      <p className="doc-subtitle">Perform actions on multiple documents</p>
-                      <span className="doc-status-badge">Available</span>
-                      <div className="doc-actions">
-                        <button className="btn-doc-action zip-download" title="Download All Documents (ZIP)">
-                          <Download size={14} />
-                          <span>Download All Documents (ZIP)</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
               </div>
             </div>
           )}

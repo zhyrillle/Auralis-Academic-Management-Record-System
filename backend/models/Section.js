@@ -1,30 +1,115 @@
 const db = require('../config/db');
 
 class Section {
+  static async resolveGradeLevelId(gradeLevelId, level) {
+    if (gradeLevelId && !isNaN(Number(gradeLevelId))) {
+      const [rows] = await db.execute('SELECT grade_level_id FROM GRADE_LEVEL WHERE grade_level_id = ? LIMIT 1', [Number(gradeLevelId)]);
+      if (rows.length > 0) return rows[0].grade_level_id;
+    }
+    const searchVal = level || gradeLevelId;
+    if (!searchVal) return 1;
+    const num = parseInt(String(searchVal).replace(/\D/g, ''), 10);
+    const [rows] = await db.execute(
+      `SELECT grade_level_id FROM GRADE_LEVEL 
+       WHERE grade_level_id = ? 
+          OR UPPER(grade_level_name) = UPPER(?) 
+          OR UPPER(grade_level_name) = UPPER(?) 
+          OR UPPER(grade_level_name) = UPPER(?) 
+       LIMIT 1`,
+      [num || 0, String(searchVal).trim(), `G${num}`, `Grade ${num}`]
+    );
+    if (rows.length > 0) return rows[0].grade_level_id;
+    const [fallbackRows] = await db.execute('SELECT grade_level_id FROM GRADE_LEVEL ORDER BY grade_level_id ASC LIMIT 1');
+    return fallbackRows[0]?.grade_level_id || 1;
+  }
+
   static async findAll() {
-    const [rows] = await db.execute('SELECT * FROM SECTION');
+    const [rows] = await db.execute(`
+      SELECT 
+        sec.section_id,
+        sec.section_id AS id,
+        sec.section_name,
+        sec.section_name AS name,
+        sec.grade_level_id,
+        sec.program_id,
+        p.program_code,
+        p.program_name,
+        COALESCE(p.is_specialized, 0) AS is_specialized,
+        COALESCE(gl.grade_level_name, 'G7') AS grade_level_name,
+        COALESCE(gl.grade_level_name, 'G7') AS level,
+        'Active' AS status,
+        COUNT(DISTINCT ss.student_id) AS student_count
+      FROM SECTION sec
+      LEFT JOIN PROGRAM p ON p.program_id = sec.program_id
+      LEFT JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
+      LEFT JOIN STUDENT_SECTION ss ON ss.section_id = sec.section_id
+      GROUP BY sec.section_id, sec.section_name, sec.grade_level_id, sec.program_id, p.program_code, p.program_name, p.is_specialized, gl.grade_level_name
+      ORDER BY sec.grade_level_id ASC, sec.section_name ASC
+    `);
     return rows;
   }
 
   static async findById(id) {
-    const [rows] = await db.execute('SELECT * FROM SECTION WHERE section_id = ?', [id]);
+    const [rows] = await db.execute(`
+      SELECT 
+        sec.section_id,
+        sec.section_id AS id,
+        sec.section_name,
+        sec.section_name AS name,
+        sec.grade_level_id,
+        sec.program_id,
+        p.program_code,
+        p.program_name,
+        COALESCE(p.is_specialized, 0) AS is_specialized,
+        COALESCE(gl.grade_level_name, 'G7') AS grade_level_name,
+        COALESCE(gl.grade_level_name, 'G7') AS level,
+        'Active' AS status,
+        COUNT(DISTINCT ss.student_id) AS student_count
+      FROM SECTION sec
+      LEFT JOIN PROGRAM p ON p.program_id = sec.program_id
+      LEFT JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
+      LEFT JOIN STUDENT_SECTION ss ON ss.section_id = sec.section_id
+      WHERE sec.section_id = ?
+      GROUP BY sec.section_id, sec.section_name, sec.grade_level_id, sec.program_id, p.program_code, p.program_name, p.is_specialized, gl.grade_level_name
+    `, [id]);
     return rows[0];
   }
 
   static async create(data) {
-    const { section_name, grade_level_id } = data;
+    let { section_name, name, grade_level_id, level, program_id } = data;
+    const finalName = (section_name || name || '').trim();
+    const finalGradeLevelId = await this.resolveGradeLevelId(grade_level_id, level);
+
     const [result] = await db.execute(
-      `INSERT INTO SECTION (section_name, grade_level_id) VALUES (?, ?)`,
-      [section_name, grade_level_id]
+      `INSERT INTO SECTION (section_name, grade_level_id, program_id) VALUES (?, ?, ?)`,
+      [finalName, finalGradeLevelId, program_id || null]
     );
     return result.insertId;
   }
 
   static async update(id, data) {
-    const keys = Object.keys(data);
-    const values = Object.values(data);
-    const setClause = keys.map(key => `${key} = ?`).join(', ');
-    await db.execute(`UPDATE SECTION SET ${setClause} WHERE section_id = ?`, [...values, id]);
+    let { section_name, name, grade_level_id, level, program_id } = data;
+    const finalName = (section_name || name || '').trim();
+    
+    const updates = [];
+    const values = [];
+    if (finalName) {
+      updates.push('section_name = ?');
+      values.push(finalName);
+    }
+    if (grade_level_id !== undefined || level !== undefined) {
+      const finalGradeLevelId = await this.resolveGradeLevelId(grade_level_id, level);
+      updates.push('grade_level_id = ?');
+      values.push(finalGradeLevelId);
+    }
+    if (program_id !== undefined) {
+      updates.push('program_id = ?');
+      values.push(program_id || null);
+    }
+    if (updates.length > 0) {
+      values.push(id);
+      await db.execute(`UPDATE SECTION SET ${updates.join(', ')} WHERE section_id = ?`, values);
+    }
     return this.findById(id);
   }
 
@@ -43,13 +128,17 @@ class Section {
            sec.section_id,
            saa.school_year_id,
            sec.section_name,
-           sec.is_specialized,
+           sec.program_id,
+           p.program_code,
+           p.program_name,
+           COALESCE(p.is_specialized, 0) AS is_specialized,
            gl.grade_level_id,
            gl.grade_level_name,
            'Advisory Class' AS class_type,
            sy.ends_on AS school_year_end
          FROM SECTION_ADVISER_ASSIGNMENT saa
          INNER JOIN SECTION sec ON sec.section_id = saa.section_id
+         LEFT JOIN PROGRAM p ON p.program_id = sec.program_id
          INNER JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
          LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = saa.school_year_id
          WHERE saa.user_id = ?
@@ -72,7 +161,10 @@ class Section {
            sec.section_id,
            so.school_year_id,
            sec.section_name,
-           sec.is_specialized,
+           sec.program_id,
+           p.program_code,
+           p.program_name,
+           COALESCE(p.is_specialized, 0) AS is_specialized,
            gl.grade_level_id,
            gl.grade_level_name,
            s.subject_name,
@@ -81,6 +173,7 @@ class Section {
          FROM TEACHER_ASSIGNMENT ta
          INNER JOIN SUBJECT_OFFERING so ON so.subject_offering_id = ta.subject_offering_id
          INNER JOIN SECTION sec ON sec.section_id = so.section_id
+         LEFT JOIN PROGRAM p ON p.program_id = sec.program_id
          INNER JOIN SUBJECT s ON s.subject_id = so.subject_id
          INNER JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
          LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = so.school_year_id
@@ -126,12 +219,20 @@ class Section {
         const subjectOfferingId = teacherMatch?.subject_offering_id || null;
         const subjectId = teacherMatch?.subject_id || null;
         const isSpecialized = checkIsSpecialized(row.is_specialized);
+        const progCode = row.program_code && String(row.program_code).toUpperCase() !== "EBEC" ? String(row.program_code).toUpperCase() : null;
+        const displayClassType = isSpecialized && progCode
+          ? `Advisory Class - ${progCode}`
+          : "Advisory Class";
+
         result.push({
           id: `advisory-${row.adviser_assignment_id}`,
           assignmentType: "advisory",
           assignmentId: Number(row.adviser_assignment_id),
           adviser_assignment_id: Number(row.adviser_assignment_id),
           section_id: row.section_id,
+          program_id: row.program_id || null,
+          program_code: row.program_code || null,
+          program_name: row.program_name || null,
           schoolYearId: Number(row.school_year_id),
           school_year_id: Number(row.school_year_id),
           subject_id: subjectId,
@@ -140,7 +241,7 @@ class Section {
           gradeLevel: gradeNum ? `G${gradeNum}` : row.grade_level_name,
           grade_level_name: row.grade_level_name,
           subject: subjectName,
-          classType: isSpecialized ? "Special Program" : "Advisory Class",
+          classType: displayClassType,
           is_specialized: isSpecialized ? 1 : 0,
           isAdviser: true,
           deadline: row.school_year_end ? String(row.school_year_end).slice(0, 10) : "2026-07-31",
@@ -160,12 +261,22 @@ class Section {
         addedSectionAssignments.add(teacherKey);
         const gradeNum = parseInt(String(row.grade_level_name).replace(/\D/g, "")) || "";
         const isSpecialized = checkIsSpecialized(row.is_specialized);
+        const progCode = row.program_code && String(row.program_code).toUpperCase() !== "EBEC" ? String(row.program_code).toUpperCase() : null;
+        const displayClassType = isSpecialized && progCode
+          ? `Special Program - ${progCode}`
+          : isSpecialized
+          ? "Special Program"
+          : "Regular Class";
+
         result.push({
           id: `teaching-${row.teacher_assignment_id}`,
           assignmentType: "teaching",
           assignmentId: Number(row.teacher_assignment_id),
           teacher_assignment_id: Number(row.teacher_assignment_id),
           section_id: row.section_id,
+          program_id: row.program_id || null,
+          program_code: row.program_code || null,
+          program_name: row.program_name || null,
           schoolYearId: Number(row.school_year_id),
           school_year_id: Number(row.school_year_id),
           subject_id: row.subject_id,
@@ -174,7 +285,7 @@ class Section {
           gradeLevel: gradeNum ? `G${gradeNum}` : row.grade_level_name,
           grade_level_name: row.grade_level_name,
           subject: row.subject_name || "Mathematics",
-          classType: isSpecialized ? "Special Program" : "Regular Class",
+          classType: displayClassType,
           is_specialized: isSpecialized ? 1 : 0,
           isAdviser: false,
           deadline: row.school_year_end ? String(row.school_year_end).slice(0, 10) : "2026-08-15",
@@ -186,7 +297,58 @@ class Section {
     return result;
   }
 
-  static async findStudentsBySection(sectionId) {
+  static async findStudentsBySection(sectionId, subjectOfferingId = null, subjectId = null, subjectName = null) {
+    let cleanSectionId = typeof sectionId === "number" ? sectionId : (parseInt(String(sectionId).replace(/\D/g, ""), 10) || null);
+    let cleanOfferingId = null;
+    let cleanSubjectId = subjectId && !isNaN(Number(subjectId)) ? Number(subjectId) : null;
+
+    if (subjectOfferingId && !isNaN(Number(subjectOfferingId)) && !String(subjectOfferingId).includes("-")) {
+      cleanOfferingId = Number(subjectOfferingId);
+    } else if (typeof subjectOfferingId === "string" && subjectOfferingId.startsWith("offering-")) {
+      cleanOfferingId = parseInt(subjectOfferingId.replace("offering-", ""), 10) || null;
+    }
+
+    // If cleanOfferingId is missing, resolve matching offering from SUBJECT_OFFERING by section_id + subject_id or subject_name
+    if (!cleanOfferingId && cleanSectionId) {
+      try {
+        let offeringQuery = `
+          SELECT so.subject_offering_id 
+          FROM SUBJECT_OFFERING so
+          LEFT JOIN SUBJECT s ON s.subject_id = so.subject_id
+          WHERE so.section_id = ?`;
+        let params = [cleanSectionId];
+
+        if (cleanSubjectId) {
+          offeringQuery += ` AND so.subject_id = ?`;
+          params.push(cleanSubjectId);
+        } else if (subjectName) {
+          offeringQuery += ` AND (UPPER(s.subject_name) = UPPER(?) OR UPPER(s.subject_code) = UPPER(?))`;
+          params.push(String(subjectName).trim(), String(subjectName).trim());
+        }
+
+        offeringQuery += ` ORDER BY so.subject_offering_id ASC LIMIT 1`;
+        const [offeringRows] = await db.execute(offeringQuery, params);
+        if (offeringRows.length > 0) {
+          cleanOfferingId = offeringRows[0].subject_offering_id;
+        }
+      } catch (err) {
+        console.warn('Could not resolve cleanOfferingId for section:', err.message);
+      }
+    }
+
+    let sgJoinCondition = `sg.student_id = s.student_id`;
+    let queryParams = [];
+
+    if (cleanOfferingId) {
+      sgJoinCondition += ` AND sg.subject_offering_id = ?`;
+      queryParams.push(cleanOfferingId);
+    } else {
+      sgJoinCondition += ` AND sg.subject_offering_id IN (SELECT subject_offering_id FROM SUBJECT_OFFERING WHERE section_id = ?)`;
+      queryParams.push(cleanSectionId || 1);
+    }
+
+    queryParams.push(cleanSectionId || 1);
+
     const [rows] = await db.execute(
       `SELECT 
          s.student_id AS id,
@@ -197,22 +359,34 @@ class Section {
          s.last_name AS lastName,
          s.middle_name AS middleName,
          s.sex,
-         MAX(CASE WHEN UPPER(sg.term) IN ('T1', '1ST TERM', 'QUARTER 1', 'TERM 1', '1', 'QUARTER1', 'TERM1', 'FIRST TERM') THEN sg.quarterly_grade END) AS term1,
-         MAX(CASE WHEN UPPER(sg.term) IN ('T2', '2ND TERM', 'QUARTER 2', 'TERM 2', '2', 'QUARTER2', 'TERM2', 'SECOND TERM') THEN sg.quarterly_grade END) AS term2,
-         MAX(CASE WHEN UPPER(sg.term) IN ('T3', '3RD TERM', 'QUARTER 3', 'TERM 3', '3', 'QUARTER3', 'TERM3', 'THIRD TERM') THEN sg.quarterly_grade END) AS term3
+         MAX(CASE WHEN UPPER(sg.term) IN ('T1', '1ST TERM', 'QUARTER 1', 'TERM 1', '1', 'QUARTER1', 'TERM1', 'FIRST TERM') AND (sg.mapeh_component IS NULL OR sg.mapeh_component = 'ALL') THEN sg.quarterly_grade END) AS term1,
+         MAX(CASE WHEN UPPER(sg.term) IN ('T2', '2ND TERM', 'QUARTER 2', 'TERM 2', '2', 'QUARTER2', 'TERM2', 'SECOND TERM') AND (sg.mapeh_component IS NULL OR sg.mapeh_component = 'ALL') THEN sg.quarterly_grade END) AS term2,
+         MAX(CASE WHEN UPPER(sg.term) IN ('T3', '3RD TERM', 'QUARTER 3', 'TERM 3', '3', 'QUARTER3', 'TERM3', 'THIRD TERM') AND (sg.mapeh_component IS NULL OR sg.mapeh_component = 'ALL') THEN sg.quarterly_grade END) AS term3,
+         MAX(CASE WHEN UPPER(sg.term) IN ('T1', '1ST TERM', 'QUARTER 1', 'TERM 1', '1', 'QUARTER1', 'TERM1', 'FIRST TERM') AND sg.mapeh_component = 'MA' THEN sg.quarterly_grade END) AS term1_ma,
+         MAX(CASE WHEN UPPER(sg.term) IN ('T2', '2ND TERM', 'QUARTER 2', 'TERM 2', '2', 'QUARTER2', 'TERM2', 'SECOND TERM') AND sg.mapeh_component = 'MA' THEN sg.quarterly_grade END) AS term2_ma,
+         MAX(CASE WHEN UPPER(sg.term) IN ('T3', '3RD TERM', 'QUARTER 3', 'TERM 3', '3', 'QUARTER3', 'TERM3', 'THIRD TERM') AND sg.mapeh_component = 'MA' THEN sg.quarterly_grade END) AS term3_ma,
+         MAX(CASE WHEN UPPER(sg.term) IN ('T1', '1ST TERM', 'QUARTER 1', 'TERM 1', '1', 'QUARTER1', 'TERM1', 'FIRST TERM') AND sg.mapeh_component = 'PEH' THEN sg.quarterly_grade END) AS term1_peh,
+         MAX(CASE WHEN UPPER(sg.term) IN ('T2', '2ND TERM', 'QUARTER 2', 'TERM 2', '2', 'QUARTER2', 'TERM2', 'SECOND TERM') AND sg.mapeh_component = 'PEH' THEN sg.quarterly_grade END) AS term2_peh,
+         MAX(CASE WHEN UPPER(sg.term) IN ('T3', '3RD TERM', 'QUARTER 3', 'TERM 3', '3', 'QUARTER3', 'TERM3', 'THIRD TERM') AND sg.mapeh_component = 'PEH' THEN sg.quarterly_grade END) AS term3_peh
        FROM STUDENT_SECTION ss
        INNER JOIN STUDENT s ON s.student_id = ss.student_id
-       LEFT JOIN STUDENT_GRADE sg ON sg.student_id = s.student_id
+       LEFT JOIN STUDENT_GRADE sg ON ${sgJoinCondition}
        WHERE ss.section_id = ?
        GROUP BY ss.student_section_id, s.student_id, s.LRN, s.first_name, s.last_name, s.middle_name, s.sex
        ORDER BY s.last_name ASC, s.first_name ASC`,
-      [sectionId]
+      queryParams
     );
     return rows.map((r) => ({
       ...r,
       term1: r.term1 !== null && r.term1 !== undefined ? Number(r.term1) : "",
       term2: r.term2 !== null && r.term2 !== undefined ? Number(r.term2) : "",
       term3: r.term3 !== null && r.term3 !== undefined ? Number(r.term3) : "",
+      term1_ma: r.term1_ma !== null && r.term1_ma !== undefined ? Number(r.term1_ma) : "",
+      term2_ma: r.term2_ma !== null && r.term2_ma !== undefined ? Number(r.term2_ma) : "",
+      term3_ma: r.term3_ma !== null && r.term3_ma !== undefined ? Number(r.term3_ma) : "",
+      term1_peh: r.term1_peh !== null && r.term1_peh !== undefined ? Number(r.term1_peh) : "",
+      term2_peh: r.term2_peh !== null && r.term2_peh !== undefined ? Number(r.term2_peh) : "",
+      term3_peh: r.term3_peh !== null && r.term3_peh !== undefined ? Number(r.term3_peh) : "",
     }));
   }
 }

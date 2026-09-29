@@ -28,7 +28,7 @@ export const sidebarConfig = {
       icon: Users,
     },
     {
-      title: "Student Section Management",
+      title: "Student Sections",
       path: "/system-admin/student-section-management",
       icon: BookOpen,
     },
@@ -56,7 +56,7 @@ export const sidebarConfig = {
       icon: Users,
     },
     {
-      title: "Student Section Management",
+      title: "Student Sections",
       path: "/system-admin/student-section-management",
       icon: BookOpen,
     },

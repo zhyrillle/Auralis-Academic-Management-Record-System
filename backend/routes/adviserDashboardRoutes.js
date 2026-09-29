@@ -38,7 +38,10 @@ async function getTeacherClasses(userId) {
        sec.section_id,
        so.school_year_id,
        sec.section_name,
-       sec.is_specialized,
+       sec.program_id,
+       p.program_code,
+       p.program_name,
+       COALESCE(p.is_specialized, 0) AS is_specialized,
        gl.grade_level_id,
        gl.grade_level_name,
        s.subject_name,
@@ -47,6 +50,7 @@ async function getTeacherClasses(userId) {
      FROM TEACHER_ASSIGNMENT ta
      INNER JOIN SUBJECT_OFFERING so ON so.subject_offering_id = ta.subject_offering_id
      INNER JOIN SECTION sec ON sec.section_id = so.section_id
+     LEFT JOIN PROGRAM p ON p.program_id = sec.program_id
      INNER JOIN SUBJECT s ON s.subject_id = so.subject_id
      INNER JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
      WHERE ta.user_id = ?
@@ -64,12 +68,16 @@ async function getTeacherClasses(userId) {
        sec.section_id,
        saa.school_year_id,
        sec.section_name,
-       sec.is_specialized,
+       sec.program_id,
+       p.program_code,
+       p.program_name,
+       COALESCE(p.is_specialized, 0) AS is_specialized,
        gl.grade_level_id,
        gl.grade_level_name,
        'Advisory Class' AS class_type
      FROM SECTION_ADVISER_ASSIGNMENT saa
      INNER JOIN SECTION sec ON sec.section_id = saa.section_id
+     LEFT JOIN PROGRAM p ON p.program_id = sec.program_id
      INNER JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
      WHERE saa.user_id = ?
      ORDER BY gl.grade_level_id ASC, sec.section_name ASC`,
@@ -92,6 +100,12 @@ async function getTeacherAssignedClasses(userId) {
   // Add advisory sections
   advisoryRows.forEach((row) => {
     const key = `sec-${row.section_id}`;
+    const progCode = row.program_code && String(row.program_code).toUpperCase() !== 'EBEC' ? String(row.program_code).toUpperCase() : null;
+    const isSpec = Boolean(row.is_specialized);
+    const displayClassType = isSpec && progCode
+      ? `Advisory Class - ${progCode}`
+      : 'Advisory Class';
+
     classMap.set(key, {
       id: key,
       section_id: row.section_id,
@@ -105,7 +119,11 @@ async function getTeacherAssignedClasses(userId) {
       assignmentType: 'advisory',
       assignmentId: row.adviser_assignment_id,
       adviser_assignment_id: row.adviser_assignment_id,
-      classType: row.is_specialized ? 'Special Program' : 'Advisory Class',
+      program_id: row.program_id || null,
+      program_code: row.program_code || null,
+      program_name: row.program_name || null,
+      classType: displayClassType,
+      is_specialized: isSpec ? 1 : 0,
       studentCount: 0,
       entryProgress: 0,
       status: 'In Progress',
@@ -116,6 +134,14 @@ async function getTeacherAssignedClasses(userId) {
   // Add or merge teaching sections
   teachingRows.forEach((row) => {
     const key = `sec-${row.section_id}`;
+    const progCode = row.program_code && String(row.program_code).toUpperCase() !== 'EBEC' ? String(row.program_code).toUpperCase() : null;
+    const isSpec = Boolean(row.is_specialized);
+    const displayClassType = isSpec && progCode
+      ? `Special Program - ${progCode}`
+      : isSpec
+      ? 'Special Program'
+      : 'Regular Class';
+
     if (classMap.has(key)) {
       const existing = classMap.get(key);
       existing.subject = row.subject_name || existing.subject;
@@ -141,7 +167,11 @@ async function getTeacherAssignedClasses(userId) {
         assignmentType: 'teaching',
         assignmentId: row.teacher_assignment_id,
         teacher_assignment_id: row.teacher_assignment_id,
-        classType: row.is_specialized ? 'Special Program' : 'Regular Class',
+        program_id: row.program_id || null,
+        program_code: row.program_code || null,
+        program_name: row.program_name || null,
+        classType: displayClassType,
+        is_specialized: isSpec ? 1 : 0,
         studentCount: 0,
         entryProgress: 0,
         status: 'In Progress',
@@ -920,6 +950,270 @@ router.get('/core-values', async (req, res) => {
     res.json({ values });
   } catch (err) {
     console.error('Error in /core-values endpoint:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/adviser/dashboard/performance-filters
+ * Returns terms (1, 2, 3) and distinct subjects handled by teacher / adviser dynamically from MySQL
+ */
+router.get('/performance-filters', async (req, res) => {
+  try {
+    const userId = req.query.userId || req.headers['x-user-id'];
+    const schoolYearId = req.query.schoolYearId;
+    const terms = [
+      { value: '1', label: 'Term 1' },
+      { value: '2', label: 'Term 2' },
+      { value: '3', label: 'Term 3' },
+    ];
+
+    const [syRows] = await db.execute(
+      `SELECT school_year_id, starts_on, ends_on, status FROM SCHOOL_YEAR ORDER BY starts_on DESC`
+    ).catch(() => [[]]);
+
+    const schoolYears = (syRows || []).map((sy) => ({
+      school_year_id: String(sy.school_year_id),
+      label: `S.Y. ${sy.starts_on}-${sy.ends_on}${sy.status === 'ongoing' ? ' (Active)' : ''}`,
+      starts_on: sy.starts_on,
+      ends_on: sy.ends_on,
+      status: sy.status,
+      is_active: sy.status === 'ongoing',
+    }));
+
+    let subjects = [];
+    if (userId) {
+      const subjSql = `
+        SELECT DISTINCT s.subject_id, s.subject_name, s.subject_code
+        FROM TEACHER_ASSIGNMENT ta
+        JOIN SUBJECT_OFFERING so ON so.subject_offering_id = ta.subject_offering_id
+        JOIN SUBJECT s ON s.subject_id = so.subject_id
+        WHERE ta.user_id = ? ${schoolYearId && schoolYearId !== 'all' ? 'AND so.school_year_id = ?' : ''}
+        ORDER BY s.subject_name ASC
+      `;
+      const subjParams = schoolYearId && schoolYearId !== 'all' ? [userId, schoolYearId] : [userId];
+
+      const [rows] = await db.execute(subjSql, subjParams).catch((err) => {
+        console.error('Error fetching teacher subjects:', err.message);
+        return [[]];
+      });
+
+      subjects = (rows || []).map((r) => ({
+        subject_id: String(r.subject_id),
+        subject_name: r.subject_name,
+        subject_code: r.subject_code,
+        label: r.subject_code ? `${r.subject_name} (${r.subject_code})` : r.subject_name,
+      }));
+    }
+
+    res.json({ schoolYears, terms, subjects });
+  } catch (err) {
+    console.error('Error in /performance-filters endpoint:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/adviser/dashboard/grade-range-report
+ * Returns dynamic grade range counts per section based on quarterly_grade in STUDENT_GRADE
+ */
+router.get('/grade-range-report', async (req, res) => {
+  try {
+    const userId = req.query.userId || req.headers['x-user-id'];
+    const rawTerm = String(req.query.term || '1').trim();
+    const subjectId = req.query.subjectId;
+    const schoolYearId = req.query.schoolYearId;
+
+    let termCodes = [];
+    if (rawTerm === '1' || rawTerm === 'T1' || rawTerm.includes('1')) {
+      termCodes = ['T1', '1', '1st Term', 'Term 1', 'Quarter 1', '1st Quarter', 'Q1'];
+    } else if (rawTerm === '2' || rawTerm === 'T2' || rawTerm.includes('2')) {
+      termCodes = ['T2', '2', '2nd Term', 'Term 2', 'Quarter 2', '2nd Quarter', 'Q2'];
+    } else if (rawTerm === '3' || rawTerm === 'T3' || rawTerm.includes('3')) {
+      termCodes = ['T3', '3', '3rd Term', 'Term 3', 'Quarter 3', '3rd Quarter', 'Q3'];
+    } else {
+      termCodes = [rawTerm];
+    }
+
+    let sectionSql = `
+      SELECT DISTINCT 
+        gl.grade_level_id, 
+        sec.section_id, 
+        sec.section_name, 
+        gl.grade_level_name, 
+        so.subject_offering_id, 
+        s.subject_id, 
+        s.subject_name
+      FROM TEACHER_ASSIGNMENT ta
+      JOIN SUBJECT_OFFERING so ON so.subject_offering_id = ta.subject_offering_id
+      JOIN SECTION sec ON sec.section_id = so.section_id
+      JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
+      JOIN SUBJECT s ON s.subject_id = so.subject_id
+    `;
+    const whereConditions = [];
+    const sectionParams = [];
+
+    if (userId) {
+      whereConditions.push(`ta.user_id = ?`);
+      sectionParams.push(userId);
+    }
+
+    if (subjectId && subjectId !== 'all') {
+      whereConditions.push(`s.subject_id = ?`);
+      sectionParams.push(subjectId);
+    }
+
+    if (schoolYearId && schoolYearId !== 'all') {
+      whereConditions.push(`so.school_year_id = ?`);
+      sectionParams.push(schoolYearId);
+    }
+
+    if (whereConditions.length > 0) {
+      sectionSql += ` WHERE ` + whereConditions.join(' AND ');
+    }
+
+    sectionSql += ` ORDER BY gl.grade_level_id ASC, sec.section_name ASC`;
+
+    let [sections] = await db.execute(sectionSql, sectionParams).catch((err) => {
+      console.error('Error querying sections in grade-range-report:', err.message);
+      return [[]];
+    });
+
+    if (!sections || sections.length === 0) {
+      return res.json({ sections: [], averageRow: null });
+    }
+
+    const reportSections = [];
+
+    for (const secRow of sections) {
+      const { section_id, section_name, subject_offering_id } = secRow;
+
+      // 1. Get enrolled students for this section
+      const [students] = await db.execute(
+        `SELECT DISTINCT ss.student_id
+         FROM STUDENT_SECTION ss
+         WHERE ss.section_id = ?`,
+        [section_id]
+      ).catch((err) => {
+        console.error('Error querying students for section:', err.message);
+        return [[]];
+      });
+
+      // 2. Query quarterly_grade from STUDENT_GRADE for this subject offering and term
+      const termPlaceholders = termCodes.map(() => 'UPPER(sg.term) = UPPER(?)').join(' OR ');
+      const gradeParams = [subject_offering_id, ...termCodes];
+
+      const [grades] = await db.execute(
+        `SELECT sg.student_id, sg.quarterly_grade, sg.initial_grade
+         FROM STUDENT_GRADE sg
+         WHERE sg.subject_offering_id = ? AND (${termPlaceholders})`,
+        gradeParams
+      ).catch(() => [[]]);
+
+      const gradeMap = new Map();
+      const validGradesList = [];
+
+      (grades || []).forEach((g) => {
+        const finalGrade = g.quarterly_grade !== null && g.quarterly_grade !== undefined
+          ? g.quarterly_grade
+          : g.initial_grade;
+
+        if (finalGrade !== null && finalGrade !== undefined && !isNaN(Number(finalGrade))) {
+          const numGrade = Number(finalGrade);
+          gradeMap.set(g.student_id, numGrade);
+          validGradesList.push(numGrade);
+        }
+      });
+
+      let noGrade = 0;
+      let r60_74 = 0;
+      let r75_79 = 0;
+      let r80_84 = 0;
+      let r85_89 = 0;
+      let r90_100 = 0;
+
+      (students || []).forEach((st) => {
+        if (!gradeMap.has(st.student_id)) {
+          noGrade++;
+        } else {
+          const g = gradeMap.get(st.student_id);
+          if (g < 75) r60_74++;
+          else if (g >= 75 && g <= 79) r75_79++;
+          else if (g >= 80 && g <= 84) r80_84++;
+          else if (g >= 85 && g <= 89) r85_89++;
+          else if (g >= 90 && g <= 100) r90_100++;
+          else r60_74++;
+        }
+      });
+
+      const total = noGrade + r60_74 + r75_79 + r80_84 + r85_89 + r90_100;
+
+      // Calculate Mean and MPS for this section
+      const numTakers = validGradesList.length;
+      const totalScore = validGradesList.reduce((a, b) => a + b, 0);
+      const scoreMean = numTakers > 0 ? Math.round((totalScore / numTakers) * 100) / 100 : 0;
+      const mps = scoreMean;
+
+      const displaySectionName = (subjectId === 'all' || !subjectId) && secRow.subject_name
+        ? `${secRow.section_name} (${secRow.subject_name})`
+        : secRow.section_name;
+
+      reportSections.push({
+        section_id,
+        section_name: displaySectionName,
+        raw_section_name: secRow.section_name,
+        subject_name: secRow.subject_name,
+        no_grade: noGrade,
+        r60_74,
+        r75_79,
+        r80_84,
+        r85_89,
+        r90_100,
+        total,
+        total_score: Math.round(totalScore * 100) / 100,
+        num_takers: numTakers,
+        score_mean: scoreMean,
+        mps,
+      });
+    }
+
+    const sectionCount = reportSections.length;
+    let averageRow = null;
+
+    if (sectionCount > 0) {
+      const sumNoGrade = reportSections.reduce((a, b) => a + b.no_grade, 0);
+      const sum60_74 = reportSections.reduce((a, b) => a + b.r60_74, 0);
+      const sum75_79 = reportSections.reduce((a, b) => a + b.r75_79, 0);
+      const sum80_84 = reportSections.reduce((a, b) => a + b.r80_84, 0);
+      const sum85_89 = reportSections.reduce((a, b) => a + b.r85_89, 0);
+      const sum90_100 = reportSections.reduce((a, b) => a + b.r90_100, 0);
+      const sumTotal = reportSections.reduce((a, b) => a + b.total, 0);
+
+      const sumTotalScore = reportSections.reduce((a, b) => a + b.total_score, 0);
+      const sumNumTakers = reportSections.reduce((a, b) => a + b.num_takers, 0);
+      const overallMean = sumNumTakers > 0 ? Math.round((sumTotalScore / sumNumTakers) * 100) / 100 : 0;
+
+      const fmt = (val) => Math.round((val / sectionCount) * 10) / 10;
+
+      averageRow = {
+        section_name: 'Average',
+        no_grade: fmt(sumNoGrade),
+        r60_74: fmt(sum60_74),
+        r75_79: fmt(sum75_79),
+        r80_84: fmt(sum80_84),
+        r85_89: fmt(sum85_89),
+        r90_100: fmt(sum90_100),
+        total: fmt(sumTotal),
+        total_score: fmt(sumTotalScore),
+        num_takers: fmt(sumNumTakers),
+        score_mean: overallMean,
+        mps: overallMean,
+      };
+    }
+
+    res.json({ sections: reportSections, averageRow });
+  } catch (err) {
+    console.error('Error in /grade-range-report endpoint:', err);
     res.status(500).json({ error: err.message });
   }
 });

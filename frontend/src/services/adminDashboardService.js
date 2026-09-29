@@ -54,13 +54,24 @@ export const getAuditEvents = async () => {
     }
 
     return data
-      .map((event) => ({
-        id: String(event.id || event.audit_event_id || ""),
-        occurredAt: event.occurredAt || event.occurred_at || new Date().toISOString(),
-        actorId: event.actorId ? String(event.actorId) : (event.user_id ? String(event.user_id) : null),
-        actorName: event.actorName || event.actor_name || "Auralis System",
-        actorRole: event.actorRole || event.actor_role || "System",
-        actingAs: event.actingAs || event.acting_as || event.actorRole || "System",
+      .map((event) => {
+        const actingAs = event.actingAs || event.acting_as || event.actorRole || "System";
+        const isAdviser =
+          String(event.actorRole || "").toLowerCase() === "adviser" ||
+          String(actingAs).toLowerCase().includes("adviser") ||
+          String(event.eventType || event.event_type || "").startsWith("ATTENDANCE_") ||
+          String(event.eventType || event.event_type || "").startsWith("SF9_") ||
+          String(event.eventType || event.event_type || "") === "LEARNER_OBSERVED_VALUES_UPDATED" ||
+          String(event.eventType || event.event_type || "") === "SECTION_RECORDS_FINALIZED";
+        const actorRole = isAdviser ? "Adviser" : (event.actorRole || event.actor_role || "System");
+
+        return {
+          id: String(event.id || event.audit_event_id || ""),
+          occurredAt: event.occurredAt || event.occurred_at || new Date().toISOString(),
+          actorId: event.actorId ? String(event.actorId) : (event.user_id ? String(event.user_id) : null),
+          actorName: event.actorName || event.actor_name || "Auralis System",
+          actorRole,
+          actingAs,
         eventType: event.eventType || event.event_type || "SYSTEM_EVENT",
         eventLabel: event.eventLabel || event.event_label || event.eventType || "System Event",
         module: event.module || event.module_name || "System",
@@ -76,7 +87,8 @@ export const getAuditEvents = async () => {
         beforeData: typeof event.beforeData === "object" && event.beforeData !== null ? event.beforeData : {},
         afterData: typeof event.afterData === "object" && event.afterData !== null ? event.afterData : {},
         metadata: typeof event.metadata === "object" && event.metadata !== null ? event.metadata : {},
-      }))
+      };
+    })
       .sort(
         (first, second) =>
           new Date(second.occurredAt).getTime() -

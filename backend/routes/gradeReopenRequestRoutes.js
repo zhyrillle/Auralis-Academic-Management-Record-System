@@ -3,6 +3,7 @@ const router = express.Router();
 
 const db = require("../config/db");
 const GradeReopenRequest = require("../models/GradeReopenRequest");
+const AuditEvent = require("../models/AuditEvent");
 
 const uploadRequestFile = require("../middleware/uploadRequestFile");
 const {
@@ -260,6 +261,49 @@ router.post(
 
       const id =
         await GradeReopenRequest.create(payload);
+
+      try {
+        const [taRows] = await db.execute(
+          `SELECT ta.user_id, sub.subject_name, sec.section_name, sy.starts_on, sy.ends_on, tm.term_name
+           FROM TEACHER_ASSIGNMENT ta
+           LEFT JOIN SUBJECT_OFFERING so ON ta.subject_offering_id = so.subject_offering_id
+           LEFT JOIN SUBJECT sub ON so.subject_id = sub.subject_id
+           LEFT JOIN SECTION sec ON so.section_id = sec.section_id
+           LEFT JOIN SCHOOL_YEAR sy ON so.school_year_id = sy.school_year_id
+           LEFT JOIN ACADEMIC_TERM tm ON tm.term_id = ?
+           WHERE ta.teacher_assignment_id = ?`,
+          [gsRows[0]?.term_id || 1, teacher_assignment_id]
+        );
+        const subjName = taRows[0]?.subject_name || "Subject";
+        const secName = taRows[0]?.section_name || "Section";
+        const termLabel = taRows[0]?.term_name || "Term 1";
+        const syLabel = taRows[0]?.starts_on && taRows[0]?.ends_on ? `${taRows[0].starts_on}–${taRows[0].ends_on}` : null;
+        const targetStr = `${subjName} — ${secName}`;
+        const teacherUserId = taRows[0]?.user_id || req.headers["x-auralis-user-id"] || null;
+
+        await AuditEvent.create({
+          user_id: teacherUserId ? Number(teacherUserId) : null,
+          actor_context: { source: "user", acting_as: "Subject Teacher", role: "subject_teacher" },
+          event_type: "GRADE_REOPEN_REQUEST_SUBMITTED",
+          module_name: "GRADE_LOCK",
+          entity_type: "GRADE_REOPEN_REQUEST",
+          entity_id: id,
+          after_data: { request_status: "PENDING", grade_sheet_id: gradeSheetId },
+          metadata: {
+            sheet_name: targetStr,
+            target: targetStr,
+            school_year: syLabel,
+            term: termLabel,
+            subject: subjName,
+            section: secName,
+            reason: reason.trim(),
+            summary: `Submitted grade reopening request for ${targetStr} (${reason.trim()}).`,
+            impact: "Medium",
+          },
+        });
+      } catch (auditErr) {
+        console.error("Failed to log reopen request audit:", auditErr.message);
+      }
 
 
       // --------------------------------------------------------

@@ -132,7 +132,10 @@ router.get('/student/:identifier', async (req, res) => {
     let studentSectionId = null;
 
     const [stRows] = await db.execute(
-      `SELECT * FROM STUDENT WHERE student_id = ? OR LRN = ? LIMIT 1`,
+      `SELECT st.*, p.program_code, p.program_name, COALESCE(p.is_specialized, 0) AS is_specialized
+       FROM STUDENT st
+       LEFT JOIN PROGRAM p ON p.program_id = st.program_id
+       WHERE st.student_id = ? OR st.LRN = ? LIMIT 1`,
       [cleanId, cleanId]
     );
 
@@ -140,9 +143,10 @@ router.get('/student/:identifier', async (req, res) => {
       student = stRows[0];
     } else {
       const [ssCheck] = await db.execute(
-        `SELECT st.*, ss.student_section_id 
+        `SELECT st.*, p.program_code, p.program_name, COALESCE(p.is_specialized, 0) AS is_specialized, ss.student_section_id 
          FROM STUDENT_SECTION ss 
          JOIN STUDENT st ON ss.student_id = st.student_id 
+         LEFT JOIN PROGRAM p ON p.program_id = st.program_id
          WHERE ss.student_section_id = ? LIMIT 1`,
         [cleanId]
       );
@@ -161,11 +165,13 @@ router.get('/student/:identifier', async (req, res) => {
     if (studentSectionId) {
       const [secRows] = await db.execute(
         `SELECT ss.student_section_id, ss.section_id, ss.school_year_id,
-                sec.section_name,
+                sec.section_name, sec.program_id,
+                p.program_code, p.program_name, COALESCE(p.is_specialized, 0) AS is_specialized,
                 gl.grade_level_name,
                 sy.starts_on, sy.ends_on
          FROM STUDENT_SECTION ss
          JOIN SECTION sec ON ss.section_id = sec.section_id
+         LEFT JOIN PROGRAM p ON p.program_id = sec.program_id
          LEFT JOIN GRADE_LEVEL gl ON sec.grade_level_id = gl.grade_level_id
          LEFT JOIN SCHOOL_YEAR sy ON ss.school_year_id = sy.school_year_id
          WHERE ss.student_section_id = ? LIMIT 1`,
@@ -177,11 +183,13 @@ router.get('/student/:identifier', async (req, res) => {
     if (!sectionInfo) {
       const [secRows] = await db.execute(
         `SELECT ss.student_section_id, ss.section_id, ss.school_year_id,
-                sec.section_name,
+                sec.section_name, sec.program_id,
+                p.program_code, p.program_name, COALESCE(p.is_specialized, 0) AS is_specialized,
                 gl.grade_level_name,
                 sy.starts_on, sy.ends_on
          FROM STUDENT_SECTION ss
          JOIN SECTION sec ON ss.section_id = sec.section_id
+         LEFT JOIN PROGRAM p ON p.program_id = sec.program_id
          LEFT JOIN GRADE_LEVEL gl ON sec.grade_level_id = gl.grade_level_id
          LEFT JOIN SCHOOL_YEAR sy ON ss.school_year_id = sy.school_year_id
          WHERE ss.student_id = ?
@@ -226,12 +234,25 @@ router.get('/student/:identifier', async (req, res) => {
       principalName = ext ? `${baseName}, ${ext}` : baseName;
     }
 
-    // 4. Student Profile Demographics
+    // 4. Student Profile Demographics & Program formatting
     const gradeLevelRaw = sectionInfo?.grade_level_name || "";
     const gradeNumMatch = gradeLevelRaw.match(/\d+/);
     const gradeNum = gradeNumMatch ? gradeNumMatch[0] : "";
     const sectionNameStr = sectionInfo?.section_name || "";
     const sexFull = (student.sex === 'M' || student.sex === 'Male') ? 'Male' : (student.sex === 'F' || student.sex === 'Female') ? 'Female' : (student.sex || '');
+
+    const rawProgCode = (student.program_code || sectionInfo?.program_code || "").toUpperCase();
+    const rawProgName = student.program_name || sectionInfo?.program_name || "";
+    let programDisplay = "";
+    if (rawProgName && rawProgCode && rawProgCode !== "EBEC") {
+      programDisplay = `${rawProgName} (${rawProgCode})`;
+    } else if (rawProgName) {
+      programDisplay = rawProgName;
+    } else if (rawProgCode && rawProgCode !== "EBEC") {
+      programDisplay = rawProgCode;
+    } else if (rawProgCode === "EBEC") {
+      programDisplay = "Enhanced Basic Education Curriculum (EBEC)";
+    }
 
     const studentProfile = {
       studentId: student.student_id,
@@ -241,7 +262,7 @@ router.get('/student/:identifier', async (req, res) => {
       gradeLevel: gradeLevelRaw && sectionNameStr ? `${gradeLevelRaw} ${sectionNameStr}` : (gradeLevelRaw || sectionNameStr || ""),
       grade: gradeNum,
       section: sectionNameStr,
-      program: "", // Blank as instructed
+      program: programDisplay,
       sex: sexFull,
       age: calculateAge(student.birthdate),
       schoolYear: formatSchoolYear(sectionInfo?.starts_on, sectionInfo?.ends_on),
@@ -259,8 +280,8 @@ router.get('/student/:identifier', async (req, res) => {
       try {
         const msData = await MasterSheetService.getMasterSheet(adviserAssignmentId, adviserUserId);
         if (msData && msData.students) {
-          masterSheetStudent = msData.students.find(s => 
-            Number(s.studentId) === Number(student.student_id) || 
+          masterSheetStudent = msData.students.find(s =>
+            Number(s.studentId) === Number(student.student_id) ||
             Number(s.studentSectionId) === Number(studentSectionId) ||
             String(s.lrn) === String(student.LRN)
           );
@@ -270,28 +291,106 @@ router.get('/student/:identifier', async (req, res) => {
       }
     }
 
-    // Map Master Sheet grades to frontend 10 subjects template
-    const gradesList = FRONTEND_SUBJECT_MAPPING.map(tmpl => {
+    // 5b. Fetch direct STUDENT_GRADE records for MAPEH components (MA and PEH)
+    let studentGradeRows = [];
+    if (studentSectionId || student.student_id) {
+      try {
+        const [sgRows] = await db.execute(
+          `SELECT sg.subject_offering_id, sg.term, sg.mapeh_component, sg.quarterly_grade, sg.remarks,
+                  s.subject_code, s.subject_name
+           FROM STUDENT_GRADE sg
+           INNER JOIN SUBJECT_OFFERING so ON so.subject_offering_id = sg.subject_offering_id
+           INNER JOIN SUBJECT s ON s.subject_id = so.subject_id
+           WHERE sg.student_section_id = ? OR sg.student_id = ?`,
+          [studentSectionId || 0, student.student_id || 0]
+        );
+        studentGradeRows = sgRows;
+      } catch (sgErr) {
+        console.warn("STUDENT_GRADE query error:", sgErr.message);
+      }
+    }
+
+    const termIndex = (termStr) => {
+      const str = String(termStr || '').toUpperCase();
+      if (str.includes('1')) return 0;
+      if (str.includes('2')) return 1;
+      if (str.includes('3')) return 2;
+      return null;
+    };
+
+    const mapehMA = [null, null, null];
+    const mapehPEH = [null, null, null];
+    const mapehCombined = [null, null, null];
+
+    studentGradeRows.forEach(row => {
+      const isMapehSubject = String(row.subject_code || '').toUpperCase().includes('MAPEH') ||
+        String(row.subject_name || '').toUpperCase().includes('MAPEH');
+      if (isMapehSubject) {
+        const idx = termIndex(row.term);
+        if (idx !== null && row.quarterly_grade !== null && row.quarterly_grade !== undefined) {
+          const val = Math.round(Number(row.quarterly_grade));
+          if (row.mapeh_component === 'MA') {
+            mapehMA[idx] = val;
+          } else if (row.mapeh_component === 'PEH') {
+            mapehPEH[idx] = val;
+          } else if (!row.mapeh_component) {
+            mapehCombined[idx] = val;
+          }
+        }
+      }
+    });
+
+    for (let i = 0; i < 3; i++) {
+      if (mapehMA[i] !== null && mapehPEH[i] !== null) {
+        mapehCombined[i] = Math.round((mapehMA[i] + mapehPEH[i]) / 2);
+      }
+    }
+
+    // Build subject list dynamically based on program specialization
+    const subjectMapping = [...FRONTEND_SUBJECT_MAPPING];
+    if (rawProgCode === "STE") {
+      subjectMapping.push({ code: "research", name: "Research", msKey: "research", isHeader: false, isSubSubject: false });
+    } else if (rawProgCode === "SPJ") {
+      subjectMapping.push({ code: "journalism", name: "Journalism", msKey: "journalism", isHeader: false, isSubSubject: false });
+    } else if (rawProgCode === "SPA") {
+      subjectMapping.push({ code: "spa_spec", name: "SPA Specialization", msKey: "spa_spec", isHeader: false, isSubSubject: false });
+    }
+
+    // Map Master Sheet grades & MAPEH sub-components to subjects list
+    const gradesList = subjectMapping.map(tmpl => {
       let t1 = "";
       let t2 = "";
       let t3 = "";
       let finalVal = "";
       let remark = "";
 
+      if (tmpl.code === "music_arts") {
+        t1 = mapehMA[0] !== null ? mapehMA[0] : "";
+        t2 = mapehMA[1] !== null ? mapehMA[1] : "";
+        t3 = mapehMA[2] !== null ? mapehMA[2] : "";
+      } else if (tmpl.code === "pe_health") {
+        t1 = mapehPEH[0] !== null ? mapehPEH[0] : "";
+        t2 = mapehPEH[1] !== null ? mapehPEH[1] : "";
+        t3 = mapehPEH[2] !== null ? mapehPEH[2] : "";
+      } else if (tmpl.code === "mapeh") {
+        t1 = mapehCombined[0] !== null ? mapehCombined[0] : "";
+        t2 = mapehCombined[1] !== null ? mapehCombined[1] : "";
+        t3 = mapehCombined[2] !== null ? mapehCombined[2] : "";
+      }
+
       if (masterSheetStudent && masterSheetStudent.grades) {
         const g = masterSheetStudent.grades[tmpl.msKey];
         if (g && Array.isArray(g.terms)) {
-          t1 = Number.isFinite(g.terms[0]) ? Math.round(g.terms[0]) : "";
-          t2 = Number.isFinite(g.terms[1]) ? Math.round(g.terms[1]) : "";
-          t3 = Number.isFinite(g.terms[2]) ? Math.round(g.terms[2]) : "";
+          if (t1 === "" && Number.isFinite(g.terms[0])) t1 = Math.round(g.terms[0]);
+          if (t2 === "" && Number.isFinite(g.terms[1])) t2 = Math.round(g.terms[1]);
+          if (t3 === "" && Number.isFinite(g.terms[2])) t3 = Math.round(g.terms[2]);
         }
-        // ONLY display finalGrade if all 3 terms are complete on MasterSheet
-        if (g && Number.isFinite(g.finalGrade)) {
+        if (g && Number.isFinite(g.finalGrade) && tmpl.code !== "music_arts" && tmpl.code !== "pe_health") {
           finalVal = Math.round(g.finalGrade);
         }
       }
 
-      // Strictly DO NOT compute a subject's final grade if not all terms are complete
+      // Compute final grade when terms are complete
       if (typeof t1 === 'number' && typeof t2 === 'number' && typeof t3 === 'number') {
         if (finalVal === "") {
           finalVal = Math.round((t1 + t2 + t3) / 3);

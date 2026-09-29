@@ -7,17 +7,26 @@ export default function ClassCard({ cls, onView, onGradingSheet, onEdit }) {
     cls?.is_specialized === true ||
     cls?.is_specialized === "1" ||
     String(cls?.is_specialized).toLowerCase() === "true" ||
-    cls?.classType === "Special Program"
+    (cls?.classType && (String(cls.classType).startsWith("Special Program") || String(cls.classType).startsWith("Advisory Class -")))
   );
-  const isAdvisory = !isSpecialized && (cls?.isAdviser === true || cls?.classType === "Advisory Class");
+  const isAdviser = Boolean(cls?.isAdviser === true || (cls?.classType && String(cls.classType).startsWith("Advisory Class")));
+  const isAdvisory = isAdviser;
 
-  const displayClassType = isSpecialized
-    ? "Special Program"
-    : isAdvisory
-    ? "Advisory Class"
-    : "Regular Class";
+  const programCode = cls?.program_code || cls?.programCode || cls?.program_name || null;
+  const validProgCode = programCode && String(programCode).toUpperCase() !== "EBEC" ? String(programCode).toUpperCase() : null;
 
-  const isGreenBadge = isAdvisory || isSpecialized;
+  let displayClassType = cls?.classType;
+  if (isAdviser && isSpecialized) {
+    displayClassType = validProgCode ? `Advisory Class - ${validProgCode}` : "Advisory Class";
+  } else if (isSpecialized) {
+    displayClassType = validProgCode ? `Special Program - ${validProgCode}` : "Special Program";
+  } else if (isAdviser) {
+    displayClassType = "Advisory Class";
+  } else {
+    displayClassType = "Regular Class";
+  }
+
+  const isGreenBadge = isAdviser || isSpecialized;
 
 
 

@@ -35,6 +35,7 @@ export default function AdminDashboard() {
   const [auditError, setAuditError] = useState("");
   const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
   const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState("");
   const [schoolYearFilter, setSchoolYearFilter] = useState("");
   const [moduleFilter, setModuleFilter] = useState("");
   const [eventTypeFilter, setEventTypeFilter] = useState("");
@@ -149,6 +150,21 @@ export default function AdminDashboard() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [selectedEvent]);
 
+  const roles = useMemo(() => {
+    const fromEvents = Array.from(
+      new Set(auditEvents.map((event) => event.actorRole)),
+    ).filter(Boolean);
+    const standardOrder = [
+      "System Administrator",
+      "Principal",
+      "Department Head",
+      "Subject Teacher",
+      "Adviser",
+      "System",
+    ];
+    return Array.from(new Set([...standardOrder, ...fromEvents]));
+  }, [auditEvents]);
+
   const modules = useMemo(
     () =>
       Array.from(new Set(auditEvents.map((event) => event.module)))
@@ -181,9 +197,25 @@ export default function AdminDashboard() {
     return auditEvents.filter((event) => {
       const matchesSearch =
         !query ||
-        [event.actorName, event.summary, event.target, event.eventLabel]
+        [
+          event.actorName,
+          event.actorRole,
+          event.actingAs,
+          event.summary,
+          event.target,
+          event.eventLabel,
+        ]
           .filter(Boolean)
           .some((value) => value.toLowerCase().includes(query));
+      const matchesRole =
+        !roleFilter ||
+        event.actorRole === roleFilter ||
+        (roleFilter === "Adviser" &&
+          (event.actorRole === "Adviser" ||
+            event.actingAs?.toLowerCase().includes("adviser"))) ||
+        (roleFilter === "Subject Teacher" &&
+          event.actorRole === "Subject Teacher" &&
+          !event.actingAs?.toLowerCase().includes("adviser"));
       const matchesModule = !moduleFilter || event.module === moduleFilter;
       const matchesSchoolYear =
         !schoolYearFilter ||
@@ -205,6 +237,7 @@ export default function AdminDashboard() {
 
       return (
         matchesSearch &&
+        matchesRole &&
         matchesSchoolYear &&
         matchesModule &&
         matchesEventType &&
@@ -220,6 +253,7 @@ export default function AdminDashboard() {
     eventTypeFilter,
     impactFilter,
     moduleFilter,
+    roleFilter,
     schoolYearFilter,
     search,
   ]);
@@ -230,6 +264,7 @@ export default function AdminDashboard() {
 
   const clearFilters = () => {
     setSearch("");
+    setRoleFilter("");
     setSchoolYearFilter("");
     setModuleFilter("");
     setEventTypeFilter("");
@@ -240,6 +275,10 @@ export default function AdminDashboard() {
 
   const handleSearchChange = (value) => {
     setSearch(value);
+  };
+
+  const handleRoleChange = (value) => {
+    setRoleFilter(value);
   };
 
   const handleModuleChange = (value) => {
@@ -329,17 +368,20 @@ export default function AdminDashboard() {
 
         <AuditEventFilters
           search={search}
+          role={roleFilter}
           schoolYear={schoolYearFilter}
           module={moduleFilter}
           eventType={eventTypeFilter}
           impact={impactFilter}
           dateFrom={dateFromFilter}
           dateTo={dateToFilter}
+          roles={roles}
           schoolYears={schoolYears}
           modules={modules}
           eventTypes={eventTypes}
           showMore={showMoreFilters}
           onSearchChange={handleSearchChange}
+          onRoleChange={handleRoleChange}
           onSchoolYearChange={handleSchoolYearChange}
           onModuleChange={handleModuleChange}
           onEventTypeChange={handleEventTypeChange}

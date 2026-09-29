@@ -36,17 +36,28 @@ export const getAdviserSections = async (userId) => {
       const data = await response.json();
       if (Array.isArray(data) && data.length > 0) {
         const mapped = data.map((item) => {
-          const isSpecialized = checkIsSpecialized(item.is_specialized) || item.classType === "Special Program";
+          const isSpecialized = checkIsSpecialized(item.is_specialized) || (item.classType && String(item.classType).startsWith("Special Program"));
           const isAdviser = item.isAdviser ?? (item.classType === "Advisory Class");
+          const progCode = item.program_code || item.programCode || null;
+          const validProgCode = progCode && String(progCode).toUpperCase() !== "EBEC" ? String(progCode).toUpperCase() : null;
+
+          let formattedClassType = item.classType;
+          if (isAdviser && isSpecialized) {
+            formattedClassType = validProgCode ? `Advisory Class - ${validProgCode}` : "Advisory Class";
+          } else if (isSpecialized) {
+            formattedClassType = validProgCode ? `Special Program - ${validProgCode}` : "Special Program";
+          } else if (isAdviser) {
+            formattedClassType = "Advisory Class";
+          } else {
+            formattedClassType = "Regular Class";
+          }
+
           return {
             ...item,
+            program_code: item.program_code || null,
             is_specialized: isSpecialized ? 1 : 0,
             isAdviser: isAdviser,
-            classType: isSpecialized
-              ? "Special Program"
-              : isAdviser
-              ? "Advisory Class"
-              : "Regular Class",
+            classType: formattedClassType,
           };
         });
         return mapped;
@@ -132,10 +143,20 @@ export const getAdviserSections = async (userId) => {
  * Fetch students enrolled in a specific section from backend.
  * @param {string|number} sectionId
  */
-export const getStudentsBySection = async (sectionId) => {
+export const getStudentsBySection = async (sectionId, subjectOfferingId = null, subjectId = null, subjectName = null) => {
   if (!sectionId) return [];
   try {
-    const response = await fetch(`${API_BASE_URL}/sections/${sectionId}/students`);
+    let url = `${API_BASE_URL}/sections/${sectionId}/students`;
+    const params = [];
+    if (subjectOfferingId && !String(subjectOfferingId).startsWith("sec-")) {
+      params.push(`subject_offering_id=${encodeURIComponent(subjectOfferingId)}`);
+    }
+    if (subjectId) params.push(`subject_id=${encodeURIComponent(subjectId)}`);
+    if (subjectName) params.push(`subject_name=${encodeURIComponent(subjectName)}`);
+    if (params.length > 0) {
+      url += `?${params.join("&")}`;
+    }
+    const response = await fetch(url);
     if (response.ok) {
       return await response.json();
     }

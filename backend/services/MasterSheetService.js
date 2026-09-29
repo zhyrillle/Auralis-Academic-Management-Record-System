@@ -10,6 +10,9 @@ const SUBJECT_DEFINITIONS = [
   { key: "tle", code: "TLE", label: "TLE", aliases: ["TLE", "TECHNOLOGYANDLIVELIHOODEDUCATION"] },
   { key: "mapeh", code: "MAPEH", label: "MAPEH", aliases: ["MAPEH"] },
   { key: "esp", code: "ESP", label: "ESP", aliases: ["ESP", "VE", "EDUKASYONSAPAGPAPAKATAO", "VALUESEDUCATION"] },
+  { key: "research", code: "RES", label: "Research", aliases: ["RES", "RESEARCH", "RESEARCH7", "RESEARCH8", "RESEARCH9", "RESEARCH10"] },
+  { key: "journalism", code: "JOURN", label: "Journalism", aliases: ["JOURN", "JOURNALISM", "JOURNALISM7", "JOURNALISM8", "JOURNALISM9", "JOURNALISM10"] },
+  { key: "spa_spec", code: "SPA", label: "SPA Specialization", aliases: ["SPA", "SPASPECIALIZATION", "ARTS", "SPARTS"] },
 ];
 
 const serviceError = (statusCode, code, message) => {

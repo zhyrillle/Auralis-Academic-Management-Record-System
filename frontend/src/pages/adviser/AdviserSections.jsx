@@ -66,11 +66,16 @@ export default function AdviserSections({ userRole: propUserRole }) {
   // Fetch students when a section is opened
   useEffect(() => {
     async function fetchSectionStudents() {
-      if (!activeSelectedClass || !activeSelectedClass.section_id) return;
+      if (!activeSelectedClass) return;
+      const sectionId = activeSelectedClass.section_id || activeSelectedClass.id;
+      if (!sectionId) return;
       const classKey = activeSelectedClass.id;
+      const offeringId = activeSelectedClass.subject_offering_id || activeSelectedClass.offering_id || null;
+      const subjectId = activeSelectedClass.subject_id || null;
+      const subjectName = activeSelectedClass.subject || activeSelectedClass.subject_name || null;
 
       try {
-        const studentList = await getStudentsBySection(activeSelectedClass.section_id);
+        const studentList = await getStudentsBySection(sectionId, offeringId, subjectId, subjectName);
         if (studentList && Array.isArray(studentList) && studentList.length > 0) {
           setStudentsBySection((prev) => ({
             ...prev,
@@ -85,6 +90,12 @@ export default function AdviserSections({ userRole: propUserRole }) {
               term1: s.term1 !== undefined && s.term1 !== null ? s.term1 : "",
               term2: s.term2 !== undefined && s.term2 !== null ? s.term2 : "",
               term3: s.term3 !== undefined && s.term3 !== null ? s.term3 : "",
+              term1_ma: s.term1_ma !== undefined && s.term1_ma !== null ? s.term1_ma : "",
+              term2_ma: s.term2_ma !== undefined && s.term2_ma !== null ? s.term2_ma : "",
+              term3_ma: s.term3_ma !== undefined && s.term3_ma !== null ? s.term3_ma : "",
+              term1_peh: s.term1_peh !== undefined && s.term1_peh !== null ? s.term1_peh : "",
+              term2_peh: s.term2_peh !== undefined && s.term2_peh !== null ? s.term2_peh : "",
+              term3_peh: s.term3_peh !== undefined && s.term3_peh !== null ? s.term3_peh : "",
             })),
           }));
         }
