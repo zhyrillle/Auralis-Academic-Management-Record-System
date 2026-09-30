@@ -43,16 +43,60 @@ function FormSkeleton() {
 }
 
 export default function UserFormModal({
-  mode, data, gradeLevels, sections, departments, subjectOfferings,
+  mode, data, gradeLevels, sections, departments, subjectOfferings, users = [],
   loading, loadError, error, saving, onRetry, onChange,
   onAddAssignment, onRemoveAssignment, onAssignmentChange, onClose, onSave,
 }) {
   const dialogRef = useRef(null);
   const isEdit = mode === "edit";
+  const isDepartmentHead = data.role === "Department Head";
   const hasDepartment = ["Department Head", "Subject Teacher", "Adviser"].includes(data.role);
   const hasTeaching = ["Subject Teacher", "Adviser"].includes(data.role);
   const change = (name, value) => onChange({ target: { name, value } });
   const gradeOptions = optionsFor(gradeLevels, "grade_level_id", "grade_level_name");
+
+  const availableDepartments = departments.filter((dept) => {
+    if (!isDepartmentHead) return true;
+
+    // Filter out if assigned to another user via metadata
+    if (dept.head_user_id && String(dept.head_user_id) !== String(data.user_id || "")) {
+      return false;
+    }
+
+    // Filter out if assigned to another user in users array
+    if (Array.isArray(users)) {
+      const hasOtherHead = users.some((u) => {
+        if (String(u.user_id) === String(data.user_id || "")) return false;
+        const role = (u.display_role || u.role || "").toLowerCase().trim();
+        const isHead = role === "department head" || role === "department_head" || role === "dept_head";
+        return isHead && String(u.department_id || "") === String(dept.department_id);
+      });
+      if (hasOtherHead) return false;
+    }
+
+    return true;
+  });
+
+  const availableAdvisorySections = sections
+    .filter((section) => String(section.grade_level_id) === String(data.adviser_grade_level_id))
+    .filter((section) => {
+      // Filter out if assigned to another user via metadata
+      if (section.adviser_user_id && String(section.adviser_user_id) !== String(data.user_id || "")) {
+        return false;
+      }
+
+      // Filter out if assigned to another user in users array
+      if (Array.isArray(users)) {
+        const hasOtherAdviser = users.some(
+          (u) =>
+            String(u.user_id) !== String(data.user_id || "") &&
+            String(u.adviser_section_id || "") === String(section.section_id)
+        );
+        if (hasOtherAdviser) return false;
+      }
+
+      return true;
+    });
 
   useEffect(() => {
     const previousFocus = document.activeElement;
@@ -166,10 +210,16 @@ export default function UserFormModal({
                     <FormSelect label="Role" value={data.role} options={roles.map((role) => ({ value: role, label: role }))}
                       placeholder="Select role" disabled={saving} onChange={(value) => change("role", value)} />
                     {hasDepartment && <FormSelect label="Department / Assigned Area" value={data.department_id}
-                      options={optionsFor(departments, "department_id", "department_name")} placeholder="Select department"
-                      disabled={saving || !departments.length} onChange={(value) => change("department_id", value)} />}
+                      options={optionsFor(availableDepartments, "department_id", "department_name")} placeholder="Select department"
+                      disabled={saving || !availableDepartments.length} onChange={(value) => change("department_id", value)} />}
                   </div>
-                  {hasDepartment && !departments.length && <p className="user-form-help">No departments are currently available.</p>}
+                  {hasDepartment && !availableDepartments.length && (
+                    <p className="user-form-help">
+                      {isDepartmentHead
+                        ? "All departments currently have an assigned Department Head."
+                        : "No departments are currently available."}
+                    </p>
+                  )}
                 </section>
                 {(hasTeaching || data.role === "Adviser") && (
                   <section className="user-form-section" aria-labelledby="user-assignments-heading">
@@ -185,10 +235,15 @@ export default function UserFormModal({
                             placeholder="Select grade level" disabled={saving || !gradeOptions.length}
                             onChange={(value) => change("adviser_grade_level_id", value)} />
                           <FormSelect label="Advisory Section" value={data.adviser_section_id}
-                            options={optionsFor(sections.filter((section) => String(section.grade_level_id) === String(data.adviser_grade_level_id)), "section_id", "section_name")}
+                            options={optionsFor(availableAdvisorySections, "section_id", "section_name")}
                             placeholder="Select section" disabled={saving || !data.adviser_grade_level_id}
                             onChange={(value) => change("adviser_section_id", value)} />
                         </div>
+                        {data.adviser_grade_level_id && !availableAdvisorySections.length && (
+                          <p className="user-form-help" style={{ marginTop: "8px" }}>
+                            All sections for this grade level already have an assigned adviser.
+                          </p>
+                        )}
                       </div>
                     )}
                     {hasTeaching && <>
@@ -203,21 +258,20 @@ export default function UserFormModal({
                       ) : data.teaching_assignments.map((assignment, index) => (
                         <div className="user-form-assignment" key={index}>
                           <div className="user-form-assignment-label">
-                            <strong>Class {index + 1}</strong>
                             <button type="button" className="user-form-remove" disabled={saving}
-                              aria-label={`Remove class ${index + 1}`} onClick={() => onRemoveAssignment(index)}>
+                              aria-label={`Remove class assignment ${index + 1}`} onClick={() => onRemoveAssignment(index)}>
                               <Trash2 size={15} aria-hidden="true" /> Remove
                             </button>
                           </div>
                           <div className="user-form-assignment-grid">
-                            <FormSelect label={`Class ${index + 1} grade level`} value={assignment.grade_level_id} options={gradeOptions}
+                            <FormSelect label="Grade Level" value={assignment.grade_level_id} options={gradeOptions}
                               placeholder="Select grade" disabled={saving || !gradeOptions.length}
                               onChange={(value) => onAssignmentChange(index, "grade_level_id", value)} />
-                            <FormSelect label={`Class ${index + 1} section`} value={assignment.section_id}
+                            <FormSelect label="Section" value={assignment.section_id}
                               options={optionsFor(sections.filter((section) => String(section.grade_level_id) === String(assignment.grade_level_id)), "section_id", "section_name")}
                               placeholder="Select section" disabled={saving || !assignment.grade_level_id}
                               onChange={(value) => onAssignmentChange(index, "section_id", value)} />
-                            <FormSelect label={`Class ${index + 1} subject`} value={assignment.subject_offering_id}
+                            <FormSelect label="Subject" value={assignment.subject_offering_id}
                               options={subjectOfferings.filter((offering) => String(offering.section_id) === String(assignment.section_id))
                                 .map((offering) => ({ value: String(offering.subject_offering_id), label: offering.subject_name + (offering.subject_code ? ` (${offering.subject_code})` : "") }))}
                               placeholder="Select subject" disabled={saving || !assignment.section_id}
