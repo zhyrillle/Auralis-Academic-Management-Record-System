@@ -85,7 +85,8 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdat
     } catch (_) {}
     return "T1";
   });
-  const userSelectedTermRef = useRef(Boolean(sessionStorage.getItem(`classRecord_activeTerm_${subjectOfferingId}`)));
+  const userSelectedTermRef = useRef(false);
+  const hasDoneInitialTermSyncRef = useRef(false);
 
   // Sync / Cloud state (Google Docs inspiration: "saved" | "saving" | "offline")
   const [syncStatus, setSyncStatus] = useState("saved");
@@ -652,10 +653,15 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdat
           });
 
           // Sync active ongoing term on initial load if user hasn't explicitly chosen one
-          const hasUserChoice = userSelectedTermRef.current || sessionStorage.getItem(`classRecord_activeTerm_${subjectOfferingId}`);
-          if (parsed.activeTerm && !hasUserChoice && parsed.activeTerm !== termToLoad) {
-            setActiveTerm(parsed.activeTerm);
-            return;
+          if (!hasDoneInitialTermSyncRef.current && !userSelectedTermRef.current) {
+            hasDoneInitialTermSyncRef.current = true;
+            if (parsed.activeTerm && parsed.activeTerm !== termToLoad) {
+              try {
+                sessionStorage.setItem(`classRecord_activeTerm_${subjectOfferingId}`, parsed.activeTerm);
+              } catch (_) {}
+              setActiveTerm(parsed.activeTerm);
+              return;
+            }
           }
 
           setIsLocked(parsed.isLocked);
