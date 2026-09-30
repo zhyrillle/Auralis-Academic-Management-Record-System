@@ -87,7 +87,16 @@ const getManagementUsers = async () => {
     SELECT
       u.user_id,
       u.role,
-      u.department_id,
+      COALESCE(
+        u.department_id,
+        (
+          SELECT dh.department_id
+          FROM DEPARTMENT_HEAD dh
+          LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = dh.school_year_id
+          WHERE dh.user_id = u.user_id AND (sy.status IS NULL OR LOWER(sy.status) IN ('active', 'ongoing'))
+          ORDER BY dh.department_head_id DESC LIMIT 1
+        )
+      ) AS department_id,
       u.first_name,
       u.middle_name,
       u.last_name,
@@ -548,8 +557,53 @@ router.get("/management-options", async (req, res) => {
   try {
     const schoolYear = await UserManagementOptions.getActiveSchoolYear();
     const [gradeLevels] = await db.execute("SELECT grade_level_id, grade_level_name FROM GRADE_LEVEL ORDER BY grade_level_id ASC");
-    const [departments] = await db.execute("SELECT department_id, department_name FROM DEPARTMENT ORDER BY department_name ASC");
-    const [sections] = await db.execute("SELECT section_id, section_name, grade_level_id FROM SECTION ORDER BY section_name ASC");
+    const [departments] = await db.execute(`
+      SELECT 
+        d.department_id, 
+        d.department_name,
+        COALESCE(
+          (
+            SELECT dh.user_id
+            FROM DEPARTMENT_HEAD dh
+            LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = dh.school_year_id
+            WHERE dh.department_id = d.department_id
+              AND (sy.status IS NULL OR LOWER(sy.status) IN ('active', 'ongoing'))
+            ORDER BY dh.department_head_id DESC
+            LIMIT 1
+          ),
+          (
+            SELECT u.user_id
+            FROM USER u
+            WHERE u.department_id = d.department_id
+              AND LOWER(u.role) IN ('department_head', 'department head', 'dept_head')
+              AND LOWER(COALESCE(u.account_status, 'active')) = 'active'
+            ORDER BY u.user_id DESC
+            LIMIT 1
+          )
+        ) AS head_user_id
+      FROM DEPARTMENT d 
+      ORDER BY d.department_name ASC
+    `);
+    const [sections] = await db.execute(`
+      SELECT 
+        sec.section_id, 
+        sec.section_name, 
+        sec.grade_level_id,
+        COALESCE(
+          (
+            SELECT saa.user_id
+            FROM SECTION_ADVISER_ASSIGNMENT saa
+            LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = saa.school_year_id
+            WHERE saa.section_id = sec.section_id
+              AND (sy.status IS NULL OR LOWER(sy.status) IN ('active', 'ongoing'))
+            ORDER BY saa.adviser_assignment_id DESC
+            LIMIT 1
+          ),
+          sec.user_id
+        ) AS adviser_user_id
+      FROM SECTION sec 
+      ORDER BY sec.section_name ASC
+    `);
     const [programs] = await db.execute("SELECT program_id, program_code, program_name, is_specialized FROM PROGRAM ORDER BY is_specialized DESC, program_code ASC");
     
     const [subjectOfferings] = await db.execute(`
@@ -730,6 +784,35 @@ const validateSingleDepartmentHead = async (connection, departmentId, userId, sc
   }
 };
 
+const validateSingleSectionAdviser = async (connection, sectionId, userId, schoolYear) => {
+  if (!sectionId) return;
+  const [existing] = await connection.execute(
+    `
+    SELECT 
+      saa.user_id,
+      CONCAT(COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, '')) AS adviser_name,
+      sec.section_name
+    FROM SECTION_ADVISER_ASSIGNMENT saa
+    INNER JOIN USER u ON u.user_id = saa.user_id
+    INNER JOIN SECTION sec ON sec.section_id = saa.section_id
+    LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = saa.school_year_id
+    WHERE saa.section_id = ?
+      AND saa.user_id <> ?
+      AND (sy.status IN ('ACTIVE', 'ONGOING') OR sy.school_year_id = ?)
+    LIMIT 1
+    `,
+    [sectionId, userId || 0, schoolYear?.school_year_id || 0]
+  );
+
+  if (existing.length > 0) {
+    const adv = existing[0];
+    const name = adv.adviser_name.trim() || `User #${adv.user_id}`;
+    throw new Error(
+      `The section ${adv.section_name} already has an assigned Adviser (${name}). Each section can only have 1 Adviser.`
+    );
+  }
+};
+
 const saveRoleAssignments = async (connection, userId, body, schoolYear) => {
   const { assignedFrom, assignedUntil } = getAssignmentDates(body, schoolYear);
   const role = normalizeRole(body.role);
@@ -790,6 +873,10 @@ router.post("/", async (req, res) => {
 
     if (role === "department head" && effectiveDepartmentId) {
       await validateSingleDepartmentHead(connection, effectiveDepartmentId, 0, schoolYear);
+    }
+
+    if ((role === "subject teacher" || req.body.is_adviser) && req.body.adviser_section_id) {
+      await validateSingleSectionAdviser(connection, req.body.adviser_section_id, 0, schoolYear);
     }
 
     const hashedPassword = await hashPassword(password);
@@ -864,6 +951,10 @@ router.put("/:id", async (req, res) => {
     // 1 Department Head per department
     if (role === "department head" && effectiveDepartmentId) {
       await validateSingleDepartmentHead(connection, effectiveDepartmentId, userId, schoolYear);
+    }
+
+    if ((role === "subject teacher" || req.body.is_adviser) && req.body.adviser_section_id) {
+      await validateSingleSectionAdviser(connection, req.body.adviser_section_id, userId, schoolYear);
     }
 
     if (password && password.trim()) {
