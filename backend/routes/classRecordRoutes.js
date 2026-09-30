@@ -246,14 +246,31 @@ async function ensureGradeSheet(subjectOfferingId, schoolYearId, termName) {
   }
 
   let [sheetRows] = await db.execute(
-    'SELECT grade_sheet_id, term_id, lock_status, workflow_status FROM GRADE_SHEET WHERE subject_offering_id = ? AND term_id = ? LIMIT 1',
+    `SELECT gs.grade_sheet_id, gs.term_id, gs.lock_status, gs.workflow_status,
+            at.grade_submission_deadline_at
+     FROM GRADE_SHEET gs
+     LEFT JOIN ACADEMIC_TERM at ON at.term_id = gs.term_id
+     WHERE gs.subject_offering_id = ? AND gs.term_id = ? LIMIT 1`,
     [subjectOfferingId, termId || 1]
   );
 
   if (sheetRows.length > 0) {
+    let currentLockStatus = sheetRows[0].lock_status || 'EDITABLE';
+    const deadline = sheetRows[0].grade_submission_deadline_at ? new Date(sheetRows[0].grade_submission_deadline_at) : null;
+    const isPastDeadline = deadline ? deadline <= new Date() : false;
+
+    // Self-healing guard: If marked TERM_LOCKED prematurely before term deadline, auto-repair to EDITABLE
+    if (currentLockStatus === 'TERM_LOCKED' && !isPastDeadline) {
+      currentLockStatus = 'EDITABLE';
+      await db.execute(
+        `UPDATE GRADE_SHEET SET lock_status = 'EDITABLE', updated_at = UTC_TIMESTAMP(6) WHERE grade_sheet_id = ?`,
+        [sheetRows[0].grade_sheet_id]
+      );
+    }
+
     return {
       gradeSheetId: sheetRows[0].grade_sheet_id,
-      lockStatus: sheetRows[0].lock_status || 'EDITABLE',
+      lockStatus: currentLockStatus,
       workflowStatus: sheetRows[0].workflow_status || 'DRAFT',
       termId: sheetRows[0].term_id || termId || 1,
       termName: resolvedTermName,
@@ -616,7 +633,11 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
     // Validate GRADE_SHEET against Active Term
     // A grade sheet is considered ACTIVE / OPEN if grade_sheet.term_id === active_term.term_id AND grade_sheet.lock_status === 'EDITABLE' (or 'OPEN' or 'TEMPORARILY_REOPENED')
     const isTermActive = Boolean(activeTerm && Number(sheetTermId) === Number(activeTerm.term_id));
+    const isDeadlinePast = activeTerm?.grade_submission_deadline_at
+      ? new Date(activeTerm.grade_submission_deadline_at) <= new Date()
+      : false;
     const isEditable = isTermActive && (
+      !isDeadlinePast ||
       lockStatus === 'EDITABLE' ||
       lockStatus === 'OPEN' ||
       lockStatus === 'TEMPORARILY_REOPENED'
@@ -624,7 +645,7 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
     const isLocked = !isEditable;
     const lockReason = !isTermActive
       ? 'CLOSED_TERM'
-      : (lockStatus === 'TERM_LOCKED' ? 'TERM_LOCKED' : (isLocked ? 'LOCKED' : null));
+      : (isLocked ? (lockStatus === 'TERM_LOCKED' ? 'TERM_LOCKED' : 'LOCKED') : null);
 
     // MAPEH sub-component resolution
     const isMapeh = isMapehSubject(classContext.subject_name, classContext.subject_code);
@@ -1048,7 +1069,11 @@ async function handleCreateAssessment(req, res) {
     const { gradeSheetId, lockStatus, termId: sheetTermId } = sheetData;
 
     const isTermActive = Boolean(activeTerm && Number(sheetTermId) === Number(activeTerm.term_id));
+    const isDeadlinePast = activeTerm?.grade_submission_deadline_at
+      ? new Date(activeTerm.grade_submission_deadline_at) <= new Date()
+      : false;
     const isEditable = isTermActive && (
+      !isDeadlinePast ||
       lockStatus === 'EDITABLE' ||
       lockStatus === 'OPEN' ||
       lockStatus === 'TEMPORARILY_REOPENED'
@@ -1242,7 +1267,11 @@ async function handleUpdateAssessment(req, res) {
       const row = actSheetRows[0];
       const activeTerm = await resolveActiveAcademicTerm(row.school_year_id);
       const isTermActive = Boolean(activeTerm && Number(row.term_id) === Number(activeTerm.term_id));
+      const isDeadlinePast = activeTerm?.grade_submission_deadline_at
+        ? new Date(activeTerm.grade_submission_deadline_at) <= new Date()
+        : false;
       const isEditable = isTermActive && (
+        !isDeadlinePast ||
         row.lock_status === 'EDITABLE' ||
         row.lock_status === 'OPEN' ||
         row.lock_status === 'TEMPORARILY_REOPENED'
@@ -1356,7 +1385,11 @@ router.delete('/assessments/:id', async (req, res) => {
       const row = actSheetRows[0];
       const activeTerm = await resolveActiveAcademicTerm(row.school_year_id);
       const isTermActive = Boolean(activeTerm && Number(row.term_id) === Number(activeTerm.term_id));
+      const isDeadlinePast = activeTerm?.grade_submission_deadline_at
+        ? new Date(activeTerm.grade_submission_deadline_at) <= new Date()
+        : false;
       const isEditable = isTermActive && (
+        !isDeadlinePast ||
         row.lock_status === 'EDITABLE' ||
         row.lock_status === 'OPEN' ||
         row.lock_status === 'TEMPORARILY_REOPENED'
@@ -1418,7 +1451,11 @@ async function handleBatchScores(req, res) {
     const { gradeSheetId, lockStatus, termId: sheetTermId } = sheetData;
 
     const isTermActive = Boolean(activeTerm && Number(sheetTermId) === Number(activeTerm.term_id));
+    const isDeadlinePast = activeTerm?.grade_submission_deadline_at
+      ? new Date(activeTerm.grade_submission_deadline_at) <= new Date()
+      : false;
     const isEditable = isTermActive && (
+      !isDeadlinePast ||
       lockStatus === 'EDITABLE' ||
       lockStatus === 'OPEN' ||
       lockStatus === 'TEMPORARILY_REOPENED'

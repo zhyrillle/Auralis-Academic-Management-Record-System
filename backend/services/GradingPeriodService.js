@@ -149,9 +149,23 @@ async function finalizePastDeadlineSheets() {
   return result.affectedRows;
 }
 
+async function releasePrematurelyLockedSheets() {
+  const [result] = await db.execute(
+    `UPDATE GRADE_SHEET gs
+    INNER JOIN ACADEMIC_TERM at ON at.term_id = gs.term_id
+    SET
+      gs.lock_status = 'EDITABLE',
+      gs.updated_at = UTC_TIMESTAMP(6)
+    WHERE at.grade_submission_deadline_at > UTC_TIMESTAMP(6)
+      AND gs.lock_status = 'TERM_LOCKED'`
+  );
+  return result.affectedRows;
+}
+
 async function runLifecycleGuard() {
   await expireTemporaryReopenings();
   await finalizePastDeadlineSheets();
+  await releasePrematurelyLockedSheets();
 }
 
 async function ensureUpcomingSchoolYear() {
