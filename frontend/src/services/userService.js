@@ -22,7 +22,8 @@ export const updateUserProfile = async (userId, profile) => {
     body: JSON.stringify(profile),
   });
 
-  return parseResponse(response);
+  const data = await parseResponse(response);
+  return data.user || data;
 };
 
 export const updateUserProfilePicture = async (userId, imageData) => {
@@ -32,7 +33,14 @@ export const updateUserProfilePicture = async (userId, imageData) => {
     body: JSON.stringify({ imageData }),
   });
 
-  return parseResponse(response);
+  const data = await parseResponse(response);
+
+  if (!data.user) return data;
+
+  return {
+    ...data.user,
+    pfp_url: data.pfp_url || data.user.pfp_url,
+  };
 };
 
 export const resolveProfilePictureUrl = (profilePictureUrl) => {

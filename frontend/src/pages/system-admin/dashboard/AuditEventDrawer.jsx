@@ -61,7 +61,11 @@ export default function AuditEventDrawer({ event, onClose }) {
             <div><span>Event</span><strong>{event.eventLabel}</strong></div>
             <div><span>Occurred</span><strong>{occurredAt}</strong></div>
             <div><span>Actor</span><strong>{event.actorName}</strong></div>
-            <div><span>Context</span><strong>{event.actingAs || event.actorRole}</strong></div>
+            <div><span>Role</span><strong>{event.actorRole}</strong></div>
+            {event.actingAs &&
+              event.actingAs.toLowerCase() !== event.actorRole.toLowerCase() && (
+                <div><span>Acting As</span><strong>{event.actingAs}</strong></div>
+              )}
             <div><span>Module</span><strong>{event.module}</strong></div>
             <div><span>Target</span><strong>{event.target || event.entityType}</strong></div>
             <div><span>School Year</span><strong>{event.schoolYear || "System-wide"}</strong></div>

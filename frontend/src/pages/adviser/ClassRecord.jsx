@@ -1,741 +1,2263 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
+import { useNavigate, useLocation, useParams } from "react-router-dom";
+import {
+  Cloud,
+  CloudOff,
+  RefreshCw,
+  Edit2,
+  X,
+  Layers,
+  Lock,
+} from "lucide-react";
 import backIconUrl from "../../assets/backButton.svg";
 import unavailableIconUrl from "../../assets/adviser-assets/unavailableicon.png";
+import depedLogoUrl from "../../assets/deped_logo.png";
+import depedWordmarkLogoUrl from "../../assets/deped-logo.gif";
 import "../../styles/ClassRecord.css";
+import {
+  getClassRecord,
+  createAssessment,
+  updateAssessment,
+  deleteAssessment,
+  saveScoresBatch,
+  downloadClassRecordExcel,
+  API_BASE_URL,
+} from "../../services/classRecordApi";
+import {
+  calculateStudentGrades,
+  DEFAULT_JHS_WEIGHTS,
+  getGradeDescriptor,
+} from "../../utils/depedTransmutation";
+import { triggerClassRecordPrint } from "../../utils/exportClassRecordPdf";
 
-const MOCK_STUDENTS = [
-  {
-    id: "s1",
-    lrn: "145783920614",
-    firstName: "Alex Matthew",
-    lastName: "Cruz",
-    sex: "M",
-  },
-  {
-    id: "s2",
-    lrn: "238691475820",
-    firstName: "Joshua Carlo",
-    lastName: "Ramirez",
-    sex: "M",
-  },
-  {
-    id: "s3",
-    lrn: "564920183747",
-    firstName: "Daniel Joseph",
-    lastName: "Reyes",
-    sex: "M",
-  },
-  {
-    id: "s4",
-    lrn: "392748561830",
-    firstName: "Adrian Kyle",
-    lastName: "Santos",
-    sex: "M",
-  },
-  {
-    id: "s5",
-    lrn: "817345629104",
-    firstName: "Zachary James",
-    lastName: "Villanueva",
-    sex: "M",
-  },
-  {
-    id: "s6",
-    lrn: "472918365104",
-    firstName: "Nathaniel John",
-    lastName: "Garcia",
-    sex: "M",
-  },
-  {
-    id: "s7",
-    lrn: "583027194658",
-    firstName: "Miguel Andre",
-    lastName: "Dela Cruz",
-    sex: "M",
-  },
-  {
-    id: "s8",
-    lrn: "694135820477",
-    firstName: "Patrick Luis",
-    lastName: "Mendoza",
-    sex: "M",
-  },
-  {
-    id: "s9",
-    lrn: "715284639501",
-    firstName: "Christian Paolo",
-    lastName: "Torres",
-    sex: "M",
-  },
-  {
-    id: "s10",
-    lrn: "826395740612",
-    firstName: "Gabriel Miguel",
-    lastName: "Navarro",
-    sex: "M",
-  },
 
-  {
-    id: "s11",
-    lrn: "937406851723",
-    firstName: "Bianca Mae",
-    lastName: "Santos",
-    sex: "F",
-  },
-  {
-    id: "s12",
-    lrn: "148517962834",
-    firstName: "Erika Nicole",
-    lastName: "Mendoza",
-    sex: "F",
-  },
-  {
-    id: "s13",
-    lrn: "259628073945",
-    firstName: "Sophia Mae",
-    lastName: "Rivera",
-    sex: "F",
-  },
-  {
-    id: "s14",
-    lrn: "360739184056",
-    firstName: "Trisha Anne",
-    lastName: "Torres",
-    sex: "F",
-  },
-  {
-    id: "s15",
-    lrn: "471840295167",
-    firstName: "Maria Angelica",
-    lastName: "Reyes",
-    sex: "F",
-  },
-  {
-    id: "s16",
-    lrn: "582951306278",
-    firstName: "Isabella Grace",
-    lastName: "Garcia",
-    sex: "F",
-  },
-  {
-    id: "s17",
-    lrn: "693062417389",
-    firstName: "Nicole Andrea",
-    lastName: "Dela Cruz",
-    sex: "F",
-  },
-  {
-    id: "s18",
-    lrn: "704173528490",
-    firstName: "Camille Rose",
-    lastName: "Navarro",
-    sex: "F",
-  },
-  {
-    id: "s19",
-    lrn: "815284639501",
-    firstName: "Julia Marie",
-    lastName: "Fernandez",
-    sex: "F",
-  },
-  {
-    id: "s20",
-    lrn: "926395740612",
-    firstName: "Gabrielle Anne",
-    lastName: "Villanueva",
-    sex: "F",
-  },
-];
+export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdateQuarterlyGrades }) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const params = useParams();
 
-const createGradeState = (students) => {
-  const initialState = {};
+  // Dynamic Class Context Resolution (from prop or router location state)
+  const effectiveClass = useMemo(() => {
+    return activeClass || location.state?.activeClass || {};
+  }, [activeClass, location.state]);
 
-  students.forEach((student) => {
-    initialState[student.id] = {
-      writtenWorks: {},
-      performanceTasks: {},
-      quarterlyAssessment: "",
-      initialGrade: "",
-      quarterlyGrade: "",
-    };
+  // Dynamic Section ID Resolution
+  const sectionId = useMemo(() => {
+    return (
+      effectiveClass?.section_id ||
+      effectiveClass?.sectionId ||
+      params.sectionId ||
+      params.id ||
+      location.state?.section_id ||
+      (typeof effectiveClass?.id === "number" ? effectiveClass.id : null) ||
+      (typeof effectiveClass?.id === "string" && !isNaN(Number(effectiveClass.id)) ? Number(effectiveClass.id) : null) ||
+      (typeof effectiveClass?.id === "string" && effectiveClass.id.startsWith("sec-") ? Number(effectiveClass.id.replace("sec-", "")) : null) ||
+      (typeof effectiveClass?.id === "string" && effectiveClass.id.startsWith("class-") ? Number(effectiveClass.id.replace("class-", "")) : null) ||
+      null
+    );
+  }, [effectiveClass, params, location]);
+
+  // Subject offering ID resolution (falls back to sectionId if offering is not explicitly assigned)
+  const subjectOfferingId = useMemo(() => {
+    return (
+      effectiveClass?.subject_offering_id ||
+      effectiveClass?.offering_id ||
+      params.subjectOfferingId ||
+      params.offeringId ||
+      location.state?.subject_offering_id ||
+      (effectiveClass?.subject_id && !effectiveClass?.section_id ? effectiveClass.subject_id : null) ||
+      sectionId ||
+      1
+    );
+  }, [effectiveClass, params, location, sectionId]);
+
+  const effectiveSubjectId = useMemo(() => {
+    return effectiveClass?.subject_id || params.subjectId || null;
+  }, [effectiveClass, params]);
+
+  // Term state (defaults to stored session term or T1, synchronized with DB active term on load)
+  const [activeTerm, setActiveTerm] = useState(() => {
+    try {
+      const stored = sessionStorage.getItem(`classRecord_activeTerm_${subjectOfferingId}`);
+      if (stored && ["T1", "T2", "T3"].includes(stored)) {
+        return stored;
+      }
+    } catch (_) {}
+    return "T1";
+  });
+  const userSelectedTermRef = useRef(false);
+  const hasDoneInitialTermSyncRef = useRef(false);
+
+  // Sync / Cloud state (Google Docs inspiration: "saved" | "saving" | "offline")
+  const [syncStatus, setSyncStatus] = useState("saved");
+  const [isExporting, setIsExporting] = useState(false);
+  const [isOnline, setIsOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
+
+  // DepEd JHS Class Record Export state
+  const [classContextData, setClassContextData] = useState(null);
+
+  // MAPEH Subject Detection & Component State ('MA' | 'PEH')
+  const [mapehComponent, setMapehComponent] = useState("MA");
+  const mapehDatasetsRef = useRef({ MA: null, PEH: null });
+  const mapehComponentRef = useRef(mapehComponent);
+  mapehComponentRef.current = mapehComponent;
+
+  // Dedicated stable state for MAPEH subject to ensure async API loads do not unmount or overwrite the toggle
+  const [isMapehSubject, setIsMapehSubject] = useState(() => {
+    const name = effectiveClass?.subject_name || effectiveClass?.subjectName || effectiveClass?.subject || "";
+    const code = effectiveClass?.subject_code || effectiveClass?.subjectCode || "";
+    const str = `${name} ${code}`.toLowerCase();
+    return (
+      str.includes("mapeh") ||
+      str.includes("music") ||
+      str.includes("arts") ||
+      str.includes("physical education") ||
+      str.includes("pe &") ||
+      str.includes("health")
+    );
   });
 
-  return initialState;
-};
+  const isMapeh = useMemo(() => {
+    if (isMapehSubject) return true;
+    if (classContextData?.is_mapeh === true || classContextData?.is_mapeh === 1 || classContextData?.is_mapeh === "1") return true;
+    const name = classContextData?.subject_name || effectiveClass?.subject_name || effectiveClass?.subjectName || effectiveClass?.subject || "";
+    const code = classContextData?.subject_code || effectiveClass?.subject_code || effectiveClass?.subjectCode || "";
+    const str = `${name} ${code}`.toLowerCase();
+    return (
+      str.includes("mapeh") ||
+      str.includes("music") ||
+      str.includes("arts") ||
+      str.includes("physical education") ||
+      str.includes("pe &") ||
+      str.includes("health")
+    );
+  }, [classContextData, effectiveClass, isMapehSubject]);
 
-export default function ClassRecord({ activeClass, onBack }) {
-  // ============================================================
-  // TERM
-  // ============================================================
+  const isMapehRef = useRef(isMapeh);
+  isMapehRef.current = isMapeh;
 
-  const [activeTerm, setActiveTerm] = useState("T1");
+  // Term Lock & Availability state
+  const [isLocked, setIsLocked] = useState(false);
+  const [lockReason, setLockReason] = useState("");
+  const [loadedTermName, setLoadedTermName] = useState("");
+  const [activeTermName, setActiveTermName] = useState("");
 
-  // ============================================================
-  // DYNAMIC COLUMNS
-  // ============================================================
+  // Component weights (WW 20%, PT 50%, EX 30%)
+  const [weights, setWeights] = useState(DEFAULT_JHS_WEIGHTS);
 
-  const [writtenWorkColumns, setWrittenWorkColumns] = useState([
-    { id: "ww1", label: "1" },
-    { id: "ww2", label: "2" },
-    { id: "ww3", label: "3" },
-    { id: "ww4", label: "4" },
-    { id: "ww5", label: "5" },
-  ]);
+  // Effective weights dynamically resolving MAPEH 20/60/20 vs standard
+  const effectiveWeights = useMemo(() => {
+    if (isMapeh) {
+      return { WW: 20, PT: 60, QA: 20, EX: 20 };
+    }
+    return weights || DEFAULT_JHS_WEIGHTS;
+  }, [isMapeh, weights]);
 
-  const [performanceTaskColumns, setPerformanceTaskColumns] = useState([
-    { id: "pt1", label: "1" },
-    { id: "pt2", label: "2" },
-    { id: "pt3", label: "3" },
-    { id: "pt4", label: "4" },
-    { id: "pt5", label: "5" },
-  ]);
+  // Assessment Columns (Loaded dynamically from database)
+  const [writtenWorkColumns, setWrittenWorkColumns] = useState([]);
+  const [performanceTaskColumns, setPerformanceTaskColumns] = useState([]);
 
-  // ============================================================
-  // GRADES
-  // ============================================================
+  // Dynamic & Customizable Examinations (ST1: 25, ST2: 25, TE: 50, weights: 30, 30, 40)
+  const [examConfig, setExamConfig] = useState({
+    st1HPS: 25,
+    st2HPS: 25,
+    teHPS: 50,
+    st1Weight: 30,
+    st2Weight: 30,
+    teWeight: 40,
+    st1Id: null,
+    st2Id: null,
+    teId: null,
+  });
 
-  const [grades, setGrades] = useState(() =>
-    createGradeState(MOCK_STUDENTS)
-  );
+  const examConfigRef = useRef(examConfig);
+  useEffect(() => {
+    examConfigRef.current = examConfig;
+  }, [examConfig]);
 
-  // ============================================================
-  // STUDENTS
-  // ============================================================
+  const [quarterlyAssessmentHPS, setQuarterlyAssessmentHPS] = useState(50);
+  const [quarterlyAssessmentId, setQuarterlyAssessmentId] = useState(null);
 
-  const maleStudents = useMemo(
-    () => MOCK_STUDENTS.filter((student) => student.sex === "M"),
-    []
-  );
+  // Exceeded HPS inline validation state
+  const [errorTooltip, setErrorTooltip] = useState(null); // { cellKey: string, message: string }
+  const errorTooltipTimerRef = useRef(null);
 
-  const femaleStudents = useMemo(
-    () => MOCK_STUDENTS.filter((student) => student.sex === "F"),
-    []
-  );
-
-  // ============================================================
-  // ADD WRITTEN WORK COLUMN
-  // ============================================================
-
-  const handleAddWrittenWork = () => {
-    setWrittenWorkColumns((previous) => [
-      ...previous,
-      {
-        id: `ww${previous.length + 1}`,
-        label: String(previous.length + 1),
-      },
-    ]);
+  const showErrorTooltip = (cellKey, message) => {
+    if (errorTooltipTimerRef.current) clearTimeout(errorTooltipTimerRef.current);
+    setErrorTooltip({ cellKey, message });
+    errorTooltipTimerRef.current = setTimeout(() => {
+      setErrorTooltip(null);
+    }, 2500);
   };
 
-  // ============================================================
-  // ADD PERFORMANCE TASK COLUMN
-  // ============================================================
+  // Students & Grades state
+  const [students, setStudents] = useState([]);
+  const [grades, setGrades] = useState({});
+  const gradesRef = useRef(grades);
+  gradesRef.current = grades;
 
-  const handleAddPerformanceTask = () => {
-    setPerformanceTaskColumns((previous) => [
-      ...previous,
-      {
-        id: `pt${previous.length + 1}`,
-        label: String(previous.length + 1),
-      },
-    ]);
+  // Modals for Add & Edit Column
+  const [modalState, setModalState] = useState({
+    isOpen: false,
+    mode: "add", // "add" | "edit"
+    category: "WW", // "WW" | "PT" | "EX" | "EX_WEIGHT"
+    categoryLabel: "Written Works",
+    columnId: null,
+    assessmentId: null,
+    title: "",
+    maxScore: "20",
+    date: "",
+    examKey: null,
+  });
+
+  const saveTimerRef = useRef(null);
+  const pendingQueueRef = useRef(new Map());
+  const isFlushingRef = useRef(false);
+  const hasPendingFlushRef = useRef(false);
+  // Wipe legacy localStorage class record cache keys once on mount
+  useEffect(() => {
+    try {
+      Object.keys(localStorage).forEach((key) => {
+        if (key.startsWith("auralis_class_record_")) {
+          localStorage.removeItem(key);
+        }
+      });
+    } catch {}
+  }, []);
+
+  // Flush pending scores to backend immediately (atomic & concurrency safe)
+  const flushPendingScores = useCallback(async () => {
+    if (isLocked) return;
+
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+
+    if (pendingQueueRef.current.size === 0) {
+      setSyncStatus("saved");
+      return;
+    }
+
+    if (!navigator.onLine) {
+      setSyncStatus("offline");
+      return;
+    }
+
+    if (isFlushingRef.current) {
+      hasPendingFlushRef.current = true;
+      return;
+    }
+
+    isFlushingRef.current = true;
+    setSyncStatus("saving");
+
+    // Take snapshot of current queue entries
+    const snapshot = Array.from(pendingQueueRef.current.entries());
+    const payloadScores = snapshot.map(([k, v]) => v);
+
+    try {
+      await saveScoresBatch({
+        subject_offering_id: subjectOfferingId,
+        term: activeTerm,
+        scores: payloadScores,
+        mapeh_component: (isMapeh || isMapehRef.current) ? (mapehComponent || mapehComponentRef.current || "MA") : null,
+        examConfig: examConfigRef.current,
+      });
+
+      // Remove only items whose queue record matches the sent snapshot
+      // (preserves newer inputs typed while the save request was in flight!)
+      snapshot.forEach(([k, sentItem]) => {
+        if (pendingQueueRef.current.get(k) === sentItem) {
+          pendingQueueRef.current.delete(k);
+        }
+      });
+
+      if (pendingQueueRef.current.size === 0) {
+        setSyncStatus("saved");
+      }
+    } catch (err) {
+      console.warn("Auto-save sync error:", err.message);
+      setSyncStatus("error");
+    } finally {
+      isFlushingRef.current = false;
+      if (hasPendingFlushRef.current || pendingQueueRef.current.size > 0) {
+        hasPendingFlushRef.current = false;
+        flushPendingScores();
+      }
+    }
+  }, [isLocked, subjectOfferingId, activeTerm, isMapeh, mapehComponent]);
+
+  const flushPendingScoresRef = useRef(flushPendingScores);
+  flushPendingScoresRef.current = flushPendingScores;
+
+  // Online / Offline window listeners
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      if (!isLocked) {
+        setSyncStatus("saving");
+        flushPendingScores();
+      }
+    };
+
+    const handleOffline = () => {
+      setIsOnline(false);
+      if (!isLocked) {
+        setSyncStatus("offline");
+      }
+    };
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, [isLocked, flushPendingScores]);
+
+  // Flush pending saves on unmount / navigation
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+      if (pendingQueueRef.current.size > 0 && navigator.onLine) {
+        const payloadScores = Array.from(pendingQueueRef.current.values());
+        try {
+          fetch(`${API_BASE_URL}/scores/batch`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              subject_offering_id: subjectOfferingId,
+              term: activeTerm,
+              scores: payloadScores,
+              mapeh_component: (isMapeh || isMapehRef.current) ? (mapehComponent || mapehComponentRef.current || "MA") : null,
+              examConfig: examConfigRef.current,
+            }),
+            keepalive: true,
+          });
+        } catch (e) {
+          console.warn("Unmount keepalive sync error:", e);
+        }
+      }
+    };
+  }, [subjectOfferingId, activeTerm, isMapeh, mapehComponent]);
+
+  // Page reload / tab close beforeunload guard
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (pendingQueueRef.current.size > 0 && navigator.onLine) {
+        const payloadScores = Array.from(pendingQueueRef.current.values());
+        const payload = JSON.stringify({
+          subject_offering_id: subjectOfferingId,
+          term: activeTerm,
+          scores: payloadScores,
+          mapeh_component: (isMapeh || isMapehRef.current) ? (mapehComponent || mapehComponentRef.current || "MA") : null,
+          examConfig: examConfigRef.current,
+        });
+        const blob = new Blob([payload], { type: "application/json" });
+        navigator.sendBeacon(`${API_BASE_URL}/scores/batch`, blob);
+      }
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [subjectOfferingId, activeTerm, isMapeh, mapehComponent]);
+
+  // ============================================================
+  // PARSE DATA PAYLOAD HELPER
+  // ============================================================
+  const parseRecordPayload = useCallback((data) => {
+    if (!data) return null;
+
+    const isSheetLocked = Boolean(
+      data.is_locked ?? (data.grade_sheet ? !data.grade_sheet.is_editable : false)
+    );
+    const lockReason = data.lock_reason || (isSheetLocked ? "CLOSED_TERM" : "");
+    const loadedTermName = data.current_term_name || data.term_name;
+    const activeTermName = data.active_term_name;
+    const effectiveIsMapeh = Boolean(data?.is_mapeh ?? isMapeh);
+    let weights = data.component_weights || null;
+    if (effectiveIsMapeh) {
+      weights = { ...(weights || {}), WW: 20, PT: 60, QA: 20, EX: 20 };
+    }
+
+    const targetComp = data.mapeh_component || (effectiveIsMapeh ? (mapehComponentRef.current || "MA") : null);
+
+    const wwCols = [];
+    const ptCols = [];
+    let st1Ass = null;
+    let st2Ass = null;
+    let teAss = null;
+    let qaHps = effectiveIsMapeh ? 25 : 50;
+    let qaId = null;
+
+    if (Array.isArray(data.assessments) && data.assessments.length > 0) {
+      data.assessments.forEach((ass) => {
+        if (ass.status === "ARCHIVED") return;
+        if (effectiveIsMapeh && ass.mapeh_component && targetComp && ass.mapeh_component !== targetComp) {
+          return;
+        }
+
+        const compCode = (ass.component_code || "").toUpperCase();
+        const type = (ass.type || ass.assessment_type || "").toLowerCase();
+        const name = String(ass.activity_name || ass.title || "").toUpperCase();
+
+        const isWW =
+          compCode === "WW" ||
+          type === "writtenwork" ||
+          type === "writtenworks" ||
+          type.includes("written") ||
+          /\b(written|quiz|ww)\b/i.test(name);
+
+        const isPT =
+          !isWW && (
+            compCode === "PT" ||
+            type === "performancetask" ||
+            type === "performancetasks" ||
+            type.includes("performance") ||
+            /\b(performance|task|pt)\b/i.test(name)
+          );
+
+        const isQA =
+          !isWW && !isPT && (
+            compCode === "QA" ||
+            compCode === "STE" ||
+            compCode === "EX" ||
+            type === "quarterlyassessment" ||
+            type.includes("exam") ||
+            type.includes("summative") ||
+            /\b(summative|term\s*exam|quarterly|st1|st2|te|exam)\b/i.test(name)
+          );
+
+        const aId = ass.assessment_id || ass.activity_id;
+
+        if (isWW) {
+          wwCols.push({
+            id: `ww_${aId}`,
+            assessment_id: aId,
+            label: String(wwCols.length + 1),
+            activity_name: ass.activity_name || ass.title || `Written Work ${wwCols.length + 1}`,
+            max_score: Number(ass.max_score || ass.highest_possible_score || 30),
+            date: ass.activity_date,
+            status: ass.status || "ACTIVE",
+            subj_comp_weight_id: ass.subj_comp_weight_id,
+            mapeh_component: ass.mapeh_component || targetComp,
+          });
+        } else if (isPT) {
+          ptCols.push({
+            id: `pt_${aId}`,
+            assessment_id: aId,
+            label: String(ptCols.length + 1),
+            activity_name: ass.activity_name || ass.title || `Performance Task ${ptCols.length + 1}`,
+            max_score: Number(ass.max_score || ass.highest_possible_score || 50),
+            date: ass.activity_date,
+            status: ass.status || "ACTIVE",
+            subj_comp_weight_id: ass.subj_comp_weight_id,
+            mapeh_component: ass.mapeh_component || targetComp,
+          });
+        } else if (isQA) {
+          if (/\b(st1|summative\s*test\s*1|summative\s*1)\b/i.test(name)) {
+            st1Ass = ass;
+          } else if (/\b(st2|summative\s*test\s*2|summative\s*2)\b/i.test(name)) {
+            st2Ass = ass;
+          } else if (/\b(te|term\s*exam|quarterly|quarterly\s*assessment|exam)\b/i.test(name) || !teAss) {
+            teAss = ass;
+            qaHps = Number(ass.max_score || ass.highest_possible_score || (effectiveIsMapeh ? 25 : 50));
+            qaId = aId;
+          }
+        } else {
+          wwCols.push({
+            id: `ww_${aId}`,
+            assessment_id: aId,
+            label: String(wwCols.length + 1),
+            activity_name: ass.activity_name || ass.title || `Written Work ${wwCols.length + 1}`,
+            max_score: Number(ass.max_score || ass.highest_possible_score || 30),
+            date: ass.activity_date,
+            status: ass.status || "ACTIVE",
+            subj_comp_weight_id: ass.subj_comp_weight_id,
+            mapeh_component: ass.mapeh_component || targetComp,
+          });
+        }
+      });
+    }
+
+    let st1W = Number(data?.exam_config?.st1Weight !== undefined ? data.exam_config.st1Weight : (effectiveIsMapeh ? 25 : 30));
+    let st2W = Number(data?.exam_config?.st2Weight !== undefined ? data.exam_config.st2Weight : (effectiveIsMapeh ? 25 : 30));
+    let teW = Number(data?.exam_config?.teWeight !== undefined ? data.exam_config.teWeight : (effectiveIsMapeh ? 25 : 40));
+    if (!effectiveIsMapeh && st1W === 20 && st2W === 20 && teW === 60) {
+      st1W = 30;
+      st2W = 30;
+      teW = 40;
+    }
+
+    const examConfig = {
+      st1Weight: effectiveIsMapeh ? 6.67 : st1W,
+      st2Weight: effectiveIsMapeh ? 6.67 : st2W,
+      teWeight: effectiveIsMapeh ? 6.66 : teW,
+      st1HPS: Number(st1Ass?.max_score || st1Ass?.highest_possible_score || data?.exam_config?.st1HPS || (effectiveIsMapeh ? 25 : 30)),
+      st1Id: st1Ass?.assessment_id || st1Ass?.activity_id || data?.exam_config?.st1Id || null,
+      st2HPS: Number(st2Ass?.max_score || st2Ass?.highest_possible_score || data?.exam_config?.st2HPS || (effectiveIsMapeh ? 25 : 30)),
+      st2Id: st2Ass?.assessment_id || st2Ass?.activity_id || data?.exam_config?.st2Id || null,
+      teHPS: Number(teAss?.max_score || teAss?.highest_possible_score || data?.exam_config?.teHPS || (effectiveIsMapeh ? 25 : 40)),
+      teId: teAss?.assessment_id || teAss?.activity_id || data?.exam_config?.teId || null,
+    };
+
+    let loadedStudents = [];
+    const newGrades = {};
+
+    if (Array.isArray(data.students)) {
+      loadedStudents = data.students.map((st) => ({
+        id: String(st.student_id),
+        student_id: st.student_id,
+        student_section_id: st.student_section_id,
+        lrn: st.LRN,
+        firstName: st.first_name,
+        lastName: st.last_name,
+        middleName: st.middle_name,
+        sex: st.sex,
+      }));
+
+      data.students.forEach((st) => {
+        const rawScores = st.scores || {};
+        const wwGrades = {};
+        const ptGrades = {};
+        const exGrades = { st1: "", st2: "", te: "" };
+
+        wwCols.forEach((col) => {
+          const val = rawScores[col.assessment_id] !== undefined ? rawScores[col.assessment_id] : rawScores[col.id];
+          wwGrades[col.id] = val !== undefined && val !== null ? val : "";
+        });
+
+        ptCols.forEach((col) => {
+          const val = rawScores[col.assessment_id] !== undefined ? rawScores[col.assessment_id] : rawScores[col.id];
+          ptGrades[col.id] = val !== undefined && val !== null ? val : "";
+        });
+
+        const st1Id = st1Ass?.assessment_id || st1Ass?.activity_id || data?.exam_config?.st1Id;
+        if (st.examinations?.st1 !== undefined && st.examinations?.st1 !== null && st.examinations?.st1 !== "") {
+          exGrades.st1 = st.examinations.st1;
+        } else if (st1Id && rawScores[st1Id] !== undefined && rawScores[st1Id] !== null) {
+          exGrades.st1 = rawScores[st1Id];
+        } else if (rawScores.st1 !== undefined && rawScores.st1 !== null) {
+          exGrades.st1 = rawScores.st1;
+        }
+
+        const st2Id = st2Ass?.assessment_id || st2Ass?.activity_id || data?.exam_config?.st2Id;
+        if (st.examinations?.st2 !== undefined && st.examinations?.st2 !== null && st.examinations?.st2 !== "") {
+          exGrades.st2 = st.examinations.st2;
+        } else if (st2Id && rawScores[st2Id] !== undefined && rawScores[st2Id] !== null) {
+          exGrades.st2 = rawScores[st2Id];
+        } else if (rawScores.st2 !== undefined && rawScores.st2 !== null) {
+          exGrades.st2 = rawScores.st2;
+        }
+
+        const teId = teAss?.assessment_id || teAss?.activity_id || data?.exam_config?.teId;
+        if (st.examinations?.te !== undefined && st.examinations?.te !== null && st.examinations?.te !== "") {
+          exGrades.te = st.examinations.te;
+        } else if (teId && rawScores[teId] !== undefined && rawScores[teId] !== null) {
+          exGrades.te = rawScores[teId];
+        } else if (rawScores.te !== undefined && rawScores.te !== null) {
+          exGrades.te = rawScores.te;
+        } else if (rawScores.qa !== undefined && rawScores.qa !== null) {
+          exGrades.te = rawScores.qa;
+        }
+
+        newGrades[String(st.student_id)] = {
+          writtenWorks: wwGrades,
+          performanceTasks: ptGrades,
+          examinations: exGrades,
+          quarterlyAssessment: exGrades.te !== undefined && exGrades.te !== null ? exGrades.te : "",
+        };
+      });
+
+      // Merge pendingQueue scores for this component
+      const pendingList = Array.from(pendingQueueRef.current.values());
+      if (pendingList.length > 0) {
+        pendingList.forEach((item) => {
+          if (item.mapeh_component && data.mapeh_component && item.mapeh_component !== data.mapeh_component) {
+            return;
+          }
+          const sId = String(item.student_id);
+          if (newGrades[sId]) {
+            const wwCol = wwCols.find((c) => String(c.assessment_id) === String(item.assessment_id) || c.id === item.assessment_id);
+            if (wwCol) {
+              newGrades[sId].writtenWorks[wwCol.id] = item.raw_score !== null ? item.raw_score : "";
+            }
+            const ptCol = ptCols.find((c) => String(c.assessment_id) === String(item.assessment_id) || c.id === item.assessment_id);
+            if (ptCol) {
+              newGrades[sId].performanceTasks[ptCol.id] = item.raw_score !== null ? item.raw_score : "";
+            }
+            if (item.exam_key === "st1" || (st1Ass && String(item.assessment_id) === String(st1Ass.assessment_id)) || item.assessment_id === "st1") {
+              newGrades[sId].examinations.st1 = item.raw_score !== null ? item.raw_score : "";
+            }
+            if (item.exam_key === "st2" || (st2Ass && String(item.assessment_id) === String(st2Ass.assessment_id)) || item.assessment_id === "st2") {
+              newGrades[sId].examinations.st2 = item.raw_score !== null ? item.raw_score : "";
+            }
+            if (item.exam_key === "te" || (teAss && String(item.assessment_id) === String(teAss.assessment_id)) || item.assessment_id === "te" || item.assessment_id === "qa") {
+              newGrades[sId].examinations.te = item.raw_score !== null ? item.raw_score : "";
+              newGrades[sId].quarterlyAssessment = item.raw_score !== null ? item.raw_score : "";
+            }
+          }
+        });
+      }
+    }
+
+    return {
+      classContextData: data.class_context,
+      activeTerm: data.active_term,
+      isLocked: isSheetLocked,
+      lockReason,
+      loadedTermName,
+      activeTermName,
+      weights,
+      writtenWorkColumns: wwCols,
+      performanceTaskColumns: ptCols,
+      examConfig,
+      quarterlyAssessmentHPS: qaHps,
+      quarterlyAssessmentId: qaId,
+      students: loadedStudents,
+      grades: newGrades,
+      isMapeh: Boolean(data.is_mapeh),
+      mapehComponent: data.mapeh_component,
+    };
+  }, []);
+
+  // ============================================================
+  // LOAD DATA FROM BACKEND
+  // ============================================================
+  const loadClassRecord = useCallback(
+    async (termToLoad, targetComp = null) => {
+      setStudents([]);
+      setGrades({});
+
+      const activeComp = targetComp || (isMapehRef.current ? mapehComponentRef.current : "MA");
+
+      try {
+        const data = await getClassRecord(subjectOfferingId, termToLoad, sectionId, activeComp, effectiveSubjectId);
+
+        if (data && data.class_context) {
+          const parsed = parseRecordPayload(data);
+
+          const isCurrentMapeh = Boolean(parsed.isMapeh || data.is_mapeh || isMapeh);
+          if (isCurrentMapeh) {
+            setIsMapehSubject(true);
+          }
+
+          setClassContextData({
+            ...parsed.classContextData,
+            is_mapeh: isCurrentMapeh,
+          });
+
+          // Sync active ongoing term on initial load if user hasn't explicitly chosen one
+          if (!hasDoneInitialTermSyncRef.current && !userSelectedTermRef.current) {
+            hasDoneInitialTermSyncRef.current = true;
+            if (parsed.activeTerm && parsed.activeTerm !== termToLoad) {
+              try {
+                sessionStorage.setItem(`classRecord_activeTerm_${subjectOfferingId}`, parsed.activeTerm);
+              } catch (_) {}
+              setActiveTerm(parsed.activeTerm);
+              return;
+            }
+          }
+
+          setIsLocked(parsed.isLocked);
+          setLockReason(parsed.lockReason);
+          setLoadedTermName(parsed.loadedTermName || termToLoad);
+          if (parsed.activeTermName) setActiveTermName(parsed.activeTermName);
+
+          if (parsed.weights) {
+            setWeights(parsed.weights);
+          }
+
+          setWrittenWorkColumns(parsed.writtenWorkColumns);
+          setPerformanceTaskColumns(parsed.performanceTaskColumns);
+          setQuarterlyAssessmentHPS(parsed.quarterlyAssessmentHPS);
+          setQuarterlyAssessmentId(parsed.quarterlyAssessmentId);
+          setExamConfig((prev) => ({
+            ...prev,
+            ...parsed.examConfig,
+          }));
+
+          setStudents(parsed.students);
+          setGrades(parsed.grades);
+          gradesRef.current = parsed.grades;
+
+          // If this subject is MAPEH, store into cache ref and prefetch the alternate component
+          if (isCurrentMapeh) {
+            const compKey = parsed.mapehComponent || activeComp || "MA";
+            mapehDatasetsRef.current[compKey] = {
+              writtenWorkColumns: parsed.writtenWorkColumns,
+              performanceTaskColumns: parsed.performanceTaskColumns,
+              examConfig: parsed.examConfig,
+              quarterlyAssessmentHPS: parsed.quarterlyAssessmentHPS,
+              quarterlyAssessmentId: parsed.quarterlyAssessmentId,
+              grades: { ...parsed.grades },
+              students: parsed.students,
+            };
+
+            // Background pre-fetch the alternate sub-component (e.g. PEH if MA loaded, or MA if PEH loaded)
+            const otherComp = compKey === "MA" ? "PEH" : "MA";
+            if (!mapehDatasetsRef.current[otherComp]) {
+              getClassRecord(subjectOfferingId, termToLoad, sectionId, otherComp, effectiveSubjectId)
+                .then((otherData) => {
+                  if (otherData && otherData.class_context) {
+                    const otherParsed = parseRecordPayload(otherData);
+                    mapehDatasetsRef.current[otherComp] = {
+                      writtenWorkColumns: otherParsed.writtenWorkColumns,
+                      performanceTaskColumns: otherParsed.performanceTaskColumns,
+                      examConfig: otherParsed.examConfig,
+                      quarterlyAssessmentHPS: otherParsed.quarterlyAssessmentHPS,
+                      quarterlyAssessmentId: otherParsed.quarterlyAssessmentId,
+                      grades: { ...otherParsed.grades },
+                      students: otherParsed.students,
+                    };
+                  }
+                })
+                .catch((e) => console.warn("Background prefetch for MAPEH failed:", e));
+            }
+          }
+
+          const pendingList = Array.from(pendingQueueRef.current.values());
+          if (pendingList.length > 0 && navigator.onLine) {
+            flushPendingScoresRef.current();
+          }
+
+          setSyncStatus(parsed.isLocked ? "locked" : "saved");
+        }
+      } catch (err) {
+        console.warn("Error loading class record:", err.message);
+        setSyncStatus("saved");
+      }
+    },
+    [subjectOfferingId, sectionId, parseRecordPayload]
+  );
+
+  const loadClassRecordRef = useRef(loadClassRecord);
+  loadClassRecordRef.current = loadClassRecord;
+
+  // Sync MAPEH detection when switching subject offering
+  useEffect(() => {
+    const name = effectiveClass?.subject_name || effectiveClass?.subjectName || effectiveClass?.subject || "";
+    const code = effectiveClass?.subject_code || effectiveClass?.subjectCode || "";
+    const str = `${name} ${code}`.toLowerCase();
+    const matches =
+      str.includes("mapeh") ||
+      str.includes("music") ||
+      str.includes("arts") ||
+      str.includes("physical education") ||
+      str.includes("pe &") ||
+      str.includes("health");
+    if (matches) {
+      setIsMapehSubject(true);
+    }
+  }, [subjectOfferingId, effectiveClass]);
+
+  useEffect(() => {
+    if (subjectOfferingId || sectionId) {
+      loadClassRecordRef.current(activeTerm, mapehComponentRef.current);
+    }
+  }, [subjectOfferingId, sectionId, activeTerm]);
+
+  // MAPEH sub-component switch handler with instant state switch & full backend hydration
+  const handleMapehComponentChange = useCallback(
+    async (targetComp) => {
+      if (targetComp === mapehComponentRef.current) return;
+
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+      // 1. Immediately flush pending scores for the current component
+      await flushPendingScoresRef.current();
+
+      // 2. Set active MAPEH component
+      setMapehComponent(targetComp);
+      mapehComponentRef.current = targetComp;
+
+      // 3. Immediately trigger backend reload for complete state and score hydration
+      await loadClassRecord(activeTerm, targetComp);
+    },
+    [activeTerm, loadClassRecord]
+  );
+
+  // Term switch handler with immediate flush
+  const handleTermChange = (newTerm) => {
+    if (newTerm === activeTerm) return;
+    userSelectedTermRef.current = true;
+    try {
+      sessionStorage.setItem(`classRecord_activeTerm_${subjectOfferingId}`, newTerm);
+    } catch (_) {}
+    flushPendingScoresRef.current();
+    mapehDatasetsRef.current = { MA: null, PEH: null };
+    setActiveTerm(newTerm);
   };
 
-  // ============================================================
-  // UPDATE GRADE
-  // ============================================================
+  // Male & Female students separation
+  const maleStudents = useMemo(() => students.filter((s) => s.sex === "M"), [students]);
+  const femaleStudents = useMemo(() => students.filter((s) => s.sex === "F"), [students]);
 
-  const handleGradeChange = (
-    studentId,
-    category,
-    columnId,
-    value
-  ) => {
-    setGrades((previous) => ({
-      ...previous,
+  // Compute Total Highest Possible Scores
+  const totalWW_HPS = useMemo(
+    () => writtenWorkColumns.reduce((sum, col) => sum + Number(col.max_score || 0), 0),
+    [writtenWorkColumns]
+  );
+
+  const totalPT_HPS = useMemo(
+    () => performanceTaskColumns.reduce((sum, col) => sum + Number(col.max_score || 0), 0),
+    [performanceTaskColumns]
+  );
+
+  // Propagate quarterly grade to parent component (GradingSheet)
+  const studentQuarterlyGradesMap = useMemo(() => {
+    if (!students || students.length === 0) return {};
+    const map = {};
+    students.forEach((student) => {
+      const studentGradesObj = grades[student.id] || {};
+      const ww = studentGradesObj.writtenWorks || {};
+      const pt = studentGradesObj.performanceTasks || {};
+      const ex = studentGradesObj.examinations || {};
+
+      const rowCalc = calculateStudentGrades({
+        writtenWorks: ww,
+        performanceTasks: pt,
+        examinations: ex,
+        quarterlyAssessment: ex.te || "",
+        writtenWorkColumns,
+        performanceTaskColumns,
+        examConfig,
+        weights: effectiveWeights,
+        isMapeh: Boolean(isMapeh),
+        isMapehSubject: Boolean(isMapeh),
+      });
+
+      const qg = rowCalc.termGrade !== "-" ? rowCalc.termGrade : (rowCalc.quarterlyGrade !== "-" ? rowCalc.quarterlyGrade : "");
+      map[student.id] = qg;
+      if (student.student_id) map[student.student_id] = qg;
+      if (student.lrn) map[student.lrn] = qg;
+    });
+    return map;
+  }, [students, grades, writtenWorkColumns, performanceTaskColumns, examConfig, effectiveWeights, isMapeh]);
+
+  useEffect(() => {
+    if (typeof onUpdateQuarterlyGrades === "function" && Object.keys(studentQuarterlyGradesMap).length > 0) {
+      onUpdateQuarterlyGrades(activeTerm, studentQuarterlyGradesMap);
+    }
+  }, [studentQuarterlyGradesMap, activeTerm, onUpdateQuarterlyGrades]);
+  // ============================================================
+  // CONDITIONAL DISABLING FOR DOWNLOAD BUTTON
+  // ============================================================
+  const isDownloadDisabled = useMemo(() => {
+    if (!students || students.length === 0) return true;
+    if (writtenWorkColumns.length === 0 && performanceTaskColumns.length === 0) return true;
+
+    for (const student of students) {
+      const studentGradesObj = grades[student.id] || {};
+      const ww = studentGradesObj.writtenWorks || {};
+      const pt = studentGradesObj.performanceTasks || {};
+      const ex = studentGradesObj.examinations || {};
+
+      // Check all Written Works columns
+      for (const col of writtenWorkColumns) {
+        const val = ww[col.id];
+        if (val === undefined || val === null || val === "" || isNaN(Number(val))) {
+          return true; // Found blank/unencoded score
+        }
+      }
+
+      // Check all Performance Tasks columns
+      for (const col of performanceTaskColumns) {
+        const val = pt[col.id];
+        if (val === undefined || val === null || val === "" || isNaN(Number(val))) {
+          return true; // Found blank/unencoded score
+        }
+      }
+
+      // Check Examinations (ST1, ST2, TE)
+      if (ex.st1 === undefined || ex.st1 === null || ex.st1 === "" || isNaN(Number(ex.st1))) return true;
+      if (ex.st2 === undefined || ex.st2 === null || ex.st2 === "" || isNaN(Number(ex.st2))) return true;
+      if (ex.te === undefined || ex.te === null || ex.te === "" || isNaN(Number(ex.te))) return true;
+    }
+
+    return false;
+  }, [students, grades, writtenWorkColumns, performanceTaskColumns]);
+
+  // ============================================================
+  // DEPED JHS EXPORT METADATA RESOLUTION
+  // ============================================================
+  const exportMetadata = useMemo(() => {
+    const termMap = {
+      T1: { termTitle: "CLASS RECORD - TERM 1", termHeader: "CLASS RECORD - TERM 1", quarterLabel: "FIRST QUARTER" },
+      T2: { termTitle: "CLASS RECORD - TERM 2", termHeader: "CLASS RECORD - TERM 2", quarterLabel: "SECOND QUARTER" },
+      T3: { termTitle: "CLASS RECORD - TERM 3", termHeader: "CLASS RECORD - TERM 3", quarterLabel: "THIRD QUARTER" },
+      T4: { termTitle: "CLASS RECORD - TERM 4", termHeader: "CLASS RECORD - TERM 4", quarterLabel: "FOURTH QUARTER" },
+    };
+    const tInfo = termMap[activeTerm] || {
+      termTitle: `CLASS RECORD - ${activeTerm.toUpperCase()}`,
+      termHeader: `CLASS RECORD - ${activeTerm.toUpperCase()}`,
+      quarterLabel: `${activeTerm.toUpperCase()} QUARTER`,
+    };
+
+    const termNum = activeTerm.replace(/[^0-9]/g, "") || activeTerm;
+    const termTitle = `CLASS RECORD - TERM ${termNum}`;
+    const termHeader = `CLASS RECORD - TERM ${termNum}`;
+
+    const rawGradeLevel =
+      classContextData?.grade_level_name ||
+      effectiveClass?.gradeLevel ||
+      effectiveClass?.grade ||
+      "10";
+    const gradeLevelDisplay = String(rawGradeLevel).replace(/[^0-9]/g, "") || String(rawGradeLevel);
+
+    const rawSection =
+      classContextData?.section_name ||
+      effectiveClass?.section_name ||
+      effectiveClass?.sectionName ||
+      "MAKAKALIKASAN";
+    const gradeAndSection = `GRADE ${gradeLevelDisplay} - ${String(rawSection).toUpperCase()}`;
+
+    let rawTeacher = classContextData?.teacher_name;
+    if (!rawTeacher || rawTeacher.toLowerCase().includes("subject teacher")) {
+      try {
+        const storedUser = JSON.parse(localStorage.getItem("user") || "null");
+        if (storedUser && (storedUser.first_name || storedUser.last_name)) {
+          const parts = [
+            storedUser.first_name,
+            storedUser.middle_name,
+            storedUser.last_name,
+            storedUser.extension_name,
+          ].filter(Boolean);
+          rawTeacher = parts.join(" ");
+        }
+      } catch {}
+    }
+    if (!rawTeacher || rawTeacher.toLowerCase().includes("subject teacher")) {
+      rawTeacher = effectiveClass?.teacher_name || effectiveClass?.teacherName || effectiveClass?.adviser || "";
+    }
+    const teacherName = rawTeacher ? String(rawTeacher).toUpperCase() : "0";
+
+    const rawSubject =
+      classContextData?.subject_name ||
+      effectiveClass?.subject_name ||
+      effectiveClass?.subjectName ||
+      effectiveClass?.subject ||
+      "";
+    let subjectName = rawSubject ? String(rawSubject).toUpperCase() : "0";
+    if (isMapeh) {
+      subjectName = mapehComponent === "MA" ? "MUSIC & ARTS" : "PE & HEALTH";
+    }
+
+    const region = (classContextData?.region || effectiveClass?.region || "Region X");
+    const division = (classContextData?.division || effectiveClass?.division || "GINGOOG");
+    const schoolName = (classContextData?.school_name || effectiveClass?.school_name || "GINGOOG CITY COMPREHENSIVE NHS");
+    const schoolId = (classContextData?.school_code || effectiveClass?.school_code || effectiveClass?.schoolId || "304130");
+    const schoolYear = (classContextData?.school_year_label || effectiveClass?.school_year || effectiveClass?.schoolYear || "2026-2027");
+
+    return {
+      region,
+      division,
+      schoolName,
+      schoolId,
+      schoolYear,
+      termTitle,
+      termHeader,
+      quarterLabel: tInfo.quarterLabel,
+      gradeAndSection,
+      gradeLevelDisplay,
+      teacherName,
+      subjectName,
+      section: rawSection,
+      activeTerm,
+      isMapeh,
+      mapehComponent,
+    };
+  }, [classContextData, effectiveClass, activeTerm, isMapeh, mapehComponent]);
+
+  // Handle Examinations Score Change
+  const handleExamScoreChange = (studentId, examKey, value, maxScore, assessmentId) => {
+    if (isLocked) return;
+
+    const numVal = Number(value);
+    const cellKey = `${studentId}_${examKey}`;
+    const maxAllowed = Number(maxScore || 0);
+
+    if (value !== "" && !isNaN(numVal) && numVal < 0) return;
+
+    if (value !== "" && !isNaN(numVal) && maxAllowed > 0 && numVal > maxAllowed) {
+      showErrorTooltip(cellKey, `Score cannot exceed ${maxAllowed}`);
+
+      setGrades((prev) => ({
+        ...prev,
+        [studentId]: {
+          ...prev[studentId],
+          examinations: {
+            ...(prev[studentId]?.examinations || {}),
+            [examKey]: "",
+          },
+        },
+      }));
+
+      const studentObj = students.find((s) => s.id === studentId || String(s.student_id) === studentId);
+      if (studentObj) {
+        queueScoreChange(
+          assessmentId || examKey,
+          studentObj.student_id,
+          studentObj.student_section_id,
+          "",
+          examKey
+        );
+      }
+      return;
+    }
+
+    if (errorTooltip?.cellKey === cellKey) {
+      setErrorTooltip(null);
+    }
+
+    setGrades((prev) => ({
+      ...prev,
       [studentId]: {
-        ...previous[studentId],
+        ...prev[studentId],
+        examinations: {
+          ...(prev[studentId]?.examinations || {}),
+          [examKey]: value,
+        },
+        quarterlyAssessment: examKey === "te" ? value : prev[studentId]?.quarterlyAssessment,
+      },
+    }));
+
+    const studentObj = students.find((s) => s.id === studentId || String(s.student_id) === studentId);
+    if (studentObj) {
+      queueScoreChange(
+        assessmentId || examKey,
+        studentObj.student_id,
+        studentObj.student_section_id,
+        value,
+        examKey
+      );
+    }
+  };
+
+  const openEditExamModal = (examKey, defaultTitle, currentHps, assessmentId) => {
+    if (isLocked) return;
+    setModalState({
+      isOpen: true,
+      mode: "edit",
+      category: "EX",
+      categoryLabel: "Examinations",
+      columnId: examKey,
+      assessmentId: assessmentId || null,
+      title: defaultTitle,
+      maxScore: String(currentHps || 25),
+      date: "",
+      examKey,
+    });
+  };
+
+  const openEditSubWeightModal = (weightKey, label, currentWeight) => {
+    if (isLocked) return;
+    setModalState({
+      isOpen: true,
+      mode: "edit",
+      category: "EX_WEIGHT",
+      categoryLabel: "Exam Sub-Weight",
+      columnId: weightKey,
+      assessmentId: null,
+      title: label,
+      maxScore: String(currentWeight || 30),
+      date: "",
+      examKey: weightKey,
+    });
+  };
+
+  // ============================================================
+  // DEBOUNCED QUEUE AUTO-SAVER (Fast, non-blocking, concurrency safe)
+  // ============================================================
+  const queueScoreChange = useCallback(
+    (assessmentId, studentId, studentSectionId, rawScore, examKey = null) => {
+      if (isLocked) return;
+
+      const normalizedExamKey = examKey || (assessmentId === "st1" || assessmentId === "st2" || assessmentId === "te" ? assessmentId : null);
+      const currentComp = (isMapeh || isMapehRef.current) ? (mapehComponent || mapehComponentRef.current || "MA") : null;
+      const key = `${studentId}_${normalizedExamKey || assessmentId}_${currentComp || "ALL"}`;
+      const record = {
+        assessment_id: assessmentId,
+        exam_key: normalizedExamKey,
+        student_id: studentId,
+        student_section_id: studentSectionId,
+        raw_score: rawScore === "" ? null : Number(rawScore),
+        mapeh_component: currentComp,
+      };
+
+      pendingQueueRef.current.set(key, record);
+
+      setSyncStatus("saving");
+
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = setTimeout(() => {
+        flushPendingScores();
+      }, 700); // 700ms debounce ensures comfortable multi-digit score typing
+    },
+    [isLocked, isMapeh, mapehComponent, flushPendingScores]
+  );
+
+  const handleGradeChange = (studentId, category, columnId, value, colMaxScore, assessmentId) => {
+    if (isLocked) return;
+
+    const numVal = Number(value);
+    const cellKey = `${studentId}_${columnId}`;
+    const maxAllowed = Number(colMaxScore || 0);
+
+    if (value !== "" && !isNaN(numVal) && numVal < 0) return;
+
+    // Feature 1: Exceeded Highest Possible Score (HPS) Validation
+    if (value !== "" && !isNaN(numVal) && maxAllowed > 0 && numVal > maxAllowed) {
+      showErrorTooltip(cellKey, `Score cannot exceed ${maxAllowed}`);
+
+      // Immediately clear/reset the invalid value so it cannot be saved
+      setGrades((prev) => ({
+        ...prev,
+        [studentId]: {
+          ...prev[studentId],
+          [category]: {
+            ...(prev[studentId]?.[category] || {}),
+            [columnId]: "",
+          },
+        },
+      }));
+
+      const cleanAssessmentId = assessmentId || (columnId ? Number(String(columnId).replace(/^(ww_|pt_)/, '')) : null);
+      const studentObj = students.find((s) => s.id === studentId || String(s.student_id) === studentId);
+      if (studentObj) {
+        queueScoreChange(
+          cleanAssessmentId || columnId,
+          studentObj.student_id,
+          studentObj.student_section_id,
+          ""
+        );
+      }
+      return;
+    }
+
+    if (errorTooltip?.cellKey === cellKey) {
+      setErrorTooltip(null);
+    }
+
+    setGrades((prev) => ({
+      ...prev,
+      [studentId]: {
+        ...prev[studentId],
         [category]: {
-          ...previous[studentId][category],
+          ...(prev[studentId]?.[category] || {}),
           [columnId]: value,
         },
       },
     }));
+
+    const cleanAssessmentId = assessmentId || (columnId ? Number(String(columnId).replace(/^(ww_|pt_)/, '')) : null);
+    const studentObj = students.find((s) => s.id === studentId || String(s.student_id) === studentId);
+    if (studentObj) {
+      queueScoreChange(
+        cleanAssessmentId || columnId,
+        studentObj.student_id,
+        studentObj.student_section_id,
+        value
+      );
+    }
   };
 
-  // ============================================================
-  // UPDATE SINGLE GRADE
-  // ============================================================
+  const handleSingleGradeChange = (studentId, field, value, maxScore, assessmentId) => {
+    if (isLocked) return;
 
-  const handleSingleGradeChange = (
-    studentId,
-    field,
-    value
-  ) => {
-    setGrades((previous) => ({
-      ...previous,
+    const numVal = Number(value);
+    const cellKey = `${studentId}_qa`;
+    const maxAllowed = Number(maxScore || 0);
+
+    if (value !== "" && !isNaN(numVal) && numVal < 0) return;
+
+    // Feature 1: Exceeded Highest Possible Score (HPS) Validation for QA
+    if (value !== "" && !isNaN(numVal) && maxAllowed > 0 && numVal > maxAllowed) {
+      showErrorTooltip(cellKey, `Score cannot exceed ${maxAllowed}`);
+
+      // Immediately clear/reset the invalid value so it cannot be saved
+      setGrades((prev) => ({
+        ...prev,
+        [studentId]: {
+          ...prev[studentId],
+          [field]: "",
+        },
+      }));
+
+      const targetAssessmentId = assessmentId || quarterlyAssessmentId;
+      const studentObj = students.find((s) => s.id === studentId || String(s.student_id) === studentId);
+      if (studentObj) {
+        queueScoreChange(
+          targetAssessmentId || "qa",
+          studentObj.student_id,
+          studentObj.student_section_id,
+          ""
+        );
+      }
+      return;
+    }
+
+    if (errorTooltip?.cellKey === cellKey) {
+      setErrorTooltip(null);
+    }
+
+    setGrades((prev) => ({
+      ...prev,
       [studentId]: {
-        ...previous[studentId],
+        ...prev[studentId],
         [field]: value,
       },
     }));
+
+    const targetAssessmentId = assessmentId || (field === "quarterlyAssessment" ? quarterlyAssessmentId : null);
+    const studentObj = students.find((s) => s.id === studentId || String(s.student_id) === studentId);
+    if (studentObj) {
+      queueScoreChange(
+        targetAssessmentId || "qa",
+        studentObj.student_id,
+        studentObj.student_section_id,
+        value
+      );
+    }
   };
 
-  const isAvailable = activeTerm === "T1";
+  // Immediate save on input blur
+  const handleScoreBlur = () => {
+    if (!isLocked) {
+      flushPendingScores();
+    }
+  };
 
-  const sectionName =
-    activeClass?.sectionName || "Gemelina";
+  // ============================================================
+  // ADD / EDIT COLUMN MODAL
+  // ============================================================
+const formatToISODate = (val) => {
+  if (!val) return "";
+  const str = String(val).trim();
+  if (str === "" || str === "null" || str === "undefined") return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+  const d = new Date(str);
+  if (isNaN(d.getTime())) return "";
+  try {
+    return d.toISOString().slice(0, 10);
+  } catch {
+    return "";
+  }
+};
+
+  const openAddColumnModal = (category) => {
+    if (isLocked) return;
+    const isWW = category === "WW" || category === "writtenWorks" || category === "writtenWork";
+    const currentComp = isMapeh ? (mapehComponent || mapehComponentRef.current || "MA") : null;
+    const currentCols = (isWW ? writtenWorkColumns : performanceTaskColumns).filter(
+      (c) =>
+        c.status !== "ARCHIVED" &&
+        (!isMapeh || !c.mapeh_component || c.mapeh_component === currentComp)
+    );
+    const nextIndex = currentCols.length + 1;
+    setModalState({
+      isOpen: true,
+      mode: "add",
+      category: isWW ? "WW" : "PT",
+      categoryLabel: isWW ? "Written Work" : "Performance Task",
+      columnId: null,
+      assessmentId: null,
+      title: isWW ? `Written Work ${nextIndex}` : `Performance Task ${nextIndex}`,
+      maxScore: isWW ? "20" : "50",
+      date: "",
+    });
+  };
+
+  const openEditColumnModal = (column, category) => {
+    if (isLocked) return;
+    const isWW = category === "WW" || category === "writtenWorks" || category === "writtenWork";
+    setModalState({
+      isOpen: true,
+      mode: "edit",
+      category: isWW ? "WW" : "PT",
+      categoryLabel: isWW ? "Written Work" : "Performance Task",
+      columnId: column.id,
+      assessmentId: column.assessment_id,
+      title: column.activity_name || `${column.label}`,
+      maxScore: String(column.max_score || 20),
+      date: formatToISODate(column.date),
+    });
+  };
+
+  const handleSaveModalColumn = async (e) => {
+    e.preventDefault();
+    if (isLocked) return;
+    const { mode, category, columnId, assessmentId, title, maxScore, date } = modalState;
+    const numMax = Number(maxScore);
+
+    if (isNaN(numMax) || numMax <= 0) return;
+
+    const safeDate = formatToISODate(date) || null;
+
+    if (category === "EX_WEIGHT") {
+      if (modalState.examKey === "st1Weight") {
+        setExamConfig((prev) => ({ ...prev, st1Weight: numMax }));
+      } else if (modalState.examKey === "st2Weight") {
+        setExamConfig((prev) => ({ ...prev, st2Weight: numMax }));
+      } else if (modalState.examKey === "teWeight") {
+        setExamConfig((prev) => ({ ...prev, teWeight: numMax }));
+      }
+      setModalState((prev) => ({ ...prev, isOpen: false }));
+      return;
+    }
+
+    if (category === "EX") {
+      if (modalState.examKey === "st1") {
+        setExamConfig((prev) => ({ ...prev, st1HPS: numMax }));
+      } else if (modalState.examKey === "st2") {
+        setExamConfig((prev) => ({ ...prev, st2HPS: numMax }));
+      } else if (modalState.examKey === "te") {
+        setExamConfig((prev) => ({ ...prev, teHPS: numMax }));
+      }
+
+      try {
+        if (assessmentId) {
+          await updateAssessment(assessmentId, {
+            activity_name: title,
+            title: title,
+            max_score: numMax,
+            highest_possible_score: numMax,
+            mapeh_component: isMapehRef.current ? mapehComponentRef.current : null,
+          });
+        } else {
+          const res = await createAssessment({
+            subject_offering_id: subjectOfferingId,
+            term: activeTerm,
+            component_code: "QA",
+            type: "quarterlyAssessment",
+            activity_name: title,
+            title: title,
+            max_score: numMax,
+            highest_possible_score: numMax,
+            mapeh_component: isMapehRef.current ? mapehComponentRef.current : null,
+          });
+          const newAss = res?.assessment;
+          if (newAss) {
+            if (modalState.examKey === "st1") setExamConfig((prev) => ({ ...prev, st1Id: newAss.assessment_id }));
+            else if (modalState.examKey === "st2") setExamConfig((prev) => ({ ...prev, st2Id: newAss.assessment_id }));
+            else if (modalState.examKey === "te") setExamConfig((prev) => ({ ...prev, teId: newAss.assessment_id }));
+          }
+        }
+      } catch (err) {
+        console.warn("Exam HPS updated locally:", err);
+      }
+
+      setModalState((prev) => ({ ...prev, isOpen: false }));
+      return;
+    }
+
+    if (mode === "add") {
+      try {
+        const res = await createAssessment({
+          subject_offering_id: subjectOfferingId,
+          term: activeTerm,
+          component_code: category,
+          type: category === "WW" ? "writtenWork" : "performanceTask",
+          activity_name: title,
+          title: title,
+          max_score: numMax,
+          highest_possible_score: numMax,
+          activity_date: safeDate,
+          mapeh_component: isMapeh ? (mapehComponent || mapehComponentRef.current || "MA") : null,
+        });
+
+        const newAss = res.assessment;
+        const currentComp = isMapeh ? (mapehComponent || mapehComponentRef.current || "MA") : null;
+        const activeCols = (category === "WW" ? writtenWorkColumns : performanceTaskColumns).filter(
+          (c) => c.status !== "ARCHIVED" && (!isMapeh || !c.mapeh_component || c.mapeh_component === currentComp)
+        );
+        const colNumber = activeCols.length + 1;
+        const safeTitle = title && title.trim() !== "" ? title.trim() : (category === "WW" ? `Written Work ${colNumber}` : `Performance Task ${colNumber}`);
+        const newCol = {
+          id: category === "WW" ? `ww_${newAss.assessment_id}` : `pt_${newAss.assessment_id}`,
+          assessment_id: newAss.assessment_id,
+          label: String(colNumber),
+          activity_name: safeTitle,
+          max_score: numMax,
+          date: safeDate,
+          status: "ACTIVE",
+          subj_comp_weight_id: newAss?.subj_comp_weight_id,
+          mapeh_component: currentComp,
+        };
+
+        if (category === "WW") {
+          setWrittenWorkColumns((prev) => [...prev, newCol]);
+        } else {
+          setPerformanceTaskColumns((prev) => [...prev, newCol]);
+        }
+      } catch (err) {
+        const isWW = category === "WW";
+        const currentComp = isMapeh ? (mapehComponent || mapehComponentRef.current || "MA") : null;
+        const activeCols = (isWW ? writtenWorkColumns : performanceTaskColumns).filter(
+          (c) => c.status !== "ARCHIVED" && (!isMapeh || !c.mapeh_component || c.mapeh_component === currentComp)
+        );
+        const colNumber = activeCols.length + 1;
+        const safeTitle = title && title.trim() !== "" ? title.trim() : (isWW ? `Written Work ${colNumber}` : `Performance Task ${colNumber}`);
+        const newCol = {
+          id: isWW ? `ww${colNumber}` : `pt${colNumber}`,
+          assessment_id: Date.now(),
+          label: String(colNumber),
+          activity_name: safeTitle,
+          max_score: numMax,
+          date: safeDate,
+          status: "ACTIVE",
+          mapeh_component: currentComp,
+        };
+
+        if (isWW) {
+          setWrittenWorkColumns((prev) => [...prev, newCol]);
+        } else {
+          setPerformanceTaskColumns((prev) => [...prev, newCol]);
+        }
+      }
+    } else {
+      try {
+        if (assessmentId) {
+          const updatePayload = {
+            activity_name: title,
+            title: title,
+            max_score: numMax,
+            highest_possible_score: numMax,
+            mapeh_component: isMapehRef.current ? mapehComponentRef.current : null,
+          };
+          if (safeDate) {
+            updatePayload.activity_date = safeDate;
+          }
+          await updateAssessment(assessmentId, updatePayload);
+        }
+
+        if (category === "WW") {
+          setWrittenWorkColumns((prev) =>
+            prev.map((c) => (c.id === columnId ? { ...c, activity_name: title, max_score: numMax, date: safeDate } : c))
+          );
+        } else {
+          setPerformanceTaskColumns((prev) =>
+            prev.map((c) => (c.id === columnId ? { ...c, activity_name: title, max_score: numMax, date: safeDate } : c))
+          );
+        }
+      } catch (err) {
+        console.error("Error updating column:", err);
+      }
+    }
+
+    setModalState((prev) => ({ ...prev, isOpen: false }));
+  };
+
+  const handleDeleteColumn = async (column, category) => {
+    if (isLocked) return;
+    if (!window.confirm(`Delete column "${column.activity_name || column.label}"?`)) return;
+
+    try {
+      if (column.assessment_id) {
+        await deleteAssessment(column.assessment_id);
+      }
+
+      if (category === "WW") {
+        setWrittenWorkColumns((prev) =>
+          prev.filter((c) => c.id !== column.id).map((c, i) => ({ ...c, label: String(i + 1) }))
+        );
+      } else {
+        setPerformanceTaskColumns((prev) =>
+          prev.filter((c) => c.id !== column.id).map((c, i) => ({ ...c, label: String(i + 1) }))
+        );
+      }
+    } catch (err) {
+      console.error("Error deleting column:", err);
+    }
+  };
+
+  // Download / Export handler: directly triggers DepEd standard landscape PDF generation/print
+  const handleDownload = () => {
+    if (isDownloadDisabled) return;
+    triggerClassRecordPrint({
+      metadata: exportMetadata,
+      weights,
+      writtenWorkColumns,
+      performanceTaskColumns,
+      examConfig,
+      quarterlyAssessmentHPS: examConfig.teHPS,
+      students,
+      grades,
+      depedLogoUrl,
+      depedWordmarkLogoUrl,
+    });
+  };
+
+  const isAvailable = activeTerm === "T1" || activeTerm === "T2" || activeTerm === "T3";
+  const sectionName = effectiveClass?.sectionName || effectiveClass?.section_name || "Mahogany";
 
   return (
     <div className="class-record-page">
-
+      {/* ============================================================
+          HEADER (Exact original position with subtle Google Docs sync badge)
+      ============================================================ */}
       <div className="class-record-header">
-
         <div className="class-record-title-area">
-
-          <button
-            className="class-record-back-btn"
-            onClick={onBack}
-            type="button"
-            aria-label="Back"
-          >
-            <img
-              src={backIconUrl}
-              alt="Back"
-            />
+          <button className="class-record-back-btn" onClick={onBack || (() => navigate(-1))} type="button" aria-label="Back">
+            <img src={backIconUrl} alt="Back" />
           </button>
-
           <h1>Assigned Classes</h1>
 
+          {/* GOOGLE DOCS STYLE AUTO-SAVE / OFFLINE / LOCKED INDICATOR */}
+          <div
+            className="gdocs-sync-status"
+            title={
+              isLocked
+                ? `This class record belongs to a closed term (${loadedTermName || activeTerm}) and is read-only.`
+                : syncStatus === "offline"
+                ? "Working offline - changes will sync when online"
+                : "All changes automatically saved"
+            }
+          >
+            {isLocked ? (
+              <span className="gdocs-status-item locked">
+                <Lock size={14} />
+                <span>Read-Only ({loadedTermName || activeTerm})</span>
+              </span>
+            ) : (
+              <>
+                {syncStatus === "saving" && (
+                  <span className="gdocs-status-item saving">
+                    <RefreshCw size={14} className="spin-icon" />
+                    <span>Saving...</span>
+                  </span>
+                )}
+                {syncStatus === "saved" && (
+                  <span className="gdocs-status-item saved">
+                    <Cloud size={15} />
+                    <span>All changes saved to cloud</span>
+                  </span>
+                )}
+                {syncStatus === "offline" && (
+                  <span className="gdocs-status-item offline">
+                    <CloudOff size={15} />
+                    <span>Saved offline (Device)</span>
+                  </span>
+                )}
+              </>
+            )}
+          </div>
         </div>
-
       </div>
 
+      {/* ============================================================
+          SUBHEADER & ACTIONS (Exact original position: Attendance, Download, T1/T2/T3)
+      ============================================================ */}
       <div className="class-record-subheader">
-
         <div>
-          <h2>
-            Section: {sectionName}
-          </h2>
-
-          <p>
-            Input and manage student grades per term
-          </p>
+          <h2>Section: {sectionName}</h2>
+          <p>Input and manage student grades per term</p>
         </div>
 
+        {/* TOP-RIGHT CONTROLS CONTAINER */}
+        <div className="class-record-controls">
+          {/* Row 1 — MAPEH Sub-Component Toggle */}
+          {isMapeh && (
+            <div className="mapeh-component-toggle" role="group" aria-label="MAPEH Component Filter">
+              <button
+                type="button"
+                className={`mapeh-toggle-btn ${mapehComponent === "MA" ? "active" : ""}`}
+                onClick={() => handleMapehComponentChange("MA")}
+              >
+                Music & Arts
+              </button>
+              <button
+                type="button"
+                className={`mapeh-toggle-btn ${mapehComponent === "PEH" ? "active" : ""}`}
+                onClick={() => handleMapehComponentChange("PEH")}
+              >
+                PE & Health
+              </button>
+            </div>
+          )}
 
-{/* ACTIONS + TERM BUTTONS */}
+          {/* Row 2 — Action & Term Buttons */}
+          <div className="class-record-actions-row">
+            {/* ATTENDANCE WITH CONDITIONAL DISABLING */}
+            <button
+              type="button"
+              className={`class-record-action-btn attendance-btn ${isLocked ? "disabled" : ""}`}
+              onClick={
+                isLocked
+                  ? undefined
+                  : onAttendance
+                  ? () => onAttendance(effectiveClass)
+                  : () => {
+                      navigate("/adviser/attendance", { state: { activeClass: effectiveClass } });
+                    }
+              }
+              disabled={isLocked}
+              title={isLocked ? "Attendance is unavailable for closed/locked terms." : "Attendance"}
+            >
+              <span className="action-icon">▰</span>
+              Attendance
+            </button>
 
-<div className="class-record-actions">
+            {/* DOWNLOAD WITH CONDITIONAL DISABLING */}
+            <button
+              type="button"
+              className={`class-record-action-btn download-btn ${isDownloadDisabled ? "disabled" : ""}`}
+              onClick={handleDownload}
+              disabled={isDownloadDisabled}
+              title={
+                isDownloadDisabled
+                  ? "Please complete all student grades for this quarter before downloading the class record."
+                  : "Download Official DepEd JHS Class Record (PDF)"
+              }
+            >
+              <span className="action-icon">↓</span>
+              Download
+            </button>
 
-  {/* ATTENDANCE */}
+            {/* TERMS */}
+            <div className="term-buttons">
+              <button
+                type="button"
+                className={activeTerm === "T1" ? "term-btn active" : "term-btn"}
+                onClick={() => handleTermChange("T1")}
+              >
+                T1
+              </button>
 
-  <button
-    type="button"
-    className="class-record-action-btn attendance-btn"
-    onClick={() => {
-      // UI only for now
-      alert("Attendance page coming soon by the one and only nekaneks.");
-    }}
-  >
-    <span className="action-icon">▰</span>
-    Attendance
-  </button>
+              <button
+                type="button"
+                className={activeTerm === "T2" ? "term-btn active" : "term-btn"}
+                onClick={() => handleTermChange("T2")}
+              >
+                T2
+              </button>
 
-  {/* DOWNLOAD */}
-
-  <button
-    type="button"
-    className="class-record-action-btn download-btn"
-    onClick={() => {
-      // UI only for now
-      alert("Download feature coming soon.");
-    }}
-  >
-    <span className="action-icon">↓</span>
-    Download
-  </button>
-
-  {/* TERMS */}
-
-  <div className="term-buttons">
-
-    <button
-      type="button"
-      className={
-        activeTerm === "T1"
-          ? "term-btn active"
-          : "term-btn"
-      }
-      onClick={() => setActiveTerm("T1")}
-    >
-      T1
-    </button>
-
-    <button
-      type="button"
-      className={
-        activeTerm === "T2"
-          ? "term-btn active"
-          : "term-btn"
-      }
-      onClick={() => setActiveTerm("T2")}
-    >
-      T2
-    </button>
-
-    <button
-      type="button"
-      className={
-        activeTerm === "T3"
-          ? "term-btn active"
-          : "term-btn"
-      }
-      onClick={() => setActiveTerm("T3")}
-    >
-      T3
-    </button>
-
-  </div>
-
-</div>
-
+              <button
+                type="button"
+                className={activeTerm === "T3" ? "term-btn active" : "term-btn"}
+                onClick={() => handleTermChange("T3")}
+              >
+                T3
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* ======================================================
-          UNAVAILABLE STATE
-      ====================================================== */}
-
+      {/* ============================================================
+          UNAVAILABLE STATE OR MAIN CLASS RECORD SPREADSHEET
+      ============================================================ */}
       {!isAvailable ? (
         <div className="unavailable-state">
-
-          <img
-            src={unavailableIconUrl}
-            alt="Unavailable"
-            className="unavailable-icon"
-          />
-
-          <h3>
-            This grading term is currently unavailable.
-          </h3>
-
-          <p>
-            Access will be enabled once the official
-            grading period begins.
-          </p>
-
+          <img src={unavailableIconUrl} alt="Unavailable" className="unavailable-icon" />
+          <h3>This grading term is currently unavailable.</h3>
+          <p>Access will be enabled once the official grading period begins.</p>
         </div>
       ) : (
-
-        /* ====================================================
-           T1 CLASS RECORD
-        ==================================================== */
-
         <div className="class-record-content">
+          {/* LOCK BANNER FOR CLOSED / INACTIVE TERMS */}
+          {isLocked && (
+            <div className="class-record-lock-banner">
+              <div className="lock-banner-left">
+                <div className="lock-icon-circle">
+                  <Lock size={16} />
+                </div>
+                <div className="lock-text">
+                  <strong>Read-Only Mode:</strong> This class record belongs to a closed term ({loadedTermName || activeTerm}) and is read-only.
+                </div>
+              </div>
+              <div className="lock-badge-tag">
+                <Lock size={12} />
+                <span>Term Locked</span>
+              </div>
+            </div>
+          )}
 
-          {/* TOTAL STUDENTS */}
+          {/* ============================================================
+              OFFICIAL CLASS RECORD TEMPLATE HEADER & METADATA
+          ============================================================ */}
+          <div className="cr-template-container">
+            <div className="cr-template-header-wrap">
+              <div className="cr-seal-wrap">
+                <img src={depedLogoUrl} alt="DepEd Seal" className="cr-seal-img" />
+              </div>
 
-          <div className="student-count">
-            Total Students: {MOCK_STUDENTS.length}
+              <div className="cr-header-center">
+                <h1 className="cr-main-title">{exportMetadata.termTitle}</h1>
+
+                <div className="cr-meta-section">
+                  {/* ROW 1: REGION | DIVISION | SCHOOL ID */}
+                  <div className="cr-meta-row">
+                    <div className="cr-meta-field">
+                      <span className="cr-meta-label">REGION</span>
+                      <div className="cr-meta-box box-md">{exportMetadata.region}</div>
+                    </div>
+                    <div className="cr-meta-field">
+                      <span className="cr-meta-label">DIVISION</span>
+                      <div className="cr-meta-box box-md">{exportMetadata.division}</div>
+                    </div>
+                    <div className="cr-meta-field">
+                      <span className="cr-meta-label">SCHOOL ID</span>
+                      <div className="cr-meta-box box-sm">{exportMetadata.schoolId}</div>
+                    </div>
+                  </div>
+
+                  {/* ROW 2: SCHOOL NAME | SCHOOL YEAR */}
+                  <div className="cr-meta-row">
+                    <div className="cr-meta-field">
+                      <span className="cr-meta-label">SCHOOL NAME</span>
+                      <div className="cr-meta-box box-lg">{exportMetadata.schoolName}</div>
+                    </div>
+                    <div className="cr-meta-field">
+                      <span className="cr-meta-label">SCHOOL YEAR</span>
+                      <div className="cr-meta-box box-sm">{exportMetadata.schoolYear}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="cr-logo-wrap">
+                <img src={depedWordmarkLogoUrl} alt="DepEd Wordmark" className="cr-wordmark-img" />
+              </div>
+            </div>
+
+            {/* TOTAL STUDENTS COUNTER */}
+            <div className="student-count" style={{ padding: "0 10px 8px" }}>
+              Total Students: {students.length}
+            </div>
+
+            {/* ==================================================
+                OFFICIAL TEMPLATE SPREADSHEET TABLE
+            ================================================== */}
+            {(() => {
+              const wwColsCount = writtenWorkColumns.length + 3; // + Total, PS, WS
+              const ptColsCount = performanceTaskColumns.length + 3; // + Total, PS, WS
+              const exColsCount = isMapeh ? 6 : 8; // MAPEH: ST1, ST2, TE, Total, PS, WS. Standard: ST1, ST2, TE, WS ST1, WS ST2, WS TE, PS, WS
+              const totalTableCols = 2 + wwColsCount + ptColsCount + exColsCount + 3; // + No + Name + Initial + Term + Descriptor
+
+              const wwHalf1 = Math.max(1, Math.floor(wwColsCount / 2));
+              const wwHalf2 = Math.max(1, wwColsCount - wwHalf1);
+
+              const ptHalf1 = Math.max(1, Math.floor(ptColsCount / 2));
+              const ptHalf2 = Math.max(1, ptColsCount - ptHalf1);
+
+              // Subject & Teacher spans covering exactly the component widths
+              const subjColsCount = exColsCount + 3;
+              const subjHalf1 = 3;
+              const subjHalf2 = Math.max(1, subjColsCount - subjHalf1);
+
+              return (
+                <div className="class-record-table-wrapper">
+                  <table className="class-record-table">
+                    {/* Fixed explicit column widths to prevent any shifting */}
+                    <colgroup>
+                      <col style={{ width: "40px", minWidth: "40px", maxWidth: "40px" }} />
+                      <col style={{ width: "240px", minWidth: "240px", maxWidth: "240px" }} />
+                      {writtenWorkColumns.map((col) => (
+                        <col key={`col-ww-${col.id}`} style={{ width: "44px", minWidth: "44px" }} />
+                      ))}
+                      <col style={{ width: "48px", minWidth: "48px" }} />
+                      <col style={{ width: "48px", minWidth: "48px" }} />
+                      <col style={{ width: "48px", minWidth: "48px" }} />
+                      {performanceTaskColumns.map((col) => (
+                        <col key={`col-pt-${col.id}`} style={{ width: "44px", minWidth: "44px" }} />
+                      ))}
+                      <col style={{ width: "48px", minWidth: "48px" }} />
+                      <col style={{ width: "48px", minWidth: "48px" }} />
+                      <col style={{ width: "48px", minWidth: "48px" }} />
+                      {isMapeh ? (
+                        <>
+                          <col style={{ width: "48px", minWidth: "48px" }} />
+                          <col style={{ width: "48px", minWidth: "48px" }} />
+                          <col style={{ width: "48px", minWidth: "48px" }} />
+                        </>
+                      ) : (
+                        <>
+                          <col style={{ width: "50px", minWidth: "50px" }} />
+                          <col style={{ width: "50px", minWidth: "50px" }} />
+                          <col style={{ width: "50px", minWidth: "50px" }} />
+                          <col style={{ width: "48px", minWidth: "48px" }} />
+                          <col style={{ width: "48px", minWidth: "48px" }} />
+                        </>
+                      )}
+                      <col style={{ width: "60px", minWidth: "60px" }} />
+                      <col style={{ width: "60px", minWidth: "60px" }} />
+                      <col style={{ width: "95px", minWidth: "95px" }} />
+                    </colgroup>
+
+                    {/* =================================================
+                        TABLE HEADER
+                    ================================================= */}
+                    <thead>
+                      {/* ROW 1: TABLE INFORMATION HEADER */}
+                      <tr>
+                        {/* Cell 1: FIRST TERM (spans 4 header rows down to HPS, and 2 columns: index + learner name) */}
+                        <th rowSpan={4} colSpan={2} className={`cr-term-col ${isMapeh ? "mapeh-term-col" : ""}`}>
+                          {exportMetadata.termHeader}
+                        </th>
+
+                        {/* Cell 2: GRADE LEVEL */}
+                        <th colSpan={wwHalf1} className="cr-info-label">
+                          GRADE LEVEL
+                        </th>
+
+                        {/* Cell 3: Grade Level Value */}
+                        <td colSpan={wwHalf2} className="cr-info-val">
+                          {exportMetadata.gradeLevelDisplay || "0"}
+                        </td>
+
+                        {/* Cell 4: TEACHER (Must span 2 rows vertically) */}
+                        <th rowSpan={2} colSpan={ptHalf1} className="cr-info-label">
+                          TEACHER
+                        </th>
+
+                        {/* Cell 5: Teacher Name */}
+                        <td rowSpan={2} colSpan={ptHalf2} className="cr-info-val">
+                          {exportMetadata.teacherName || "0"}
+                        </td>
+
+                        {/* Cell 6: SUBJECT (Must span 2 rows vertically) */}
+                        <th rowSpan={2} colSpan={subjHalf1} className="cr-info-label">
+                          SUBJECT
+                        </th>
+
+                        {/* Cell 7: Subject Name */}
+                        <td rowSpan={2} colSpan={subjHalf2} className="cr-info-val">
+                          {exportMetadata.subjectName || "0"}
+                        </td>
+                      </tr>
+
+                      {/* ROW 2: SECTION */}
+                      <tr>
+                        {/* Cell 1: SECTION */}
+                        <th colSpan={wwHalf1} className="cr-info-label">
+                          SECTION
+                        </th>
+
+                        {/* Cell 2: Section Value */}
+                        <td colSpan={wwHalf2} className="cr-info-val">
+                          {exportMetadata.section || "0"}
+                        </td>
+                        {/* Note: TEACHER and SUBJECT span down from Row 1 via rowSpan={2} */}
+                      </tr>
+
+                      {/* ROW 3: COMPONENT HEADERS */}
+                      <tr>
+                        {/* Group 1 (WWs): WRITTEN / ORAL WORKS */}
+                        <th colSpan={wwColsCount} className="cr-comp-header">
+                          <div className="cr-comp-title-wrap">
+                            <span>{isMapeh ? "WRITTEN / ORAL WORKS (20%)" : "WRITTEN / ORAL WORKS (WWs)"}</span>
+                            {!isLocked && (
+                              <button
+                                type="button"
+                                className="add-column-btn"
+                                onClick={() => openAddColumnModal("WW")}
+                                title="Add Written Work Column"
+                              >
+                                + Add
+                              </button>
+                            )}
+                          </div>
+                        </th>
+
+                        {/* Group 2 (PTs): PRODUCT / PERFORMANCE TASKS */}
+                        <th colSpan={ptColsCount} className="cr-comp-header">
+                          <div className="cr-comp-title-wrap">
+                            <span>{isMapeh ? "PRODUCT / PERFORMANCE TASKS (60%)" : "PRODUCT / PERFORMANCE TASKS (PTS)"}</span>
+                            {!isLocked && (
+                              <button
+                                type="button"
+                                className="add-column-btn"
+                                onClick={() => openAddColumnModal("PT")}
+                                title="Add Performance Task Column"
+                              >
+                                + Add
+                              </button>
+                            )}
+                          </div>
+                        </th>
+
+                        {/* Group 3 (EXs): EXAMINATIONS */}
+                        <th colSpan={exColsCount} className="cr-comp-header">
+                          <span>{isMapeh ? "SUMMATIVE TESTS AND TERM EXAMINATIONS (20%)" : "EXAMINATIONS (EXs)"}</span>
+                        </th>
+
+                        {/* Summary Headers */}
+                        <th rowSpan={2} className="cr-summary-header">
+                          Initial<br />Grade
+                        </th>
+                        <th rowSpan={2} className="cr-summary-header">
+                          Term<br />Grade
+                        </th>
+                        <th rowSpan={2} className="cr-summary-header descriptor-col">
+                          Descriptor
+                        </th>
+                      </tr>
+
+                      {/* ROW 4: SUB HEADERS */}
+                      <tr>
+                        {/* WW Column Headers: Individual numbers (1, 2, 3, ...), then Total, PS, WS */}
+                        {writtenWorkColumns.map((column) => (
+                          <th key={column.id} className="cr-sub-header dynamic-col-header" title={column.activity_name || `Written Work ${column.label}`}>
+                            <div className="col-header-inner">
+                              <span>{column.label}</span>
+                              {!isLocked && (
+                                <div className="col-actions">
+                                  <button type="button" className="col-action-btn" onClick={() => openEditColumnModal(column, "WW")} title="Edit Column">
+                                    <Edit2 size={10} />
+                                  </button>
+                                  {writtenWorkColumns.length > 1 && (
+                                    <button type="button" className="col-action-btn col-delete-btn" onClick={() => handleDeleteColumn(column, "WW")} title="Delete Column">
+                                      <X size={10} />
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </th>
+                        ))}
+                        <th className="cr-sub-header">Total</th>
+                        <th className="cr-sub-header">PS</th>
+                        <th className="cr-sub-header">WS</th>
+
+                        {/* PT Column Headers: Individual numbers (1, 2, ...), then Total, PS, WS */}
+                        {performanceTaskColumns.map((column) => (
+                          <th key={column.id} className="cr-sub-header dynamic-col-header" title={column.activity_name || `Performance Task ${column.label}`}>
+                            <div className="col-header-inner">
+                              <span>{column.label}</span>
+                              {!isLocked && (
+                                <div className="col-actions">
+                                  <button type="button" className="col-action-btn" onClick={() => openEditColumnModal(column, "PT")} title="Edit Column">
+                                    <Edit2 size={10} />
+                                  </button>
+                                  {performanceTaskColumns.length > 1 && (
+                                    <button type="button" className="col-action-btn col-delete-btn" onClick={() => handleDeleteColumn(column, "PT")} title="Delete Column">
+                                      <X size={10} />
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </th>
+                        ))}
+                        <th className="cr-sub-header">Total</th>
+                        <th className="cr-sub-header">PS</th>
+                        <th className="cr-sub-header">WS</th>
+
+                        {/* EX Column Headers */}
+                        <th className="cr-sub-header">ST1</th>
+                        <th className="cr-sub-header">ST2</th>
+                        <th className="cr-sub-header">TE</th>
+                        {isMapeh ? (
+                          <>
+                            <th className="cr-sub-header">Total</th>
+                            <th className="cr-sub-header">PS</th>
+                            <th className="cr-sub-header">WS</th>
+                          </>
+                        ) : (
+                          <>
+                            <th className="cr-sub-header wide-sub">WS ST1</th>
+                            <th className="cr-sub-header wide-sub">WS ST2</th>
+                            <th className="cr-sub-header wide-sub">WS TE</th>
+                            <th className="cr-sub-header">PS</th>
+                            <th className="cr-sub-header">WS</th>
+                          </>
+                        )}
+                      </tr>
+
+                      {/* ROW 5 (HPS Row): HIGHEST POSSIBLE SCORE */}
+                      <tr className="hps-row">
+                        <th colSpan={2} className="cr-hps-title-cell hps-label">
+                          HIGHEST POSSIBLE SCORE
+                        </th>
+
+                        {/* WW HPS */}
+                        {writtenWorkColumns.map((col) => (
+                          <td
+                            key={col.id}
+                            className="cr-hps-cell editable-hps"
+                            onClick={() => openEditColumnModal(col, "WW")}
+                            title="Click to edit HPS"
+                          >
+                            {col.max_score}
+                          </td>
+                        ))}
+                        <td className="cr-hps-cell">{totalWW_HPS}</td>
+                        <td className="cr-hps-cell">{isMapeh ? "100.00" : "100"}</td>
+                        <td className="cr-hps-cell">{effectiveWeights.WW || 20}%</td>
+
+                        {/* PT HPS */}
+                        {performanceTaskColumns.map((col) => (
+                          <td
+                            key={col.id}
+                            className="cr-hps-cell editable-hps"
+                            onClick={() => openEditColumnModal(col, "PT")}
+                            title="Click to edit HPS"
+                          >
+                            {col.max_score}
+                          </td>
+                        ))}
+                        <td className="cr-hps-cell">{totalPT_HPS}</td>
+                        <td className="cr-hps-cell">{isMapeh ? "100.00" : "100"}</td>
+                        <td className="cr-hps-cell">{effectiveWeights.PT || (isMapeh ? 60 : 50)}%</td>
+
+                        {/* EX HPS & WEIGHTS */}
+                        <td
+                          className="cr-hps-cell editable-hps"
+                          onClick={() => openEditExamModal("st1", "Summative Test 1", examConfig.st1HPS, examConfig.st1Id)}
+                          title="Click to edit ST1 HPS"
+                        >
+                          {examConfig.st1HPS}
+                        </td>
+                        <td
+                          className="cr-hps-cell editable-hps"
+                          onClick={() => openEditExamModal("st2", "Summative Test 2", examConfig.st2HPS, examConfig.st2Id)}
+                          title="Click to edit ST2 HPS"
+                        >
+                          {examConfig.st2HPS}
+                        </td>
+                        <td
+                          className="cr-hps-cell editable-hps"
+                          onClick={() => openEditExamModal("te", "Term Exam", examConfig.teHPS, examConfig.teId)}
+                          title="Click to edit Term Exam HPS"
+                        >
+                          {examConfig.teHPS}
+                        </td>
+                        {isMapeh ? (
+                          <>
+                            <td className="cr-hps-cell">
+                              {Number(examConfig.st1HPS || 25) + Number(examConfig.st2HPS || 25) + Number(examConfig.teHPS || 25)}
+                            </td>
+                            <td className="cr-hps-cell">100.00</td>
+                            <td className="cr-hps-cell">{effectiveWeights.EX || 20}%</td>
+                          </>
+                        ) : (
+                          <>
+                            <td
+                              className="cr-hps-cell editable-hps"
+                              onClick={() => openEditSubWeightModal("st1Weight", "WS ST1 Weight", examConfig.st1Weight)}
+                              title="Click to edit WS ST1 Weight"
+                            >
+                              {examConfig.st1Weight}
+                            </td>
+                            <td
+                              className="cr-hps-cell editable-hps"
+                              onClick={() => openEditSubWeightModal("st2Weight", "WS ST2 Weight", examConfig.st2Weight)}
+                              title="Click to edit WS ST2 Weight"
+                            >
+                              {examConfig.st2Weight}
+                            </td>
+                            <td
+                              className="cr-hps-cell editable-hps"
+                              onClick={() => openEditSubWeightModal("teWeight", "WS TE Weight", examConfig.teWeight)}
+                              title="Click to edit WS TE Weight"
+                            >
+                              {examConfig.teWeight}
+                            </td>
+                            <td className="cr-hps-cell">100</td>
+                            <td className="cr-hps-cell">{effectiveWeights.EX || effectiveWeights.QA || 30}%</td>
+                          </>
+                        )}
+
+                        {/* SUMMARY COLUMNS IN HPS ROW */}
+                        <td className="cr-hps-cell" />
+                        <td className="cr-hps-cell" />
+                        <td className="cr-hps-cell" />
+                      </tr>
+                    </thead>
+
+                    {/* =================================================
+                        TABLE BODY
+                    ================================================= */}
+                    <tbody>
+                      {students.length === 0 ? (
+                        <tr>
+                          <td
+                            colSpan={totalTableCols}
+                            style={{ textAlign: "center", padding: "40px 16px", color: "#64748b", fontWeight: 500 }}
+                          >
+                            No students currently enrolled in this section.
+                          </td>
+                        </tr>
+                      ) : (
+                        <>
+                          {/* LEARNERS' NAMES DIVIDER ROW */}
+                          <tr className="cr-learners-names-row">
+                            <td colSpan={totalTableCols}>LEARNERS' NAMES</td>
+                          </tr>
+
+                          {/* MALE DIVIDER ROW */}
+                          <tr className="cr-gender-row">
+                            <td colSpan={totalTableCols}>
+                              MALE {maleStudents.length > 0 ? `(${maleStudents.length})` : ""}
+                            </td>
+                          </tr>
+
+                          {/* MALE STUDENTS */}
+                          {maleStudents.map((student, index) => (
+                            <StudentRow
+                              key={student.id}
+                              student={student}
+                              number={index + 1}
+                              grades={grades}
+                              writtenWorkColumns={writtenWorkColumns}
+                              performanceTaskColumns={performanceTaskColumns}
+                              examConfig={examConfig}
+                              weights={effectiveWeights}
+                              isMapeh={Boolean(isMapeh)}
+                              isLocked={isLocked}
+                              errorTooltip={errorTooltip}
+                              handleGradeChange={handleGradeChange}
+                              handleExamScoreChange={handleExamScoreChange}
+                              handleScoreBlur={handleScoreBlur}
+                            />
+                          ))}
+
+                          {/* FEMALE DIVIDER ROW */}
+                          <tr className="cr-gender-row">
+                            <td colSpan={totalTableCols}>
+                              FEMALE {femaleStudents.length > 0 ? `(${femaleStudents.length})` : ""}
+                            </td>
+                          </tr>
+
+                          {/* FEMALE STUDENTS */}
+                          {femaleStudents.map((student, index) => (
+                            <StudentRow
+                              key={student.id}
+                              student={student}
+                              number={maleStudents.length + index + 1}
+                              grades={grades}
+                              writtenWorkColumns={writtenWorkColumns}
+                              performanceTaskColumns={performanceTaskColumns}
+                              examConfig={examConfig}
+                              weights={effectiveWeights}
+                              isMapeh={Boolean(isMapeh)}
+                              isLocked={isLocked}
+                              errorTooltip={errorTooltip}
+                              handleGradeChange={handleGradeChange}
+                              handleExamScoreChange={handleExamScoreChange}
+                              handleScoreBlur={handleScoreBlur}
+                            />
+                          ))}
+                        </>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
           </div>
+        </div>
+      )}
 
-          {/* ==================================================
-              TABLE
-          ================================================== */}
+      {/* ============================================================
+          MODERN ADD / EDIT COLUMN MODAL
+      ============================================================ */}
+      {modalState.isOpen && (
+        <div className="class-record-modal-backdrop" onClick={() => setModalState((prev) => ({ ...prev, isOpen: false }))}>
+          <div className="class-record-modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-title-wrap">
+                <div className="modal-icon-badge">
+                  <Layers size={18} />
+                </div>
+                <div>
+                  <h3>
+                    {modalState.category === "EX"
+                      ? `Edit ${modalState.title} HPS`
+                      : modalState.category === "EX_WEIGHT"
+                      ? `Edit ${modalState.title}`
+                      : modalState.mode === "add"
+                      ? `Add ${modalState.categoryLabel} Column`
+                      : `Edit ${modalState.categoryLabel} Column`}
+                  </h3>
+                  <p>Configure assessment details and Highest Possible Score</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => setModalState((prev) => ({ ...prev, isOpen: false }))}
+              >
+                <X size={16} />
+              </button>
+            </div>
 
-          <div className="class-record-table-wrapper">
-
-            <table className="class-record-table">
-
-              {/* =================================================
-                  TABLE HEADER
-              ================================================= */}
-
-              <thead>
-
-                {/* MAIN HEADER */}
-
-                <tr>
-
-                  <th
-                    rowSpan="2"
-                    className="number-header"
-                  >
-                    No.
-                  </th>
-
-                  <th
-                    rowSpan="2"
-                    className="lrn-header"
-                  >
-                    LRN
-                  </th>
-
-                  <th
-                    rowSpan="2"
-                    className="name-header"
-                  >
-                    Learners' Name
-                  </th>
-
-                  {/* WRITTEN WORKS */}
-
-                  <th
-                    colSpan={
-                      writtenWorkColumns.length + 3
-                    }
-                    className="category-header"
-                  >
-                    <div className="category-title">
-
-                      <span>
-                        Written Works (30%)
-                      </span>
-
-                      <button
-                        type="button"
-                        className="add-column-btn"
-                        onClick={handleAddWrittenWork}
-                      >
-                        + Add
-                      </button>
-
-                    </div>
-                  </th>
-
-                  {/* PERFORMANCE TASKS */}
-
-                  <th
-                    colSpan={
-                      performanceTaskColumns.length + 3
-                    }
-                    className="category-header"
-                  >
-                    <div className="category-title">
-
-                      <span>
-                        Performance Tasks (50%)
-                      </span>
-
-                      <button
-                        type="button"
-                        className="add-column-btn"
-                        onClick={handleAddPerformanceTask}
-                      >
-                        + Add
-                      </button>
-
-                    </div>
-                  </th>
-
-                  {/* QUARTERLY ASSESSMENT */}
-
-                  <th
-                    colSpan="3"
-                    className="category-header"
-                  >
-                    Quarterly Assessment (20%)
-                  </th>
-
-                  {/* FINAL GRADES */}
-
-                  <th
-                    rowSpan="2"
-                    className="grade-header"
-                  >
-                    Initial
-                    <br />
-                    Grade
-                  </th>
-
-                  <th
-                    rowSpan="2"
-                    className="grade-header"
-                  >
-                    Quarterly
-                    <br />
-                    Grade
-                  </th>
-
-                </tr>
-
-                {/* SUB HEADER */}
-
-                <tr>
-
-                  {/* WRITTEN WORKS */}
-
-                  {writtenWorkColumns.map((column) => (
-                    <th
-                      key={column.id}
-                      className="sub-header"
-                    >
-                      {column.label}
-                    </th>
-                  ))}
-
-                  <th className="sub-header total-header">
-                    Total
-                  </th>
-
-                  <th className="sub-header">
-                    PS
-                  </th>
-
-                  <th className="sub-header">
-                    WS
-                  </th>
-
-                  {/* PERFORMANCE TASKS */}
-
-                  {performanceTaskColumns.map((column) => (
-                    <th
-                      key={column.id}
-                      className="sub-header"
-                    >
-                      {column.label}
-                    </th>
-                  ))}
-
-                  <th className="sub-header total-header">
-                    Total
-                  </th>
-
-                  <th className="sub-header">
-                    PS
-                  </th>
-
-                  <th className="sub-header">
-                    WS
-                  </th>
-
-                  {/* QUARTERLY ASSESSMENT */}
-
-                  <th className="sub-header">
-                    1
-                  </th>
-
-                  <th className="sub-header">
-                    PS
-                  </th>
-
-                  <th className="sub-header">
-                    WS
-                  </th>
-
-                </tr>
-
-              </thead>
-
-              {/* =================================================
-                  TABLE BODY
-              ================================================= */}
-
-              <tbody>
-
-                {/* =================================================
-                    MALE IDENTIFIER
-                ================================================= */}
-
-                <tr className="gender-divider-row">
-
-                  <td
-                    colSpan={
-                      3 +
-                      writtenWorkColumns.length +
-                      3 +
-                      performanceTaskColumns.length +
-                      3 +
-                      3 +
-                      2
-                    }
-                  >
-                    MALE
-                  </td>
-
-                </tr>
-
-                {/* MALE STUDENTS */}
-
-                {maleStudents.map(
-                  (student, index) => (
-                    <StudentRow
-                      key={student.id}
-                      student={student}
-                      number={index + 1}
-                      grades={grades}
-                      writtenWorkColumns={
-                        writtenWorkColumns
-                      }
-                      performanceTaskColumns={
-                        performanceTaskColumns
-                      }
-                      handleGradeChange={
-                        handleGradeChange
-                      }
-                      handleSingleGradeChange={
-                        handleSingleGradeChange
-                      }
+            <form onSubmit={handleSaveModalColumn} className="modal-form">
+              <div className="modal-body">
+                {modalState.category !== "EX_WEIGHT" && (
+                  <div className="form-group">
+                    <label>Column Title / Assessment Name</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Quiz 1, Long Test, Unit Assessment"
+                      className="modal-input"
+                      value={modalState.title}
+                      onChange={(e) => setModalState((prev) => ({ ...prev, title: e.target.value }))}
+                      disabled={modalState.category === "EX"}
                     />
-                  )
+                  </div>
                 )}
 
-                {/* =================================================
-                    FEMALE IDENTIFIER
-                ================================================= */}
-
-                <tr className="gender-divider-row">
-
-                  <td
-                    colSpan={
-                      3 +
-                      writtenWorkColumns.length +
-                      3 +
-                      performanceTaskColumns.length +
-                      3 +
-                      3 +
-                      2
-                    }
-                  >
-                    FEMALE
-                  </td>
-
-                </tr>
-
-                {/* FEMALE STUDENTS */}
-
-                {femaleStudents.map(
-                  (student, index) => (
-                    <StudentRow
-                      key={student.id}
-                      student={student}
-                      number={
-                        maleStudents.length +
-                        index +
-                        1
-                      }
-                      grades={grades}
-                      writtenWorkColumns={
-                        writtenWorkColumns
-                      }
-                      performanceTaskColumns={
-                        performanceTaskColumns
-                      }
-                      handleGradeChange={
-                        handleGradeChange
-                      }
-                      handleSingleGradeChange={
-                        handleSingleGradeChange
-                      }
+                <div className="form-row">
+                  <div className="form-group flex-1">
+                    <label>
+                      {modalState.category === "EX_WEIGHT"
+                        ? "Weight Percentage (%)"
+                        : "Highest Possible Score (HPS)"}
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min="1"
+                      placeholder="e.g. 25"
+                      className="modal-input"
+                      value={modalState.maxScore}
+                      onChange={(e) => setModalState((prev) => ({ ...prev, maxScore: e.target.value }))}
                     />
-                  )
-                )}
+                    <span className="input-hint">Must be greater than 0</span>
+                  </div>
 
-              </tbody>
+                  {modalState.category !== "EX" && modalState.category !== "EX_WEIGHT" && (
+                    <div className="form-group flex-1">
+                      <label>Activity Date</label>
+                      <input
+                        type="date"
+                        className="modal-input"
+                        value={modalState.date}
+                        onChange={(e) => setModalState((prev) => ({ ...prev, date: e.target.value }))}
+                      />
+                    </div>
+                  )}
+                </div>
 
-            </table>
-
+                <div className="modal-footer">
+                  <button
+                    type="button"
+                    className="modal-cancel-btn"
+                    onClick={() => setModalState((prev) => ({ ...prev, isOpen: false }))}
+                  >
+                    Cancel
+                  </button>
+                  <button type="submit" className="modal-submit-btn">
+                    {modalState.category === "EX" || modalState.category === "EX_WEIGHT"
+                      ? "Save HPS"
+                      : modalState.mode === "add"
+                      ? "Add Column"
+                      : "Save Changes"}
+                  </button>
+                </div>
+              </div>
+            </form>
           </div>
-
         </div>
       )}
 
@@ -744,202 +2266,274 @@ export default function ClassRecord({ activeClass, onBack }) {
 }
 
 // ============================================================
-// STUDENT ROW
+// STUDENT ROW (DEPED ORDER NO. 8, S. 2015 REAL-TIME CALCULATIONS)
 // ============================================================
-
 function StudentRow({
   student,
   number,
   grades,
   writtenWorkColumns,
   performanceTaskColumns,
+  examConfig,
+  weights,
+  isMapeh,
+  isLocked,
+  errorTooltip,
   handleGradeChange,
-  handleSingleGradeChange,
+  handleExamScoreChange,
+  handleScoreBlur,
 }) {
-  const studentGrades =
-    grades[student.id] || {};
+  const studentGrades = grades[student.id] || {};
+  const studentWW = studentGrades.writtenWorks || {};
+  const studentPT = studentGrades.performanceTasks || {};
+  const studentEX = studentGrades.examinations || {
+    st1: studentGrades.st1 || "",
+    st2: studentGrades.st2 || "",
+    te: studentGrades.te || studentGrades.quarterlyAssessment || "",
+  };
+
+  // Real-time calculation with DepEd Transmutation Table
+  const rowCalculation = useMemo(() => {
+    return calculateStudentGrades({
+      writtenWorks: studentWW,
+      performanceTasks: studentPT,
+      examinations: studentEX,
+      quarterlyAssessment: studentEX.te || "",
+      writtenWorkColumns,
+      performanceTaskColumns,
+      examConfig,
+      weights,
+      isMapeh: Boolean(isMapeh),
+      isMapehSubject: Boolean(isMapeh),
+    });
+  }, [studentWW, studentPT, studentEX, writtenWorkColumns, performanceTaskColumns, examConfig, weights, isMapeh]);
 
   return (
     <tr className="student-row">
-
       {/* NUMBER */}
+      <td className="cr-student-num">{number}</td>
 
-      <td className="number-cell">
-        {number}
+      {/* LEARNERS' NAME */}
+      <td className="cr-student-name" title={`LRN: ${student.lrn || "N/A"}`}>
+        {student.firstName} {student.lastName}
       </td>
 
-      {/* LRN */}
+      {/* WRITTEN WORKS */}
+      {writtenWorkColumns.map((column) => {
+        const val = studentWW[column.id];
+        const numVal = Number(val);
+        const cellKey = `${student.id}_${column.id}`;
+        const isExceeded = errorTooltip?.cellKey === cellKey;
+        const isScoreFailing = !isExceeded && val !== undefined && val !== "" && !isNaN(numVal) && column.max_score > 0 && numVal / column.max_score < 0.6;
 
-      <td className="lrn-cell">
-        {student.lrn}
+        return (
+          <td key={column.id} className={`cr-score-input-cell ${isScoreFailing ? "failing-cell" : ""}`}>
+            <div className="grade-input-wrapper">
+              <input
+                type="number"
+                min="0"
+                max={column.max_score}
+                value={val !== undefined ? val : ""}
+                disabled={isLocked}
+                readOnly={isLocked}
+                className={`cr-score-input ${isExceeded ? "exceeded-score-input" : ""} ${isScoreFailing ? "failing-input" : ""} ${isLocked ? "locked-input" : ""}`}
+                onChange={(e) =>
+                  handleGradeChange(
+                    student.id,
+                    "writtenWorks",
+                    column.id,
+                    e.target.value,
+                    column.max_score,
+                    column.assessment_id
+                  )
+                }
+                onBlur={handleScoreBlur}
+                title={isLocked ? "This term is locked and read-only" : `Max: ${column.max_score}`}
+              />
+              {isExceeded && (
+                <div className="score-exceeded-badge" role="alert">
+                  {errorTooltip.message}
+                </div>
+              )}
+            </div>
+          </td>
+        );
+      })}
+
+      <td className="cr-calc-cell">{rowCalculation.writtenWorks.total}</td>
+      <td className={`cr-calc-cell ${rowCalculation.writtenWorks.isFailing ? "failing-metric" : ""}`}>
+        {rowCalculation.writtenWorks.ps}
+      </td>
+      <td className="cr-calc-cell">{rowCalculation.writtenWorks.ws}</td>
+
+      {/* PERFORMANCE TASKS */}
+      {performanceTaskColumns.map((column) => {
+        const val = studentPT[column.id];
+        const numVal = Number(val);
+        const cellKey = `${student.id}_${column.id}`;
+        const isExceeded = errorTooltip?.cellKey === cellKey;
+        const isScoreFailing = !isExceeded && val !== undefined && val !== "" && !isNaN(numVal) && column.max_score > 0 && numVal / column.max_score < 0.6;
+
+        return (
+          <td key={column.id} className={`cr-score-input-cell ${isScoreFailing ? "failing-cell" : ""}`}>
+            <div className="grade-input-wrapper">
+              <input
+                type="number"
+                min="0"
+                max={column.max_score}
+                value={val !== undefined ? val : ""}
+                disabled={isLocked}
+                readOnly={isLocked}
+                className={`cr-score-input ${isExceeded ? "exceeded-score-input" : ""} ${isScoreFailing ? "failing-input" : ""} ${isLocked ? "locked-input" : ""}`}
+                onChange={(e) =>
+                  handleGradeChange(
+                    student.id,
+                    "performanceTasks",
+                    column.id,
+                    e.target.value,
+                    column.max_score,
+                    column.assessment_id
+                  )
+                }
+                onBlur={handleScoreBlur}
+                title={isLocked ? "This term is locked and read-only" : `Max: ${column.max_score}`}
+              />
+              {isExceeded && (
+                <div className="score-exceeded-badge" role="alert">
+                  {errorTooltip.message}
+                </div>
+              )}
+            </div>
+          </td>
+        );
+      })}
+
+      <td className="cr-calc-cell">{rowCalculation.performanceTasks.total}</td>
+      <td className={`cr-calc-cell ${rowCalculation.performanceTasks.isFailing ? "failing-metric" : ""}`}>
+        {rowCalculation.performanceTasks.ps}
+      </td>
+      <td className="cr-calc-cell">{rowCalculation.performanceTasks.ws}</td>
+
+      {/* EXAMINATIONS: ST1 | ST2 | TE | WS ST1 | WS ST2 | WS TE | PS | WS */}
+      {/* ST1 INPUT */}
+      {(() => {
+        const val = studentEX.st1;
+        const numVal = Number(val);
+        const cellKey = `${student.id}_st1`;
+        const isExceeded = errorTooltip?.cellKey === cellKey;
+        const isFailing = !isExceeded && val !== undefined && val !== "" && !isNaN(numVal) && examConfig.st1HPS > 0 && numVal / examConfig.st1HPS < 0.6;
+        return (
+          <td className={`cr-score-input-cell ${isFailing ? "failing-cell" : ""}`}>
+            <div className="grade-input-wrapper">
+              <input
+                type="number"
+                min="0"
+                max={examConfig.st1HPS}
+                value={val !== undefined && val !== null ? val : ""}
+                disabled={isLocked}
+                readOnly={isLocked}
+                className={`cr-score-input ${isExceeded ? "exceeded-score-input" : ""} ${isFailing ? "failing-input" : ""} ${isLocked ? "locked-input" : ""}`}
+                onChange={(e) => handleExamScoreChange(student.id, "st1", e.target.value, examConfig.st1HPS, examConfig.st1Id)}
+                onBlur={handleScoreBlur}
+                title={isLocked ? "Locked" : `Max: ${examConfig.st1HPS}`}
+              />
+              {isExceeded && <div className="score-exceeded-badge">{errorTooltip.message}</div>}
+            </div>
+          </td>
+        );
+      })()}
+
+      {/* ST2 INPUT */}
+      {(() => {
+        const val = studentEX.st2;
+        const numVal = Number(val);
+        const cellKey = `${student.id}_st2`;
+        const isExceeded = errorTooltip?.cellKey === cellKey;
+        const isFailing = !isExceeded && val !== undefined && val !== "" && !isNaN(numVal) && examConfig.st2HPS > 0 && numVal / examConfig.st2HPS < 0.6;
+        return (
+          <td className={`cr-score-input-cell ${isFailing ? "failing-cell" : ""}`}>
+            <div className="grade-input-wrapper">
+              <input
+                type="number"
+                min="0"
+                max={examConfig.st2HPS}
+                value={val !== undefined && val !== null ? val : ""}
+                disabled={isLocked}
+                readOnly={isLocked}
+                className={`cr-score-input ${isExceeded ? "exceeded-score-input" : ""} ${isFailing ? "failing-input" : ""} ${isLocked ? "locked-input" : ""}`}
+                onChange={(e) => handleExamScoreChange(student.id, "st2", e.target.value, examConfig.st2HPS, examConfig.st2Id)}
+                onBlur={handleScoreBlur}
+                title={isLocked ? "Locked" : `Max: ${examConfig.st2HPS}`}
+              />
+              {isExceeded && <div className="score-exceeded-badge">{errorTooltip.message}</div>}
+            </div>
+          </td>
+        );
+      })()}
+
+      {/* TE INPUT */}
+      {(() => {
+        const val = studentEX.te;
+        const numVal = Number(val);
+        const cellKey = `${student.id}_te`;
+        const isExceeded = errorTooltip?.cellKey === cellKey;
+        const isFailing = !isExceeded && val !== undefined && val !== "" && !isNaN(numVal) && examConfig.teHPS > 0 && numVal / examConfig.teHPS < 0.6;
+        return (
+          <td className={`cr-score-input-cell ${isFailing ? "failing-cell" : ""}`}>
+            <div className="grade-input-wrapper">
+              <input
+                type="number"
+                min="0"
+                max={examConfig.teHPS}
+                value={val !== undefined && val !== null ? val : ""}
+                disabled={isLocked}
+                readOnly={isLocked}
+                className={`cr-score-input ${isExceeded ? "exceeded-score-input" : ""} ${isFailing ? "failing-input" : ""} ${isLocked ? "locked-input" : ""}`}
+                onChange={(e) => handleExamScoreChange(student.id, "te", e.target.value, examConfig.teHPS, examConfig.teId)}
+                onBlur={handleScoreBlur}
+                title={isLocked ? "Locked" : `Max: ${examConfig.teHPS}`}
+              />
+              {isExceeded && <div className="score-exceeded-badge">{errorTooltip.message}</div>}
+            </div>
+          </td>
+        );
+      })()}
+
+      {/* EX COMPUTED METRICS: MAPEH shows Total, PS, WS. Standard shows WS ST1, WS ST2, WS TE, PS, WS */}
+      {isMapeh ? (
+        <>
+          <td className="cr-calc-cell">{rowCalculation.examinations.totalRaw}</td>
+          <td className={`cr-calc-cell ${rowCalculation.examinations.isFailing ? "failing-metric" : ""}`}>
+            {rowCalculation.examinations.ps}
+          </td>
+          <td className="cr-calc-cell">{rowCalculation.examinations.ws}</td>
+        </>
+      ) : (
+        <>
+          <td className="cr-calc-cell">{rowCalculation.examinations.st1.ws}</td>
+          <td className="cr-calc-cell">{rowCalculation.examinations.st2.ws}</td>
+          <td className="cr-calc-cell">{rowCalculation.examinations.te.ws}</td>
+          <td className={`cr-calc-cell ${rowCalculation.examinations.isFailing ? "failing-metric" : ""}`}>
+            {rowCalculation.examinations.ps}
+          </td>
+          <td className="cr-calc-cell">{rowCalculation.examinations.ws}</td>
+        </>
+      )}
+
+      {/* INITIAL GRADE */}
+      <td className="cr-summary-cell">
+        {rowCalculation.initialGrade !== "-" ? rowCalculation.initialGrade : ""}
       </td>
 
-      {/* NAME */}
-
-      <td className="name-cell">
-        {student.firstName}{" "}
-        {student.lastName}
+      {/* TERM GRADE */}
+      <td className={`cr-summary-cell term-grade-cell ${rowCalculation.isFailing ? "failing-grade-cell" : ""}`}>
+        {rowCalculation.termGrade !== "-" ? rowCalculation.termGrade : ""}
       </td>
 
-      {/* ======================================================
-          WRITTEN WORKS
-      ====================================================== */}
-
-      {writtenWorkColumns.map((column) => (
-        <td
-          key={column.id}
-          className="grade-input-cell"
-        >
-          <input
-            type="number"
-            min="0"
-            max="100"
-            value={
-              studentGrades.writtenWorks?.[
-                column.id
-              ] || ""
-            }
-            onChange={(e) =>
-              handleGradeChange(
-                student.id,
-                "writtenWorks",
-                column.id,
-                e.target.value
-              )
-            }
-          />
-        </td>
-      ))}
-
-      <td className="computed-cell">
-        -
+      {/* DESCRIPTOR */}
+      <td className="cr-descriptor-cell">
+        {rowCalculation.descriptor !== "-" ? rowCalculation.descriptor : ""}
       </td>
-
-      <td className="computed-cell">
-        -
-      </td>
-
-      <td className="computed-cell">
-        -
-      </td>
-
-      {/* ======================================================
-          PERFORMANCE TASKS
-      ====================================================== */}
-
-      {performanceTaskColumns.map((column) => (
-        <td
-          key={column.id}
-          className="grade-input-cell"
-        >
-          <input
-            type="number"
-            min="0"
-            max="100"
-            value={
-              studentGrades.performanceTasks?.[
-                column.id
-              ] || ""
-            }
-            onChange={(e) =>
-              handleGradeChange(
-                student.id,
-                "performanceTasks",
-                column.id,
-                e.target.value
-              )
-            }
-          />
-        </td>
-      ))}
-
-      <td className="computed-cell">
-        -
-      </td>
-
-      <td className="computed-cell">
-        -
-      </td>
-
-      <td className="computed-cell">
-        -
-      </td>
-
-      {/* ======================================================
-          QUARTERLY ASSESSMENT
-      ====================================================== */}
-
-      <td className="grade-input-cell">
-        <input
-          type="number"
-          min="0"
-          max="100"
-          value={
-            studentGrades.quarterlyAssessment ||
-            ""
-          }
-          onChange={(e) =>
-            handleSingleGradeChange(
-              student.id,
-              "quarterlyAssessment",
-              e.target.value
-            )
-          }
-        />
-      </td>
-
-      <td className="computed-cell">
-        -
-      </td>
-
-      <td className="computed-cell">
-        -
-      </td>
-
-      {/* ======================================================
-          INITIAL GRADE
-      ====================================================== */}
-
-      <td className="grade-input-cell final-grade-cell">
-        <input
-          type="number"
-          min="0"
-          max="100"
-          value={
-            studentGrades.initialGrade || ""
-          }
-          onChange={(e) =>
-            handleSingleGradeChange(
-              student.id,
-              "initialGrade",
-              e.target.value
-            )
-          }
-        />
-      </td>
-
-      {/* ======================================================
-          QUARTERLY GRADE
-      ====================================================== */}
-
-      <td className="grade-input-cell final-grade-cell">
-        <input
-          type="number"
-          min="0"
-          max="100"
-          value={
-            studentGrades.quarterlyGrade || ""
-          }
-          onChange={(e) =>
-            handleSingleGradeChange(
-              student.id,
-              "quarterlyGrade",
-              e.target.value
-            )
-          }
-        />
-      </td>
-
     </tr>
   );
 }

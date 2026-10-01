@@ -8,7 +8,8 @@ import {
   getAccountSummary,
   getAuditEvents,
 } from "../../services/adminDashboardService";
-import { getStoredUser } from "../../utils/auth";
+import { getUserProfile } from "../../services/userService";
+import { getStoredUser, setStoredUser } from "../../utils/auth";
 import "../../styles/adminDashboard.css";
 
 const emptySummary = {
@@ -24,15 +25,17 @@ const emptySummary = {
 };
 
 export default function AdminDashboard() {
-  const currentUser = useMemo(() => getStoredUser(), []);
+  const [adminUser, setAdminUser] = useState(() => getStoredUser());
   const [summary, setSummary] = useState(emptySummary);
   const [auditEvents, setAuditEvents] = useState([]);
   const [isSummaryLoading, setIsSummaryLoading] = useState(true);
+  const [hasLoadedSummary, setHasLoadedSummary] = useState(false);
   const [isAuditLoading, setIsAuditLoading] = useState(true);
   const [summaryError, setSummaryError] = useState("");
   const [auditError, setAuditError] = useState("");
   const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
   const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState("");
   const [schoolYearFilter, setSchoolYearFilter] = useState("");
   const [moduleFilter, setModuleFilter] = useState("");
   const [eventTypeFilter, setEventTypeFilter] = useState("");
@@ -47,14 +50,28 @@ export default function AdminDashboard() {
     setSummaryError("");
 
     try {
+      if (adminUser?.user_id) {
+        getUserProfile(adminUser.user_id)
+          .then((profile) => {
+            if (profile) {
+              setAdminUser((prev) => {
+                const merged = { ...prev, ...profile };
+                setStoredUser(merged);
+                return merged;
+              });
+            }
+          })
+          .catch(() => {});
+      }
       setSummary(await getAccountSummary());
+      setHasLoadedSummary(true);
       setLastUpdatedAt(new Date());
     } catch (error) {
       setSummaryError(error.message || "Account summary could not be loaded.");
     } finally {
       setIsSummaryLoading(false);
     }
-  }, []);
+  }, [adminUser?.user_id]);
 
   const loadAuditEvents = useCallback(async () => {
     setIsAuditLoading(true);
@@ -73,10 +90,24 @@ export default function AdminDashboard() {
   useEffect(() => {
     let isCurrent = true;
 
+    if (adminUser?.user_id) {
+      getUserProfile(adminUser.user_id)
+        .then((profile) => {
+          if (!isCurrent || !profile) return;
+          setAdminUser((prev) => {
+            const merged = { ...prev, ...profile };
+            setStoredUser(merged);
+            return merged;
+          });
+        })
+        .catch(() => {});
+    }
+
     getAccountSummary()
       .then((nextSummary) => {
         if (!isCurrent) return;
         setSummary(nextSummary);
+        setHasLoadedSummary(true);
         setLastUpdatedAt(new Date());
       })
       .catch((error) => {
@@ -106,7 +137,7 @@ export default function AdminDashboard() {
     return () => {
       isCurrent = false;
     };
-  }, []);
+  }, [adminUser?.user_id]);
 
   useEffect(() => {
     if (!selectedEvent) return undefined;
@@ -118,6 +149,21 @@ export default function AdminDashboard() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [selectedEvent]);
+
+  const roles = useMemo(() => {
+    const fromEvents = Array.from(
+      new Set(auditEvents.map((event) => event.actorRole)),
+    ).filter(Boolean);
+    const standardOrder = [
+      "System Administrator",
+      "Principal",
+      "Department Head",
+      "Subject Teacher",
+      "Adviser",
+      "System",
+    ];
+    return Array.from(new Set([...standardOrder, ...fromEvents]));
+  }, [auditEvents]);
 
   const modules = useMemo(
     () =>
@@ -151,9 +197,25 @@ export default function AdminDashboard() {
     return auditEvents.filter((event) => {
       const matchesSearch =
         !query ||
-        [event.actorName, event.summary, event.target, event.eventLabel]
+        [
+          event.actorName,
+          event.actorRole,
+          event.actingAs,
+          event.summary,
+          event.target,
+          event.eventLabel,
+        ]
           .filter(Boolean)
           .some((value) => value.toLowerCase().includes(query));
+      const matchesRole =
+        !roleFilter ||
+        event.actorRole === roleFilter ||
+        (roleFilter === "Adviser" &&
+          (event.actorRole === "Adviser" ||
+            event.actingAs?.toLowerCase().includes("adviser"))) ||
+        (roleFilter === "Subject Teacher" &&
+          event.actorRole === "Subject Teacher" &&
+          !event.actingAs?.toLowerCase().includes("adviser"));
       const matchesModule = !moduleFilter || event.module === moduleFilter;
       const matchesSchoolYear =
         !schoolYearFilter ||
@@ -175,6 +237,7 @@ export default function AdminDashboard() {
 
       return (
         matchesSearch &&
+        matchesRole &&
         matchesSchoolYear &&
         matchesModule &&
         matchesEventType &&
@@ -190,6 +253,7 @@ export default function AdminDashboard() {
     eventTypeFilter,
     impactFilter,
     moduleFilter,
+    roleFilter,
     schoolYearFilter,
     search,
   ]);
@@ -200,6 +264,7 @@ export default function AdminDashboard() {
 
   const clearFilters = () => {
     setSearch("");
+    setRoleFilter("");
     setSchoolYearFilter("");
     setModuleFilter("");
     setEventTypeFilter("");
@@ -210,6 +275,10 @@ export default function AdminDashboard() {
 
   const handleSearchChange = (value) => {
     setSearch(value);
+  };
+
+  const handleRoleChange = (value) => {
+    setRoleFilter(value);
   };
 
   const handleModuleChange = (value) => {
@@ -236,7 +305,10 @@ export default function AdminDashboard() {
     setDateToFilter(value);
   };
 
-  const firstName = currentUser?.first_name || "Admin";
+  const adminFullName =
+    [adminUser?.first_name, adminUser?.last_name].filter(Boolean).join(" ") ||
+    adminUser?.first_name ||
+    "Admin";
   const isRefreshing = isSummaryLoading || isAuditLoading;
   const lastUpdatedLabel = lastUpdatedAt
     ? `Updated ${new Intl.DateTimeFormat("en-PH", {
@@ -253,7 +325,7 @@ export default function AdminDashboard() {
       ======================================== */}
       <header className="admin-dashboard-intro">
         <div>
-          <h1>Welcome back, {firstName}!</h1>
+          <h1>Welcome back, {adminFullName}!</h1>
           <p>Monitor user accounts and recent activity across Auralis.</p>
         </div>
         <div className="admin-dashboard-refresh">
@@ -276,6 +348,7 @@ export default function AdminDashboard() {
         summary={summary}
         isLoading={isSummaryLoading}
         error={summaryError}
+        hasLoadedData={hasLoadedSummary}
         onRetry={loadSummary}
       />
 
@@ -295,17 +368,20 @@ export default function AdminDashboard() {
 
         <AuditEventFilters
           search={search}
+          role={roleFilter}
           schoolYear={schoolYearFilter}
           module={moduleFilter}
           eventType={eventTypeFilter}
           impact={impactFilter}
           dateFrom={dateFromFilter}
           dateTo={dateToFilter}
+          roles={roles}
           schoolYears={schoolYears}
           modules={modules}
           eventTypes={eventTypes}
           showMore={showMoreFilters}
           onSearchChange={handleSearchChange}
+          onRoleChange={handleRoleChange}
           onSchoolYearChange={handleSchoolYearChange}
           onModuleChange={handleModuleChange}
           onEventTypeChange={handleEventTypeChange}

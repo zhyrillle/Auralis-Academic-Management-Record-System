@@ -2,7 +2,33 @@ import { Eye, FileSpreadsheet, Edit2, Star } from "lucide-react";
 import "../../styles/themes.css";
 
 export default function ClassCard({ cls, onView, onGradingSheet, onEdit }) {
-  const isAdvisory = cls.classType === "Advisory Class";
+  const isSpecialized = Boolean(
+    cls?.is_specialized == 1 ||
+    cls?.is_specialized === true ||
+    cls?.is_specialized === "1" ||
+    String(cls?.is_specialized).toLowerCase() === "true" ||
+    (cls?.classType && (String(cls.classType).startsWith("Special Program") || String(cls.classType).startsWith("Advisory Class -")))
+  );
+  const isAdviser = Boolean(cls?.isAdviser === true || (cls?.classType && String(cls.classType).startsWith("Advisory Class")));
+  const isAdvisory = isAdviser;
+
+  const programCode = cls?.program_code || cls?.programCode || cls?.program_name || null;
+  const validProgCode = programCode && String(programCode).toUpperCase() !== "EBEC" ? String(programCode).toUpperCase() : null;
+
+  let displayClassType = cls?.classType;
+  if (isAdviser && isSpecialized) {
+    displayClassType = validProgCode ? `Advisory Class - ${validProgCode}` : "Advisory Class";
+  } else if (isSpecialized) {
+    displayClassType = validProgCode ? `Special Program - ${validProgCode}` : "Special Program";
+  } else if (isAdviser) {
+    displayClassType = "Advisory Class";
+  } else {
+    displayClassType = "Regular Class";
+  }
+
+  const isGreenBadge = isAdviser || isSpecialized;
+
+
 
   return (
     <div
@@ -60,10 +86,14 @@ export default function ClassCard({ cls, onView, onGradingSheet, onEdit }) {
 
           <span
             style={{
-              backgroundColor: isAdvisory
+              backgroundColor: isSpecialized
+                ? "rgba(201, 162, 39, 0.1)"
+                : isGreenBadge
                 ? "rgba(22,163,74,0.1)"
                 : "rgba(17,45,97,0.06)",
-              color: isAdvisory
+              color: isSpecialized
+                ? "#c9a227"
+                : isGreenBadge
                 ? "#16a34a"
                 : "#112d61",
               padding: "4px 10px",
@@ -101,11 +131,11 @@ export default function ClassCard({ cls, onView, onGradingSheet, onEdit }) {
             fontSize: "var(--fs-subtext)",
             fontWeight: "var(--fw-medium)",
             fontFamily: "var(--font-dm-sans)",
-            color: isAdvisory ? "#16a34a" : "#64748b",
+            color: isSpecialized ? "#c9a227" : isAdvisory ? "#16a34a" : "#64748b",
           }}
         >
 
-          {isAdvisory && (
+          {(isAdvisory || isSpecialized) && (
             <Star
               size={14}
               fill="currentColor"
@@ -113,7 +143,7 @@ export default function ClassCard({ cls, onView, onGradingSheet, onEdit }) {
           )}
 
           <span>
-            {cls.classType}
+            {displayClassType}
           </span>
 
         </div>

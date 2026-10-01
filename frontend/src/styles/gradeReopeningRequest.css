@@ -657,6 +657,18 @@
   color: #dc2626;
 }
 
+.grr-badge.cancelled {
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #cbd5e1;
+}
+
+.grr-timeline-icon-circle.cancelled {
+  background: #f1f5f9;
+  color: #64748b;
+  border-color: #cbd5e1;
+}
+
 .grr-view-details-btn {
   padding: 4px 10px;
   border: 1px solid #cbd5e1;
@@ -866,7 +878,31 @@
   border-top: 1px solid #e2e8f0;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.grr-cancel-request-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: #fee2e2;
+  color: #dc2626;
+  border: 1px solid #fca5a5;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.grr-cancel-request-btn:hover {
+  background: #dc2626;
+  color: #ffffff;
+  border-color: #dc2626;
+  box-shadow: 0 2px 8px rgba(220, 38, 38, 0.2);
 }
 
 /* Success Modal Specifics */

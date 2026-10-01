@@ -6,6 +6,7 @@ const db = require("../config/db");
 
 const User = require("../models/User");
 const UserManagementOptions = require("../models/UserManagementOptions");
+const AuditEvent = require("../models/AuditEvent");
 const OtpStore = require("../services/otpStore");
 const { sendPasswordResetOtpEmail } = require("../services/emailService");
 const {
@@ -86,7 +87,16 @@ const getManagementUsers = async () => {
     SELECT
       u.user_id,
       u.role,
-      u.department_id,
+      COALESCE(
+        u.department_id,
+        (
+          SELECT dh.department_id
+          FROM DEPARTMENT_HEAD dh
+          LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = dh.school_year_id
+          WHERE dh.user_id = u.user_id AND (sy.status IS NULL OR LOWER(sy.status) IN ('active', 'ongoing'))
+          ORDER BY dh.department_head_id DESC LIMIT 1
+        )
+      ) AS department_id,
       u.first_name,
       u.middle_name,
       u.last_name,
@@ -101,7 +111,7 @@ const getManagementUsers = async () => {
           SELECT 1
           FROM SECTION_ADVISER_ASSIGNMENT saa
           LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = saa.school_year_id
-          WHERE saa.user_id = u.user_id AND sy.status IN ('ACTIVE', 'ONGOING')
+          WHERE saa.user_id = u.user_id AND (sy.status IS NULL OR LOWER(sy.status) IN ('active', 'ongoing'))
         ) AND u.role IN ('subject_teacher', 'subject teacher') THEN 'adviser'
         WHEN u.role IN ('subject_teacher', 'subject teacher') THEN 'subject teacher'
         WHEN u.role IN ('department_head', 'department head') THEN 'department head'
@@ -121,19 +131,10 @@ const getManagementUsers = async () => {
           FROM DEPARTMENT_HEAD dh
           INNER JOIN DEPARTMENT d ON d.department_id = dh.department_id
           LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = dh.school_year_id
-          WHERE dh.user_id = u.user_id AND sy.status IN ('ACTIVE', 'ONGOING')
+          WHERE dh.user_id = u.user_id AND (sy.status IS NULL OR LOWER(sy.status) IN ('active', 'ongoing'))
           ORDER BY dh.department_head_id DESC LIMIT 1
         )
-        WHEN u.role IN ('subject_teacher', 'subject teacher') THEN (
-          SELECT GROUP_CONCAT(DISTINCT d.department_name ORDER BY d.department_name SEPARATOR ', ')
-          FROM TEACHER_ASSIGNMENT ta
-          INNER JOIN SUBJECT_OFFERING so ON so.subject_offering_id = ta.subject_offering_id
-          INNER JOIN SUBJECT s ON s.subject_id = so.subject_id
-          INNER JOIN DEPARTMENT d ON d.department_id = s.department_id
-          LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = so.school_year_id
-          WHERE ta.user_id = u.user_id AND sy.status IN ('ACTIVE', 'ONGOING')
-        )
-        ELSE NULL
+        ELSE 'General Education'
       END AS department_name,
       (
         SELECT gl.grade_level_name
@@ -141,7 +142,7 @@ const getManagementUsers = async () => {
         INNER JOIN SECTION sec ON sec.section_id = saa.section_id
         INNER JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
         LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = saa.school_year_id
-        WHERE saa.user_id = u.user_id AND sy.status IN ('ACTIVE', 'ONGOING')
+        WHERE saa.user_id = u.user_id AND (sy.status IS NULL OR LOWER(sy.status) IN ('active', 'ongoing'))
         ORDER BY saa.adviser_assignment_id DESC LIMIT 1
       ) AS gradeLevel,
       (
@@ -149,7 +150,7 @@ const getManagementUsers = async () => {
         FROM SECTION_ADVISER_ASSIGNMENT saa
         INNER JOIN SECTION sec ON sec.section_id = saa.section_id
         LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = saa.school_year_id
-        WHERE saa.user_id = u.user_id AND sy.status IN ('ACTIVE', 'ONGOING')
+        WHERE saa.user_id = u.user_id AND (sy.status IS NULL OR LOWER(sy.status) IN ('active', 'ongoing'))
         ORDER BY saa.adviser_assignment_id DESC LIMIT 1
       ) AS section,
       (
@@ -157,7 +158,7 @@ const getManagementUsers = async () => {
         FROM SECTION_ADVISER_ASSIGNMENT saa
         INNER JOIN SECTION sec ON sec.section_id = saa.section_id
         LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = saa.school_year_id
-        WHERE saa.user_id = u.user_id AND sy.status IN ('ACTIVE', 'ONGOING')
+        WHERE saa.user_id = u.user_id AND (sy.status IS NULL OR LOWER(sy.status) IN ('active', 'ongoing'))
         ORDER BY saa.adviser_assignment_id DESC LIMIT 1
       ) AS adviser_section_name,
       (
@@ -166,14 +167,14 @@ const getManagementUsers = async () => {
         INNER JOIN SECTION sec ON sec.section_id = saa.section_id
         INNER JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
         LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = saa.school_year_id
-        WHERE saa.user_id = u.user_id AND sy.status IN ('ACTIVE', 'ONGOING')
+        WHERE saa.user_id = u.user_id AND (sy.status IS NULL OR LOWER(sy.status) IN ('active', 'ongoing'))
         ORDER BY saa.adviser_assignment_id DESC LIMIT 1
       ) AS adviser_grade_level_name,
       (
         SELECT saa.section_id
         FROM SECTION_ADVISER_ASSIGNMENT saa
         LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = saa.school_year_id
-        WHERE saa.user_id = u.user_id AND sy.status IN ('ACTIVE', 'ONGOING')
+        WHERE saa.user_id = u.user_id AND (sy.status IS NULL OR LOWER(sy.status) IN ('active', 'ongoing'))
         ORDER BY saa.adviser_assignment_id DESC LIMIT 1
       ) AS adviser_section_id,
       (
@@ -181,9 +182,18 @@ const getManagementUsers = async () => {
         FROM SECTION_ADVISER_ASSIGNMENT saa
         INNER JOIN SECTION sec ON sec.section_id = saa.section_id
         LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = saa.school_year_id
-        WHERE saa.user_id = u.user_id AND sy.status IN ('ACTIVE', 'ONGOING')
+        WHERE saa.user_id = u.user_id AND (sy.status IS NULL OR LOWER(sy.status) IN ('active', 'ongoing'))
         ORDER BY saa.adviser_assignment_id DESC LIMIT 1
-      ) AS adviser_grade_level_id
+      ) AS adviser_grade_level_id,
+      (
+        SELECT COALESCE(p.is_specialized, 0)
+        FROM SECTION_ADVISER_ASSIGNMENT saa
+        INNER JOIN SECTION sec ON sec.section_id = saa.section_id
+        LEFT JOIN PROGRAM p ON p.program_id = sec.program_id
+        LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = saa.school_year_id
+        WHERE saa.user_id = u.user_id AND (sy.status IS NULL OR LOWER(sy.status) IN ('active', 'ongoing'))
+        ORDER BY saa.adviser_assignment_id DESC LIMIT 1
+      ) AS is_specialized
     FROM USER u
     WHERE u.role <> 'system_admin'
     ORDER BY u.last_name ASC, u.first_name ASC
@@ -198,6 +208,10 @@ const getManagementUsers = async () => {
         so.subject_id,
         so.section_id,
         sec.grade_level_id,
+        sec.program_id,
+        p.program_code,
+        p.program_name,
+        COALESCE(p.is_specialized, 0) AS is_specialized,
         s.subject_name,
         s.subject_code,
         sec.section_name,
@@ -205,10 +219,11 @@ const getManagementUsers = async () => {
       FROM TEACHER_ASSIGNMENT ta
       INNER JOIN SUBJECT_OFFERING so ON so.subject_offering_id = ta.subject_offering_id
       INNER JOIN SECTION sec ON sec.section_id = so.section_id
+      LEFT JOIN PROGRAM p ON p.program_id = sec.program_id
       INNER JOIN SUBJECT s ON s.subject_id = so.subject_id
       INNER JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
       LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = so.school_year_id
-      WHERE ta.user_id = ? AND sy.status IN ('ACTIVE', 'ONGOING')
+      WHERE ta.user_id = ? AND (sy.status IS NULL OR LOWER(sy.status) IN ('active', 'ongoing'))
       ORDER BY gl.grade_level_id ASC, sec.section_name ASC, s.subject_name ASC
       `,
       [user.user_id]
@@ -265,13 +280,18 @@ router.post("/login", async (req, res) => {
         saa.adviser_assignment_id,
         saa.section_id,
         sec.section_name,
+        sec.program_id,
+        p.program_code,
+        p.program_name,
+        COALESCE(p.is_specialized, 0) AS is_specialized,
         gl.grade_level_id,
         gl.grade_level_name
       FROM SECTION_ADVISER_ASSIGNMENT saa
       INNER JOIN SECTION sec ON sec.section_id = saa.section_id
+      LEFT JOIN PROGRAM p ON p.program_id = sec.program_id
       INNER JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
       LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = saa.school_year_id
-      WHERE saa.user_id = ? AND (sy.status IN ('ACTIVE', 'ONGOING') OR sy.school_year_id IS NULL)
+      WHERE saa.user_id = ?
       ORDER BY saa.adviser_assignment_id DESC
       LIMIT 1
       `,
@@ -499,6 +519,21 @@ router.post("/reset-password", async (req, res) => {
 
     OtpStore.invalidate(cleanEmail);
 
+    await AuditEvent.create({
+      user_id: user.user_id,
+      actor_context: { source: 'user', acting_as: 'User' },
+      event_type: 'USER_PASSWORD_RESET',
+      module_name: 'ACCOUNT_MANAGEMENT',
+      entity_type: 'USER',
+      entity_id: user.user_id,
+      after_data: { email: cleanEmail },
+      metadata: {
+        target: `${user.first_name || ''} ${user.last_name || ''}`.trim() || cleanEmail,
+        summary: `Reset password for ${cleanEmail}.`,
+        impact: 'High',
+      },
+    }).catch((err) => console.error('Failed to log password reset audit:', err.message));
+
     res.json({
       success: true,
       message: "Your password has been successfully reset. You can now login with your new password.",
@@ -509,12 +544,67 @@ router.post("/reset-password", async (req, res) => {
   }
 });
 
+router.get("/summary", async (req, res) => {
+  try {
+    const summary = await AuditEvent.getAccountSummary();
+    res.json(summary);
+  } catch (err) {
+    sendDatabaseError(res, err);
+  }
+});
+
 router.get("/management-options", async (req, res) => {
   try {
     const schoolYear = await UserManagementOptions.getActiveSchoolYear();
     const [gradeLevels] = await db.execute("SELECT grade_level_id, grade_level_name FROM GRADE_LEVEL ORDER BY grade_level_id ASC");
-    const [departments] = await db.execute("SELECT department_id, department_name FROM DEPARTMENT ORDER BY department_name ASC");
-    const [sections] = await db.execute("SELECT section_id, section_name, grade_level_id FROM SECTION ORDER BY section_name ASC");
+    const [departments] = await db.execute(`
+      SELECT 
+        d.department_id, 
+        d.department_name,
+        COALESCE(
+          (
+            SELECT dh.user_id
+            FROM DEPARTMENT_HEAD dh
+            LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = dh.school_year_id
+            WHERE dh.department_id = d.department_id
+              AND (sy.status IS NULL OR LOWER(sy.status) IN ('active', 'ongoing'))
+            ORDER BY dh.department_head_id DESC
+            LIMIT 1
+          ),
+          (
+            SELECT u.user_id
+            FROM USER u
+            WHERE u.department_id = d.department_id
+              AND LOWER(u.role) IN ('department_head', 'department head', 'dept_head')
+              AND LOWER(COALESCE(u.account_status, 'active')) = 'active'
+            ORDER BY u.user_id DESC
+            LIMIT 1
+          )
+        ) AS head_user_id
+      FROM DEPARTMENT d 
+      ORDER BY d.department_name ASC
+    `);
+    const [sections] = await db.execute(`
+      SELECT 
+        sec.section_id, 
+        sec.section_name, 
+        sec.grade_level_id,
+        COALESCE(
+          (
+            SELECT saa.user_id
+            FROM SECTION_ADVISER_ASSIGNMENT saa
+            LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = saa.school_year_id
+            WHERE saa.section_id = sec.section_id
+              AND (sy.status IS NULL OR LOWER(sy.status) IN ('active', 'ongoing'))
+            ORDER BY saa.adviser_assignment_id DESC
+            LIMIT 1
+          ),
+          sec.user_id
+        ) AS adviser_user_id
+      FROM SECTION sec 
+      ORDER BY sec.section_name ASC
+    `);
+    const [programs] = await db.execute("SELECT program_id, program_code, program_name, is_specialized FROM PROGRAM ORDER BY is_specialized DESC, program_code ASC");
     
     const [subjectOfferings] = await db.execute(`
       SELECT 
@@ -535,7 +625,7 @@ router.get("/management-options", async (req, res) => {
       ORDER BY gl.grade_level_id ASC, sec.section_name ASC, s.subject_name ASC
     `);
 
-    res.json({ gradeLevels, sections, departments, subjectOfferings, schoolYear });
+    res.json({ gradeLevels, sections, departments, programs, subjectOfferings, schoolYear });
   } catch (err) {
     console.error("GET MANAGEMENT OPTIONS ERROR:", err);
     res.status(500).json({ error: err.message });
@@ -576,6 +666,26 @@ router.put("/:id/profile", async (req, res) => {
       extension_name: toNullable(extension_name),
       email: email.trim().toLowerCase(),
     });
+
+    await AuditEvent.create({
+      user_id: userId,
+      actor_context: { source: 'user', acting_as: 'User' },
+      event_type: 'USER_PROFILE_UPDATED',
+      module_name: 'ACCOUNT_MANAGEMENT',
+      entity_type: 'USER',
+      entity_id: userId,
+      after_data: {
+        first_name: first_name.trim(),
+        last_name: last_name.trim(),
+        email: email.trim().toLowerCase(),
+      },
+      metadata: {
+        target: `${first_name.trim()} ${last_name.trim()}`,
+        summary: `Updated profile details for ${first_name.trim()} ${last_name.trim()}.`,
+        impact: 'Low',
+      },
+    }).catch((err) => console.error('Failed to log profile update audit:', err.message));
+
     res.json({ message: "Profile updated successfully.", user: updated });
   } catch (err) {
     sendDatabaseError(res, err);
@@ -674,6 +784,35 @@ const validateSingleDepartmentHead = async (connection, departmentId, userId, sc
   }
 };
 
+const validateSingleSectionAdviser = async (connection, sectionId, userId, schoolYear) => {
+  if (!sectionId) return;
+  const [existing] = await connection.execute(
+    `
+    SELECT 
+      saa.user_id,
+      CONCAT(COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, '')) AS adviser_name,
+      sec.section_name
+    FROM SECTION_ADVISER_ASSIGNMENT saa
+    INNER JOIN USER u ON u.user_id = saa.user_id
+    INNER JOIN SECTION sec ON sec.section_id = saa.section_id
+    LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = saa.school_year_id
+    WHERE saa.section_id = ?
+      AND saa.user_id <> ?
+      AND (sy.status IN ('ACTIVE', 'ONGOING') OR sy.school_year_id = ?)
+    LIMIT 1
+    `,
+    [sectionId, userId || 0, schoolYear?.school_year_id || 0]
+  );
+
+  if (existing.length > 0) {
+    const adv = existing[0];
+    const name = adv.adviser_name.trim() || `User #${adv.user_id}`;
+    throw new Error(
+      `The section ${adv.section_name} already has an assigned Adviser (${name}). Each section can only have 1 Adviser.`
+    );
+  }
+};
+
 const saveRoleAssignments = async (connection, userId, body, schoolYear) => {
   const { assignedFrom, assignedUntil } = getAssignmentDates(body, schoolYear);
   const role = normalizeRole(body.role);
@@ -736,6 +875,10 @@ router.post("/", async (req, res) => {
       await validateSingleDepartmentHead(connection, effectiveDepartmentId, 0, schoolYear);
     }
 
+    if ((role === "subject teacher" || req.body.is_adviser) && req.body.adviser_section_id) {
+      await validateSingleSectionAdviser(connection, req.body.adviser_section_id, 0, schoolYear);
+    }
+
     const hashedPassword = await hashPassword(password);
 
     const [result] = await connection.execute(
@@ -745,6 +888,28 @@ router.post("/", async (req, res) => {
 
     const userId = result.insertId;
     await saveRoleAssignments(connection, userId, req.body, schoolYear);
+
+    await AuditEvent.create({
+      user_id: req.headers['x-auralis-user-id'] ? Number(req.headers['x-auralis-user-id']) : null,
+      actor_context: { source: 'user', acting_as: 'System Administrator' },
+      event_type: 'USER_ACCOUNT_CREATED',
+      module_name: 'ACCOUNT_MANAGEMENT',
+      entity_type: 'USER',
+      entity_id: userId,
+      after_data: {
+        role,
+        email: email.trim().toLowerCase(),
+        first_name: first_name.trim(),
+        last_name: last_name.trim(),
+        account_status: account_status || status || "active",
+      },
+      metadata: {
+        target: `${first_name.trim()} ${last_name.trim()}`,
+        summary: `Created a ${role} account for ${first_name.trim()} ${last_name.trim()}.`,
+        impact: 'Medium',
+      },
+    }, connection);
+
     await connection.commit();
 
     const users = await getManagementUsers();
@@ -788,6 +953,10 @@ router.put("/:id", async (req, res) => {
       await validateSingleDepartmentHead(connection, effectiveDepartmentId, userId, schoolYear);
     }
 
+    if ((role === "subject teacher" || req.body.is_adviser) && req.body.adviser_section_id) {
+      await validateSingleSectionAdviser(connection, req.body.adviser_section_id, userId, schoolYear);
+    }
+
     if (password && password.trim()) {
       const hashedPassword = await hashPassword(password);
       await connection.execute(
@@ -803,6 +972,38 @@ router.put("/:id", async (req, res) => {
 
     await deleteRoleAssignments(connection, userId);
     await saveRoleAssignments(connection, userId, req.body, schoolYear);
+
+    const isStatusChanged = existingUser.account_status !== (account_status || status || "active");
+    await AuditEvent.create({
+      user_id: req.headers['x-auralis-user-id'] ? Number(req.headers['x-auralis-user-id']) : null,
+      actor_context: { source: 'user', acting_as: 'System Administrator' },
+      event_type: isStatusChanged ? 'USER_STATUS_UPDATED' : 'USER_ACCOUNT_UPDATED',
+      module_name: 'ACCOUNT_MANAGEMENT',
+      entity_type: 'USER',
+      entity_id: userId,
+      before_data: {
+        role: existingUser.role,
+        email: existingUser.email,
+        first_name: existingUser.first_name,
+        last_name: existingUser.last_name,
+        account_status: existingUser.account_status,
+      },
+      after_data: {
+        role,
+        email: email.trim().toLowerCase(),
+        first_name: first_name.trim(),
+        last_name: last_name.trim(),
+        account_status: account_status || status || "active",
+      },
+      metadata: {
+        target: `${first_name.trim()} ${last_name.trim()}`,
+        summary: isStatusChanged
+          ? `Changed account status to ${account_status || status || 'active'} for ${first_name.trim()} ${last_name.trim()}.`
+          : `Updated account details for ${first_name.trim()} ${last_name.trim()}.`,
+        impact: 'Medium',
+      },
+    }, connection);
+
     await connection.commit();
 
     const users = await getManagementUsers();

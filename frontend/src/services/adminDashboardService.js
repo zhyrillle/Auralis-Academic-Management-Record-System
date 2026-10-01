@@ -1,9 +1,15 @@
-import { placeholderAuditEvents } from "./adminDashboardPlaceholderData";
+const API_BASE_URL = (
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api"
+).replace(/\/$/, "");
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api";
-
-let usersRequest = null;
+const normalizeNetworkError = (error, context = "dashboard data") => {
+  if (error instanceof TypeError || /failed to fetch/i.test(error?.message || "")) {
+    return new Error(
+      `Unable to load ${context}. Check the backend connection and try again.`,
+    );
+  }
+  return error;
+};
 
 const parseResponse = async (response) => {
   const data = await response.json().catch(() => ({}));
@@ -17,76 +23,78 @@ const parseResponse = async (response) => {
   return data;
 };
 
-const getUsers = () => {
-  if (!usersRequest) {
-    usersRequest = fetch(`${API_BASE_URL}/users`)
-      .then(parseResponse)
-      .finally(() => {
-        usersRequest = null;
-      });
-  }
-
-  return usersRequest;
-};
-
-const normalizeRole = (role) => {
-  const value = String(role || "")
-    .trim()
-    .toLowerCase()
-    .replace(/[\s-]+/g, "_");
-
-  const aliases = {
-    admin: "system_admin",
-    administrator: "system_admin",
-    system_administrator: "system_admin",
-    teacher: "subject_teacher",
-  };
-
-  return aliases[value] || value;
-};
-
 export const getAccountSummary = async () => {
-  const users = await getUsers();
-  const roleCounts = {
-    subject_teacher: 0,
-    department_head: 0,
-    principal: 0,
-    system_admin: 0,
-  };
+  try {
+    const response = await fetch(`${API_BASE_URL}/audit-logs/summary`);
+    const data = await parseResponse(response);
 
-  users.forEach((user) => {
-    const role = normalizeRole(user.role);
-    if (Object.prototype.hasOwnProperty.call(roleCounts, role)) {
-      roleCounts[role] += 1;
-    }
-  });
-
-  const activeAccounts = users.filter(
-    (user) => String(user.account_status || "active").toLowerCase() === "active",
-  ).length;
-
-  return {
-    totalAccounts: users.length,
-    activeAccounts,
-    inactiveAccounts: users.length - activeAccounts,
-    roles: roleCounts,
-  };
+    return {
+      totalAccounts: Number(data.totalAccounts ?? data.total_accounts ?? 0),
+      activeAccounts: Number(data.activeAccounts ?? data.active_accounts ?? 0),
+      inactiveAccounts: Number(data.inactiveAccounts ?? data.inactive_accounts ?? 0),
+      roles: {
+        subject_teacher: Number(data.roles?.subject_teacher ?? 0),
+        department_head: Number(data.roles?.department_head ?? 0),
+        principal: Number(data.roles?.principal ?? 0),
+        system_admin: Number(data.roles?.system_admin ?? 0),
+      },
+    };
+  } catch (error) {
+    throw normalizeNetworkError(error, "account summary");
+  }
 };
 
 export const getAuditEvents = async () => {
-  // UI placeholder only. The backend developer can replace this return value
-  // with the normalized response from GET /api/audit-logs without changing the
-  // Dashboard page or its private components.
-  return placeholderAuditEvents
-    .map((event) => ({
-      ...event,
-      beforeData: { ...event.beforeData },
-      afterData: { ...event.afterData },
-      metadata: { ...event.metadata },
-    }))
-    .sort(
-      (first, second) =>
-        new Date(second.occurredAt).getTime() -
-        new Date(first.occurredAt).getTime(),
-    );
+  try {
+    const response = await fetch(`${API_BASE_URL}/audit-logs`);
+    const data = await parseResponse(response);
+
+    if (!Array.isArray(data)) {
+      return [];
+    }
+
+    return data
+      .map((event) => {
+        const actingAs = event.actingAs || event.acting_as || event.actorRole || "System";
+        const isAdviser =
+          String(event.actorRole || "").toLowerCase() === "adviser" ||
+          String(actingAs).toLowerCase().includes("adviser") ||
+          String(event.eventType || event.event_type || "").startsWith("ATTENDANCE_") ||
+          String(event.eventType || event.event_type || "").startsWith("SF9_") ||
+          String(event.eventType || event.event_type || "") === "LEARNER_OBSERVED_VALUES_UPDATED" ||
+          String(event.eventType || event.event_type || "") === "SECTION_RECORDS_FINALIZED";
+        const actorRole = isAdviser ? "Adviser" : (event.actorRole || event.actor_role || "System");
+
+        return {
+          id: String(event.id || event.audit_event_id || ""),
+          occurredAt: event.occurredAt || event.occurred_at || new Date().toISOString(),
+          actorId: event.actorId ? String(event.actorId) : (event.user_id ? String(event.user_id) : null),
+          actorName: event.actorName || event.actor_name || "Auralis System",
+          actorRole,
+          actingAs,
+        eventType: event.eventType || event.event_type || "SYSTEM_EVENT",
+        eventLabel: event.eventLabel || event.event_label || event.eventType || "System Event",
+        module: event.module || event.module_name || "System",
+        entityType: event.entityType || event.entity_type || "Record",
+        entityId: event.entityId ? String(event.entityId) : (event.entity_id ? String(event.entity_id) : null),
+        target: event.target || null,
+        summary: event.summary || "No summary available.",
+        impact: event.impact || "Medium",
+        schoolYear: event.schoolYear || event.school_year || null,
+        term: event.term || null,
+        subject: event.subject || null,
+        section: event.section || null,
+        beforeData: typeof event.beforeData === "object" && event.beforeData !== null ? event.beforeData : {},
+        afterData: typeof event.afterData === "object" && event.afterData !== null ? event.afterData : {},
+        metadata: typeof event.metadata === "object" && event.metadata !== null ? event.metadata : {},
+      };
+    })
+      .sort(
+        (first, second) =>
+          new Date(second.occurredAt).getTime() -
+          new Date(first.occurredAt).getTime(),
+      );
+  } catch (error) {
+    throw normalizeNetworkError(error, "audit activity");
+  }
 };

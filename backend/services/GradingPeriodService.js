@@ -733,7 +733,8 @@ async function getReopeningOptions(userId) {
     INNER JOIN TEACHER_ASSIGNMENT ta
       ON ta.subject_offering_id = gs.subject_offering_id
       AND ta.user_id = ?
-    WHERE (ta.assigned_until IS NULL OR ta.assigned_until >= UTC_DATE())
+    WHERE LOWER(ta.status) = 'active'
+      AND (ta.assigned_until IS NULL OR ta.assigned_until >= UTC_DATE())
     ORDER BY at.grade_submission_deadline_at DESC, s.subject_name, sec.section_name`,
     [userId]
   );
