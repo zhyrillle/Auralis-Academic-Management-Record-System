@@ -87,14 +87,41 @@ export default function GradeReopeningRequest() {
           const requestedSet = new Set();
           const mapped = data.map((item) => {
             const secName = item.section_name || item.subject_name || "Section";
-            if (secName) requestedSet.add(secName);
+            const statusUpper = String(item.status || "").toUpperCase();
+            if (secName && statusUpper !== "CANCELLED") requestedSet.add(secName);
+
+            const reqFormatted = item.requested_at
+              ? new Date(item.requested_at).toLocaleString("en-US", {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+                hour: "numeric",
+                minute: "numeric",
+                hour12: true,
+              })
+              : "May 20, 2026";
+
+            const appFormatted = item.reviewed_at
+              ? new Date(item.reviewed_at).toLocaleString("en-US", {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+                hour: "numeric",
+                minute: "numeric",
+                hour12: true,
+              })
+              : statusUpper === "APPROVED"
+                ? item.access_until || item.reopen_until || "May 22, 2026"
+                : null;
+
             return {
               id: item.request_id ? `#REQ-${String(item.request_id).padStart(3, "0")}` : `#REQ-${item.id}`,
               status: item.status ? (item.status.charAt(0).toUpperCase() + item.status.slice(1).toLowerCase()) : "Pending",
               subject: secName,
-              term: item.term || "1st",
+              term: item.term || "1st Term",
               requestType: item.request_type || "Grade Reopening",
-              requestedDate: item.requested_at ? new Date(item.requested_at).toLocaleString("en-US") : "May 20, 2026",
+              requestedDate: reqFormatted,
+              approvedDate: appFormatted,
               accessUntil: item.access_until || item.reopen_until || "May 25, 2026",
               reason: item.reason || "",
               file: item.file_name ? `${item.file_name} (${(item.file_size ? item.file_size / 1024 : 100).toFixed(0)} KB)` : null,
@@ -329,6 +356,42 @@ export default function GradeReopeningRequest() {
     setIsViewDetailsOpen(true);
   };
 
+  // Cancel Request Handler
+  const handleCancelRequest = async (targetReq) => {
+    if (!targetReq) return;
+    const reqId = targetReq.id;
+
+    const rawNum = parseInt(String(reqId).replace(/\D/g, ""), 10);
+    if (rawNum) {
+      try {
+        await fetch(`http://localhost:5000/api/reopen-requests/${rawNum}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: "CANCELLED" }),
+        });
+      } catch (e) {
+        console.warn("Could not cancel on server:", e);
+      }
+    }
+
+    setRequests((prev) =>
+      prev.map((r) =>
+        r.id === reqId ? { ...r, status: "Cancelled" } : r
+      )
+    );
+
+    if (targetReq.subject) {
+      setAlreadyRequestedSections((prev) => {
+        const next = new Set(prev);
+        next.delete(targetReq.subject);
+        return next;
+      });
+    }
+
+    setActiveModalRequest((prev) => (prev ? { ...prev, status: "Cancelled" } : null));
+    setIsViewDetailsOpen(false);
+  };
+
   return (
     <div className="grr-container">
       {/* ── Page Header ── */}
@@ -526,7 +589,8 @@ export default function GradeReopeningRequest() {
                 const statusUpper = String(item.status || "").toUpperCase();
                 const isPending = statusUpper === "PENDING";
                 const isApproved = statusUpper === "APPROVED";
-                const isRejected = !isPending && !isApproved;
+                const isCancelled = statusUpper === "CANCELLED";
+                const isRejected = !isPending && !isApproved && !isCancelled;
 
                 return (
                   <div key={item.id} className="grr-timeline-item">
@@ -534,7 +598,7 @@ export default function GradeReopeningRequest() {
 
                     {/* Icon Circle */}
                     <div
-                      className={`grr-timeline-icon-circle ${isPending ? "pending" : isApproved ? "approved" : "rejected"
+                      className={`grr-timeline-icon-circle ${isPending ? "pending" : isApproved ? "approved" : isCancelled ? "cancelled" : "rejected"
                         }`}
                     >
                       {isPending && (
@@ -547,6 +611,9 @@ export default function GradeReopeningRequest() {
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                           <polyline points="20 6 9 17 4 12" />
                         </svg>
+                      )}
+                      {isCancelled && (
+                        <X size={18} />
                       )}
                       {isRejected && (
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -561,7 +628,7 @@ export default function GradeReopeningRequest() {
                     <div className="grr-timeline-content">
                       <div className="grr-timeline-top">
                         <span
-                          className={`grr-badge ${isPending ? "pending" : isApproved ? "approved" : "rejected"
+                          className={`grr-badge ${isPending ? "pending" : isApproved ? "approved" : isCancelled ? "cancelled" : "rejected"
                             }`}
                         >
                           {item.status}
@@ -587,6 +654,12 @@ export default function GradeReopeningRequest() {
                           <Clock className="grr-detail-icon" />
                           <span>Requested: {item.requestedDate}</span>
                         </div>
+                        {isApproved && (
+                          <div className="grr-detail-line">
+                            <CheckCircle2 className="grr-detail-icon" style={{ color: "#16a34a" }} />
+                            <span>Approved: {item.approvedDate || item.accessUntil || "May 22, 2026"}</span>
+                          </div>
+                        )}
 
                         {item.adminNote && (
                           <span
@@ -621,7 +694,9 @@ export default function GradeReopeningRequest() {
                     ? "pending"
                     : activeModalRequest.status === "Approved"
                       ? "approved"
-                      : "rejected"
+                      : activeModalRequest.status === "Cancelled"
+                        ? "cancelled"
+                        : "rejected"
                     }`}
                 >
                   {activeModalRequest.status}
@@ -654,6 +729,18 @@ export default function GradeReopeningRequest() {
                   <span className="grr-info-item-label">Request Type</span>
                   <span className="grr-info-item-value">{activeModalRequest.requestType}</span>
                 </div>
+                <div className="grr-info-item">
+                  <span className="grr-info-item-label">Requested Date</span>
+                  <span className="grr-info-item-value">{activeModalRequest.requestedDate}</span>
+                </div>
+                {activeModalRequest.status === "Approved" && (
+                  <div className="grr-info-item">
+                    <span className="grr-info-item-label">Approved Date</span>
+                    <span className="grr-info-item-value" style={{ color: "#16a34a", fontWeight: 700 }}>
+                      {activeModalRequest.approvedDate || activeModalRequest.accessUntil || "May 22, 2026"}
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Reason Box */}
@@ -683,7 +770,7 @@ export default function GradeReopeningRequest() {
                     <span>{activeModalRequest.file}</span>
                   </div>
                 ) : (
-                  <div style={{ fontSize: "13px", color: "#94a3b8", italic: "true" }}>
+                  <div style={{ fontSize: "13px", color: "#94a3b8", fontStyle: "italic" }}>
                     No supporting document attached.
                   </div>
                 )}
@@ -714,7 +801,21 @@ export default function GradeReopeningRequest() {
             </div>
 
             <div className="grr-modal-footer">
+              {activeModalRequest.status === "Pending" ? (
+                <button
+                  type="button"
+                  className="grr-cancel-request-btn"
+                  onClick={() => handleCancelRequest(activeModalRequest)}
+                  title="Cancel this pending request"
+                >
+                  <XCircle size={16} />
+                  <span>Cancel Request</span>
+                </button>
+              ) : (
+                <div />
+              )}
               <button
+                type="button"
                 className="grr-clear-btn"
                 onClick={() => setIsViewDetailsOpen(false)}
               >
