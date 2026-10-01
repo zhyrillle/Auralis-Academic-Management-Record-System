@@ -95,7 +95,7 @@ class Attendance {
     return anyMatch[0]?.student_section_id || numId;
   }
 
-  // Upsert a single attendance record (or delete if status is empty)
+  // Upsert a single attendance record (or delete if status is empty AND no remarks)
   static async upsert(sheetId, rawStudentSectionId, status = 'P', remarks = null) {
     if (!sheetId || !rawStudentSectionId) {
       throw new Error(`attendance_sheet_id (${sheetId}) and student_section_id (${rawStudentSectionId}) are required`);
@@ -105,12 +105,35 @@ class Attendance {
       throw new Error(`Could not resolve student_section_id for ${rawStudentSectionId}`);
     }
 
+    const cleanRemarks = remarks !== undefined && remarks !== null ? String(remarks).trim() || null : null;
+
     if (!status || status === 'BLANK' || status === 'NONE') {
-      await db.execute(
-        `DELETE FROM ATTENDANCE WHERE attendance_sheet_id = ? AND student_section_id = ?`,
-        [sheetId, studentSectionId]
-      );
-      return null;
+      if (cleanRemarks) {
+        const [existing] = await db.execute(
+          `SELECT attendance_id FROM ATTENDANCE WHERE attendance_sheet_id = ? AND student_section_id = ?`,
+          [sheetId, studentSectionId]
+        );
+        if (existing.length > 0) {
+          await db.execute(
+            `UPDATE ATTENDANCE SET remarks = ? WHERE attendance_id = ?`,
+            [cleanRemarks, existing[0].attendance_id]
+          );
+          return existing[0].attendance_id;
+        } else {
+          const [insResult] = await db.execute(
+            `INSERT INTO ATTENDANCE (attendance_sheet_id, student_section_id, status, remarks)
+             VALUES (?, ?, 'P', ?)`,
+            [sheetId, studentSectionId, cleanRemarks]
+          );
+          return insResult.insertId;
+        }
+      } else {
+        await db.execute(
+          `DELETE FROM ATTENDANCE WHERE attendance_sheet_id = ? AND student_section_id = ?`,
+          [sheetId, studentSectionId]
+        );
+        return null;
+      }
     }
 
     const normalizedStatus = ['P', 'A', 'L'].includes(status) ? status : 'P';
@@ -118,7 +141,7 @@ class Attendance {
       `INSERT INTO ATTENDANCE (attendance_sheet_id, student_section_id, status, remarks)
        VALUES (?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE status = VALUES(status), remarks = VALUES(remarks)`,
-      [sheetId, studentSectionId, normalizedStatus, remarks || null]
+      [sheetId, studentSectionId, normalizedStatus, cleanRemarks]
     );
     if (result.insertId) return result.insertId;
     const [row] = await db.execute(
@@ -126,6 +149,41 @@ class Attendance {
       [sheetId, studentSectionId]
     );
     return row[0]?.attendance_id;
+  }
+
+  // Save/update remarks directly for a student's attendance record
+  static async saveRemarks(sheetId, rawStudentSectionId, remarks, defaultStatus = 'P') {
+    if (!sheetId || !rawStudentSectionId) {
+      throw new Error('attendance_sheet_id and student_section_id are required');
+    }
+    const studentSectionId = await this.resolveStudentSectionId(sheetId, rawStudentSectionId);
+    if (!studentSectionId) {
+      throw new Error(`Could not resolve student_section_id for ${rawStudentSectionId}`);
+    }
+
+    const cleanRemarks = remarks !== undefined && remarks !== null ? String(remarks).trim() || null : null;
+
+    const [existing] = await db.execute(
+      `SELECT attendance_id, status FROM ATTENDANCE WHERE attendance_sheet_id = ? AND student_section_id = ?`,
+      [sheetId, studentSectionId]
+    );
+
+    if (existing.length > 0) {
+      await db.execute(
+        `UPDATE ATTENDANCE SET remarks = ? WHERE attendance_id = ?`,
+        [cleanRemarks, existing[0].attendance_id]
+      );
+      return existing[0].attendance_id;
+    } else {
+      const statusToUse = ['P', 'A', 'L'].includes(defaultStatus) ? defaultStatus : 'P';
+      const [result] = await db.execute(
+        `INSERT INTO ATTENDANCE (attendance_sheet_id, student_section_id, status, remarks)
+         VALUES (?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE remarks = VALUES(remarks)`,
+        [sheetId, studentSectionId, statusToUse, cleanRemarks]
+      );
+      return result.insertId;
+    }
   }
 
   // Bulk save multiple attendance records
@@ -139,7 +197,7 @@ class Attendance {
         rec.attendance_sheet_id,
         rawId,
         rec.status || null,
-        rec.remarks || null
+        rec.remarks !== undefined ? rec.remarks : null
       );
       results.push(id);
     }

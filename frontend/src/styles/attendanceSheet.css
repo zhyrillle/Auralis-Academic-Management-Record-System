@@ -1,12 +1,26 @@
 /* src/styles/attendanceSheet.css - Learner Attendance Conversion Tool (DepEd SF2 Layout) */
 
 .attendance-sheet-container {
+  box-sizing: border-box;
+  width: calc(100% - 32px);
+  max-width: 1440px;
+  min-width: 0;
+  margin: 0 auto;
   display: flex;
   flex-direction: column;
   gap: 20px;
-  width: 100%;
   padding-bottom: 40px;
   animation: attFadeIn 0.3s ease-out;
+}
+
+@media (max-width: 1100px) {
+  .attendance-sheet-container {
+    width: 100%;
+  }
+}
+
+.sections-page-container .attendance-sheet-container {
+  width: 100%;
 }
 
 @keyframes attFadeIn {
@@ -474,11 +488,46 @@
 
 .sf2-td-remarks {
   text-align: left;
-  padding-left: 8px !important;
+  padding: 2px 4px !important;
   font-size: 11px;
   color: #475569;
   background-color: #fffbeb;
   border-left: 1px solid #000000 !important;
+  width: 180px;
+  min-width: 160px;
+}
+
+.sf2-remarks-input {
+  width: 100%;
+  border: 1px solid transparent;
+  background: transparent;
+  font-family: var(--font-inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
+  font-size: 11px;
+  color: #1e293b;
+  padding: 4px 6px;
+  border-radius: 4px;
+  outline: none;
+  box-sizing: border-box;
+  transition: all 0.2s ease;
+}
+
+.sf2-remarks-input:hover {
+  background-color: #fef3c7;
+  border-color: #fcd34d;
+}
+
+.sf2-remarks-input:focus {
+  background-color: #ffffff;
+  border-color: #ca8a04;
+  box-shadow: 0 0 0 2px rgba(202, 138, 4, 0.2);
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.sf2-remarks-input::placeholder {
+  color: #94a3b8;
+  font-style: italic;
+  font-size: 10.5px;
 }
 
 /* ════════════════ SUB-TOTAL ROWS (Yellow Highlight as in SF2) ════════════════ */
