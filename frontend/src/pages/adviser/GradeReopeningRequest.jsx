@@ -587,15 +587,11 @@ export default function GradeReopeningRequest() {
                         }
                         return true;
                       })
-                      .map((sec) => {
-                        const info = reopeningOptions[sec.sectionName];
-                        const suffix = info?.reason === "WINDOW_CLOSED" ? " (Deadline Passed)" : "";
-                        return (
-                          <option key={sec.id} value={sec.sectionName}>
-                            {sec.label}{suffix}
-                          </option>
-                        );
-                      })
+                      .map((sec) => (
+                        <option key={sec.id} value={sec.sectionName}>
+                          {sec.label}
+                        </option>
+                      ))
                   ) : (
                     <>
                       <option value="Honesty">Honesty</option>
