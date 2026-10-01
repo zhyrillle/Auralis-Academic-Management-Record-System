@@ -65,14 +65,15 @@
   cursor: pointer;
 }
 
-.download-btn {
+.download-btn,
+.print-btn {
   display: flex;
   align-items: center;
   gap: 8px;
   background-color: #123062;
   border: 1px solid #123062;
   color: #ffffff;
-  padding: 10px 25px;
+  padding: 10px 20px;
   border-radius: 10px;
   font-size: var(--fs-subtext);
   font-weight: var(--fw-bold);
@@ -81,19 +82,49 @@
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.01);
 }
 
-.download-btn:hover {
+.download-btn:hover,
+.print-btn:hover {
   background-color: var(--button-primary-hover-color);
   color: #ffffff;
   border-color: var(--button-primary-hover-color);
   box-shadow: 0 4px 12px rgba(17, 45, 97, 0.15);
 }
 
+
+
 /* ---- Sub-header ---- */
+.grading-sheet-subheader-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
 .total-students-desc {
   font-size: var(--fs-body);
   color: var(--subtext-color);
-  margin-bottom: 16px;
   font-weight: var(--fw-normal);
+}
+
+.current-term-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background-color: #e0f2fe;
+  color: #0369a1;
+  border: 1px solid #bae6fd;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.current-term-badge strong {
+  font-weight: 700;
+  color: #0284c7;
 }
 
 /* ---- Filters Row ---- */

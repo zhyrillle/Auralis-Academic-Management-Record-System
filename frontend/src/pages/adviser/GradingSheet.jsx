@@ -1,10 +1,10 @@
-import { useState, useMemo } from "react";
-import { Download, Check } from "lucide-react";
+import { useState, useMemo, useEffect } from "react";
+import { Download, Printer, Check, Calendar } from "lucide-react";
 import backIconUrl from "../../assets/backButton.svg";
 import SearchBar from "../../components/common/SearchBar.jsx";
 import SelectFilter from "../../components/common/SelectFilter.jsx";
 import SubmissionFooter from "../../components/common/SubmissionFooter.jsx";
-import { downloadGradingSheetCSV } from "../../utils/downloadHelper";
+import { exportGradingSheetPdf } from "../../utils/exportGradingSheetPdf";
 import { getStoredUser } from "../../utils/auth";
 import "../../styles/gradingSheet.css";
 
@@ -21,10 +21,120 @@ export default function GradingSheet({
     const [filterDescriptor, setFilterDescriptor] = useState("All");
     const [filterRemark, setFilterRemark] = useState("All");
 
+    const sectionId = useMemo(() => {
+        return (
+            activeSelectedClass?.section_id ||
+            activeSelectedClass?.sectionId ||
+            (typeof activeSelectedClass?.id === "number" ? activeSelectedClass.id : null) ||
+            (typeof activeSelectedClass?.id === "string" && !isNaN(Number(activeSelectedClass.id)) ? Number(activeSelectedClass.id) : null) ||
+            (typeof activeSelectedClass?.id === "string" && activeSelectedClass.id.startsWith("sec-") ? Number(activeSelectedClass.id.replace("sec-", "")) : null) ||
+            null
+        );
+    }, [activeSelectedClass]);
+
+    const subjectOfferingId = useMemo(() => {
+        return (
+            activeSelectedClass?.subject_offering_id ||
+            activeSelectedClass?.offering_id ||
+            (activeSelectedClass?.subject_id && !activeSelectedClass?.section_id ? activeSelectedClass.subject_id : null) ||
+            sectionId ||
+            1
+        );
+    }, [activeSelectedClass, sectionId]);
+
+    // Term state (follows ClassRecord logic: checks sessionStorage, activeSelectedClass, class-record API, and date-range matching)
+    const [currentTermCode, setCurrentTermCode] = useState(() => {
+        try {
+            const stored = sessionStorage.getItem(`classRecord_activeTerm_${subjectOfferingId}`) || sessionStorage.getItem("activeTerm");
+            if (stored && ["T1", "T2", "T3"].includes(stored)) {
+                return stored;
+            }
+        } catch (_) {}
+
+        const raw = activeSelectedClass?.activeTerm || activeSelectedClass?.term || activeSelectedClass?.active_term || activeSelectedClass?.currentTerm;
+        if (raw) {
+            const str = String(raw).toUpperCase();
+            if (str.includes("3") || str.includes("T3") || str.includes("3RD")) return "T3";
+            if (str.includes("2") || str.includes("T2") || str.includes("2ND")) return "T2";
+            if (str.includes("1") || str.includes("T1") || str.includes("1ST")) return "T1";
+        }
+        return null;
+    });
+
+    const currentTermLabel = useMemo(() => {
+        if (currentTermCode === "T2") return "Term 2";
+        if (currentTermCode === "T3") return "Term 3";
+        if (currentTermCode === "T1") return "Term 1";
+        return "";
+    }, [currentTermCode]);
+
     // MAPEH Tab State: 'MA' (Music & Arts), 'PEH' (PE & Health), 'COMBINED' (Combined MAPEH)
     const [activeMapehTab, setActiveMapehTab] = useState("MA");
-    // Combined Sheet Term Selector: 'T1', 'T2', 'T3', 'All'
-    const [combinedTermFilter, setCombinedTermFilter] = useState("T1");
+    // Combined Sheet Term Selector: 'T1', 'T2', 'T3', 'All' (defaults to current term or T1)
+    const [combinedTermFilter, setCombinedTermFilter] = useState(() => currentTermCode || "T1");
+
+    // Synchronize current term using ClassRecord API and Academic Terms date range logic
+    useEffect(() => {
+        let isMounted = true;
+        async function fetchClassRecordTerm() {
+            try {
+                // 1. Fetch from class-record API endpoint (returns server resolved active_term matching ClassRecord logic)
+                const res = await fetch(`http://localhost:5000/api/class-record/${subjectOfferingId}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data && data.active_term && isMounted) {
+                        const code = data.active_term.toUpperCase();
+                        if (["T1", "T2", "T3"].includes(code)) {
+                            setCurrentTermCode(code);
+                            setCombinedTermFilter(code);
+                            try {
+                                sessionStorage.setItem(`classRecord_activeTerm_${subjectOfferingId}`, code);
+                            } catch (_) {}
+                            return;
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn("ClassRecord API term fetch error:", e);
+            }
+
+            // 2. Fallback: Query academic-terms and match date range (CURRENT_TIMESTAMP between starts_at and ends_at)
+            try {
+                const resTerms = await fetch("http://localhost:5000/api/academic-terms");
+                if (resTerms.ok) {
+                    const terms = await resTerms.json();
+                    if (Array.isArray(terms) && terms.length > 0 && isMounted) {
+                        const now = new Date();
+                        // Find term where current date falls between starts_at and ends_at
+                        const activeObj = terms.find((t) => {
+                            if (!t.starts_at || !t.ends_at) return false;
+                            const start = new Date(t.starts_at);
+                            const end = new Date(t.ends_at);
+                            return now >= start && now <= end;
+                        }) || terms.find((t) => String(t.status).toLowerCase() === "ongoing" || String(t.status).toLowerCase() === "open") || terms[0];
+
+                        if (activeObj) {
+                            const name = String(activeObj.term_name || "").toLowerCase();
+                            let code = "T1";
+                            if (name.includes("2") || name.includes("2nd") || name.includes("t2")) code = "T2";
+                            else if (name.includes("3") || name.includes("3rd") || name.includes("t3")) code = "T3";
+
+                            setCurrentTermCode(code);
+                            setCombinedTermFilter(code);
+                            try {
+                                sessionStorage.setItem(`classRecord_activeTerm_${subjectOfferingId}`, code);
+                            } catch (_) {}
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn("Academic terms date-range fetch error:", e);
+            }
+        }
+
+        fetchClassRecordTerm();
+        return () => { isMounted = false; };
+    }, [activeSelectedClass, subjectOfferingId]);
 
     const currentUser = useMemo(() => getStoredUser(), []);
     const teacherName = useMemo(() => {
@@ -175,31 +285,144 @@ export default function GradingSheet({
         };
     }, [students, searchStudentQuery, filterDescriptor, filterRemark, isMapeh, activeMapehTab, combinedTermFilter, calculateFinalGrade]);
 
-    const handleDownloadSheet = async () => {
+    const handleDownloadPDF = async () => {
         let downloadSubject = activeSelectedClass.subject;
+        let exportMapehTab = activeMapehTab;
+
         if (isMapeh) {
-            if (activeMapehTab === "MA") downloadSubject = "MAPEH - Music & Arts";
-            else if (activeMapehTab === "PEH") downloadSubject = "MAPEH - PE & Health";
-            else downloadSubject = "MAPEH";
+            downloadSubject = "MAPEH";
+            exportMapehTab = "COMBINED";
         }
 
-        const preparedStudents = students.map((s) => {
-            const grades = resolveStudentGrades(s);
-            if (!isMapeh || activeMapehTab !== "COMBINED") {
-                return { ...s, term1: grades.t1, term2: grades.t2, term3: grades.t3 };
-            }
-            return { ...s, term1: grades.t1_combined, term2: grades.t2_combined, term3: grades.t3_combined };
+        await exportGradingSheetPdf({
+            activeSelectedClass,
+            students,
+            calculateFinalGrade,
+            getDescriptor,
+            getRemark,
+            teacherName,
+            isMapeh,
+            activeMapehTab: exportMapehTab,
+            combinedTermFilter,
+            isPrintMode: false,
         });
 
-        const updatedClassMeta = { ...activeSelectedClass, subject: downloadSubject };
+        if (triggerToast) {
+            triggerToast(`Downloaded PDF Grading Sheet for ${activeSelectedClass.gradeLevel} - ${activeSelectedClass.sectionName} (${downloadSubject})`, "info");
+        }
+    };
 
-        await downloadGradingSheetCSV(updatedClassMeta, preparedStudents, calculateFinalGrade, getDescriptor, getRemark, teacherName);
-        triggerToast(`Downloaded Excel Grading Sheet for ${activeSelectedClass.gradeLevel} - ${activeSelectedClass.sectionName} (${downloadSubject})`, "info");
+    const handlePrintSheet = () => {
+        let printSubject = activeSelectedClass.subject;
+        let exportMapehTab = activeMapehTab;
+
+        if (isMapeh) {
+            printSubject = "MAPEH";
+            exportMapehTab = "COMBINED";
+        }
+
+        exportGradingSheetPdf({
+            activeSelectedClass,
+            students,
+            calculateFinalGrade,
+            getDescriptor,
+            getRemark,
+            teacherName,
+            isMapeh,
+            activeMapehTab: exportMapehTab,
+            combinedTermFilter,
+            isPrintMode: true,
+        });
+
+        if (triggerToast) {
+            triggerToast(`Opening Print Preview for ${activeSelectedClass.gradeLevel} - ${activeSelectedClass.sectionName} (${printSubject})`, "info");
+        }
     };
 
     const handleFooterSubmitTrigger = () => {
         onSubmit(activeSelectedClass.id);
     };
+
+    // Calculate submit button disabled state and hover reason
+    const { isSubmitDisabled, submitDisabledReason } = useMemo(() => {
+        if (activeSelectedClass?.submitted) {
+            return { isSubmitDisabled: true, submitDisabledReason: "Grades already submitted (Locked)" };
+        }
+
+        if (!currentTermCode) {
+            return { isSubmitDisabled: true, submitDisabledReason: "Loading academic term information..." };
+        }
+
+        // 1. MAPEH Term Restriction Check: Cannot submit for terms that have already passed or are yet to come
+        if (isMapeh) {
+            if (activeMapehTab === "COMBINED" && combinedTermFilter !== "All" && combinedTermFilter !== currentTermCode) {
+                const termNumStr = combinedTermFilter === "T1" ? "Term 1" : combinedTermFilter === "T2" ? "Term 2" : "Term 3";
+                if (combinedTermFilter < currentTermCode) {
+                    return {
+                        isSubmitDisabled: true,
+                        submitDisabledReason: `Cannot submit: ${termNumStr} has already passed. Submissions are only allowed for the active term (${currentTermLabel || "active term"}).`,
+                    };
+                }
+                if (combinedTermFilter > currentTermCode) {
+                    return {
+                        isSubmitDisabled: true,
+                        submitDisabledReason: `Cannot submit: ${termNumStr} is yet to come. Submissions are only allowed for the active term (${currentTermLabel || "active term"}).`,
+                    };
+                }
+            }
+        }
+
+        // 2. Incomplete Grades Check for Current Term across all students
+        if (!students || students.length === 0) {
+            return {
+                isSubmitDisabled: true,
+                submitDisabledReason: "Cannot submit: No students found in this class.",
+            };
+        }
+
+        const targetTerm = currentTermCode;
+        let missingCount = 0;
+
+        students.forEach((stud) => {
+            const grades = resolveStudentGrades(stud);
+            let gradeVal = "";
+
+            if (!isMapeh) {
+                if (targetTerm === "T1") gradeVal = grades.t1;
+                else if (targetTerm === "T2") gradeVal = grades.t2;
+                else if (targetTerm === "T3") gradeVal = grades.t3;
+            } else {
+                if (activeMapehTab === "MA") {
+                    if (targetTerm === "T1") gradeVal = grades.t1;
+                    else if (targetTerm === "T2") gradeVal = grades.t2;
+                    else if (targetTerm === "T3") gradeVal = grades.t3;
+                } else if (activeMapehTab === "PEH") {
+                    if (targetTerm === "T1") gradeVal = grades.t1;
+                    else if (targetTerm === "T2") gradeVal = grades.t2;
+                    else if (targetTerm === "T3") gradeVal = grades.t3;
+                } else {
+                    // COMBINED TAB
+                    if (targetTerm === "T1") gradeVal = grades.t1_combined;
+                    else if (targetTerm === "T2") gradeVal = grades.t2_combined;
+                    else if (targetTerm === "T3") gradeVal = grades.t3_combined;
+                }
+            }
+
+            const isEmpty = gradeVal === "" || gradeVal === null || gradeVal === undefined || isNaN(Number(gradeVal));
+            if (isEmpty) {
+                missingCount++;
+            }
+        });
+
+        if (missingCount > 0) {
+            return {
+                isSubmitDisabled: true,
+                submitDisabledReason: `Cannot submit: Current term (${currentTermLabel || "active term"}) grades are incomplete (${missingCount} student${missingCount > 1 ? "s" : ""} missing grades).`,
+            };
+        }
+
+        return { isSubmitDisabled: false, submitDisabledReason: "" };
+    }, [activeSelectedClass, currentTermCode, currentTermLabel, isMapeh, activeMapehTab, combinedTermFilter, students, resolveStudentGrades]);
 
     const getDescriptorClass = (desc) => {
         switch (desc) {
@@ -251,10 +474,17 @@ export default function GradingSheet({
                     <h1 className="grading-sheet-title" onClick={onBack}>Assigned Classes</h1>
                 </div>
 
-                <button className="download-btn" onClick={handleDownloadSheet} title="Download Sheet">
-                    <Download size={18} />
-                    <span>Download</span>
-                </button>
+                <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                    <button className="download-btn" onClick={handleDownloadPDF} title="Download PDF Sheet">
+                        <Download size={18} />
+                        <span>Download PDF</span>
+                    </button>
+
+                    <button className="print-btn" onClick={handlePrintSheet} title="Print Grading Sheet">
+                        <Printer size={18} />
+                        <span>Print</span>
+                    </button>
+                </div>
             </div>
 
             {/* MAPEH Sub-Component Pill Navigation (Matching ClassRecord UI) */}
@@ -284,8 +514,16 @@ export default function GradingSheet({
                 </div>
             )}
 
-            <div className="total-students-desc">
-                Total students: {activeClassStudentsList.totalCount}
+            <div className="grading-sheet-subheader-container">
+                <div className="total-students-desc">
+                    Total students: {activeClassStudentsList.totalCount}
+                </div>
+                {currentTermLabel ? (
+                    <div className="current-term-badge" title="Currently Active Grading Term">
+                        <Calendar size={15} />
+                        <span>Current Term: <strong>{currentTermLabel}</strong></span>
+                    </div>
+                ) : null}
             </div>
 
             <div className="grading-filters-row">
@@ -353,6 +591,12 @@ export default function GradingSheet({
                             </th>
                             <th colSpan={isMapeh && activeMapehTab === "COMBINED" && combinedTermFilter === "All" ? "6" : "3"} className="border-bottom-line">
                                 School year: <span className="info-cell-title">2026-2027</span>
+                                {currentTermLabel ? (
+                                    <>
+                                        <span style={{ margin: "0 8px", color: "#cbd5e1" }}>|</span>
+                                        Current Term: <span className="info-cell-title">{currentTermLabel}</span>
+                                    </>
+                                ) : null}
                             </th>
                         </tr>
                         <tr className="grading-header-row-2">
@@ -640,6 +884,8 @@ export default function GradingSheet({
                 isSubmitted={activeSelectedClass.submitted}
                 onSubmit={handleFooterSubmitTrigger}
                 userRole={userRole}
+                disabled={isSubmitDisabled}
+                disabledReason={submitDisabledReason}
             />
         </div>
     );

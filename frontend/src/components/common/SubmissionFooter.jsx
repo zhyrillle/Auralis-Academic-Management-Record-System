@@ -5,6 +5,8 @@ export default function SubmissionFooter({
     deadline,
     isSubmitted,
     onSubmit,
+    disabled = false,
+    disabledReason = "",
 
     userRole = "teacher",
     customDeadlineLabel,
@@ -137,21 +139,26 @@ export default function SubmissionFooter({
                 </div>
 
                 <button
-                    disabled={isSubmitted}
-                    onClick={() => setShowModal(true)}
+                    disabled={isSubmitted || disabled}
+                    onClick={() => {
+                        if (!isSubmitted && !disabled) {
+                            setShowModal(true);
+                        }
+                    }}
+                    title={isSubmitted ? "Grades already submitted" : (disabled ? disabledReason : "")}
                     style={{
                         fontFamily: "var(--font-montserrat)",
-                        backgroundColor: isSubmitted
-                            ? "var(--unavailable-bg)"
+                        backgroundColor: (isSubmitted || disabled)
+                            ? "#cbd5e1"
                             : "var(--success-text-color)",
-                        color: isSubmitted ? "var(--unavailable-text-color)" : "var(--white-text-color)",
+                        color: (isSubmitted || disabled) ? "#64748b" : "var(--white-text-color)",
                         border: "none",
                         borderRadius: "10px",
                         padding: "10px 45px",
                         fontWeight: "var(--fw-bold)",
-                        cursor: isSubmitted ? "not-allowed" : "pointer",
-                        pointerEvents: isSubmitted ? "none" : "auto",
-                        transition: "none",
+                        cursor: (isSubmitted || disabled) ? "not-allowed" : "pointer",
+                        pointerEvents: "auto",
+                        transition: "all 0.2s",
                         transform: "none",
                         boxShadow: "none",
                     }}
