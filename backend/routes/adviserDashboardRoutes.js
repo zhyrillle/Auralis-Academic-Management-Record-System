@@ -1148,11 +1148,66 @@ router.get('/grade-range-report', async (req, res) => {
 
       const total = noGrade + r60_74 + r75_79 + r80_84 + r85_89 + r90_100;
 
-      // Calculate Mean and MPS for this section
-      const numTakers = validGradesList.length;
-      const totalScore = validGradesList.reduce((a, b) => a + b, 0);
-      const scoreMean = numTakers > 0 ? Math.round((totalScore / numTakers) * 100) / 100 : 0;
-      const mps = scoreMean;
+      // Calculate Mean and MPS for this section using Terminal Examination (TE) raw scores
+      let teTotalScore = 0;
+      let teNumTakers = 0;
+      let teScoreMean = 0;
+      let teMps = 0;
+
+      const termIdNum = parseInt(rawTerm, 10) || 1;
+      const [sheets] = await db.execute(
+        `SELECT grade_sheet_id FROM GRADE_SHEET WHERE subject_offering_id = ? AND (term_id = ? OR term_id = ?) LIMIT 1`,
+        [subject_offering_id, termIdNum, `T${termIdNum}`]
+      ).catch(() => [[]]);
+
+      if (sheets && sheets.length > 0) {
+        const gradeSheetId = sheets[0].grade_sheet_id;
+
+        const [activities] = await db.execute(
+          `SELECT ga.activity_id, ga.activity_name, ct.component_code
+           FROM GRADE_ACTIVITY ga
+           LEFT JOIN SUBJECT_COMPONENT_WEIGHT scw ON scw.subj_comp_weight_id = ga.subj_comp_weight_id
+           LEFT JOIN COMPONENT_TYPE ct ON ct.component_type_id = scw.component_type_id
+           WHERE ga.grade_sheet_id = ? AND (ga.status = 'ACTIVE' OR ga.status IS NULL) AND ga.status != 'ARCHIVED'`,
+          [gradeSheetId]
+        ).catch(() => [[]]);
+
+        let teActId = null;
+        (activities || []).forEach((a) => {
+          const aName = String(a.activity_name || '').toUpperCase();
+          const code = String(a.component_code || '').toUpperCase();
+          if (code === 'QA' || code === 'EX' || aName.includes('EXAM') || aName.includes('QUARTERLY') || aName.includes('TE')) {
+            if (!/\b(ST1|ST2|SUMMATIVE\s*1|SUMMATIVE\s*2)\b/i.test(aName)) {
+              if (/\b(TE|TERM\s*EXAM|QUARTERLY\s*ASSESSMENT|QUARTERLY)\b/i.test(aName) || !teActId) {
+                teActId = a.activity_id;
+              }
+            }
+          }
+        });
+
+        if (teActId) {
+          const [scoreRows] = await db.execute(
+            `SELECT sc.raw_score
+             FROM SCORE sc
+             JOIN STUDENT_SECTION ss ON ss.student_section_id = sc.student_section_id
+             WHERE sc.activity_id = ? AND ss.section_id = ? AND sc.raw_score IS NOT NULL AND sc.raw_score != ''`,
+            [teActId, section_id]
+          ).catch(() => [[]]);
+
+          (scoreRows || []).forEach((sc) => {
+            const val = Number(sc.raw_score);
+            if (!isNaN(val)) {
+              teTotalScore += val;
+              teNumTakers += 1;
+            }
+          });
+
+          if (teNumTakers > 0) {
+            teScoreMean = Math.round((teTotalScore / teNumTakers) * 100) / 100;
+            teMps = Math.round(((teScoreMean / 50) * 100) * 100) / 100;
+          }
+        }
+      }
 
       const displaySectionName = (subjectId === 'all' || !subjectId) && secRow.subject_name
         ? `${secRow.section_name} (${secRow.subject_name})`
@@ -1170,10 +1225,10 @@ router.get('/grade-range-report', async (req, res) => {
         r85_89,
         r90_100,
         total,
-        total_score: Math.round(totalScore * 100) / 100,
-        num_takers: numTakers,
-        score_mean: scoreMean,
-        mps,
+        total_score: Math.round(teTotalScore * 100) / 100,
+        num_takers: teNumTakers,
+        score_mean: teScoreMean,
+        mps: teMps,
       });
     }
 
@@ -1192,22 +1247,21 @@ router.get('/grade-range-report', async (req, res) => {
       const sumTotalScore = reportSections.reduce((a, b) => a + b.total_score, 0);
       const sumNumTakers = reportSections.reduce((a, b) => a + b.num_takers, 0);
       const overallMean = sumNumTakers > 0 ? Math.round((sumTotalScore / sumNumTakers) * 100) / 100 : 0;
-
-      const fmt = (val) => Math.round((val / sectionCount) * 10) / 10;
+      const overallMps = sumNumTakers > 0 ? Math.round(((overallMean / 50) * 100) * 100) / 100 : 0;
 
       averageRow = {
-        section_name: 'Average',
-        no_grade: fmt(sumNoGrade),
-        r60_74: fmt(sum60_74),
-        r75_79: fmt(sum75_79),
-        r80_84: fmt(sum80_84),
-        r85_89: fmt(sum85_89),
-        r90_100: fmt(sum90_100),
-        total: fmt(sumTotal),
-        total_score: fmt(sumTotalScore),
-        num_takers: fmt(sumNumTakers),
+        section_name: 'Total',
+        no_grade: sumNoGrade,
+        r60_74: sum60_74,
+        r75_79: sum75_79,
+        r80_84: sum80_84,
+        r85_89: sum85_89,
+        r90_100: sum90_100,
+        total: sumTotal,
+        total_score: Math.round(sumTotalScore * 100) / 100,
+        num_takers: sumNumTakers,
         score_mean: overallMean,
-        mps: overallMean,
+        mps: overallMps,
       };
     }
 

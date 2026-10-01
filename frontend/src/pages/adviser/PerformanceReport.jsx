@@ -111,48 +111,34 @@ export default function PerformanceReport() {
   }, [selectedSchoolYear, selectedTerm, selectedSubject, effectiveUserId]);
 
   // Calculate averages per column across all handled sections dynamically
-  const averageRow = useMemo(() => {
+  // Calculate totals across all handled sections dynamically
+  const summaryRow = useMemo(() => {
     if (!sectionsData || sectionsData.length === 0) return null;
 
-    const count = sectionsData.length;
     const sumNoGrade = sectionsData.reduce((acc, r) => acc + (Number(r.no_grade) || 0), 0);
     const sum60_74 = sectionsData.reduce((acc, r) => acc + (Number(r.r60_74) || 0), 0);
     const sum75_79 = sectionsData.reduce((acc, r) => acc + (Number(r.r75_79) || 0), 0);
     const sum80_84 = sectionsData.reduce((acc, r) => acc + (Number(r.r80_84) || 0), 0);
     const sum85_89 = sectionsData.reduce((acc, r) => acc + (Number(r.r85_89) || 0), 0);
     const sum90_100 = sectionsData.reduce((acc, r) => acc + (Number(r.r90_100) || 0), 0);
-    const sumTotal = sectionsData.reduce(
-      (acc, r) =>
-        acc +
-        (Number(r.total) ||
-          (Number(r.no_grade) || 0) +
-            (Number(r.r60_74) || 0) +
-            (Number(r.r75_79) || 0) +
-            (Number(r.r80_84) || 0) +
-            (Number(r.r85_89) || 0) +
-            (Number(r.r90_100) || 0)),
-      0
-    );
 
     const sumTotalScore = sectionsData.reduce((acc, r) => acc + (Number(r.total_score) || 0), 0);
     const sumNumTakers = sectionsData.reduce((acc, r) => acc + (Number(r.num_takers) || 0), 0);
     const overallMean = sumNumTakers > 0 ? Math.round((sumTotalScore / sumNumTakers) * 100) / 100 : 0;
-
-    const fmt = (sum) => Math.round((sum / count) * 10) / 10;
+    const overallMps = sumNumTakers > 0 ? Math.round(((overallMean / 50) * 100) * 100) / 100 : 0;
 
     return {
-      section_name: "Average",
-      no_grade: fmt(sumNoGrade),
-      r60_74: fmt(sum60_74),
-      r75_79: fmt(sum75_79),
-      r80_84: fmt(sum80_84),
-      r85_89: fmt(sum85_89),
-      r90_100: fmt(sum90_100),
-      total: fmt(sumTotal),
-      total_score: fmt(sumTotalScore),
-      num_takers: fmt(sumNumTakers),
+      section_name: "Total",
+      no_grade: sumNoGrade,
+      r60_74: sum60_74,
+      r75_79: sum75_79,
+      r80_84: sum80_84,
+      r85_89: sum85_89,
+      r90_100: sum90_100,
+      total_score: sumTotalScore,
+      num_takers: sumNumTakers,
       score_mean: overallMean,
-      mps: overallMean,
+      mps: overallMps,
     };
   }, [sectionsData]);
 
@@ -255,22 +241,22 @@ export default function PerformanceReport() {
                       </tr>
                     ))}
 
-                    {averageRow && (
+                    {summaryRow && (
                       <tr className="average-row">
                         <td>
-                          <strong>{averageRow.section_name}</strong>
+                          <strong>{summaryRow.section_name}</strong>
                         </td>
                         <td>
-                          <strong>{averageRow.total_score}</strong>
+                          <strong>{summaryRow.total_score}</strong>
                         </td>
                         <td>
-                          <strong>{averageRow.num_takers}</strong>
+                          <strong>{summaryRow.num_takers}</strong>
                         </td>
                         <td>
-                          <strong>{Number(averageRow.score_mean || 0).toFixed(2)}</strong>
+                          <strong>{Number(summaryRow.score_mean || 0).toFixed(2)}</strong>
                         </td>
                         <td>
-                          <strong>{Number(averageRow.mps || 0).toFixed(2)}%</strong>
+                          <strong>{Number(summaryRow.mps || 0).toFixed(2)}%</strong>
                         </td>
                       </tr>
                     )}
@@ -295,75 +281,57 @@ export default function PerformanceReport() {
                   <th>80-84</th>
                   <th>85-89</th>
                   <th>90-100</th>
-                  <th>Total</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={8} className="no-data-row">
+                    <td colSpan={7} className="no-data-row">
                       Loading grade range data...
                     </td>
                   </tr>
                 ) : sectionsData.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="no-data-row">
+                    <td colSpan={7} className="no-data-row">
                       No data provided yet
                     </td>
                   </tr>
                 ) : (
                   <>
-                    {sectionsData.map((row, idx) => {
-                      const rowTotal =
-                        row.total ??
-                        (Number(row.no_grade) || 0) +
-                          (Number(row.r60_74) || 0) +
-                          (Number(row.r75_79) || 0) +
-                          (Number(row.r80_84) || 0) +
-                          (Number(row.r85_89) || 0) +
-                          (Number(row.r90_100) || 0);
+                    {sectionsData.map((row, idx) => (
+                      <tr key={row.section_id || idx}>
+                        <td>{row.section_name}</td>
+                        <td>{row.no_grade ?? 0}</td>
+                        <td>{row.r60_74 ?? 0}</td>
+                        <td>{row.r75_79 ?? 0}</td>
+                        <td>{row.r80_84 ?? 0}</td>
+                        <td>{row.r85_89 ?? 0}</td>
+                        <td>{row.r90_100 ?? 0}</td>
+                      </tr>
+                    ))}
 
-                      return (
-                        <tr key={row.section_id || idx}>
-                          <td>{row.section_name}</td>
-                          <td>{row.no_grade ?? 0}</td>
-                          <td>{row.r60_74 ?? 0}</td>
-                          <td>{row.r75_79 ?? 0}</td>
-                          <td>{row.r80_84 ?? 0}</td>
-                          <td>{row.r85_89 ?? 0}</td>
-                          <td>{row.r90_100 ?? 0}</td>
-                          <td>
-                            <strong>{rowTotal}</strong>
-                          </td>
-                        </tr>
-                      );
-                    })}
-
-                    {averageRow && (
+                    {summaryRow && (
                       <tr className="average-row">
                         <td>
-                          <strong>{averageRow.section_name}</strong>
+                          <strong>{summaryRow.section_name}</strong>
                         </td>
                         <td>
-                          <strong>{averageRow.no_grade}</strong>
+                          <strong>{summaryRow.no_grade}</strong>
                         </td>
                         <td>
-                          <strong>{averageRow.r60_74}</strong>
+                          <strong>{summaryRow.r60_74}</strong>
                         </td>
                         <td>
-                          <strong>{averageRow.r75_79}</strong>
+                          <strong>{summaryRow.r75_79}</strong>
                         </td>
                         <td>
-                          <strong>{averageRow.r80_84}</strong>
+                          <strong>{summaryRow.r80_84}</strong>
                         </td>
                         <td>
-                          <strong>{averageRow.r85_89}</strong>
+                          <strong>{summaryRow.r85_89}</strong>
                         </td>
                         <td>
-                          <strong>{averageRow.r90_100}</strong>
-                        </td>
-                        <td>
-                          <strong>{averageRow.total}</strong>
+                          <strong>{summaryRow.r90_100}</strong>
                         </td>
                       </tr>
                     )}
