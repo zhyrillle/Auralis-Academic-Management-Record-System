@@ -39,7 +39,11 @@ export default function GradeReopeningRequest() {
   const [reason, setReason] = useState("");
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [formError, setFormError] = useState("");
+  const [subjectError, setSubjectError] = useState("");
+  const [reasonError, setReasonError] = useState("");
   const [isDragOver, setIsDragOver] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [reopeningOptions, setReopeningOptions] = useState({});
 
   // Requests Data & Modals State
   const [requests, setRequests] = useState(INITIAL_REQUESTS);
@@ -79,7 +83,39 @@ export default function GradeReopeningRequest() {
       })
       .catch((err) => console.error("Error fetching handled sections:", err));
 
-    // 2. Fetch existing grade reopening requests for logged in user
+    // 2. Fetch reopening options and window states
+    fetch(`http://localhost:5000/api/grading-periods/grade-sheets/reopening-options`, {
+      headers: {
+        "X-Auralis-User-Id": String(currentUser.user_id),
+      },
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.gradeSheets && Array.isArray(data.gradeSheets)) {
+          const optionsMap = { _rawSheets: data.gradeSheets };
+          data.gradeSheets.forEach((sheet) => {
+            const key = sheet.section_name || sheet.subject_name;
+            if (key) {
+              // Priority for eligible or closed over not_open when mapping by section_name
+              if (!optionsMap[key] || sheet.eligible || sheet.reason === "WINDOW_CLOSED") {
+                optionsMap[key] = {
+                  eligible: sheet.eligible,
+                  reason: sheet.reason,
+                  reopening_requests_open_at: sheet.reopening_requests_open_at,
+                  reopening_requests_close_at: sheet.reopening_requests_close_at,
+                  gradeSheetId: sheet.grade_sheet_id,
+                  teacherAssignmentId: sheet.teacher_assignment_id,
+                  termName: sheet.term_name,
+                };
+              }
+            }
+          });
+          setReopeningOptions(optionsMap);
+        }
+      })
+      .catch((err) => console.error("Error fetching reopening options:", err));
+
+    // 3. Fetch existing grade reopening requests for logged in user
     fetch(`http://localhost:5000/api/reopen-requests/user/${currentUser.user_id}`)
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
@@ -204,12 +240,15 @@ export default function GradeReopeningRequest() {
     setReason("");
     setSelectedFiles([]);
     setFormError("");
+    setSubjectError("");
+    setReasonError("");
   };
 
   // Handle Dropdown Change for Subject/Section
   const handleSubjectSelect = (e) => {
     const selectedVal = e.target.value;
     setSubject(selectedVal);
+    if (selectedVal) setSubjectError("");
 
     if (!selectedVal) {
       setCurrentTeacherAssignmentId(null);
@@ -243,14 +282,79 @@ export default function GradeReopeningRequest() {
     return isNaN(parsed) ? 1 : parsed;
   };
 
+  // Compute disable status and short hover explanation for the Submit button
+  const getSubmitDisableInfo = () => {
+    const sectionInfo = subject ? reopeningOptions[subject] : null;
+
+    if (sectionInfo) {
+      if (sectionInfo.reason === "WINDOW_CLOSED") {
+        return {
+          isDisabled: true,
+          reason: "Submissions are closed."
+        };
+      }
+
+      if (sectionInfo.reason === "WINDOW_NOT_OPEN") {
+        return {
+          isDisabled: true,
+          reason: "Reopening requests are not open yet."
+        };
+      }
+    }
+
+    // Check overall reopening window availability if no section selected or checking general state
+    const sheetsList = reopeningOptions._rawSheets || Object.values(reopeningOptions).filter(Boolean);
+    if (sheetsList.length > 0) {
+      const hasAnyEligibleWindow = sheetsList.some((s) => s.eligible === true);
+      if (!hasAnyEligibleWindow) {
+        const hasClosedWindow = sheetsList.some((s) => s.reason === "WINDOW_CLOSED");
+        if (hasClosedWindow) {
+          return {
+            isDisabled: true,
+            reason: "Submissions are closed."
+          };
+        }
+        return {
+          isDisabled: true,
+          reason: "Reopening requests are not open yet."
+        };
+      }
+    }
+
+    return {
+      isDisabled: false,
+      reason: ""
+    };
+  };
+
+  const disableInfo = getSubmitDisableInfo();
+
   // Submit Handler
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setFormError("");
+    if (isSubmitting) return;
 
-    // Validation
-    if (!subject || !requestType || !reason.trim()) {
+    setFormError("");
+    setSubjectError("");
+    setReasonError("");
+
+    let hasFieldErrors = false;
+    if (!subject) {
+      setSubjectError("Please select a section / handled subject first.");
+      hasFieldErrors = true;
+    }
+    if (!reason.trim()) {
+      setReasonError("Please provide a reason / explanation for requesting grade reopening.");
+      hasFieldErrors = true;
+    }
+
+    if (hasFieldErrors) {
       setFormError("Please fill in all required fields marked with *");
+      return;
+    }
+
+    if (disableInfo.isDisabled) {
+      setFormError(disableInfo.reason);
       return;
     }
 
@@ -267,6 +371,8 @@ export default function GradeReopeningRequest() {
       );
       return;
     }
+
+    setIsSubmitting(true);
 
     try {
       // Create FormData
@@ -347,6 +453,8 @@ export default function GradeReopeningRequest() {
       setFormError(
         "An error occurred while connecting to the server."
       );
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -460,19 +568,34 @@ export default function GradeReopeningRequest() {
                   Section / Handled Subject <span className="required">*</span>
                 </label>
                 <select
-                  className="grr-select"
+                  className={`grr-select${subjectError ? " grr-field-error-input" : ""}`}
                   value={subject}
                   onChange={handleSubjectSelect}
                 >
                   <option value="">Select Section / Handled Subject</option>
                   {handledSections.length > 0 ? (
                     handledSections
-                      .filter((sec) => !alreadyRequestedSections.has(sec.sectionName))
-                      .map((sec) => (
-                        <option key={sec.id} value={sec.sectionName}>
-                          {sec.label}
-                        </option>
-                      ))
+                      .filter((sec) => {
+                        if (alreadyRequestedSections.has(sec.sectionName)) return false;
+                        const info = reopeningOptions[sec.sectionName];
+                        if (
+                          info?.reason === "REQUEST_ALREADY_PENDING" ||
+                          info?.reason === "TEMPORARY_ACCESS_ACTIVE" ||
+                          info?.reason === "SHEET_NOT_SUBMITTED_AND_LOCKED"
+                        ) {
+                          return false;
+                        }
+                        return true;
+                      })
+                      .map((sec) => {
+                        const info = reopeningOptions[sec.sectionName];
+                        const suffix = info?.reason === "WINDOW_CLOSED" ? " (Deadline Passed)" : "";
+                        return (
+                          <option key={sec.id} value={sec.sectionName}>
+                            {sec.label}{suffix}
+                          </option>
+                        );
+                      })
                   ) : (
                     <>
                       <option value="Honesty">Honesty</option>
@@ -481,8 +604,35 @@ export default function GradeReopeningRequest() {
                     </>
                   )}
                 </select>
+                {subjectError && (
+                  <span className="grr-field-error-msg">
+                    <AlertCircle size={13} />
+                    {subjectError}
+                  </span>
+                )}
               </div>
             </div>
+
+            {/* Window state alert banners */}
+            {subject && reopeningOptions[subject]?.reason === "WINDOW_CLOSED" && (
+              <div className="grr-window-notice closed">
+                <AlertCircle size={16} className="grr-window-notice-icon" />
+                <div>
+                  <strong>Reopening Window Closed</strong>
+                  <p>The 7-day window to request grade reopening for this term has expired. Submissions are disabled.</p>
+                </div>
+              </div>
+            )}
+
+            {subject && reopeningOptions[subject]?.reason === "WINDOW_NOT_OPEN" && (
+              <div className="grr-window-notice info">
+                <Info size={16} className="grr-window-notice-icon" />
+                <div>
+                  <strong>Reopening Window Not Open Yet</strong>
+                  <p>Reopening requests open automatically after the grade submission deadline passes.</p>
+                </div>
+              </div>
+            )}
 
             {/* Row 3: Reason / Explanation */}
             <div className="grr-field-group">
@@ -492,16 +642,25 @@ export default function GradeReopeningRequest() {
               <span className="grr-sublabel">
                 Please provide a clear and detailed explanation why you are requesting to reopen grade access.
               </span>
-              <div className="grr-textarea-wrapper">
+              <div className={`grr-textarea-wrapper${reasonError ? " grr-field-error-input" : ""}`}>
                 <textarea
                   className="grr-textarea"
                   placeholder="Type your explanation here..."
                   maxLength={1000}
                   value={reason}
-                  onChange={(e) => setReason(e.target.value)}
+                  onChange={(e) => {
+                    setReason(e.target.value);
+                    if (e.target.value.trim()) setReasonError("");
+                  }}
                 />
                 <span className="grr-char-counter">{reason.length}/1000</span>
               </div>
+              {reasonError && (
+                <span className="grr-field-error-msg">
+                  <AlertCircle size={13} />
+                  {reasonError}
+                </span>
+              )}
             </div>
 
             {/* Row 4: Supporting Documents */}
@@ -558,13 +717,37 @@ export default function GradeReopeningRequest() {
 
             {/* Row 5: Action Buttons */}
             <div className="grr-actions-row">
-              <button type="button" className="grr-clear-btn" onClick={handleClear}>
+              <button type="button" className="grr-clear-btn" onClick={handleClear} disabled={isSubmitting}>
                 Clear
               </button>
-              <button type="submit" className="grr-submit-btn">
-                <Send size={16} />
-                <span>Submit Request</span>
-              </button>
+              <div
+                className={`grr-submit-wrapper${disableInfo.isDisabled || isSubmitting ? " grr-submit-wrapper--disabled" : ""}`}
+                title={disableInfo.isDisabled ? disableInfo.reason : ""}
+              >
+                <button
+                  type="submit"
+                  className="grr-submit-btn"
+                  disabled={disableInfo.isDisabled || isSubmitting}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <span className="grr-spinner" />
+                      <span>Submitting...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Send size={16} />
+                      <span>Submit Request</span>
+                    </>
+                  )}
+                </button>
+                {disableInfo.isDisabled && !isSubmitting && (
+                  <div className="grr-submit-tooltip" role="tooltip">
+                    <Info size={14} style={{ flexShrink: 0, marginTop: "2px" }} />
+                    <span>{disableInfo.reason}</span>
+                  </div>
+                )}
+              </div>
             </div>
           </form>
 
