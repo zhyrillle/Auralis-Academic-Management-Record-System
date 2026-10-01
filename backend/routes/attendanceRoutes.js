@@ -33,6 +33,21 @@ router.get('/section/:sectionId', async (req, res) => {
   }
 });
 
+// POST save-remarks for a student's attendance record
+router.post('/save-remarks', async (req, res) => {
+  try {
+    const { attendance_sheet_id, student_section_id, student_id, status, remarks } = req.body;
+    const rawId = student_section_id || student_id;
+    if (!attendance_sheet_id || !rawId) {
+      return res.status(400).json({ error: 'attendance_sheet_id and student_section_id are required' });
+    }
+    const id = await Attendance.saveRemarks(attendance_sheet_id, rawId, remarks, status);
+    res.json({ message: 'Remarks saved successfully', attendance_id: id });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST bulk-save multiple attendance records at once
 router.post('/bulk-save', async (req, res) => {
   try {

@@ -450,6 +450,55 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
     }
   };
 
+  // ── Handle remarks input change ──
+  const handleRemarksChange = (studentSectionId, val, studentId = null) => {
+    setRemarksMap(prev => {
+      const next = { ...prev, [studentSectionId]: val };
+      if (studentId) next[studentId] = val;
+      return next;
+    });
+  };
+
+  // ── Save remarks on blur or Enter ──
+  const handleRemarksBlur = async (studentSectionId, val, studentId = null) => {
+    if (!targetSectionId) return;
+    try {
+      const targetDate = selectedDate || TODAY;
+      const sheetId = await ensureSheetForDate(targetDate);
+      const currentStatus = attendanceMap[`${studentSectionId}-${targetDate}`] || 
+                            (studentId ? attendanceMap[`${studentId}-${targetDate}`] : null) || 
+                            null;
+
+      const saveRes = await fetch(`${BASE_URL}/attendance/bulk-save`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          records: [{
+            attendance_sheet_id: sheetId,
+            student_section_id: studentSectionId,
+            student_id: studentId,
+            status: currentStatus || "P",
+            remarks: val !== undefined && val !== null ? String(val).trim() : null,
+          }],
+        }),
+      });
+
+      if (!saveRes.ok) {
+        const errData = await saveRes.json().catch(() => ({}));
+        throw new Error(errData.error || `Failed with status ${saveRes.status}`);
+      }
+    } catch (err) {
+      console.error("Error saving remarks:", err);
+      triggerToast(`Failed to save remark: ${err.message}`, "error");
+    }
+  };
+
+  const handleRemarksKeyDown = (e) => {
+    if (e.key === "Enter") {
+      e.target.blur();
+    }
+  };
+
   // ── Gender separation ──
   const maleStudents = useMemo(() => students.filter(s => s.sex === "M"), [students]);
   const femaleStudents = useMemo(() => students.filter(s => s.sex === "F"), [students]);
@@ -859,7 +908,18 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
 
                     <td className="sf2-td-stat">{stats.absents}</td>
                     <td className="sf2-td-stat">{stats.tardy}</td>
-                    <td className="sf2-td-remarks">{remarksVal}</td>
+                    <td className="sf2-td-remarks">
+                      <input
+                        type="text"
+                        className="sf2-remarks-input"
+                        value={remarksVal}
+                        onChange={(e) => handleRemarksChange(sId, e.target.value, stu.student_id)}
+                        onBlur={(e) => handleRemarksBlur(sId, e.target.value, stu.student_id)}
+                        onKeyDown={handleRemarksKeyDown}
+                        placeholder="Enter remarks…"
+                        title={`Remarks for ${stu.last_name}, ${stu.first_name}`}
+                      />
+                    </td>
                   </tr>
                 );
               })}
@@ -917,7 +977,18 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
 
                     <td className="sf2-td-stat">{stats.absents}</td>
                     <td className="sf2-td-stat">{stats.tardy}</td>
-                    <td className="sf2-td-remarks">{remarksVal}</td>
+                    <td className="sf2-td-remarks">
+                      <input
+                        type="text"
+                        className="sf2-remarks-input"
+                        value={remarksVal}
+                        onChange={(e) => handleRemarksChange(sId, e.target.value, stu.student_id)}
+                        onBlur={(e) => handleRemarksBlur(sId, e.target.value, stu.student_id)}
+                        onKeyDown={handleRemarksKeyDown}
+                        placeholder="Enter remarks…"
+                        title={`Remarks for ${stu.last_name}, ${stu.first_name}`}
+                      />
+                    </td>
                   </tr>
                 );
               })}
