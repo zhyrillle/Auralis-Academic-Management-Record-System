@@ -18,6 +18,7 @@ class GradeActivity {
     const {
       grade_sheet_id,
       subj_comp_weight_id,
+      mapeh_component,
       activity_name,
       highest_possible_score,
       activity_date,
@@ -28,16 +29,18 @@ class GradeActivity {
       `INSERT INTO GRADE_ACTIVITY (
       grade_sheet_id,
       subj_comp_weight_id,
+      mapeh_component,
       activity_name,
       highest_possible_score,
       activity_date,
       status,
       created_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, NOW(6))`,
+    VALUES (?, ?, ?, ?, ?, ?, ?, NOW(6))`,
       [
         grade_sheet_id,
         subj_comp_weight_id,
+        mapeh_component || null,
         activity_name,
         highest_possible_score,
         activity_date,
@@ -52,6 +55,10 @@ class GradeActivity {
     const updateFields = [];
     const updateValues = [];
 
+    if (data.mapeh_component !== undefined) {
+      updateFields.push('mapeh_component = ?');
+      updateValues.push(data.mapeh_component || null);
+    }
     if (data.activity_name !== undefined) {
       updateFields.push('activity_name = ?');
       updateValues.push(data.activity_name);

@@ -4,17 +4,20 @@ import DropdownSelect from "../../../components/common/DropdownSelect";
 
 export default function AuditEventFilters({
   search,
+  role,
   schoolYear,
   module,
   eventType,
   impact,
   dateFrom,
   dateTo,
+  roles = [],
   schoolYears,
   modules,
   eventTypes,
   showMore,
   onSearchChange,
+  onRoleChange,
   onSchoolYearChange,
   onModuleChange,
   onEventTypeChange,
@@ -26,9 +29,13 @@ export default function AuditEventFilters({
 }) {
   const popoverRef = useRef(null);
   const hasFilters = Boolean(
-    search || schoolYear || module || eventType || impact || dateFrom || dateTo,
+    search || role || schoolYear || module || eventType || impact || dateFrom || dateTo,
   );
   const hasAdvancedFilters = Boolean(eventType || impact || dateFrom || dateTo);
+  const roleOptions = [
+    { value: "", label: "All roles" },
+    ...roles.map((roleName) => ({ value: roleName, label: roleName })),
+  ];
   const schoolYearOptions = [
     { value: "", label: "All school years" },
     ...schoolYears.map((year, index) => ({
@@ -83,6 +90,13 @@ export default function AuditEventFilters({
             placeholder="Search user or activity"
           />
         </label>
+
+        <DropdownSelect
+          label="Filter by role"
+          value={role}
+          onChange={onRoleChange}
+          options={roleOptions}
+        />
 
         <DropdownSelect
           label="Filter by school year"

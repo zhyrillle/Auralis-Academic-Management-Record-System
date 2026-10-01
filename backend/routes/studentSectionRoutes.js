@@ -11,6 +11,52 @@ router.get('/', async (req, res) => {
   }
 });
 
+router.post('/assign', async (req, res) => {
+  try {
+    const { student_id, section_id, school_year_id } = req.body;
+    if (!student_id || !section_id) {
+      return res.status(400).json({ error: 'student_id and section_id are required' });
+    }
+    const id = await StudentSection.assign(student_id, section_id, school_year_id);
+    res.json({ message: 'Student assigned successfully', student_section_id: id });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/bulk-assign', async (req, res) => {
+  try {
+    const { student_ids, section_id, school_year_id } = req.body;
+    if (!student_ids || !Array.isArray(student_ids) || student_ids.length === 0 || !section_id) {
+      return res.status(400).json({ error: 'student_ids (array) and section_id are required' });
+    }
+    const results = await StudentSection.bulkAssign(student_ids, section_id, school_year_id);
+    res.json({ message: 'Students assigned successfully', count: results.length, results });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/unassign', async (req, res) => {
+  try {
+    const { student_id, section_id, school_year_id, student_section_id } = req.body;
+    const success = await StudentSection.unassign(student_id, section_id, school_year_id, student_section_id);
+    res.json({ message: 'Student unassigned successfully', success });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete('/unassign', async (req, res) => {
+  try {
+    const { student_id, section_id, school_year_id, student_section_id } = req.body;
+    const success = await StudentSection.unassign(student_id, section_id, school_year_id, student_section_id);
+    res.json({ message: 'Student unassigned successfully', success });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/:id', async (req, res) => {
   try {
     const enrollment = await StudentSection.findById(req.params.id);

@@ -14,6 +14,20 @@ class UserManagementOptions {
     return rows;
   }
 
+  static async getPrograms() {
+    const [rows] = await db.execute(`
+      SELECT
+        program_id,
+        program_code,
+        program_name,
+        is_specialized
+      FROM PROGRAM
+      ORDER BY is_specialized DESC, program_code ASC
+    `);
+
+    return rows;
+  }
+
   static async getSections(gradeLevelId) {
     const [rows] = await db.execute(
       `

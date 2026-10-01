@@ -37,13 +37,17 @@ const notificationRoutes = require('./routes/notificationRoutes');
 const feedbackRoutes = require('./routes/feedbackRoutes');
 const principalFeedbackRoutes = require('./routes/principalFeedbackRoutes');
 const principalAnalyticsRoutes = require('./routes/principalAnalyticsRoutes');
+const principalPerformanceRoutes = require('./routes/principalPerformanceRoutes');
 const departmentHeadDashboardRoutes = require('./routes/departmentHeadDashboard.routes');
 const atRiskPredictionRoutes = require('./routes/atRiskPredictionRoutes');
 const gradingPeriodRoutes = require('./routes/gradingPeriodRoutes');
 const classRecordRoutes = require('./routes/classRecordRoutes');
 const StudentGrade = require('./models/StudentGrade');
 const masterSheetRoutes = require('./routes/masterSheetRoutes');
+const sectionDetailsRoutes = require('./routes/sectionDetailsRoutes');
+const studentSf9Routes = require('./routes/studentSf9Routes');
 const GradingPeriodService = require('./services/GradingPeriodService');
+const adviserDashboardRoutes = require('./routes/adviserDashboardRoutes');
 
 app.use('/api', classRecordRoutes);
 app.use('/api/schools', schoolRoutes);
@@ -74,10 +78,14 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/feedback', feedbackRoutes);
 app.use('/api/principal/feedback', principalFeedbackRoutes);
 app.use('/api/principal/analytics', principalAnalyticsRoutes);
+app.use('/api/principal/performance', principalPerformanceRoutes);
 app.use('/api/department-head', departmentHeadDashboardRoutes);
 app.use('/api/principal/at-risk-prediction', atRiskPredictionRoutes);
 app.use('/api/grading-periods', gradingPeriodRoutes);
 app.use('/api/master-sheets', masterSheetRoutes);
+app.use('/api/section-details', sectionDetailsRoutes);
+app.use('/api/student-sf9', studentSf9Routes);
+app.use('/api/adviser/dashboard', adviserDashboardRoutes);
 
 app.get('/', (req, res) => {
   res.json({ status: 'Backend API is running' });

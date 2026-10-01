@@ -7,6 +7,7 @@ import ResetPassword from "./pages/ResetPassword";
 import AdminDashboard from "./pages/system-admin/AdminDashboard";
 import WSConfig from "./pages/system-admin/WSConfig";
 import ManageUsers from "./pages/system-admin/ManageUsers";
+import StudentSectionManagement from "./pages/system-admin/StudentSectionManagement";
 import AcademicPeriod from "./pages/system-admin/AcademicPeriod";
 import AdviserDashboard from "./pages/adviser/AdviserDashboard";
 import DeptDashboard from "./pages/department-head/DeptDashboard";
@@ -14,7 +15,6 @@ import DeptClassRecord from "./pages/department-head/DeptClassRecord";
 import PrincipalDashboard from "./pages/principal/PrincipalDashboard";
 import TeacherDashboard from "./pages/teacher/TeacherDashboard";
 import PerformanceReport from "./pages/adviser/PerformanceReport";
-import PlaceholderPage from "./pages/PlaceholderPage";
 import DashboardLayout from "./components/layout/DashboardLayout";
 import AdviserSections from "./pages/adviser/AdviserSections";
 import MasterSheet from "./pages/adviser/MasterSheet";
@@ -22,6 +22,11 @@ import AdviserFeedback from "./pages/adviser/AdviserFeedback";
 import ProfilePage from "./pages/ProfilePage";
 import AtRiskBreakdown from "./pages/principal/AtRiskBreakdown";
 import AtRiskPrediction from "./pages/principal/AtRiskPrediction";
+import PerformanceGradeLevels from "./pages/principal/PerformanceGradeLevels";
+import PerformanceSections from "./pages/principal/PerformanceSections";
+import PerformanceSubjects from "./pages/principal/PerformanceSubjects";
+import PerformanceTeachers from "./pages/principal/PerformanceTeachers";
+import PerformanceLowest from "./pages/principal/PerformanceLowest";
 import TeacherFeedback from "./pages/principal/TeacherFeedback";
 import SubjectPerformanceTrend from "./pages/principal/SubjectPerformanceTrend";
 import HistoricalComparison from "./pages/principal/HistoricalComparison";
@@ -30,6 +35,7 @@ import GradeReopeningRequest from "./pages/adviser/GradeReopeningRequest";
 import SectionDetails from "./pages/adviser/SectionDetails";
 import AdviserNotifications from "./pages/adviser/AdviserNotifications";
 import AttendanceSheet from "./pages/adviser/AttendanceSheet";
+import ClassRecord from "./pages/adviser/ClassRecord";
 import { getStoredUser, setStoredUser } from "./utils/auth";
 
 export default function App() {
@@ -53,9 +59,7 @@ export default function App() {
       <Routes>
         <Route
           path="/"
-          element={
-            <Login user={user} onLoginSuccess={handleLoginSuccess} />
-          }
+          element={<Login user={user} onLoginSuccess={handleLoginSuccess} />}
         />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/otp" element={<OtpVerify />} />
@@ -63,27 +67,20 @@ export default function App() {
 
         {/* Protected Dashboard Layout routes */}
         <Route
-          element={
-            <DashboardLayout user={user} onLogout={handleLogout} />
-          }
+          element={<DashboardLayout user={user} onLogout={handleLogout} />}
         >
           {/* Shared profile route for every signed-in account */}
           <Route
             path="/profile"
             element={
-              <ProfilePage
-                user={user}
-                onUserUpdated={handleUserUpdated}
-              />
+              <ProfilePage user={user} onUserUpdated={handleUserUpdated} />
             }
           />
 
           {/* 1. System Administrator */}
           <Route path="/system-admin/dashboard" element={<AdminDashboard />} />
-          <Route
-            path="/system-admin/manage-users"
-            element={<ManageUsers />}
-          />
+          <Route path="/system-admin/manage-users" element={<ManageUsers />} />
+          <Route path="/system-admin/student-section-management" element={<StudentSectionManagement />} />
           <Route
             path="/system-admin/grading-periods"
             element={<AcademicPeriod user={user} />}
@@ -102,23 +99,23 @@ export default function App() {
           />
           <Route
             path="/principal/performance-level/grade-levels"
-            element={<PlaceholderPage />}
+            element={<PerformanceGradeLevels />}
           />
           <Route
             path="/principal/performance-level/sections"
-            element={<PlaceholderPage />}
+            element={<PerformanceSections />}
           />
           <Route
             path="/principal/performance-level/subjects"
-            element={<PlaceholderPage />}
+            element={<PerformanceSubjects />}
           />
           <Route
             path="/principal/performance-level/teachers"
-            element={<PlaceholderPage />}
+            element={<PerformanceTeachers />}
           />
           <Route
             path="/principal/performance-level/lowest-performers"
-            element={<PlaceholderPage />}
+            element={<PerformanceLowest />}
           />
           <Route
             path="/principal/analytics/subject-trend"
@@ -144,22 +141,53 @@ export default function App() {
           {/* 4. Adviser */}
           <Route path="/adviser/dashboard" element={<AdviserDashboard />} />
           <Route path="/adviser/sections" element={<AdviserSections />} />
-          <Route path="/adviser/sections/details" element={<SectionDetails />} />
           <Route
-            path="/adviser/attendance"
-            element={<AttendanceSheet />}
+            path="/adviser/sections/details"
+            element={<SectionDetails />}
           />
-          <Route path="/adviser/notifications" element={<AdviserNotifications />} />
+          <Route path="/adviser/attendance" element={<AttendanceSheet />} />
+          <Route
+            path="/adviser/notifications"
+            element={<AdviserNotifications />}
+          />
           <Route path="/adviser/master-sheet" element={<MasterSheet />} />
           <Route path="/adviser/performance" element={<PerformanceReport />} />
           <Route path="/adviser/feedback" element={<AdviserFeedback />} />
           <Route path="/adviser/request" element={<GradeReopeningRequest />} />
+          <Route
+            path="/class-record/:sectionId/:subjectId"
+            element={<ClassRecord />}
+          />
+          <Route
+            path="/class-record/:sectionId"
+            element={<ClassRecord />}
+          />
+          <Route
+            path="/adviser/class-record/:sectionId/:subjectId"
+            element={<ClassRecord />}
+          />
+          <Route
+            path="/adviser/class-record/:sectionId"
+            element={<ClassRecord />}
+          />
 
           {/* 5. Subject Teacher */}
           <Route path="/teacher/dashboard" element={<TeacherDashboard />} />
           <Route
             path="/teacher/sections"
             element={<AdviserSections userRole="teacher" />}
+          />
+          <Route
+            path="/teacher/sections/details"
+            element={<SectionDetails userRole="teacher" />}
+          />
+          <Route
+            path="/teacher/class-record/:sectionId/:subjectId"
+            element={<ClassRecord />}
+          />
+          <Route
+            path="/teacher/class-record/:sectionId"
+            element={<ClassRecord />}
           />
           <Route
             path="/teacher/notifications"
@@ -173,10 +201,7 @@ export default function App() {
             path="/teacher/feedback"
             element={<AdviserFeedback userRole="teacher" />}
           />
-          <Route
-            path="/teacher/request"
-            element={<GradeReopeningRequest />}
-          />
+          <Route path="/teacher/request" element={<GradeReopeningRequest />} />
         </Route>
       </Routes>
     </BrowserRouter>

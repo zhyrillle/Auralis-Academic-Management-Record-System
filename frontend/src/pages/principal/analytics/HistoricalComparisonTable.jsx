@@ -4,8 +4,9 @@ const statusClass = (status) => status.toLowerCase().replaceAll(" ", "-");
 
 export default function HistoricalComparisonTable({ rows, primaryLabel, comparisonLabel }) {
   return (
-    <div className="pa-comparison-table-wrap" tabIndex="0" aria-label="Scrollable subject comparison table">
-      <table className="pa-comparison-table">
+    <div className="pa-table-scroll-shell">
+      <div className="pa-comparison-table-wrap" tabIndex="0" aria-label="Scrollable subject comparison table">
+        <table className="pa-comparison-table">
         <thead>
           <tr>
             <th>Subject</th>
@@ -36,7 +37,11 @@ export default function HistoricalComparisonTable({ rows, primaryLabel, comparis
             );
           })}
         </tbody>
-      </table>
+        </table>
+      </div>
+      <span className="pa-table-scroll-hint" aria-hidden="true">
+        Swipe or scroll to view all columns
+      </span>
     </div>
   );
 }

@@ -1,6 +1,13 @@
-export default function SubjectLegend({ subjects, selectedIds, onToggle, onAll, onNone }) {
+export default function SubjectLegend({
+  subjects,
+  selectedIds,
+  onToggle,
+  onAll,
+  onNone,
+  className = "",
+}) {
   return (
-    <div className="pa-legend-row">
+    <div className={`pa-legend-row${className ? ` ${className}` : ""}`}>
       <div className="pa-legend" aria-label="Visible subjects">
         {subjects.map((subject) => {
           const selected = selectedIds.includes(subject.id);

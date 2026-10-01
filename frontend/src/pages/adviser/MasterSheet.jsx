@@ -11,6 +11,7 @@ import DropdownSelect from "../../components/common/DropdownSelect.jsx";
 import EmptyState from "../../components/common/EmptyState.jsx";
 import SearchBar from "../../components/common/SearchBar.jsx";
 import Toast from "../../components/common/Toast.jsx";
+import MasterSheetSkeleton from "./MasterSheetSkeleton.jsx";
 import {
   downloadMasterSheet,
   getMasterSheet,
@@ -23,65 +24,28 @@ import "../../styles/masterSheet.css";
 const getUserId = (user) => user?.user_id || user?.id || null;
 const emptyToast = { message: "", variant: "success", icon: null };
 
-function MasterSheetSkeleton() {
-  return (
-    <div className="ms-skeleton" role="status" aria-live="polite">
-      <span className="ms-sr-only">Loading Master Sheet data.</span>
-      <div aria-hidden="true">
-        <div className="ms-skeleton-page-header">
-          <div className="ms-skeleton-heading">
-            <span className="ms-skeleton-block ms-skeleton-block--eyebrow" />
-            <span className="ms-skeleton-block ms-skeleton-block--title" />
-            <span className="ms-skeleton-block ms-skeleton-block--subtitle" />
-          </div>
-          <div className="ms-skeleton-selectors">
-            <span className="ms-skeleton-block ms-skeleton-block--selector" />
-            <span className="ms-skeleton-block ms-skeleton-block--selector" />
-          </div>
-        </div>
+const formatSubmissionDeadline = (terms = []) => {
+  const deadlines = terms
+    .map((term) => ({
+      deadline: term.submissionDeadlineAt,
+      timestamp: new Date(term.submissionDeadlineAt).getTime(),
+    }))
+    .filter((term) => term.deadline && Number.isFinite(term.timestamp))
+    .sort((a, b) => a.timestamp - b.timestamp);
 
-        <div className="ms-skeleton-controls">
-          <span className="ms-skeleton-block ms-skeleton-block--summary" />
-          <div className="ms-skeleton-control-actions">
-            <span className="ms-skeleton-block ms-skeleton-block--search" />
-            <span className="ms-skeleton-block ms-skeleton-block--button" />
-          </div>
-        </div>
+  if (!deadlines.length) return "Not set";
 
-        <div className="ms-skeleton-table-shell">
-          <div className="ms-skeleton-table">
-            <div className="ms-skeleton-table-header">
-              <span className="ms-skeleton-block ms-skeleton-block--name-header" />
-              {Array.from({ length: 6 }, (_, index) => (
-                <span
-                  key={`subject-skeleton-${index}`}
-                  className="ms-skeleton-block ms-skeleton-block--subject-header"
-                />
-              ))}
-            </div>
-            <div className="ms-skeleton-group-row">
-              <span className="ms-skeleton-block ms-skeleton-block--group" />
-            </div>
-            {Array.from({ length: 5 }, (_, rowIndex) => (
-              <div
-                className="ms-skeleton-student-row"
-                key={`student-skeleton-${rowIndex}`}
-              >
-                <span className="ms-skeleton-block ms-skeleton-block--student" />
-                {Array.from({ length: 12 }, (_, cellIndex) => (
-                  <span
-                    key={`grade-skeleton-${rowIndex}-${cellIndex}`}
-                    className="ms-skeleton-block ms-skeleton-block--grade"
-                  />
-                ))}
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
+  const now = Date.now();
+  const relevantDeadline =
+    deadlines.find((term) => term.timestamp >= now) ||
+    deadlines[deadlines.length - 1];
+
+  return new Date(relevantDeadline.deadline).toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+};
 
 const triggerBrowserDownload = (blob, filename) => {
   const url = URL.createObjectURL(blob);
@@ -343,6 +307,7 @@ export default function MasterSheet() {
     ),
   };
   const subjects = masterSheet?.subjects || [];
+  const submissionDeadline = formatSubmissionDeadline(masterSheet?.terms);
   const totalColumns = 2 + subjects.length * 4;
 
   const renderGroupHeader = (label, tone) => (
@@ -617,10 +582,7 @@ export default function MasterSheet() {
                 <FileSpreadsheet size={19} />
               </span>
               <div>
-                <strong>Master Sheet Submission</strong>
-                <span>
-                  Submission will be enabled after the persistent workflow is finalized.
-                </span>
+                <strong>Deadline: {submissionDeadline}</strong>
               </div>
             </div>
             <button

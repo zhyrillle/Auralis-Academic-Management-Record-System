@@ -251,8 +251,52 @@ class Feedback {
     return result.affectedRows > 0;
   }
 
-  static async getPrincipalFeedbackSummary(term = "Overall", schoolYear = "2025-2026") {
+  static async getDateRange(schoolYear = "2026-2027") {
+    if (!schoolYear || schoolYear === "Overall" || schoolYear === "all") {
+      return { startDate: null, endDate: null };
+    }
+    const syParts = String(schoolYear).split(/[-–_]/);
+    const startYr = parseInt(syParts[0], 10);
+    const endYr = syParts[1] ? parseInt(syParts[1], 10) : startYr + 1;
+
+    if (isNaN(startYr)) return { startDate: null, endDate: null };
+
     try {
+      const [terms] = await db.execute(
+        `SELECT at.starts_at, at.ends_at 
+         FROM ACADEMIC_TERM at
+         JOIN SCHOOL_YEAR sy ON at.school_year_id = sy.school_year_id
+         WHERE sy.starts_on = ? OR YEAR(sy.starts_on) = ? OR (YEAR(sy.starts_on) = ? AND YEAR(sy.ends_on) = ?)`,
+        [startYr, startYr, startYr, endYr]
+      );
+
+      if (terms.length > 0) {
+        const starts = terms.map(t => new Date(t.starts_at)).sort((a, b) => a - b);
+        const ends = terms.map(t => new Date(t.ends_at)).sort((a, b) => b - a);
+        return { startDate: starts[0], endDate: ends[0] };
+      }
+    } catch (e) {
+      console.warn("[WARN] getDateRange DB query error:", e.message);
+    }
+
+    return {
+      startDate: new Date(`${startYr}-06-01T00:00:00.000Z`),
+      endDate: new Date(`${endYr}-05-31T23:59:59.999Z`),
+    };
+  }
+
+  static async getPrincipalFeedbackSummary(schoolYear = "2026-2027") {
+    try {
+      const { startDate, endDate } = await this.getDateRange(schoolYear);
+
+      let whereClause = "WHERE LOWER(u.role) LIKE '%principal%'";
+      const params = [];
+
+      if (startDate && endDate) {
+        whereClause += " AND f.created_at >= ? AND f.created_at <= ?";
+        params.push(startDate, endDate);
+      }
+
       const [rows] = await db.execute(
         `SELECT 
           COUNT(*) AS total_responses,
@@ -268,7 +312,8 @@ class Feedback {
           AVG(q8_rate) AS q8_avg
          FROM FEEDBACK f
          INNER JOIN \`USER\` u ON f.evaluee_id = u.user_id
-         WHERE LOWER(u.role) LIKE '%principal%'`
+         ${whereClause}`,
+        params
       );
 
       const totalResponses = rows[0]?.total_responses || 0;
@@ -278,12 +323,12 @@ class Feedback {
         `SELECT 
           SUM(
             (CASE WHEN strengths_comments IS NOT NULL AND TRIM(strengths_comments) != '' THEN 1 ELSE 0 END) +
-            (CASE WHEN improvements_comments IS NOT NULL AND TRIM(improvements_comments) != '' THEN 1 ELSE 0 END) +
-            (CASE WHEN comment IS NOT NULL AND TRIM(comment) != '' THEN 1 ELSE 0 END)
+            (CASE WHEN improvements_comments IS NOT NULL AND TRIM(improvements_comments) != '' THEN 1 ELSE 0 END)
           ) AS total_comments
          FROM FEEDBACK f
          INNER JOIN \`USER\` u ON f.evaluee_id = u.user_id
-         WHERE LOWER(u.role) LIKE '%principal%'`
+         ${whereClause}`,
+        params
       );
 
       const totalComments = parseInt(commentCountRows[0]?.total_comments || 0, 10);
@@ -303,10 +348,46 @@ class Feedback {
         belowTargetCount = qAvgs.filter((avg) => avg > 0 && avg < 3.0).length;
       }
 
+      // Calculate rating difference vs previous school year
+      let ratingDiff = "+0.0";
+      if (overallRating > 0) {
+        const syParts = String(schoolYear || "").split(/[-–_]/);
+        const startYr = parseInt(syParts[0], 10) || 2026;
+        const endYr = syParts[1] ? parseInt(syParts[1], 10) : startYr + 1;
+        const prevSY = `${startYr - 1}-${endYr - 1}`;
+
+        const { startDate: prevStart, endDate: prevEnd } = await this.getDateRange(prevSY);
+
+        let prevRating = 0;
+        if (prevStart && prevEnd) {
+          const [prevRows] = await db.execute(
+            `SELECT 
+              AVG((COALESCE(q1_rate, 0) + COALESCE(q2_rate, 0) + COALESCE(q3_rate, 0) + COALESCE(q4_rate, 0) + 
+                   COALESCE(q5_rate, 0) + COALESCE(q6_rate, 0) + COALESCE(q7_rate, 0) + COALESCE(q8_rate, 0)) / 8.0) AS avg_rating
+             FROM FEEDBACK f
+             INNER JOIN \`USER\` u ON f.evaluee_id = u.user_id
+             WHERE LOWER(u.role) LIKE '%principal%' AND f.created_at >= ? AND f.created_at <= ?`,
+            [prevStart, prevEnd]
+          );
+          if (prevRows[0]?.avg_rating) {
+            prevRating = parseFloat(prevRows[0].avg_rating);
+          }
+        }
+
+        if (prevRating > 0) {
+          const diff = overallRating - prevRating;
+          ratingDiff = (diff >= 0 ? "+" : "") + diff.toFixed(1);
+        } else {
+          // Compare against standard 3.0 baseline
+          const diff = overallRating - 3.0;
+          ratingDiff = (diff >= 0 ? "+" : "") + diff.toFixed(1);
+        }
+      }
+
       return {
         totalResponses,
         overallRating,
-        ratingDiff: "+0.0",
+        ratingDiff,
         totalComments,
         belowTargetCount,
       };
@@ -322,7 +403,7 @@ class Feedback {
     }
   }
 
-  static async getPrincipalLikertResults(term = "Overall", schoolYear = "2025-2026") {
+  static async getPrincipalLikertResults(schoolYear = "2026-2027") {
     try {
       const questions = [
         "The principal communicates clear goals and vision for the school.",
@@ -334,6 +415,16 @@ class Feedback {
         "The principal is approachable and open to teacher feedback.",
         "The principal demonstrates fair and transparent decision-making.",
       ];
+
+      const { startDate, endDate } = await this.getDateRange(schoolYear);
+
+      let whereClause = "WHERE LOWER(u.role) LIKE '%principal%'";
+      const params = [];
+
+      if (startDate && endDate) {
+        whereClause += " AND f.created_at >= ? AND f.created_at <= ?";
+        params.push(startDate, endDate);
+      }
 
       const [rows] = await db.execute(
         `SELECT 
@@ -347,7 +438,8 @@ class Feedback {
           AVG(q8_rate) AS q8_avg
          FROM FEEDBACK f
          INNER JOIN \`USER\` u ON f.evaluee_id = u.user_id
-         WHERE LOWER(u.role) LIKE '%principal%'`
+         ${whereClause}`,
+        params
       );
 
       const r = rows[0] || {};
@@ -368,8 +460,10 @@ class Feedback {
     }
   }
 
-  static async getPrincipalFeedbackComments(term = "Overall", schoolYear = "2025-2026", query = "") {
+  static async getPrincipalFeedbackComments(schoolYear = "2026-2027", query = "") {
     try {
+      const { startDate, endDate } = await this.getDateRange(schoolYear);
+
       let sql = `
         SELECT f.*
         FROM FEEDBACK f
@@ -378,10 +472,15 @@ class Feedback {
       `;
       const params = [];
 
+      if (startDate && endDate) {
+        sql += ` AND f.created_at >= ? AND f.created_at <= ?`;
+        params.push(startDate, endDate);
+      }
+
       if (query && query.trim()) {
         const q = `%${query.trim()}%`;
-        sql += ` AND (f.strengths_comments LIKE ? OR f.improvements_comments LIKE ? OR f.comment LIKE ?)`;
-        params.push(q, q, q);
+        sql += ` AND (f.strengths_comments LIKE ? OR f.improvements_comments LIKE ?)`;
+        params.push(q, q);
       }
 
       sql += ` ORDER BY f.feedback_id DESC`;
@@ -392,12 +491,11 @@ class Feedback {
       rows.forEach((row, idx) => {
         const praiseText = row.strengths_comments || row.strengths_comment || row.strenghts_comment;
         const suggestionText = row.improvements_comments || row.improvements_comment;
-        const generalText = row.comment;
 
         if (praiseText && String(praiseText).trim()) {
           comments.push({
             id: `str-${row.feedback_id}-${idx}`,
-            category: "Praise",
+            category: "Strengths & Contributions",
             text: String(praiseText).trim(),
             created_at: row.created_at,
           });
@@ -405,16 +503,8 @@ class Feedback {
         if (suggestionText && String(suggestionText).trim()) {
           comments.push({
             id: `imp-${row.feedback_id}-${idx}`,
-            category: "Suggestion",
+            category: "Areas for Improvement",
             text: String(suggestionText).trim(),
-            created_at: row.created_at,
-          });
-        }
-        if (generalText && String(generalText).trim()) {
-          comments.push({
-            id: `com-${row.feedback_id}-${idx}`,
-            category: "General",
-            text: String(generalText).trim(),
             created_at: row.created_at,
           });
         }

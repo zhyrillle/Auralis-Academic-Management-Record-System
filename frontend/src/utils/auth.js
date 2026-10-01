@@ -8,6 +8,14 @@ export const normalizeRole = (role, userObj) => {
     targetRole = role.role;
   }
 
+  // Pure Subject Teacher: If teacher is explicitly NOT in SECTION_ADVISER_ASSIGNMENT, treat strictly as Subject Teacher
+  if (targetUser && (targetUser.is_adviser === false || targetUser.isAdviser === false)) {
+    const rawR = (targetRole || "").toString().trim().toLowerCase().replace(/_/g, "-");
+    if (rawR === "adviser" || rawR === "teacher" || rawR === "subject-teacher" || rawR === "subject teacher") {
+      return "teacher";
+    }
+  }
+
   if (targetUser && (targetUser.is_adviser || targetUser.isAdviser)) {
     return "adviser";
   }
@@ -90,8 +98,25 @@ export const isPathAllowedForRole = (path, role) => {
   const normRole = normalizeRole(role);
   if (!normRole || normRole === "guest") return false;
 
-  // The profile page is shared by every authenticated account.
-  if (path === "/profile") return true;
+  // Shared authenticated pages
+  if (
+    path === "/profile" ||
+    path.startsWith("/class-record") ||
+    path.startsWith("/adviser/class-record") ||
+    path.startsWith("/teacher/class-record") ||
+    path.startsWith("/adviser/sections/details") ||
+    path.startsWith("/teacher/sections/details")
+  ) {
+    return true;
+  }
+
+  // Allow Subject Teachers to access sections management and detail views
+  if (
+    normRole === "teacher" &&
+    (path === "/adviser/sections" || path.startsWith("/adviser/sections/"))
+  ) {
+    return true;
+  }
 
   const rolePrefixes = {
     "system-admin": "/system-admin",
