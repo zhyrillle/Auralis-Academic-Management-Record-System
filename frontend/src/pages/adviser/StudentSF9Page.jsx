@@ -511,7 +511,7 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
 
               {/* Section 2: Teacher's Comments/Remarks */}
               <div className="sf9-comments-section">
-                <div className="sf9-table-heading" style={{ marginTop: "14px" }}>TEACHER'S COMMENTS/REMARKS</div>
+                <div className="sf9-table-heading">TEACHER'S COMMENTS/REMARKS</div>
                 <div className="sf9-term-comments-box">
                   <div className="sf9-comment-term-row">
                     <span className="sf9-term-label font-bold">Term 1</span>
@@ -556,7 +556,7 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
 
               {/* Section 3: Parents/Guardian's Signature */}
               <div className="sf9-parent-signatures-section">
-                <div className="sf9-table-heading" style={{ marginTop: "14px" }}>PARENTS/GUARDIAN'S SIGNATURE</div>
+                <div className="sf9-table-heading">PARENTS/GUARDIAN'S SIGNATURE</div>
                 <div className="sf9-parent-sig-lines">
                   <div className="sf9-parent-sig-row">
                     <span className="sf9-parent-sig-label font-bold">Term 1</span>
@@ -575,7 +575,7 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
 
               {/* Section 4: Certificate of Transfer */}
               <div className="sf9-certificate-section">
-                <div className="sf9-table-heading" style={{ marginTop: "16px" }}>CERTIFICATE OF TRANSFER</div>
+                <div className="sf9-table-heading">CERTIFICATE OF TRANSFER</div>
                 <p className="sf9-cert-statement">
                   This is to certify that the above-named learner has satisfactorily completed the requirements for the grade level indicated.
                 </p>
@@ -608,7 +608,7 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
 
               {/* Section 5: Cancellation of Eligibility to Transfer */}
               <div className="sf9-cancellation-section">
-                <div className="sf9-table-heading" style={{ marginTop: "16px" }}>CANCELLATION OF ELIGIBILITY TO TRANSFER</div>
+                <div className="sf9-table-heading">CANCELLATION OF ELIGIBILITY TO TRANSFER</div>
                 <div className="sf9-cancel-row">
                   <div className="sf9-cancel-field">
                     <span className="sf9-cert-label">Admitted in:</span>
