@@ -1729,7 +1729,7 @@ const formatToISODate = (val) => {
             </div>
 
             {/* TOTAL STUDENTS COUNTER */}
-            <div className="student-count" style={{ padding: "0 10px 8px" }}>
+            <div className="student-count">
               Total Students: {students.length}
             </div>
 
@@ -2090,14 +2090,18 @@ const formatToISODate = (val) => {
                         <>
                           {/* LEARNERS' NAMES DIVIDER ROW */}
                           <tr className="cr-learners-names-row">
-                            <td colSpan={totalTableCols}>LEARNERS' NAMES</td>
+                            <td colSpan={2} className="cr-learners-names-sticky-cell">
+                              LEARNERS' NAMES
+                            </td>
+                            <td colSpan={totalTableCols - 2} className="cr-learners-names-fill-cell" aria-hidden="true" />
                           </tr>
 
                           {/* MALE DIVIDER ROW */}
                           <tr className="cr-gender-row">
-                            <td colSpan={totalTableCols}>
+                            <td colSpan={2} className="cr-gender-sticky-cell">
                               MALE {maleStudents.length > 0 ? `(${maleStudents.length})` : ""}
                             </td>
+                            <td colSpan={totalTableCols - 2} className="cr-gender-fill-cell" aria-hidden="true" />
                           </tr>
 
                           {/* MALE STUDENTS */}
@@ -2122,9 +2126,10 @@ const formatToISODate = (val) => {
 
                           {/* FEMALE DIVIDER ROW */}
                           <tr className="cr-gender-row">
-                            <td colSpan={totalTableCols}>
+                            <td colSpan={2} className="cr-gender-sticky-cell">
                               FEMALE {femaleStudents.length > 0 ? `(${femaleStudents.length})` : ""}
                             </td>
+                            <td colSpan={totalTableCols - 2} className="cr-gender-fill-cell" aria-hidden="true" />
                           </tr>
 
                           {/* FEMALE STUDENTS */}
