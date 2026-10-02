@@ -9,13 +9,24 @@ import { getStoredUser, normalizeRole } from "../../utils/auth";
 import { getStudentSF9Details } from "../../services/studentSf9Service";
 import Toast from "../../components/common/Toast.jsx";
 
-export default function StudentSF9Page({ student, onBack, userRole: propUserRole, initialTab }) {
+export default function StudentSF9Page({ student, onBack, userRole: propUserRole, initialTab, isAdviser: propIsAdviser }) {
   const storedUser = useMemo(() => getStoredUser(), []);
   const normRole = useMemo(() => normalizeRole(storedUser?.role, storedUser), [storedUser]);
   const userRole = propUserRole || (normRole === "adviser" ? "adviser" : normRole === "principal" ? "principal" : "teacher");
-  const isAdviser = userRole === "adviser" || userRole === "principal";
+  const isAdviser = typeof propIsAdviser === "boolean"
+    ? propIsAdviser
+    : (userRole === "adviser" || userRole === "principal");
 
-  const [activeTab, setActiveTab] = useState(initialTab || (isAdviser ? "sf9" : "personal"));
+  const [activeTab, setActiveTab] = useState(() => {
+    if (!isAdviser) return "personal";
+    return initialTab || "sf9";
+  });
+
+  useEffect(() => {
+    if (!isAdviser && activeTab !== "personal") {
+      setActiveTab("personal");
+    }
+  }, [isAdviser, activeTab]);
   const [viewMode, setViewMode] = useState("spread"); // "spread", "front", "back"
   const [sf9Data, setSf9Data] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -307,7 +318,7 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
       </div>
 
       {/* Tab Contents */}
-      {activeTab === "sf9" ? (
+      {activeTab === "sf9" && isAdviser ? (
         /* Official SF9 Document Spread Layout */
         <div className={`sf9-document-spread ${viewMode}`}>
 
