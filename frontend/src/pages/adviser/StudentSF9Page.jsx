@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { Eye, Download, FileText, Sparkles, Printer, FileSpreadsheet } from "lucide-react";
+import { Eye, Download, FileText, Sparkles, Printer, FileSpreadsheet, CheckCircle2 } from "lucide-react";
 import "../../styles/studentSF9.css";
 
 import depedLogo from "../../assets/deped_logo.png";
@@ -8,6 +8,7 @@ import backIconUrl from "../../assets/backButton.svg";
 import { getStoredUser, normalizeRole } from "../../utils/auth";
 import { getStudentSF9Details } from "../../services/studentSf9Service";
 import Toast from "../../components/common/Toast.jsx";
+import { exportSf9Pdf } from "../../utils/exportSf9Pdf";
 
 export default function StudentSF9Page({ student, onBack, userRole: propUserRole, initialTab, isAdviser: propIsAdviser }) {
   const storedUser = useMemo(() => getStoredUser(), []);
@@ -159,12 +160,12 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
     };
   }, [sf9Data]);
 
-  const [toast, setToast] = useState({ message: "", variant: "success" });
+  const [toast, setToast] = useState({ message: "", variant: "success", icon: null });
 
-  const showToast = (message, variant = "success") => {
-    setToast({ message, variant });
+  const showToast = (message, variant = "success", icon = CheckCircle2) => {
+    setToast({ message, variant, icon });
     setTimeout(() => {
-      setToast({ message: "", variant: "success" });
+      setToast({ message: "", variant: "success", icon: null });
     }, 4000);
   };
 
@@ -188,18 +189,37 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
     return "STUDENT";
   };
 
+  const handleDownloadPDF = async () => {
+    try {
+      showToast(`Generating PDF for ${studentProfile.name || "Student"}...`, "info", CheckCircle2);
+      await exportSf9Pdf({
+        studentProfile,
+        grades,
+        performanceDescriptors,
+        attendanceData,
+        comments,
+        depedLogo,
+        gccnhsLogo,
+      });
+      showToast(`Downloaded PDF SF9 Performance Report for ${studentProfile.name}`, "success", CheckCircle2);
+    } catch (err) {
+      console.error("Failed to export SF9 PDF:", err);
+      showToast("Failed to download SF9 PDF. Please try again.", "error");
+    }
+  };
+
   const handlePrint = () => {
     const originalTitle = document.title;
     const lastName = getStudentLastName();
     const fileName = `${lastName}_SF9`;
 
-    document.title = fileName;
-    window.print();
+    showToast(`Opening Print Preview for ${studentProfile.name || "Student"}...`, "info", Printer);
 
     setTimeout(() => {
+      document.title = fileName;
+      window.print();
       document.title = originalTitle;
-      showToast(`Successfully downloaded ${fileName}.pdf!`, "success");
-    }, 500);
+    }, 100);
   };
 
   return (
@@ -309,6 +329,10 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
               </button>
             </div>
 
+            <button className="sf9-download-btn" onClick={handleDownloadPDF} title="Download SF9 PDF">
+              <Download size={16} />
+              <span>Download PDF</span>
+            </button>
             <button className="sf9-print-btn" onClick={handlePrint} title="Print Official SF9 Document">
               <Printer size={16} />
               <span>Print SF9</span>
@@ -325,8 +349,7 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
           {/* ============================================================
               FRONT PAGE (PAGE 1): LEARNER'S PERFORMANCE REPORT
              ============================================================ */}
-          {(viewMode === "spread" || viewMode === "front") && (
-            <div className="sf9-official-sheet sf9-front-sheet">
+          <div className={`sf9-official-sheet sf9-front-sheet ${viewMode === "back" ? "hide-on-screen" : ""}`}>
 
               {/* Official Header */}
               <div className="sf9-sheet-header">
@@ -475,20 +498,18 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
               </div>
 
             </div>
-          )}
 
           {/* ============================================================
               BACK PAGE (PAGE 2): ATTENDANCE, REMARKS, & CERTIFICATE OF TRANSFER
              ============================================================ */}
-          {(viewMode === "spread" || viewMode === "back") && (
-            <div className="sf9-official-sheet sf9-back-sheet">
+          <div className={`sf9-official-sheet sf9-back-sheet ${viewMode === "front" ? "hide-on-screen" : ""}`}>
 
               {/* Section 1: Attendance Record */}
               <div className="sf9-table-heading">ATTENDANCE RECORD</div>
               <table className="sf9-official-table sf9-attendance-table-clean">
                 <thead>
                   <tr>
-                    <th className="col-month-head">Month</th>
+                    <th className="col-month-head">Metric Name</th>
                     {attendanceData.months.map((m, idx) => (
                       <th key={idx} className="col-month-col">{m}</th>
                     ))}
@@ -640,7 +661,6 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
               </div>
 
             </div>
-          )}
 
         </div>
       ) : (
@@ -747,7 +767,7 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
                           <Eye size={14} />
                           <span>Preview</span>
                         </button>
-                        <button className="btn-doc-action download" onClick={handlePrint} title="Download SF9">
+                        <button className="btn-doc-action download" onClick={handleDownloadPDF} title="Download SF9">
                           <Download size={14} />
                           <span>Download</span>
                         </button>
@@ -766,7 +786,8 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
       <Toast
         message={toast.message}
         variant={toast.variant}
-        onDismiss={() => setToast({ message: "", variant: "success" })}
+        icon={toast.icon}
+        onDismiss={() => setToast({ message: "", variant: "success", icon: null })}
       />
     </div>
   );
