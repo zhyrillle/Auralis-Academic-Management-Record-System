@@ -297,6 +297,43 @@ export default function AdviserDashboard() {
                 Here's an overview of today's academic activities.
               </p>
             </div>
+            
+            {/* Decorative Pencil SVG */}
+            <svg 
+              className="adviser-dashboard__banner-pencil"
+              width="120" 
+              height="120" 
+              viewBox="0 0 100 100" 
+              style={{
+                position: 'absolute',
+                left: '55%',
+                top: '50%',
+                transform: 'translate(-50%, -50%) rotate(20deg)',
+                opacity: 0.15,
+                pointerEvents: 'none',
+                zIndex: 1
+              }}
+            >
+              {/* Eraser */}
+              <path d="M 40 15 C 40 10, 60 10, 60 15 L 60 25 L 40 25 Z" fill="#F43F5E" />
+              {/* Metal band */}
+              <rect x="40" y="25" width="20" height="8" fill="#94A3B8" />
+              {/* Body */}
+              <rect x="40" y="33" width="20" height="40" fill="#F59E0B" />
+              {/* Inner lines */}
+              <line x1="46" y1="33" x2="46" y2="73" stroke="#D97706" strokeWidth="1" />
+              <line x1="53" y1="33" x2="53" y2="73" stroke="#D97706" strokeWidth="1" />
+              {/* Wood cone */}
+              <polygon points="40,73 60,73 50,90" fill="#FDE68A" />
+              {/* Lead */}
+              <polygon points="48,87 52,87 50,93" fill="#334155" />
+              
+              {/* Sparkles */}
+              <path d="M 20 40 L 25 45 L 20 50 L 15 45 Z" fill="#F59E0B" />
+              <path d="M 80 50 L 85 53 L 80 56 L 75 53 Z" fill="#F59E0B" />
+              <path d="M 25 70 L 28 72 L 25 74 L 22 72 Z" fill="#F59E0B" />
+            </svg>
+
             <div className="adviser-dashboard__banner-art-wrap">
               <img
                 src={bannerArt}
@@ -332,80 +369,80 @@ export default function AdviserDashboard() {
             />
           </div>
 
-          {/* Section Performance Breakdown Bar Chart */}
-          <AdviserSubjectBarChart
-            data={subjectPerformance}
-            term={subjectTerm}
-            onTermChange={setSubjectTerm}
-            onSelectSection={handleSelectSection}
-            loading={loading}
-          />
         </div>
+      </section>
 
-        {/* Right Column */}
-        <div className="adviser-dashboard__top-right-col">
-          {/* Quick Actions Card (Advisers only) */}
-          {isAdviser && (
-            <div className="adviser-dashboard__quick-actions-card">
-              <h3 className="adviser-dashboard__quick-actions-title">
-                Quick actions
-              </h3>
-              <p className="adviser-dashboard__quick-actions-desc">
-                Generate official government documents
-              </p>
+      <section className="adviser-dashboard__performance-row">
+        {/* Entry Progress Semi-Circle Gauge Card */}
+        <AdviserEntryProgressGauge
+          progress={summary?.entryProgress ?? 0}
+          loading={loading}
+        />
 
-              <div className="adviser-dashboard__quick-action-items">
-                <div className="adviser-dashboard__doc-item">
-                  <div className="adviser-dashboard__doc-left">
-                    <FileText size={18} className="adviser-dashboard__doc-icon" />
-                    <span className="adviser-dashboard__doc-name">
-                      SF9 Report Card
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    className="adviser-dashboard__doc-download-btn"
-                    title="Download SF9 Report Card"
-                    onClick={() => handleDownloadDoc("SF9 Report Card")}
-                  >
-                    <Download size={15} />
-                  </button>
+        {/* Section Performance Breakdown Bar Chart */}
+        <AdviserSubjectBarChart
+          data={subjectPerformance}
+          term={subjectTerm}
+          onTermChange={setSubjectTerm}
+          onSelectSection={handleSelectSection}
+          loading={loading}
+        />
+
+        {/* Quick Actions Card (Advisers only) */}
+        {isAdviser && (
+          <div className="adviser-dashboard__quick-actions-card">
+            <h3 className="adviser-dashboard__quick-actions-title">
+              Quick actions
+            </h3>
+            <p className="adviser-dashboard__quick-actions-desc">
+              Generate official government documents
+            </p>
+
+            <div className="adviser-dashboard__quick-action-items">
+              <div className="adviser-dashboard__doc-item">
+                <div className="adviser-dashboard__doc-left">
+                  <FileText size={18} className="adviser-dashboard__doc-icon" />
+                  <span className="adviser-dashboard__doc-name">
+                    SF9 Report Card
+                  </span>
                 </div>
-
-                <div className="adviser-dashboard__doc-item">
-                  <div className="adviser-dashboard__doc-left">
-                    <FileText size={18} className="adviser-dashboard__doc-icon" />
-                    <span className="adviser-dashboard__doc-name">
-                      SF10 Permanent Record
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    className="adviser-dashboard__doc-download-btn"
-                    title="Download SF10 Permanent Record"
-                    onClick={() => handleDownloadDoc("SF10 Permanent Record")}
-                  >
-                    <Download size={15} />
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  className="adviser-dashboard__doc-download-btn"
+                  title="Download SF9 Report Card"
+                  onClick={() => handleDownloadDoc("SF9 Report Card")}
+                >
+                  <Download size={15} />
+                </button>
               </div>
 
-              <button
-                type="button"
-                className="adviser-dashboard__bulk-download-btn"
-                onClick={() => handleDownloadDoc("Bulk Documents")}
-              >
-                Bulk Download
-              </button>
+              <div className="adviser-dashboard__doc-item">
+                <div className="adviser-dashboard__doc-left">
+                  <FileText size={18} className="adviser-dashboard__doc-icon" />
+                  <span className="adviser-dashboard__doc-name">
+                    SF10 Permanent Record
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className="adviser-dashboard__doc-download-btn"
+                  title="Download SF10 Permanent Record"
+                  onClick={() => handleDownloadDoc("SF10 Permanent Record")}
+                >
+                  <Download size={15} />
+                </button>
+              </div>
             </div>
-          )}
 
-          {/* Entry Progress Semi-Circle Gauge Card */}
-          <AdviserEntryProgressGauge
-            progress={summary?.entryProgress ?? 0}
-            loading={loading}
-          />
-        </div>
+            <button
+              type="button"
+              className="adviser-dashboard__bulk-download-btn"
+              onClick={() => handleDownloadDoc("Bulk Documents")}
+            >
+              Bulk Download
+            </button>
+          </div>
+        )}
       </section>
 
       {/* 3. Assigned Classes Section */}
@@ -516,12 +553,6 @@ export default function AdviserDashboard() {
             loading={loading}
           />
 
-          <AdviserCoreValuesDonut
-            data={coreValuesData}
-            term={coreValuesTerm}
-            onTermChange={setCoreValuesTerm}
-            loading={loading}
-          />
         </section>
       )}
     </div>

@@ -8,7 +8,7 @@ export default function AdviserSubjectAreaHBarChart({
 }) {
   const [hoveredIndex, setHoveredIndex] = useState(null);
   const terms = ["T1", "T2", "T3"];
-  const xTicks = [0, 50, 100, 150, 200];
+  const xTicks = [0, 20, 40, 60, 80, 100];
 
   const defaultSubjects = [
     { subject: "Filipino", subjectName: "Filipino", count: 11, grade: 85.9 },
@@ -32,13 +32,14 @@ export default function AdviserSubjectAreaHBarChart({
 
   const sectionName = data?.sectionName || data?.advisorySectionName || "Mahogany";
 
-  const chartWidth = 520;
   const rowHeight = 28;
   const topPad = 16;
   const bottomPad = 28;
   const chartHeight = topPad + items.length * rowHeight + bottomPad;
-  const leftLabelPad = 95;
-  const rightPad = 35;
+  // Use a wide native width so it stretches edge-to-edge without hitting height limits
+  const chartWidth = 1000; 
+  const leftLabelPad = 120; // Extra breathing room for long subject names
+  const rightPad = 40;
   const plotWidth = chartWidth - leftLabelPad - rightPad;
   const plotHeight = items.length * rowHeight;
 
@@ -80,7 +81,7 @@ export default function AdviserSubjectAreaHBarChart({
           >
             {/* Vertical grid lines and X-axis labels */}
             {xTicks.map((tick) => {
-              const x = leftLabelPad + (tick / 200) * plotWidth;
+              const x = leftLabelPad + (tick / 100) * plotWidth;
               return (
                 <g key={tick}>
                   <line
@@ -108,8 +109,8 @@ export default function AdviserSubjectAreaHBarChart({
               const barThickness = 14;
               const y = topPad + rowHeight * idx + (rowHeight - barThickness) / 2;
               const scoreVal = Number(item.grade || item.count || 85);
-              const barVal = item.grade ? Math.min(200, Math.round(scoreVal * 2)) : Math.min(200, scoreVal);
-              const barWidth = (barVal / 200) * plotWidth;
+              const barVal = Math.min(100, scoreVal);
+              const barWidth = (barVal / 100) * plotWidth;
               const isHovered = hoveredIndex === idx;
 
               return (

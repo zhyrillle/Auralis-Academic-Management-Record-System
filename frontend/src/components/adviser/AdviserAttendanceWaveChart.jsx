@@ -68,7 +68,7 @@ export default function AdviserAttendanceWaveChart({
           <svg
             viewBox="0 0 440 230"
             className="adviser-dashboard__wave-svg"
-            preserveAspectRatio="xMidYMid meet"
+            preserveAspectRatio="none"
           >
             <defs>
               <linearGradient id="adviserWaveGrad" x1="0" y1="0" x2="0" y2="1">

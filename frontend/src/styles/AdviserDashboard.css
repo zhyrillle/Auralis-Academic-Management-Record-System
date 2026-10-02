@@ -64,7 +64,7 @@
    -------------------------------------------------------------------------- */
 .adviser-dashboard__top-grid {
   display: grid;
-  grid-template-columns: 1fr 340px;
+  grid-template-columns: 1fr;
   gap: 24px;
   align-items: stretch;
 }
@@ -75,11 +75,12 @@
   gap: 20px;
 }
 
-.adviser-dashboard__top-right-col {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  height: 100%;
+.adviser-dashboard__performance-row {
+  display: grid;
+  grid-template-columns: 1fr 1.5fr 1fr;
+  gap: 24px;
+  align-items: stretch;
+  margin-top: 24px;
 }
 
 /* Welcome Banner */
@@ -729,11 +730,20 @@
 }
 
 .adviser-dashboard__vbar-svg,
-.adviser-dashboard__wave-svg,
+.adviser-dashboard__wave-svg {
+  width: 100%;
+  height: auto;
+  max-height: 240px;
+  overflow: visible;
+}
+
 .adviser-dashboard__hbar-svg {
   width: 100%;
   height: auto;
+  max-height: 420px;
   overflow: visible;
+  display: block;
+  margin: 0 auto;
 }
 
 /* Bar chart body with right vertical pills */
@@ -1072,7 +1082,7 @@
    -------------------------------------------------------------------------- */
 .adviser-dashboard__bottom-grid {
   display: grid;
-  grid-template-columns: 1.35fr 1fr;
+  grid-template-columns: 1fr;
   gap: 24px;
   align-items: start;
 }
@@ -1278,3 +1288,8 @@
   }
 }
 
+
+@media (max-width: 1200px) { .adviser-dashboard__performance-row { grid-template-columns: 1fr; } }
+@media (max-width: 1400px) and (min-width: 1201px) { .adviser-dashboard__performance-row { grid-template-columns: 1fr 1fr; } }
+
+.adviser-dashboard__container--teacher-view .adviser-dashboard__performance-row { grid-template-columns: 1fr 1.5fr; }
