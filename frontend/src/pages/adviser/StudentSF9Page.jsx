@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useEffect } from "react";
-import { Eye, Download, FileText, Sparkles, Printer, FileSpreadsheet, CheckCircle2 } from "lucide-react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
+import { Eye, Download, FileText, Sparkles, Printer, FileSpreadsheet, CheckCircle2, Loader2 } from "lucide-react";
 import "../../styles/studentSF9.css";
 
 import depedLogo from "../../assets/deped_logo.png";
@@ -7,8 +7,12 @@ import gccnhsLogo from "../../assets/gccnhs_logo.png";
 import backIconUrl from "../../assets/backButton.svg";
 import { getStoredUser, normalizeRole } from "../../utils/auth";
 import { getStudentSF9Details } from "../../services/studentSf9Service";
+import { getStudentSF10Details } from "../../services/reportService";
 import Toast from "../../components/common/Toast.jsx";
 import { exportSf9Pdf } from "../../utils/exportSf9Pdf";
+import SF10PreviewModal from "../../components/SF10PreviewModal.jsx";
+import SF10Document from "../../components/SF10Document.jsx";
+import { generateSF10PdfFromPages } from "../../utils/sf10PdfGenerator.js";
 
 export default function StudentSF9Page({ student, onBack, userRole: propUserRole, initialTab, isAdviser: propIsAdviser }) {
   const storedUser = useMemo(() => getStoredUser(), []);
@@ -31,6 +35,12 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
   const [viewMode, setViewMode] = useState("spread"); // "spread", "front", "back"
   const [sf9Data, setSf9Data] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [isSF10Open, setIsSF10Open] = useState(false);
+  const [downloadingSF10, setDownloadingSF10] = useState(false);
+  const [cachedSF10Data, setCachedSF10Data] = useState(null);
+
+  const offscreenPage1Ref = useRef(null);
+  const offscreenPage2Ref = useRef(null);
 
   // Teacher Comments/Remarks state for terms with frontend localStorage persistence
   const studentKey = student?.lrn || student?.student_id || student?.studentId || student?.id || "default";
@@ -222,6 +232,61 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
     }, 100);
   };
 
+  const sf10StudentProp = useMemo(() => ({
+    ...student,
+    ...studentProfile,
+    grades: grades,
+    studentId: studentProfile.studentId || student?.studentId || student?.student_id,
+    studentSectionId: studentProfile.studentSectionId || student?.studentSectionId || student?.student_section_id,
+    lrn: studentProfile.lrn || student?.lrn || student?.LRN
+  }), [student, studentProfile, grades]);
+
+  const handleDirectDownloadSF10 = async () => {
+    if (downloadingSF10) return;
+    setDownloadingSF10(true);
+    showToast("Generating Form 10 PDF...", "info");
+
+    try {
+      let data = cachedSF10Data;
+      const identifier =
+        sf10StudentProp.studentId ||
+        sf10StudentProp.student_id ||
+        sf10StudentProp.studentSectionId ||
+        sf10StudentProp.lrn ||
+        sf10StudentProp.id;
+
+      if (!data && identifier) {
+        try {
+          data = await getStudentSF10Details(identifier);
+          if (data) setCachedSF10Data(data);
+        } catch (fetchErr) {
+          console.warn("Could not fetch remote SF10 data, using client fallback:", fetchErr);
+        }
+      }
+
+      // Small delay to ensure any data update has flushed to the offscreen DOM
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
+      const page1 = offscreenPage1Ref.current;
+      const page2 = offscreenPage2Ref.current;
+
+      if (!page1 || !page2) {
+        throw new Error("SF10 document template not ready.");
+      }
+
+      const lastName = getStudentLastName();
+      const fileName = `${lastName}_SF10.pdf`;
+
+      await generateSF10PdfFromPages(page1, page2, fileName);
+      showToast(`Successfully downloaded ${fileName}!`, "success");
+    } catch (err) {
+      console.error("Direct SF10 download error:", err);
+      showToast("Failed to generate Form 10 PDF. Please try again.", "error");
+    } finally {
+      setDownloadingSF10(false);
+    }
+  };
+
   return (
     <div className="student-sf9-container">
       {/* Top Navigation / Breadcrumb Area */}
@@ -329,6 +394,14 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
               </button>
             </div>
 
+            <button
+              className="sf9-print-btn"
+              onClick={() => setIsSF10Open(true)}
+              title="Preview Form 10 (SF10)"
+            >
+              <FileText size={16} />
+              <span>Preview</span>
+            </button>
             <button className="sf9-download-btn" onClick={handleDownloadPDF} title="Download SF9 PDF">
               <Download size={16} />
               <span>Download PDF</span>
@@ -726,13 +799,31 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
                       <p className="doc-subtitle">Official cumulative student record</p>
                       <span className="doc-status-badge">Available</span>
                       <div className="doc-actions">
-                        <button className="btn-doc-action preview" title="Preview Document">
+                        <button
+                          className="btn-doc-action preview"
+                          onClick={() => setIsSF10Open(true)}
+                          title="Preview Form 10"
+                        >
                           <Eye size={14} />
                           <span>Preview</span>
                         </button>
-                        <button className="btn-doc-action download" title="Download Document">
-                          <Download size={14} />
-                          <span>Download</span>
+                        <button
+                          className="btn-doc-action download"
+                          onClick={handleDirectDownloadSF10}
+                          disabled={downloadingSF10}
+                          title="Download Form 10"
+                        >
+                          {downloadingSF10 ? (
+                            <>
+                              <Loader2 size={14} className="animate-spin" />
+                              <span>Downloading...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Download size={14} />
+                              <span>Download</span>
+                            </>
+                          )}
                         </button>
                       </div>
                     </div>
@@ -783,6 +874,36 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
           )}
         </div>
       )}
+
+      {/* SF10 Preview Modal */}
+      <SF10PreviewModal
+        isOpen={isSF10Open}
+        onClose={() => setIsSF10Open(false)}
+        student={sf10StudentProp}
+      />
+
+      {/* Background Offscreen SF10 Document Template for Direct PDF Download */}
+      <div
+        aria-hidden="true"
+        style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          width: "816px",
+          height: "auto",
+          zIndex: -9999,
+          opacity: 0.001,
+          pointerEvents: "none",
+          overflow: "hidden"
+        }}
+      >
+        <SF10Document
+          student={sf10StudentProp}
+          sf10Data={cachedSF10Data}
+          page1Ref={offscreenPage1Ref}
+          page2Ref={offscreenPage2Ref}
+        />
+      </div>
 
       {/* Confirmation Toast Notification */}
       <Toast
