@@ -79,12 +79,25 @@ export default function SectionDetails({
   const currentUser = useMemo(() => getStoredUser(), []);
   const userId = currentUser?.user_id || currentUser?.id;
 
+  const [data, setData] = useState(null);
+  const [updating, setUpdating] = useState(false);
+  const [error, setError] = useState("");
+  const [selectedTerm, setSelectedTerm] = useState("T1");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedHonor, setSelectedHonor] = useState(null);
+  const [sortBy, setSortBy] = useState("name");
+  const [sortAscending, setSortAscending] = useState(true);
+  const [activeSf9Student, setActiveSf9Student] = useState(null);
+
   const isSectionAdviser = useMemo(() => {
+    if (data?.assignmentType) return data.assignmentType === "advisory";
+    if (data?.meta?.assignmentType) return data.meta.assignmentType === "advisory";
     if (activeSection?.assignmentType) return activeSection.assignmentType === "advisory";
-    if (typeof isAdviser === "boolean") return isAdviser;
     if (typeof activeSection?.isAdviser === "boolean") return activeSection.isAdviser;
+    if (activeSection?.classType) return String(activeSection.classType).startsWith("Advisory Class");
+    if (typeof isAdviser === "boolean") return isAdviser;
     return userRole === "adviser";
-  }, [activeSection, isAdviser, userRole]);
+  }, [data, activeSection, isAdviser, userRole]);
 
   const assignmentType = activeSection?.assignmentType
     || (isSectionAdviser ? "advisory" : "teaching");
@@ -96,18 +109,9 @@ export default function SectionDetails({
     || activeSection?.sectionId
     || activeSection?.id;
 
-  const [data, setData] = useState(null);
   const [initialLoading, setInitialLoading] = useState(
     Boolean(activeSection && assignmentId && userId),
   );
-  const [updating, setUpdating] = useState(false);
-  const [error, setError] = useState("");
-  const [selectedTerm, setSelectedTerm] = useState("T1");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedHonor, setSelectedHonor] = useState(null);
-  const [sortBy, setSortBy] = useState("name");
-  const [sortAscending, setSortAscending] = useState(true);
-  const [activeSf9Student, setActiveSf9Student] = useState(null);
 
   const dataRef = useRef(null);
   const requestSequenceRef = useRef(0);
@@ -241,6 +245,7 @@ export default function SectionDetails({
     return (
       <StudentSF9Page
         student={activeSf9Student}
+        isAdviser={isSectionAdviser}
         userRole={userRole}
         onBack={() => setActiveSf9Student(null)}
       />
