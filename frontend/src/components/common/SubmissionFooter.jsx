@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Calendar, Check } from "lucide-react";
+import { Calendar, Check, Send } from "lucide-react";
 
 export default function SubmissionFooter({
     deadline,
@@ -147,23 +147,40 @@ export default function SubmissionFooter({
                     }}
                     title={isSubmitted ? "Grades already submitted" : (disabled ? disabledReason : "")}
                     style={{
-                        fontFamily: "var(--font-montserrat)",
-                        backgroundColor: (isSubmitted || disabled)
-                            ? "#cbd5e1"
-                            : "var(--success-text-color)",
-                        color: (isSubmitted || disabled) ? "#64748b" : "var(--white-text-color)",
-                        border: "none",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "8px",
+                        minHeight: "40px",
+                        minWidth: "118px",
+                        padding: "8px 20px",
                         borderRadius: "10px",
-                        padding: "10px 45px",
-                        fontWeight: "var(--fw-bold)",
+                        fontFamily: "var(--font-dm-sans, sans-serif)",
+                        fontSize: "0.8rem",
+                        fontWeight: 800,
+                        backgroundColor: (isSubmitted || disabled)
+                            ? "#e9eef5"
+                            : "var(--success-text-color, #16a34a)",
+                        color: (isSubmitted || disabled) ? "#8795a9" : "#ffffff",
+                        border: (isSubmitted || disabled) ? "1px solid #d8e0eb" : "1px solid #16a34a",
                         cursor: (isSubmitted || disabled) ? "not-allowed" : "pointer",
                         pointerEvents: "auto",
-                        transition: "all 0.2s",
+                        transition: "all 0.2s ease",
                         transform: "none",
                         boxShadow: "none",
                     }}
                 >
-                    {isSubmitted ? "Submitted" : "Submit"}
+                    {isSubmitted ? (
+                        <>
+                            <Check size={16} aria-hidden="true" />
+                            <span>Submitted</span>
+                        </>
+                    ) : (
+                        <>
+                            <Send size={16} aria-hidden="true" />
+                            <span>Submit</span>
+                        </>
+                    )}
                 </button>
             </div>
 
