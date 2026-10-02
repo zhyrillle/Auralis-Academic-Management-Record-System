@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import DropdownSelect from "../../components/common/DropdownSelect";
-import { Plus, X, Edit, Users, Eye, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
+import { Plus, X, Edit, Users, Eye, CheckCircle2, AlertCircle, Loader2, Trash2 } from "lucide-react";
 import {
   fetchSections,
   fetchGradeLevels,
@@ -8,6 +8,7 @@ import {
   fetchStudentSections,
   createSection,
   updateSection,
+  deleteSection,
   assignStudent,
   bulkAssignStudents,
   unassignStudent,
@@ -44,7 +45,7 @@ function StatusBadge({ status }) {
 }
 
 // Custom dropdown for Section Actions
-function ActionMenu({ section, onEdit, onManageStudents, onViewStudents }) {
+function ActionMenu({ section, onEdit, onManageStudents, onViewStudents, onDelete }) {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef(null);
 
@@ -97,6 +98,18 @@ function ActionMenu({ section, onEdit, onManageStudents, onViewStudents }) {
           >
             <Eye size={14} /> View Students
           </button>
+          {onDelete && (
+            <button
+              type="button"
+              onClick={() => {
+                setIsOpen(false);
+                onDelete(section);
+              }}
+              style={{ color: "#ef4444" }}
+            >
+              <Trash2 size={14} /> Remove Section
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -361,22 +374,22 @@ export default function StudentSectionManagement() {
     try {
       setIsSubmitting(true);
       if (activeModal === "createSection") {
-                  await createSection({
-            section_name: sectionFormData.name.trim(),
-            grade_level_id: sectionFormData.grade_level_id,
-            level: sectionFormData.level,
-            is_specialized: sectionFormData.is_specialized ? 1 : 0,
-            program_id: sectionFormData.is_specialized ? sectionFormData.program_id : null,
-          });
+        await createSection({
+          section_name: sectionFormData.name.trim(),
+          grade_level_id: sectionFormData.grade_level_id,
+          level: sectionFormData.level,
+          is_specialized: sectionFormData.is_specialized ? 1 : 0,
+          program_id: sectionFormData.is_specialized ? sectionFormData.program_id : null,
+        });
         showFeedback("success", `Section "${sectionFormData.name.trim()}" created successfully.`);
       } else if (activeModal === "editSection") {
-                  await updateSection(sectionFormData.id, {
-            section_name: sectionFormData.name.trim(),
-            grade_level_id: sectionFormData.grade_level_id,
-            level: sectionFormData.level,
-            is_specialized: sectionFormData.is_specialized ? 1 : 0,
-            program_id: sectionFormData.is_specialized ? sectionFormData.program_id : null,
-          });
+        await updateSection(sectionFormData.id, {
+          section_name: sectionFormData.name.trim(),
+          grade_level_id: sectionFormData.grade_level_id,
+          level: sectionFormData.level,
+          is_specialized: sectionFormData.is_specialized ? 1 : 0,
+          program_id: sectionFormData.is_specialized ? sectionFormData.program_id : null,
+        });
         showFeedback("success", `Section "${sectionFormData.name.trim()}" updated successfully.`);
       }
       await loadData();
@@ -438,6 +451,7 @@ export default function StudentSectionManagement() {
         formatLevelLabel(gl.name, gl.id) === formatLevelLabel(section.level, section.grade_level_id)
     ) || gradeLevels[0] || { id: 1, name: "G7" };
 
+    setTargetSection(section);
     setSectionFormData({
       id: section.id,
       name: section.name,
@@ -447,6 +461,27 @@ export default function StudentSectionManagement() {
       program_id: String(section.program_id || "1"),
     });
     setActiveModal("editSection");
+  };
+
+  const openDeleteSection = (section) => {
+    setTargetSection(section);
+    setActiveModal("deleteSectionConfirm");
+  };
+
+  const confirmDeleteSection = async () => {
+    if (!targetSection) return;
+    try {
+      setIsSubmitting(true);
+      await deleteSection(targetSection.id);
+      showFeedback("success", `Section "${targetSection.name}" was successfully removed.`);
+      await loadData();
+      closeModal();
+    } catch (err) {
+      console.error("Delete section error:", err);
+      showFeedback("error", err.message || "Failed to remove section.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const openManageStudents = (section) => {
@@ -576,9 +611,9 @@ export default function StudentSectionManagement() {
             </div>
             <div style={{ flex: 1, display: "flex", alignItems: "center", background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "0 12px", height: "42px" }}>
               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-              <input 
-                type="text" 
-                placeholder="Search sections by name..." 
+              <input
+                type="text"
+                placeholder="Search sections by name..."
                 value={sectionSearch}
                 onChange={(e) => setSectionSearch(e.target.value)}
                 style={{ border: "none", outline: "none", background: "transparent", width: "100%", paddingLeft: "10px", color: "#1e293b", fontSize: "0.9rem", height: "100%" }}
@@ -606,14 +641,14 @@ export default function StudentSectionManagement() {
                   transition: "all 0.3s ease",
                   height: "205px",
                 }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = "translateY(-5px)";
-                  e.currentTarget.style.boxShadow = "0 16px 35px rgba(15, 23, 42, 0.12)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = "translateY(0)";
-                  e.currentTarget.style.boxShadow = "0 8px 24px rgba(15, 23, 42, 0.06)";
-                }}>
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = "translateY(-5px)";
+                    e.currentTarget.style.boxShadow = "0 16px 35px rgba(15, 23, 42, 0.12)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = "translateY(0)";
+                    e.currentTarget.style.boxShadow = "0 8px 24px rgba(15, 23, 42, 0.06)";
+                  }}>
                   <div>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "7px" }}>
                       <h3 style={{ fontSize: "1.1rem", fontWeight: "600", color: "#1e293b", margin: 0 }}>
@@ -633,7 +668,7 @@ export default function StudentSectionManagement() {
                       </span>
                     </div>
                     <p style={{ color: "#64748b", fontSize: "0.85rem", margin: "0 0 16px 0", fontWeight: "500" }}>
-                      {(sec.is_specialized == 1 || sec.program_id) 
+                      {(sec.is_specialized == 1 || sec.program_id)
                         ? (String(sec.program_id) === "1" ? "Special Program - STE" : String(sec.program_id) === "2" ? "Special Program - SPJ" : String(sec.program_id) === "3" ? "Special Program - SPA" : "Special Program")
                         : "Regular Class"}
                     </p>
@@ -782,9 +817,40 @@ export default function StudentSectionManagement() {
                     </section>
                   </fieldset>
                 </div>
-                <footer className="user-form-footer">
-                  <span>Review section details before saving.</span>
-                  <div>
+                <footer className="user-form-footer" style={{ justifyContent: "space-between" }}>
+                  {activeModal === "editSection" ? (
+                    <button
+                      type="button"
+                      disabled={isSubmitting}
+                      onClick={() => {
+                        const currentSec = sections.find((s) => s.id === sectionFormData.id) || targetSection || {
+                          id: sectionFormData.id,
+                          name: sectionFormData.name,
+                          level: sectionFormData.level,
+                          grade_level_id: sectionFormData.grade_level_id,
+                        };
+                        openDeleteSection(currentSec);
+                      }}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        color: "#ef4444",
+                        backgroundColor: "#fef2f2",
+                        border: "1px solid #fecaca",
+                        padding: "8px 14px",
+                        borderRadius: "6px",
+                        fontSize: "0.85rem",
+                        fontWeight: "600",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <Trash2 size={14} /> Remove Section
+                    </button>
+                  ) : (
+                    <span>Review section details before saving.</span>
+                  )}
+                  <div style={{ display: "flex", gap: "8px" }}>
                     <button
                       type="button"
                       className="user-form-cancel"
@@ -902,305 +968,305 @@ export default function StudentSectionManagement() {
         )}
 
         {/* Manage Students Modal */}
-          {activeModal === "manageStudents" && targetSection && (
-            <div
-              className="user-form-overlay"
-              onMouseDown={(e) => {
-                if (e.target === e.currentTarget && !isSubmitting) closeModal();
-              }}
+        {activeModal === "manageStudents" && targetSection && (
+          <div
+            className="user-form-overlay"
+            onMouseDown={(e) => {
+              if (e.target === e.currentTarget && !isSubmitting) closeModal();
+            }}
+          >
+            <section
+              className="user-form-modal"
+              role="dialog"
+              style={{ maxWidth: "800px", maxHeight: "90vh" }}
             >
-              <section
-                className="user-form-modal"
-                role="dialog"
-                style={{ maxWidth: "800px", maxHeight: "90vh" }}
-              >
-                <header className="user-form-header">
-                  <div className="user-form-heading">
-                    <div>
-                      <h2 id="user-form-title">Manage Students - {targetSection.name}</h2>
-                    </div>
+              <header className="user-form-header">
+                <div className="user-form-heading">
+                  <div>
+                    <h2 id="user-form-title">Manage Students - {targetSection.name}</h2>
                   </div>
-                  <button
-                    className="user-form-close"
-                    type="button"
-                    disabled={isSubmitting}
-                    onClick={closeModal}
-                  >
-                    <X size={20} />
-                  </button>
-                </header>
-                <div
-                  className="user-form-layout"
-                  style={{ overflowY: "auto", display: "flex", flexDirection: "column" }}
+                </div>
+                <button
+                  className="user-form-close"
+                  type="button"
+                  disabled={isSubmitting}
+                  onClick={closeModal}
                 >
-                  {(() => {
-                    const filteredManageStudents = students.filter(
-                      (s) =>
-                        !s.section_id &&
-                        (Number(s.grade_level_id) === Number(targetSection.grade_level_id) || !s.grade_level_id) &&
-                        (manageSearch.trim() === "" ||
-                          s.name.toLowerCase().includes(manageSearch.toLowerCase()) ||
-                          s.lrn.includes(manageSearch))
-                    );
+                  <X size={20} />
+                </button>
+              </header>
+              <div
+                className="user-form-layout"
+                style={{ overflowY: "auto", display: "flex", flexDirection: "column" }}
+              >
+                {(() => {
+                  const filteredManageStudents = students.filter(
+                    (s) =>
+                      !s.section_id &&
+                      (Number(s.grade_level_id) === Number(targetSection.grade_level_id) || !s.grade_level_id) &&
+                      (manageSearch.trim() === "" ||
+                        s.name.toLowerCase().includes(manageSearch.toLowerCase()) ||
+                        s.lrn.includes(manageSearch))
+                  );
 
-                    return (
-                      <>
-                        <div style={{ padding: "24px 32px" }}>
-                          <h3 style={{ fontSize: "1rem", color: "var(--mu-navy)", marginBottom: "12px" }}>
-                            Add Students to {targetSection.name}
-                          </h3>
-                          <div className="search-box" style={{ marginBottom: "16px", maxWidth: "100%" }}>
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>
+                  return (
+                    <>
+                      <div style={{ padding: "24px 32px" }}>
+                        <h3 style={{ fontSize: "1rem", color: "var(--mu-navy)", marginBottom: "12px" }}>
+                          Add Students to {targetSection.name}
+                        </h3>
+                        <div className="search-box" style={{ marginBottom: "16px", maxWidth: "100%" }}>
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>
+                          <input
+                            type="text"
+                            placeholder="Search student by name or LRN..."
+                            value={manageSearch}
+                            onChange={(e) => setManageSearch(e.target.value)}
+                          />
+                        </div>
+
+                        <div className="manage-student-list">
+                          <div style={{ padding: "10px", display: "flex", alignItems: "center", gap: "10px", borderBottom: "1px solid #e2e8f0" }}>
                             <input
-                              type="text"
-                              placeholder="Search student by name or LRN..."
-                              value={manageSearch}
-                              onChange={(e) => setManageSearch(e.target.value)}
+                              type="checkbox"
+                              checked={massSelectedStudents.size === filteredManageStudents.length && filteredManageStudents.length > 0}
+                              onChange={() => toggleAllMassStudents(filteredManageStudents)}
+                              style={{ width: "16px", height: "16px", cursor: "pointer" }}
                             />
+                            <span style={{ fontSize: "0.9rem", fontWeight: "600", color: "#1e293b" }}>Select All</span>
                           </div>
 
-                          <div className="manage-student-list">
-                            <div style={{ padding: "10px", display: "flex", alignItems: "center", gap: "10px", borderBottom: "1px solid #e2e8f0" }}>
-                              <input 
-                                type="checkbox" 
-                                checked={massSelectedStudents.size === filteredManageStudents.length && filteredManageStudents.length > 0}
-                                onChange={() => toggleAllMassStudents(filteredManageStudents)}
+                          {filteredManageStudents.map((student) => (
+                            <div key={student.id} className="manage-student-item" style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                              <input
+                                type="checkbox"
+                                checked={massSelectedStudents.has(student.id)}
+                                onChange={() => toggleMassStudentSelection(student.id)}
                                 style={{ width: "16px", height: "16px", cursor: "pointer" }}
                               />
-                              <span style={{ fontSize: "0.9rem", fontWeight: "600", color: "#1e293b" }}>Select All</span>
-                            </div>
-                            
-                            {filteredManageStudents.map((student) => (
-                                <div key={student.id} className="manage-student-item" style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                                  <input 
-                                    type="checkbox" 
-                                    checked={massSelectedStudents.has(student.id)}
-                                    onChange={() => toggleMassStudentSelection(student.id)}
-                                    style={{ width: "16px", height: "16px", cursor: "pointer" }}
-                                  />
-                                  <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "4px" }}>
-                                    <strong style={{ lineHeight: "1.2" }}>{student.name}</strong>
-                                    <span style={{ fontSize: "0.85rem", color: "#64748b", lineHeight: "1.2" }}>
-                                      LRN: {student.lrn} · {formatLevelLabel(student.gradeLevel, student.grade_level_id)}
-                                    </span>
-                                  </div>
-                                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                                    <input 
-                                      type="checkbox" 
-                                      id={`spec-${student.id}`}
-                                      checked={studentSpecializations[student.id]?.isSpecialized || false}
-                                      onChange={(e) => setStudentSpecializations(prev => ({ ...prev, [student.id]: { ...prev[student.id], isSpecialized: e.target.checked, programId: e.target.checked ? "1" : "" } }))}
-                                      style={{ width: "14px", height: "14px", cursor: "pointer" }}
-                                    />
-                                    <label htmlFor={`spec-${student.id}`} style={{ fontSize: "0.8rem", color: "#64748b", cursor: "pointer" }}>Specialized</label>
-                                    
-                                    {studentSpecializations[student.id]?.isSpecialized && (
-                                      <select 
-                                        value={studentSpecializations[student.id]?.programId || "1"}
-                                        onChange={(e) => setStudentSpecializations(prev => ({ ...prev, [student.id]: { ...prev[student.id], programId: e.target.value } }))}
-                                        style={{ fontSize: "0.8rem", padding: "4px", borderRadius: "4px", border: "1px solid #e2e8f0" }}
-                                      >
-                                        <option value="1">STE</option>
-                                        <option value="2">SPJ</option>
-                                        <option value="3">SPA</option>
-                                      </select>
-                                    )}
-                                  </div>
-                                  <button
-                                    type="button"
-                                    disabled={isSubmitting}
-                                    onClick={() => assignStudentToSection(student.id, targetSection.id)}
-                                    className="add-user-btn"
-                                    style={{ padding: "4px 10px", fontSize: "1rem", minWidth: "32px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
-                                    title="Add Student"
+                              <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "4px" }}>
+                                <strong style={{ lineHeight: "1.2" }}>{student.name}</strong>
+                                <span style={{ fontSize: "0.85rem", color: "#64748b", lineHeight: "1.2" }}>
+                                  LRN: {student.lrn} · {formatLevelLabel(student.gradeLevel, student.grade_level_id)}
+                                </span>
+                              </div>
+                              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                <input
+                                  type="checkbox"
+                                  id={`spec-${student.id}`}
+                                  checked={studentSpecializations[student.id]?.isSpecialized || false}
+                                  onChange={(e) => setStudentSpecializations(prev => ({ ...prev, [student.id]: { ...prev[student.id], isSpecialized: e.target.checked, programId: e.target.checked ? "1" : "" } }))}
+                                  style={{ width: "14px", height: "14px", cursor: "pointer" }}
+                                />
+                                <label htmlFor={`spec-${student.id}`} style={{ fontSize: "0.8rem", color: "#64748b", cursor: "pointer" }}>Specialized</label>
+
+                                {studentSpecializations[student.id]?.isSpecialized && (
+                                  <select
+                                    value={studentSpecializations[student.id]?.programId || "1"}
+                                    onChange={(e) => setStudentSpecializations(prev => ({ ...prev, [student.id]: { ...prev[student.id], programId: e.target.value } }))}
+                                    style={{ fontSize: "0.8rem", padding: "4px", borderRadius: "4px", border: "1px solid #e2e8f0" }}
                                   >
-                                    +
-                                  </button>
+                                    <option value="1">STE</option>
+                                    <option value="2">SPJ</option>
+                                    <option value="3">SPA</option>
+                                  </select>
+                                )}
+                              </div>
+                              <button
+                                type="button"
+                                disabled={isSubmitting}
+                                onClick={() => assignStudentToSection(student.id, targetSection.id)}
+                                className="add-user-btn"
+                                style={{ padding: "4px 10px", fontSize: "1rem", minWidth: "32px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+                                title="Add Student"
+                              >
+                                +
+                              </button>
+                            </div>
+                          ))}
+                          {filteredManageStudents.length === 0 && (
+                            <p className="users-empty-state" style={{ padding: "16px 0", border: "none" }}>
+                              {manageSearch.trim() === "" ? `No unassigned Grade ${targetSection.grade_level_id === 1 ? '7' : targetSection.grade_level_id === 2 ? '8' : targetSection.grade_level_id === 3 ? '9' : targetSection.grade_level_id === 4 ? '10' : ''} students left to add.` : "No unassigned students found matching your search."}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div style={{ padding: "24px 32px", borderTop: "1px solid #e2e8f0" }}>
+                        <h3 style={{ fontSize: "1rem", color: "var(--mu-navy)", marginBottom: "12px" }}>
+                          Current Students ({students.filter(s => Number(s.section_id) === Number(targetSection.id)).length})
+                        </h3>
+                        <div className="manage-student-list">
+                          {students
+                            .filter((s) => Number(s.section_id) === Number(targetSection.id))
+                            .map((student) => (
+                              <div key={student.id} className="manage-student-item">
+                                <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "4px" }}>
+                                  <strong style={{ lineHeight: "1.2" }}>{student.name}</strong>
+                                  <span style={{ fontSize: "0.85rem", color: "#64748b", lineHeight: "1.2" }}>
+                                    LRN: {student.lrn} · {formatLevelLabel(student.gradeLevel, student.grade_level_id)}
+                                  </span>
+                                  {student.is_specialized == 1 && student.program_code && (
+                                    <div>
+                                      <span style={{
+                                        backgroundColor: String(student.program_id) === "1" ? "rgba(37, 99, 235, 0.1)" : String(student.program_id) === "2" ? "rgba(22, 163, 74, 0.1)" : "rgba(202, 138, 4, 0.1)",
+                                        color: String(student.program_id) === "1" ? "#2563eb" : String(student.program_id) === "2" ? "#16a34a" : "#ca8a04",
+                                        padding: "2px 8px",
+                                        borderRadius: "12px",
+                                        fontSize: "0.7rem",
+                                        fontWeight: "600",
+                                        display: "inline-block"
+                                      }}>
+                                        Specialized - {student.program_code}
+                                      </span>
+                                    </div>
+                                  )}
                                 </div>
+                                <button
+                                  type="button"
+                                  className="remove-student-btn"
+                                  onClick={() => removeStudentFromSection(student)}
+                                >
+                                  <X size={16} />
+                                </button>
+                              </div>
                             ))}
-                            {filteredManageStudents.length === 0 && (
-                              <p className="users-empty-state" style={{ padding: "16px 0", border: "none" }}>
-                                {manageSearch.trim() === "" ? `No unassigned Grade ${targetSection.grade_level_id === 1 ? '7' : targetSection.grade_level_id === 2 ? '8' : targetSection.grade_level_id === 3 ? '9' : targetSection.grade_level_id === 4 ? '10' : ''} students left to add.` : "No unassigned students found matching your search."}
-                              </p>
-                            )}
-                          </div>
+                          {students.filter((s) => Number(s.section_id) === Number(targetSection.id)).length === 0 && (
+                            <p className="users-empty-state" style={{ padding: "16px 0", border: "none" }}>
+                              No students assigned to this section yet.
+                            </p>
+                          )}
                         </div>
-
-                        <div style={{ padding: "24px 32px", borderTop: "1px solid #e2e8f0" }}>
-                          <h3 style={{ fontSize: "1rem", color: "var(--mu-navy)", marginBottom: "12px" }}>
-                            Current Students ({students.filter(s => Number(s.section_id) === Number(targetSection.id)).length})
-                          </h3>
-                          <div className="manage-student-list">
-                            {students
-                              .filter((s) => Number(s.section_id) === Number(targetSection.id))
-                              .map((student) => (
-                                <div key={student.id} className="manage-student-item">
-                            <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "4px" }}>
-                              <strong style={{ lineHeight: "1.2" }}>{student.name}</strong>
-                              <span style={{ fontSize: "0.85rem", color: "#64748b", lineHeight: "1.2" }}>
-                                LRN: {student.lrn} · {formatLevelLabel(student.gradeLevel, student.grade_level_id)}
-                              </span>
-                              {student.is_specialized == 1 && student.program_code && (
-                                <div>
-                                  <span style={{
-                                    backgroundColor: String(student.program_id) === "1" ? "rgba(37, 99, 235, 0.1)" : String(student.program_id) === "2" ? "rgba(22, 163, 74, 0.1)" : "rgba(202, 138, 4, 0.1)",
-                                    color: String(student.program_id) === "1" ? "#2563eb" : String(student.program_id) === "2" ? "#16a34a" : "#ca8a04",
-                                    padding: "2px 8px",
-                                    borderRadius: "12px",
-                                    fontSize: "0.7rem",
-                                    fontWeight: "600",
-                                    display: "inline-block"
-                                  }}>
-                                    Specialized - {student.program_code}
-                                  </span>
-                                </div>
-                              )}
-                            </div>
-                                  <button
-                                    type="button"
-                                    className="remove-student-btn"
-                                    onClick={() => removeStudentFromSection(student)}
-                                  >
-                                    <X size={16} />
-                                  </button>
-                                </div>
-                              ))}
-                            {students.filter((s) => Number(s.section_id) === Number(targetSection.id)).length === 0 && (
-                              <p className="users-empty-state" style={{ padding: "16px 0", border: "none" }}>
-                                No students assigned to this section yet.
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      </>
-                    );
-                  })()}
-                </div>
-                <footer className="user-form-footer" style={{ justifyContent: "space-between" }}>
-                  <button
-                    type="button"
-                    className="user-form-cancel"
-                    disabled={isSubmitting}
-                    onClick={closeModal}
-                  >
-                    Close
-                  </button>
-                  <button
-                    type="button"
-                    disabled={massSelectedStudents.size === 0 || isSubmitting}
-                    onClick={handleMassAssign}
-                    className="user-form-submit"
-                    style={{ display: "flex", alignItems: "center", gap: "6px" }}
-                  >
-                    {isSubmitting ? (
-                      <><Loader2 className="animate-spin" size={14} /> Assigning...</>
-                    ) : (
-                      `+ Assign Selected (${massSelectedStudents.size})`
-                    )}
-                  </button>
-                </footer>
-              </section>
-            </div>
-          )}
-
-          {/* View Students Modal (Read Only) */}
-          {activeModal === "viewStudents" && targetSection && (
-            <div
-              className="user-form-overlay"
-              onMouseDown={(e) => {
-                if (e.target === e.currentTarget && !isSubmitting) closeModal();
-              }}
-            >
-              <section
-                className="user-form-modal"
-                role="dialog"
-                style={{ maxWidth: "600px", maxHeight: "90vh" }}
-              >
-                <header className="user-form-header">
-                  <div className="user-form-heading">
-                    <div>
-                      <h2 id="user-form-title">View Students - {targetSection.name}</h2>
-                    </div>
-                  </div>
-                  <button
-                    className="user-form-close"
-                    type="button"
-                    onClick={closeModal}
-                  >
-                    <X size={20} />
-                  </button>
-                </header>
-                <div
-                  className="user-form-layout"
-                  style={{ overflowY: "auto", display: "flex", flexDirection: "column" }}
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+              <footer className="user-form-footer" style={{ justifyContent: "space-between" }}>
+                <button
+                  type="button"
+                  className="user-form-cancel"
+                  disabled={isSubmitting}
+                  onClick={closeModal}
                 >
-                  <div style={{ padding: "24px 32px" }}>
-                    <div className="search-box" style={{ marginBottom: "16px", maxWidth: "100%" }}>
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>
-                      <input
-                        type="text"
-                        placeholder="Search current students..."
-                        value={viewSearch}
-                        onChange={(e) => setViewSearch(e.target.value)}
-                      />
-                    </div>
+                  Close
+                </button>
+                <button
+                  type="button"
+                  disabled={massSelectedStudents.size === 0 || isSubmitting}
+                  onClick={handleMassAssign}
+                  className="user-form-submit"
+                  style={{ display: "flex", alignItems: "center", gap: "6px" }}
+                >
+                  {isSubmitting ? (
+                    <><Loader2 className="animate-spin" size={14} /> Assigning...</>
+                  ) : (
+                    `+ Assign Selected (${massSelectedStudents.size})`
+                  )}
+                </button>
+              </footer>
+            </section>
+          </div>
+        )}
 
-                    <div className="manage-student-list">
-                      {students
-                        .filter((s) => Number(s.section_id) === Number(targetSection.id))
-                        .filter((s) => viewSearch.trim() === "" || s.name.toLowerCase().includes(viewSearch.toLowerCase()) || s.lrn.includes(viewSearch))
-                        .map((student) => (
-                          <div key={student.id} className="manage-student-item">
-                            <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "4px" }}>
-                              <strong style={{ lineHeight: "1.2" }}>{student.name}</strong>
-                              <span style={{ fontSize: "0.85rem", color: "#64748b", lineHeight: "1.2" }}>
-                                LRN: {student.lrn} · {formatLevelLabel(student.gradeLevel, student.grade_level_id)}
-                              </span>
-                              {student.is_specialized == 1 && student.program_code && (
-                                <div>
-                                  <span style={{
-                                    backgroundColor: String(student.program_id) === "1" ? "rgba(37, 99, 235, 0.1)" : String(student.program_id) === "2" ? "rgba(22, 163, 74, 0.1)" : "rgba(202, 138, 4, 0.1)",
-                                    color: String(student.program_id) === "1" ? "#2563eb" : String(student.program_id) === "2" ? "#16a34a" : "#ca8a04",
-                                    padding: "2px 8px",
-                                    borderRadius: "12px",
-                                    fontSize: "0.7rem",
-                                    fontWeight: "600",
-                                    display: "inline-block"
-                                  }}>
-                                    Specialized - {student.program_code}
-                                  </span>
-                                </div>
-                              )}
-                            </div>
+        {/* View Students Modal (Read Only) */}
+        {activeModal === "viewStudents" && targetSection && (
+          <div
+            className="user-form-overlay"
+            onMouseDown={(e) => {
+              if (e.target === e.currentTarget && !isSubmitting) closeModal();
+            }}
+          >
+            <section
+              className="user-form-modal"
+              role="dialog"
+              style={{ maxWidth: "600px", maxHeight: "90vh" }}
+            >
+              <header className="user-form-header">
+                <div className="user-form-heading">
+                  <div>
+                    <h2 id="user-form-title">View Students - {targetSection.name}</h2>
+                  </div>
+                </div>
+                <button
+                  className="user-form-close"
+                  type="button"
+                  onClick={closeModal}
+                >
+                  <X size={20} />
+                </button>
+              </header>
+              <div
+                className="user-form-layout"
+                style={{ overflowY: "auto", display: "flex", flexDirection: "column" }}
+              >
+                <div style={{ padding: "24px 32px" }}>
+                  <div className="search-box" style={{ marginBottom: "16px", maxWidth: "100%" }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>
+                    <input
+                      type="text"
+                      placeholder="Search current students..."
+                      value={viewSearch}
+                      onChange={(e) => setViewSearch(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="manage-student-list">
+                    {students
+                      .filter((s) => Number(s.section_id) === Number(targetSection.id))
+                      .filter((s) => viewSearch.trim() === "" || s.name.toLowerCase().includes(viewSearch.toLowerCase()) || s.lrn.includes(viewSearch))
+                      .map((student) => (
+                        <div key={student.id} className="manage-student-item">
+                          <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "4px" }}>
+                            <strong style={{ lineHeight: "1.2" }}>{student.name}</strong>
+                            <span style={{ fontSize: "0.85rem", color: "#64748b", lineHeight: "1.2" }}>
+                              LRN: {student.lrn} · {formatLevelLabel(student.gradeLevel, student.grade_level_id)}
+                            </span>
+                            {student.is_specialized == 1 && student.program_code && (
+                              <div>
+                                <span style={{
+                                  backgroundColor: String(student.program_id) === "1" ? "rgba(37, 99, 235, 0.1)" : String(student.program_id) === "2" ? "rgba(22, 163, 74, 0.1)" : "rgba(202, 138, 4, 0.1)",
+                                  color: String(student.program_id) === "1" ? "#2563eb" : String(student.program_id) === "2" ? "#16a34a" : "#ca8a04",
+                                  padding: "2px 8px",
+                                  borderRadius: "12px",
+                                  fontSize: "0.7rem",
+                                  fontWeight: "600",
+                                  display: "inline-block"
+                                }}>
+                                  Specialized - {student.program_code}
+                                </span>
+                              </div>
+                            )}
                           </div>
-                        ))}
-                      {students
-                        .filter((s) => Number(s.section_id) === Number(targetSection.id))
-                        .filter((s) => viewSearch.trim() === "" || s.name.toLowerCase().includes(viewSearch.toLowerCase()) || s.lrn.includes(viewSearch))
-                        .length === 0 && (
+                        </div>
+                      ))}
+                    {students
+                      .filter((s) => Number(s.section_id) === Number(targetSection.id))
+                      .filter((s) => viewSearch.trim() === "" || s.name.toLowerCase().includes(viewSearch.toLowerCase()) || s.lrn.includes(viewSearch))
+                      .length === 0 && (
                         <p className="users-empty-state" style={{ padding: "16px 0", border: "none" }}>
                           No students found.
                         </p>
                       )}
-                    </div>
                   </div>
                 </div>
-                <footer className="user-form-footer" style={{ justifyContent: "flex-end" }}>
-                  <div>
-                    <button
-                      type="button"
-                      className="user-form-cancel"
-                      onClick={closeModal}
-                    >
-                      Close
-                    </button>
-                  </div>
-                </footer>
-              </section>
-            </div>
-          )}
+              </div>
+              <footer className="user-form-footer" style={{ justifyContent: "flex-end" }}>
+                <div>
+                  <button
+                    type="button"
+                    className="user-form-cancel"
+                    onClick={closeModal}
+                  >
+                    Close
+                  </button>
+                </div>
+              </footer>
+            </section>
+          </div>
+        )}
 
-          {/* Remove Student Confirmation Modal */}{/* Remove Student Confirmation Modal */}
+        {/* Remove Student Confirmation Modal */}{/* Remove Student Confirmation Modal */}
         {activeModal === "removeStudent" && targetStudent && (
           <div
             className="user-form-overlay"
@@ -1264,6 +1330,68 @@ export default function StudentSectionManagement() {
                       )}
                     </button>
                   </div>
+                </footer>
+              </div>
+            </section>
+          </div>
+        )}
+        {/* Delete Section Confirmation Modal */}
+        {activeModal === "deleteSectionConfirm" && targetSection && (
+          <div
+            className="user-form-overlay"
+            onMouseDown={(e) => {
+              if (e.target === e.currentTarget && !isSubmitting) closeModal();
+            }}
+          >
+            <section className="user-form-modal" role="dialog" style={{ maxWidth: "480px" }}>
+              <header className="user-form-header">
+                <div className="user-form-heading">
+                  <h2 id="user-form-title" style={{ color: "#ef4444", display: "flex", alignItems: "center", gap: "8px" }}>
+                    <AlertCircle size={20} /> Remove Section
+                  </h2>
+                </div>
+                <button
+                  className="user-form-close"
+                  type="button"
+                  disabled={isSubmitting}
+                  onClick={closeModal}
+                >
+                  <X size={20} />
+                </button>
+              </header>
+              <div className="user-form-layout">
+                <div className="user-form-body" style={{ padding: "20px 24px" }}>
+                  <p style={{ color: "#1e293b", margin: 0, fontSize: "0.95rem", lineHeight: "1.5" }}>
+                    Are you sure you want to remove section <strong>{targetSection.name}</strong> ({formatLevelLabel(targetSection.level, targetSection.grade_level_id)})?
+                  </p>
+                  <p style={{ color: "#64748b", margin: "10px 0 0 0", fontSize: "0.85rem" }}>
+                    Students currently assigned to this section will become unassigned. This action cannot be undone.
+                  </p>
+                </div>
+                <footer className="user-form-footer" style={{ justifyContent: "flex-end", gap: "8px" }}>
+                  <button
+                    type="button"
+                    className="user-form-cancel"
+                    disabled={isSubmitting}
+                    onClick={closeModal}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="user-form-submit"
+                    disabled={isSubmitting}
+                    onClick={confirmDeleteSection}
+                    style={{ backgroundColor: "#ef4444", borderColor: "#ef4444" }}
+                  >
+                    {isSubmitting ? (
+                      <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        <Loader2 className="animate-spin" size={16} /> Removing...
+                      </span>
+                    ) : (
+                      "Yes, Remove Section"
+                    )}
+                  </button>
                 </footer>
               </div>
             </section>

@@ -118,6 +118,21 @@ class Section {
   }
 
   static async delete(id) {
+    try {
+      await db.execute('DELETE FROM STUDENT_SECTION WHERE section_id = ?', [id]);
+    } catch (e) {
+      console.warn('Error cleaning STUDENT_SECTION on section delete:', e.message);
+    }
+    try {
+      await db.execute('DELETE FROM SECTION_ADVISER_ASSIGNMENT WHERE section_id = ?', [id]);
+    } catch (e) {
+      console.warn('Error cleaning SECTION_ADVISER_ASSIGNMENT on section delete:', e.message);
+    }
+    try {
+      await db.execute('DELETE FROM SUBJECT_OFFERING WHERE section_id = ?', [id]);
+    } catch (e) {
+      console.warn('Error cleaning SUBJECT_OFFERING on section delete:', e.message);
+    }
     const [result] = await db.execute('DELETE FROM SECTION WHERE section_id = ?', [id]);
     return result.affectedRows > 0;
   }
