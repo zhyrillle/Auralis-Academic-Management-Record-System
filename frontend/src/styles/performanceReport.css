@@ -1,10 +1,10 @@
 :root {
   --performance-bg: #ffffff;
   --performance-card: #f8fafc;
-  --performance-heading: #032140;
-  --performance-subheading: #475569;
-  --performance-border: #e5e7eb;
-  --performance-primary: #c9a227;
+  --performance-heading: #112d61;
+  --performance-subheading: #64748b;
+  --performance-border: #dfe7f1;
+  --performance-primary: #edf2fa;
 }
 
 .performance-page {
@@ -26,7 +26,7 @@
 }
 
 .page-title {
-  font-family: "DM Sans", sans-serif;
+  font-family: var(--font-inter, "Inter", sans-serif);
   font-size: 32px;
   font-weight: 700;
   margin-bottom: 24px;
@@ -64,11 +64,13 @@
 
 .filter-control select {
   min-width: 180px;
-  padding: 12px 14px;
-  border-radius: 14px;
-  border: 1px solid #d1d5db;
+  padding: 12px 36px 12px 14px;
+  border-radius: 9px;
+  border: 1px solid #d4dfeb;
   background: #ffffff;
-  color: #111827;
+  color: #17345f;
+  font-size: 13px;
+  font-family: inherit;
 }
 
 .report-card {
@@ -97,24 +99,23 @@
 
 .performance-table th,
 .performance-table td {
-  padding: 18px 16px;
+  padding: 14px 20px;
   text-align: left;
   border-bottom: 1px solid var(--performance-border);
 }
 
 .performance-table th {
   background: var(--performance-primary);
-  color: #ffffff;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  color: var(--performance-heading);
+  font-weight: 650;
+  font-size: 13px;
   border-right: 1px solid #ffffff;
 }
 
 .performance-table td,
 .grade-table td,
 .grade-table th {
-  color: #334155;
+  color: #172b49;
   font-size: 14px;
   font-weight: 400;
 }
@@ -135,8 +136,8 @@
 
 .grade-table tr.average-row td {
   font-weight: 700;
-  background-color: #f8fafc;
-  color: #032140;
+  background-color: var(--performance-card);
+  color: var(--performance-heading);
   border-top: 2px solid #cbd5e1;
 }
 
