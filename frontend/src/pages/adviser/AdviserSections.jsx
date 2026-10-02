@@ -9,6 +9,7 @@ import GradingSheet from "./GradingSheet"; // Imported the separated component
 import ClassRecord from "./ClassRecord.jsx";
 import SectionDetails from "./SectionDetails.jsx";
 import AttendanceSheet from "./AttendanceSheet.jsx";
+import Toast from "../../components/common/Toast.jsx";
 
 // Auth & Services
 import { getStoredUser } from "../../utils/auth";
@@ -263,15 +264,15 @@ export default function AdviserSections({ userRole: propUserRole }) {
 
   return (
     <div className="sections-page-container">
-      {/* Toast Notifications */}
-      <div style={{ zIndex: 9999 }}>
-        {toasts.map((t) => (
-          <div key={t.id} className={`toast-notification ${t.type === "success" ? "toast-success" : "toast-info"}`}>
-            {t.type === "success" ? <Check size={18} style={{ color: "#10b981" }} /> : <FileSpreadsheet size={18} style={{ color: "#3b82f6" }} />}
-            <span>{t.message}</span>
-          </div>
-        ))}
-      </div>
+      {/* Bottom-Right Toast Notifications */}
+      {toasts.map((t) => (
+        <Toast
+          key={t.id}
+          message={t.message}
+          variant={t.type === "error" ? "error" : "success"}
+          onDismiss={() => setToasts((prev) => prev.filter((item) => item.id !== t.id))}
+        />
+      ))}
 
       {currentView === "dashboard" ? (
         <>

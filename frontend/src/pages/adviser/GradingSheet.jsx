@@ -1,12 +1,15 @@
 import { useState, useMemo, useEffect } from "react";
-import { Download, Printer, Check, Calendar } from "lucide-react";
+import { Download, Printer, Check, Calendar, CheckCircle2 } from "lucide-react";
 import backIconUrl from "../../assets/backButton.svg";
 import SearchBar from "../../components/common/SearchBar.jsx";
 import SelectFilter from "../../components/common/SelectFilter.jsx";
 import SubmissionFooter from "../../components/common/SubmissionFooter.jsx";
+import Toast from "../../components/common/Toast.jsx";
 import { exportGradingSheetPdf } from "../../utils/exportGradingSheetPdf";
 import { getStoredUser } from "../../utils/auth";
 import "../../styles/gradingSheet.css";
+
+const emptyToast = { message: "", variant: "success", icon: null };
 
 export default function GradingSheet({
     activeSelectedClass,
@@ -20,6 +23,17 @@ export default function GradingSheet({
     const [searchStudentQuery, setSearchStudentQuery] = useState("");
     const [filterDescriptor, setFilterDescriptor] = useState("All");
     const [filterRemark, setFilterRemark] = useState("All");
+    const [toast, setToast] = useState(emptyToast);
+
+    const showToast = (message, variant = "success", icon = null) => {
+        setToast({ message, variant, icon });
+    };
+
+    useEffect(() => {
+        if (!toast.message) return undefined;
+        const timer = window.setTimeout(() => setToast(emptyToast), 3400);
+        return () => window.clearTimeout(timer);
+    }, [toast.message]);
 
     const sectionId = useMemo(() => {
         return (
@@ -307,9 +321,8 @@ export default function GradingSheet({
             isPrintMode: false,
         });
 
-        if (triggerToast) {
-            triggerToast(`Downloaded PDF Grading Sheet for ${activeSelectedClass.gradeLevel} - ${activeSelectedClass.sectionName} (${downloadSubject})`, "info");
-        }
+        const termSuffix = isMapeh && combinedTermFilter !== "All" ? ` (${combinedTermFilter === "T1" ? "Term 1" : combinedTermFilter === "T2" ? "Term 2" : "Term 3"})` : "";
+        showToast(`Downloaded PDF Grading Sheet for ${activeSelectedClass.gradeLevel} - ${activeSelectedClass.sectionName}${termSuffix} (${downloadSubject})`, "success", CheckCircle2);
     };
 
     const handlePrintSheet = () => {
@@ -334,13 +347,14 @@ export default function GradingSheet({
             isPrintMode: true,
         });
 
-        if (triggerToast) {
-            triggerToast(`Opening Print Preview for ${activeSelectedClass.gradeLevel} - ${activeSelectedClass.sectionName} (${printSubject})`, "info");
-        }
+        showToast(`Opening Print Preview for ${activeSelectedClass.gradeLevel} - ${activeSelectedClass.sectionName} (${printSubject})`, "success", CheckCircle2);
     };
 
     const handleFooterSubmitTrigger = () => {
-        onSubmit(activeSelectedClass.id);
+        if (onSubmit) {
+            onSubmit(activeSelectedClass.id);
+        }
+        showToast(`Grades for ${activeSelectedClass.gradeLevel} - ${activeSelectedClass.sectionName} submitted successfully!`, "success", CheckCircle2);
     };
 
     // Calculate submit button disabled state and hover reason
@@ -886,6 +900,14 @@ export default function GradingSheet({
                 userRole={userRole}
                 disabled={isSubmitDisabled}
                 disabledReason={submitDisabledReason}
+            />
+
+            {/* Bottom-Right Toast Alert Notification (Exact Master Sheet Styling) */}
+            <Toast
+                message={toast.message}
+                variant={toast.variant}
+                icon={toast.icon}
+                onDismiss={() => setToast(emptyToast)}
             />
         </div>
     );
