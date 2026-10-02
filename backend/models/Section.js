@@ -76,19 +76,19 @@ class Section {
   }
 
   static async create(data) {
-    let { section_name, name, grade_level_id, level, program_id } = data;
+    let { section_name, name, grade_level_id, level, program_id, is_specialized } = data;
     const finalName = (section_name || name || '').trim();
     const finalGradeLevelId = await this.resolveGradeLevelId(grade_level_id, level);
 
     const [result] = await db.execute(
-      `INSERT INTO SECTION (section_name, grade_level_id, program_id) VALUES (?, ?, ?)`,
-      [finalName, finalGradeLevelId, program_id || null]
+      `INSERT INTO SECTION (section_name, grade_level_id, program_id, is_specialized) VALUES (?, ?, ?, ?)`,
+      [finalName, finalGradeLevelId, program_id || null, is_specialized ? 1 : 0]
     );
     return result.insertId;
   }
 
   static async update(id, data) {
-    let { section_name, name, grade_level_id, level, program_id } = data;
+    let { section_name, name, grade_level_id, level, program_id, is_specialized } = data;
     const finalName = (section_name || name || '').trim();
     
     const updates = [];
@@ -105,6 +105,10 @@ class Section {
     if (program_id !== undefined) {
       updates.push('program_id = ?');
       values.push(program_id || null);
+    }
+    if (is_specialized !== undefined) {
+      updates.push('is_specialized = ?');
+      values.push(is_specialized ? 1 : 0);
     }
     if (updates.length > 0) {
       values.push(id);
