@@ -500,49 +500,51 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
             </div>
 
           {/* ============================================================
-              BACK PAGE (PAGE 2): ATTENDANCE, REMARKS, & CERTIFICATE OF TRANSFER
+              BACK PAGE (PAGE 2): ATTENDANCE, REMARKS, SIGNATURES, TRANSFER & CANCELLATION
              ============================================================ */}
           <div className={`sf9-official-sheet sf9-back-sheet ${viewMode === "front" ? "hide-on-screen" : ""}`}>
 
-              {/* Section 1: Attendance Record */}
-              <div className="sf9-table-heading">ATTENDANCE RECORD</div>
-              <table className="sf9-official-table sf9-attendance-table-clean">
-                <thead>
-                  <tr>
-                    <th className="col-month-head">Metric Name</th>
-                    {attendanceData.months.map((m, idx) => (
-                      <th key={idx} className="col-month-col">{m}</th>
-                    ))}
-                    <th className="col-total-col">Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td className="row-att-label">No. of Class Days</td>
-                    {attendanceData.classDays.map((d, idx) => (
-                      <td key={idx} className="att-num">{d}</td>
-                    ))}
-                    <td className="att-num font-bold">{getAttendanceTotal(attendanceData.classDays)}</td>
-                  </tr>
-                  <tr>
-                    <td className="row-att-label">No. of Days Present</td>
-                    {attendanceData.daysPresent.map((d, idx) => (
-                      <td key={idx} className="att-num">{d}</td>
-                    ))}
-                    <td className="att-num font-bold">{getAttendanceTotal(attendanceData.daysPresent)}</td>
-                  </tr>
-                  <tr>
-                    <td className="row-att-label">No. of Days Absent</td>
-                    {attendanceData.daysAbsent.map((d, idx) => (
-                      <td key={idx} className="att-num">{d}</td>
-                    ))}
-                    <td className="att-num font-bold">{getAttendanceTotal(attendanceData.daysAbsent)}</td>
-                  </tr>
-                </tbody>
-              </table>
+              {/* Section 1: ATTENDANCE RECORD (Top) */}
+              <div className="sf9-section-block">
+                <div className="sf9-table-heading">ATTENDANCE RECORD</div>
+                <table className="sf9-official-table sf9-attendance-table-clean">
+                  <thead>
+                    <tr>
+                      <th className="col-month-head">Month</th>
+                      {attendanceData.months.map((m, idx) => (
+                        <th key={idx} className="col-month-col">{m}</th>
+                      ))}
+                      <th className="col-total-col">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td className="row-att-label">No. of Class Days</td>
+                      {attendanceData.classDays.map((d, idx) => (
+                        <td key={idx} className="att-num">{d}</td>
+                      ))}
+                      <td className="att-num font-bold">{getAttendanceTotal(attendanceData.classDays)}</td>
+                    </tr>
+                    <tr>
+                      <td className="row-att-label">No. of Days Present</td>
+                      {attendanceData.daysPresent.map((d, idx) => (
+                        <td key={idx} className="att-num">{d}</td>
+                      ))}
+                      <td className="att-num font-bold">{getAttendanceTotal(attendanceData.daysPresent)}</td>
+                    </tr>
+                    <tr>
+                      <td className="row-att-label">No. of Days Absent</td>
+                      {attendanceData.daysAbsent.map((d, idx) => (
+                        <td key={idx} className="att-num">{d}</td>
+                      ))}
+                      <td className="att-num font-bold">{getAttendanceTotal(attendanceData.daysAbsent)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
 
-              {/* Section 2: Teacher's Comments/Remarks */}
-              <div className="sf9-comments-section">
+              {/* Section 2: TEACHER'S COMMENTS/REMARKS (Full-Width Bordered Box) */}
+              <div className="sf9-section-block">
                 <div className="sf9-table-heading">TEACHER'S COMMENTS/REMARKS</div>
                 <div className="sf9-term-comments-box">
                   <div className="sf9-comment-term-row">
@@ -586,27 +588,27 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
                 </div>
               </div>
 
-              {/* Section 3: Parents/Guardian's Signature */}
-              <div className="sf9-parent-signatures-section">
+              {/* Section 3: PARENTS/GUARDIAN'S SIGNATURE (Full-Width Lined Block) */}
+              <div className="sf9-section-block sf9-parent-signatures-full">
                 <div className="sf9-table-heading">PARENTS/GUARDIAN'S SIGNATURE</div>
-                <div className="sf9-parent-sig-lines">
+                <div className="sf9-parent-sig-stack">
                   <div className="sf9-parent-sig-row">
                     <span className="sf9-parent-sig-label font-bold">Term 1</span>
-                    <div className="sf9-parent-sig-underline"></div>
+                    <div className="sf9-parent-sig-line"></div>
                   </div>
                   <div className="sf9-parent-sig-row">
                     <span className="sf9-parent-sig-label font-bold">Term 2</span>
-                    <div className="sf9-parent-sig-underline"></div>
+                    <div className="sf9-parent-sig-line"></div>
                   </div>
                   <div className="sf9-parent-sig-row">
                     <span className="sf9-parent-sig-label font-bold">Term 3</span>
-                    <div className="sf9-parent-sig-underline"></div>
+                    <div className="sf9-parent-sig-line"></div>
                   </div>
                 </div>
               </div>
 
-              {/* Section 4: Certificate of Transfer */}
-              <div className="sf9-certificate-section">
+              {/* Section 4: CERTIFICATE OF TRANSFER */}
+              <div className="sf9-section-block sf9-certificate-section">
                 <div className="sf9-table-heading">CERTIFICATE OF TRANSFER</div>
                 <p className="sf9-cert-statement">
                   This is to certify that the above-named learner has satisfactorily completed the requirements for the grade level indicated.
@@ -638,15 +640,15 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
                 </div>
               </div>
 
-              {/* Section 5: Cancellation of Eligibility to Transfer */}
-              <div className="sf9-cancellation-section">
+              {/* Section 5: CANCELLATION OF ELIGIBILITY TO TRANSFER */}
+              <div className="sf9-section-block sf9-cancellation-section">
                 <div className="sf9-table-heading">CANCELLATION OF ELIGIBILITY TO TRANSFER</div>
                 <div className="sf9-cancel-row">
-                  <div className="sf9-cancel-field">
+                  <div className="sf9-cancel-field cancel-admitted">
                     <span className="sf9-cert-label">Admitted in:</span>
                     <span className="sf9-cert-underline"></span>
                   </div>
-                  <div className="sf9-cancel-field">
+                  <div className="sf9-cancel-field cancel-date">
                     <span className="sf9-cert-label">Date:</span>
                     <span className="sf9-cert-underline"></span>
                   </div>
