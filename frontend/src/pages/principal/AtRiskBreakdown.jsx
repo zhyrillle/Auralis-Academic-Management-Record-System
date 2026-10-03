@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { AlertCircle, MinusCircle, AlertTriangle, Users } from "lucide-react";
+import DropdownSelect from "../../components/common/DropdownSelect";
 import TermTabs from "../../components/at-risk/TermTabs";
 import RiskStatCard from "../../components/at-risk/RiskStatCard";
 import OverallDistributionChart from "../../components/at-risk/OverallDistributionChart";
@@ -11,14 +12,15 @@ import {
   getGradeLevelBreakdown,
   getRiskLevelLearners,
 } from "../../services/atRiskApi";
+import { getAtRiskOptions } from "../../services/atRiskPredictionApi";
 import "../../styles/atRiskBreakdown.css";
 
-const EMPTY_SUMMARY = { lowRisk: 2, mediumRisk: 4, highRisk: 1, total: 7 };
+const EMPTY_SUMMARY = { lowRisk: 0, mediumRisk: 0, highRisk: 0, total: 0 };
 const EMPTY_DISTRIBUTION = {
-  high: { count: 1, percent: 14 },
-  medium: { count: 4, percent: 57 },
-  low: { count: 2, percent: 29 },
-  totalFlagged: 7,
+  high: { count: 0, percent: 0 },
+  medium: { count: 0, percent: 0 },
+  low: { count: 0, percent: 0 },
+  totalFlagged: 0,
 };
 const EMPTY_BREAKDOWN = [];
 
@@ -26,43 +28,28 @@ export default function AtRiskBreakdown() {
   const [activeTerm, setActiveTerm] = useState("overall");
   const [schoolYear, setSchoolYear] = useState("2026-2027");
   const [schoolYearsList, setSchoolYearsList] = useState([
-    { id: "1", value: "2026-2027", label: "SY 2026-2027 (Active)" },
-    { id: "2", value: "2025-2026", label: "SY 2025-2026" },
-    { id: "3", value: "2027-2028", label: "SY 2027-2028" },
+    { value: "2026-2027", label: "SY 2026–2027" },
+    { value: "2025-2026", label: "SY 2025–2026" },
   ]);
   const [summary, setSummary] = useState(EMPTY_SUMMARY);
   const [distribution, setDistribution] = useState(EMPTY_DISTRIBUTION);
   const [breakdown, setBreakdown] = useState(EMPTY_BREAKDOWN);
-  const [lowNotes, setLowNotes] = useState({ count: 2, notes: [] });
-  const [mediumNotes, setMediumNotes] = useState({ count: 4, notes: [] });
-  const [highNotes, setHighNotes] = useState({ count: 1, notes: [] });
+  const [lowNotes, setLowNotes] = useState({ count: 0, notes: [] });
+  const [mediumNotes, setMediumNotes] = useState({ count: 0, notes: [] });
+  const [highNotes, setHighNotes] = useState({ count: 0, notes: [] });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // Load school years from backend on mount
+  // Load dynamic options on mount
   useEffect(() => {
-    fetch("http://localhost:5000/api/school-years")
-      .then((res) => (res.ok ? res.json() : []))
-      .then((years) => {
-        if (Array.isArray(years) && years.length > 0) {
-          const formatted = years.map((y) => {
-            const val = `${y.starts_on}-${y.ends_on}`;
-            const isOngoing = (y.status || "").toLowerCase() === "ongoing" || (y.status || "").toLowerCase() === "active";
-            return {
-              id: String(y.school_year_id),
-              value: val,
-              label: `SY ${val}${isOngoing ? " (Active)" : ""}`,
-              isOngoing,
-            };
-          });
-          setSchoolYearsList(formatted);
-          const activeYear = formatted.find((y) => y.isOngoing);
-          if (activeYear) {
-            setSchoolYear(activeYear.value);
-          }
+    getAtRiskOptions()
+      .then((opts) => {
+        if (opts.schoolYears && opts.schoolYears.length > 0) {
+          setSchoolYearsList(opts.schoolYears);
+          setSchoolYear(opts.schoolYears[0].value);
         }
       })
-      .catch(() => {});
+      .catch((err) => console.warn("Failed to load options for breakdown:", err));
   }, []);
 
   useEffect(() => {
@@ -79,9 +66,9 @@ export default function AtRiskBreakdown() {
             getAtRiskSummary({ schoolYear, term: termParam }).catch(() => EMPTY_SUMMARY),
             getOverallDistribution({ schoolYear, term: termParam }).catch(() => EMPTY_DISTRIBUTION),
             getGradeLevelBreakdown({ schoolYear, term: termParam }).catch(() => EMPTY_BREAKDOWN),
-            getRiskLevelLearners({ schoolYear, term: termParam, riskLevel: "low" }).catch(() => ({ count: 2, notes: [] })),
-            getRiskLevelLearners({ schoolYear, term: termParam, riskLevel: "medium" }).catch(() => ({ count: 4, notes: [] })),
-            getRiskLevelLearners({ schoolYear, term: termParam, riskLevel: "high" }).catch(() => ({ count: 1, notes: [] })),
+            getRiskLevelLearners({ schoolYear, term: termParam, riskLevel: "low" }).catch(() => ({ count: 0, notes: [] })),
+            getRiskLevelLearners({ schoolYear, term: termParam, riskLevel: "medium" }).catch(() => ({ count: 0, notes: [] })),
+            getRiskLevelLearners({ schoolYear, term: termParam, riskLevel: "high" }).catch(() => ({ count: 0, notes: [] })),
           ]);
 
         if (cancelled) return;
@@ -89,9 +76,9 @@ export default function AtRiskBreakdown() {
         setSummary(summaryData || EMPTY_SUMMARY);
         setDistribution(distData || EMPTY_DISTRIBUTION);
         setBreakdown(breakdownData || EMPTY_BREAKDOWN);
-        setLowNotes(lowData || { count: 2, notes: [] });
-        setMediumNotes(mediumData || { count: 4, notes: [] });
-        setHighNotes(highData || { count: 1, notes: [] });
+        setLowNotes(lowData || { count: 0, notes: [] });
+        setMediumNotes(mediumData || { count: 0, notes: [] });
+        setHighNotes(highData || { count: 0, notes: [] });
       } catch (err) {
         if (!cancelled) {
           setError(err.message || "Failed to load at-risk data");
@@ -120,25 +107,18 @@ export default function AtRiskBreakdown() {
         </div>
       </div>
 
-      {/* Filter Row: Term Tabs on Left, School Year dropdown on Right */}
+      {/* Filter Row: Term Tabs on Left, Dropdown on Right */}
       <div className="ar-filter-row">
         <TermTabs active={activeTerm} onChange={setActiveTerm} disabled={loading} />
 
         <div className="ar-filter-group">
-          <div className="ar-filter-control-compact">
-            <select
-              className="ar-filter-select-compact"
-              value={schoolYear}
-              onChange={(e) => setSchoolYear(e.target.value)}
-              disabled={loading}
-            >
-              {schoolYearsList.map((sy) => (
-                <option key={sy.id} value={sy.value}>
-                  {sy.label}
-                </option>
-              ))}
-            </select>
-          </div>
+          <DropdownSelect
+            label="School Year"
+            value={schoolYear}
+            options={schoolYearsList}
+            onChange={setSchoolYear}
+            disabled={loading}
+          />
         </div>
       </div>
 

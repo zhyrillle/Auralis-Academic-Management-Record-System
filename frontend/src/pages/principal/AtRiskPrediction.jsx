@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { AlertCircle, MinusCircle, AlertTriangle, Users, Search, X } from "lucide-react";
+import DropdownSelect from "../../components/common/DropdownSelect";
 import TermTabs from "../../components/at-risk/TermTabs";
 import RiskStatCard from "../../components/at-risk/RiskStatCard";
 import RiskSection from "../../components/at-risk/RiskSection";
 import StudentRiskCard from "../../components/at-risk/StudentRiskCard";
 import {
+  getAtRiskOptions,
   getAtRiskPredictionSummary,
   getStudentsByRiskLevel,
 } from "../../services/atRiskPredictionApi";
@@ -16,12 +18,18 @@ const EMPTY_STUDENTS = { students: [], totalCount: 0 };
 
 export default function AtRiskPrediction() {
   const [activeTerm, setActiveTerm] = useState("overall");
-  const [gradeLevel, setGradeLevel] = useState("");
+  const [gradeLevel, setGradeLevel] = useState("all");
   const [schoolYear, setSchoolYear] = useState("2026-2027");
   const [schoolYearsList, setSchoolYearsList] = useState([
-    { id: "1", value: "2026-2027", label: "SY 2026-2027 (Active)" },
-    { id: "2", value: "2025-2026", label: "SY 2025-2026" },
-    { id: "3", value: "2027-2028", label: "SY 2027-2028" },
+    { value: "2026-2027", label: "SY 2026–2027" },
+    { value: "2025-2026", label: "SY 2025–2026" },
+  ]);
+  const [gradeLevelOptions, setGradeLevelOptions] = useState([
+    { value: "all", label: "All Grade Levels" },
+    { value: "7", label: "Grade 7" },
+    { value: "8", label: "Grade 8" },
+    { value: "9", label: "Grade 9" },
+    { value: "10", label: "Grade 10" },
   ]);
   const [summary, setSummary] = useState(EMPTY_SUMMARY);
   const [highStudents, setHighStudents] = useState(EMPTY_STUDENTS);
@@ -30,30 +38,19 @@ export default function AtRiskPrediction() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // Load school years from backend on mount
+  // Load dynamic options on mount
   useEffect(() => {
-    fetch("http://localhost:5000/api/school-years")
-      .then((res) => (res.ok ? res.json() : []))
-      .then((years) => {
-        if (Array.isArray(years) && years.length > 0) {
-          const formatted = years.map((y) => {
-            const val = `${y.starts_on}-${y.ends_on}`;
-            const isOngoing = (y.status || "").toLowerCase() === "ongoing" || (y.status || "").toLowerCase() === "active";
-            return {
-              id: String(y.school_year_id),
-              value: val,
-              label: `SY ${val}${isOngoing ? " (Active)" : ""}`,
-              isOngoing,
-            };
-          });
-          setSchoolYearsList(formatted);
-          const activeYear = formatted.find((y) => y.isOngoing);
-          if (activeYear) {
-            setSchoolYear(activeYear.value);
-          }
+    getAtRiskOptions()
+      .then((opts) => {
+        if (opts.schoolYears && opts.schoolYears.length > 0) {
+          setSchoolYearsList(opts.schoolYears);
+          setSchoolYear(opts.schoolYears[0].value);
+        }
+        if (opts.gradeLevels && opts.gradeLevels.length > 0) {
+          setGradeLevelOptions(opts.gradeLevels);
         }
       })
-      .catch(() => {});
+      .catch((err) => console.warn("Failed to load at-risk options:", err));
   }, []);
 
   // "See all" modal state
@@ -156,39 +153,25 @@ export default function AtRiskPrediction() {
         </div>
       </div>
 
-      {/* Filter Row: Term Tabs on Left, Selects on Right */}
+      {/* Filter Row: Term Tabs on Left, Dropdowns on Right */}
       <div className="ar-filter-row">
         <TermTabs active={activeTerm} onChange={setActiveTerm} disabled={loading} />
 
         <div className="ar-filter-group">
-          <div className="ar-filter-control-compact">
-            <select
-              className="ar-filter-select-compact"
-              value={gradeLevel}
-              onChange={(e) => setGradeLevel(e.target.value)}
-              disabled={loading}
-            >
-              <option value="">Grade Level</option>
-              <option value="7">Grade 7</option>
-              <option value="8">Grade 8</option>
-              <option value="9">Grade 9</option>
-              <option value="10">Grade 10</option>
-            </select>
-          </div>
-          <div className="ar-filter-control-compact">
-            <select
-              className="ar-filter-select-compact"
-              value={schoolYear}
-              onChange={(e) => setSchoolYear(e.target.value)}
-              disabled={loading}
-            >
-              {schoolYearsList.map((sy) => (
-                <option key={sy.id} value={sy.value}>
-                  {sy.label}
-                </option>
-              ))}
-            </select>
-          </div>
+          <DropdownSelect
+            label="Grade Level"
+            value={gradeLevel}
+            options={gradeLevelOptions}
+            onChange={setGradeLevel}
+            disabled={loading}
+          />
+          <DropdownSelect
+            label="School Year"
+            value={schoolYear}
+            options={schoolYearsList}
+            onChange={setSchoolYear}
+            disabled={loading}
+          />
         </div>
       </div>
 
