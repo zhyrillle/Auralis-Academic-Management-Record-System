@@ -123,7 +123,7 @@ export default function HistoricalComparison() {
     return [
       {
         label: "Total Students",
-        value: data.totalStudents.toLocaleString(),
+        value: (data.totalStudents ?? 0).toLocaleString(),
         description:
           data.term === "overall"
             ? "Across all three terms"
@@ -148,7 +148,7 @@ export default function HistoricalComparison() {
       {
         label: "Average Grade",
         value: currentAverage,
-        description: data.primarySchoolYear.label,
+        description: data.primarySchoolYear?.label || "Primary SY",
         icon: ChartNoAxesCombined,
         tone: "gold",
       },
@@ -180,7 +180,9 @@ export default function HistoricalComparison() {
     );
   }
 
-  const allYears = data.availableSchoolYears;
+  const allYears = Array.isArray(data.availableSchoolYears)
+    ? data.availableSchoolYears
+    : [];
   const primaryOptions = allYears
     .filter((year) => year.value !== comparisonSchoolYear)
     .map((year) => ({ value: year.value, label: year.label }));
@@ -191,6 +193,11 @@ export default function HistoricalComparison() {
   const displayedTerm = data.term;
   const selectedTermIndex =
     displayedTerm === "overall" ? null : termIndex(displayedTerm);
+  const primaryLabel = data.primarySchoolYear?.label || primarySchoolYear;
+  const comparisonLabel = data.comparisonSchoolYear?.label || comparisonSchoolYear;
+  const primaryTrend = Array.isArray(data.primaryTrend) ? data.primaryTrend : [0, 0, 0];
+  const comparisonTrend = Array.isArray(data.comparisonTrend) ? data.comparisonTrend : [0, 0, 0];
+  const totalLearnersCount = data.totalStudents ?? 0;
 
   return (
     <main className="pa-page">
@@ -198,9 +205,6 @@ export default function HistoricalComparison() {
         <div>
           <div className="pa-title-row">
             <h1>Historical Comparison</h1>
-            {import.meta.env.DEV && (
-              <span className="pa-preview-badge">Preview data</span>
-            )}
           </div>
           <p>Compare average grades and pass rates across two school years.</p>
         </div>
@@ -303,35 +307,35 @@ export default function HistoricalComparison() {
                 >
                   <span>
                     <i style={{ "--series-color": "#17376d" }} />
-                    {data.primarySchoolYear.label}
+                    {primaryLabel}
                   </span>
                   <span>
                     <i style={{ "--series-color": "#d4a017" }} />
-                    {data.comparisonSchoolYear.label}
+                    {comparisonLabel}
                   </span>
                 </div>
               </div>
               {displayedTerm === "overall" ? (
                 <LineChart
-                  ariaLabel={`Average grade comparison for ${data.primarySchoolYear.label} and ${data.comparisonSchoolYear.label}`}
+                  ariaLabel={`Average grade comparison for ${primaryLabel} and ${comparisonLabel}`}
                   labels={["Term 1", "Term 2", "Term 3"]}
                   series={[
                     {
                       id: "primary",
-                      label: data.primarySchoolYear.label,
+                      label: primaryLabel,
                       color: "#17376d",
-                      values: data.primaryTrend.map((value) => ({
+                      values: primaryTrend.map((value) => ({
                         value,
-                        detail: `${data.totalStudents} learners`,
+                        detail: `${totalLearnersCount} learners`,
                       })),
                     },
                     {
                       id: "comparison",
-                      label: data.comparisonSchoolYear.label,
+                      label: comparisonLabel,
                       color: "#d4a017",
-                      values: data.comparisonTrend.map((value) => ({
+                      values: comparisonTrend.map((value) => ({
                         value,
-                        detail: `${data.totalStudents} learners`,
+                        detail: `${totalLearnersCount} learners`,
                       })),
                     },
                   ]}
@@ -346,16 +350,16 @@ export default function HistoricalComparison() {
                     values: [
                       {
                         id: `${row.id}-primary`,
-                        label: data.primarySchoolYear.label,
+                        label: primaryLabel,
                         value: row.primaryAverage,
-                        detail: `${row.learnerCount} learners`,
+                        detail: `${row.learnerCount ?? 0} learners`,
                         color: "#17376d",
                       },
                       {
                         id: `${row.id}-comparison`,
-                        label: data.comparisonSchoolYear.label,
+                        label: comparisonLabel,
                         value: row.comparisonAverage,
-                        detail: `${row.learnerCount} learners`,
+                        detail: `${row.learnerCount ?? 0} learners`,
                         color: "#d4a017",
                       },
                     ],
@@ -378,8 +382,8 @@ export default function HistoricalComparison() {
               </div>
               <HistoricalComparisonTable
                 rows={rows}
-                primaryLabel={data.primarySchoolYear.label}
-                comparisonLabel={data.comparisonSchoolYear.label}
+                primaryLabel={primaryLabel}
+                comparisonLabel={comparisonLabel}
               />
             </section>
           </>

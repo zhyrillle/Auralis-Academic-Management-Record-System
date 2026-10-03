@@ -9,11 +9,9 @@ export default function StackedBarChart({
 }) {
   const legendItems = suppliedLegendItems || groups[0]?.segments || [];
   const hasLimitedViewport = Number.isInteger(maxVisibleGroups);
-  const hasData =
-    groups.length > 0 &&
-    groups.some((group) =>
-      group.segments.some((segment) => Number(segment.value) > 0),
-    );
+  const isScrollable = hasLimitedViewport && groups.length > maxVisibleGroups;
+  // Render rows whenever groups exist; zero-valued segments simply draw empty tracks.
+  const hasData = groups.length > 0;
 
   return (
     <div className="stacked-bar-chart" role="group" aria-label={ariaLabel}>

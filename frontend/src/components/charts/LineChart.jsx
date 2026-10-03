@@ -29,10 +29,14 @@ export default function LineChart({
     index *
       ((WIDTH - PADDING.left - PADDING.right) /
         Math.max(categories.length - 1, 1));
-  const yFor = (value) =>
-    PADDING.top +
-    ((maximum - value) / Math.max(maximum - minimum, 1)) *
-      (HEIGHT - PADDING.top - PADDING.bottom);
+  const yFor = (value) => {
+    const clamped = Math.max(minimum, Math.min(maximum, Number(value || 0)));
+    return (
+      PADDING.top +
+      ((maximum - clamped) / Math.max(maximum - minimum, 1)) *
+        (HEIGHT - PADDING.top - PADDING.bottom)
+    );
+  };
 
   return (
     <div className="chart-viewport chart-viewport--wide line-chart">
