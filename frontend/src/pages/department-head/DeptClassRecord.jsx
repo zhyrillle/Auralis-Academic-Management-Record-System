@@ -1,816 +1,645 @@
-import React, { useMemo, useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import {
-  Bell,
-  ChevronDown,
-  AlertTriangle,
-  X,
-  Send,
+  Download,
   FileSpreadsheet,
-  Printer,
-  Inbox,
+  LoaderCircle,
 } from "lucide-react";
-
-import backIconUrl from "../../assets/backButton.svg";
-import unavailableIconUrl from "../../assets/adviser-assets/unavailableicon.png";
-import { getStoredUser } from "../../utils/auth";
-
-// Services
+import DropdownSelect from "../../components/common/DropdownSelect.jsx";
+import SearchBar from "../../components/common/SearchBar.jsx";
+import Toast from "../../components/common/Toast.jsx";
 import {
   getDeptFilterOptions,
   getDeptClassRecord,
-  getDeptMissingGradesAlerts,
-  sendTeacherGradeReminder,
-} from "../../services/deptHeadClassRecordApi";
+  downloadDeptClassRecord,
+} from "../../services/deptHeadClassRecordApi.js";
+import { getStoredUser } from "../../utils/auth.js";
+import "../../styles/masterSheet.css";
 
-// DepEd Print Modal
-import DepEdClassRecordPrintModal from "../../components/DepEdClassRecordPrintModal";
+const getUserId = (user) => user?.user_id || user?.id || user?.user?.user_id || user?.user?.id || 4;
+const emptyToast = { message: "", variant: "success", icon: null };
 
-// Styles
-import "../../styles/ClassRecord.css";
-
-const MOCK_STUDENTS = [
-  { id: "s1", lrn: "145783920614", firstName: "Alex Matthew", lastName: "Cruz", sex: "M" },
-  { id: "s2", lrn: "238691475820", firstName: "Joshua Carlo", lastName: "Ramirez", sex: "M" },
-  { id: "s3", lrn: "564920183747", firstName: "Daniel Joseph", lastName: "Reyes", sex: "M" },
-  { id: "s4", lrn: "392748561830", firstName: "Adrian Kyle", lastName: "Santos", sex: "M" },
-  { id: "s5", lrn: "817345629104", firstName: "Zachary James", lastName: "Villanueva", sex: "M" },
-  { id: "s6", lrn: "472918365104", firstName: "Nathaniel John", lastName: "Garcia", sex: "M" },
-  { id: "s7", lrn: "583027194658", firstName: "Miguel Andre", lastName: "Dela Cruz", sex: "M" },
-  { id: "s8", lrn: "694135820477", firstName: "Patrick Luis", lastName: "Mendoza", sex: "M" },
-  { id: "s9", lrn: "715284639501", firstName: "Christian Paolo", lastName: "Torres", sex: "M" },
-  { id: "s10", lrn: "826395740612", firstName: "Gabriel Miguel", lastName: "Navarro", sex: "M" },
-  { id: "s11", lrn: "937406851723", firstName: "Bianca Mae", lastName: "Santos", sex: "F" },
-  { id: "s12", lrn: "148517962834", firstName: "Erika Nicole", lastName: "Mendoza", sex: "F" },
-  { id: "s13", lrn: "259628073945", firstName: "Sophia Mae", lastName: "Rivera", sex: "F" },
-  { id: "s14", lrn: "360739184056", firstName: "Trisha Anne", lastName: "Torres", sex: "F" },
-  { id: "s15", lrn: "471840295167", firstName: "Maria Angelica", lastName: "Reyes", sex: "F" },
-  { id: "s16", lrn: "582951306278", firstName: "Isabella Grace", lastName: "Garcia", sex: "F" },
-  { id: "s17", lrn: "693062417389", firstName: "Nicole Andrea", lastName: "Dela Cruz", sex: "F" },
-  { id: "s18", lrn: "704173528490", firstName: "Camille Rose", lastName: "Navarro", sex: "F" },
-  { id: "s19", lrn: "815284639501", firstName: "Julia Marie", lastName: "Fernandez", sex: "F" },
-  { id: "s20", lrn: "926395740612", firstName: "Gabrielle Anne", lastName: "Villanueva", sex: "F" },
-];
-
-const createGradeState = (students) => {
-  const initialState = {};
-  students.forEach((student) => {
-    initialState[student.id] = {
-      writtenWorks: {},
-      performanceTasks: {},
-      quarterlyAssessment: "",
-      initialGrade: "",
-      quarterlyGrade: "",
-    };
-  });
-  return initialState;
+const formatGradeLevelLabel = (name) => {
+  if (!name) return "Grade Level";
+  const str = String(name).trim();
+  if (/^g\d+$/i.test(str)) {
+    return `Grade ${str.replace(/[^0-9]/g, "")}`;
+  }
+  return str;
 };
 
-export default function DeptClassRecord({ activeClass, onBack }) {
-  const navigate = useNavigate();
-  const currentUser = useMemo(() => getStoredUser(), []);
+const formatSubmissionDeadline = (terms = []) => {
+  if (!terms || !terms.length) return "Oct 15, 2026";
+  const deadlines = terms
+    .map((term) => ({
+      deadline: term.submissionDeadlineAt,
+      timestamp: new Date(term.submissionDeadlineAt).getTime(),
+    }))
+    .filter((term) => term.deadline && Number.isFinite(term.timestamp))
+    .sort((a, b) => a.timestamp - b.timestamp);
 
-  // Department name
-  const departmentName =
-    currentUser?.department_name ||
-    currentUser?.department ||
-    "English";
+  if (!deadlines.length) return "Oct 15, 2026";
 
-  // Filter States
-  const [filterOptions, setFilterOptions] = useState({
-    schoolYears: ["SY 2025-2026", "SY 2026-2027"],
-    gradeLevels: ["All", "Grade 7", "Grade 8", "Grade 9", "Grade 10"],
-    sections: ["All", "Gemelina", "Mahogany", "Narra", "Tanguile"],
-    teachers: ["All", "Mr. Santos", "Ms. Garcia", "Mr. Ramirez", "Ms. Reyes"],
+  const now = Date.now();
+  const relevantDeadline =
+    deadlines.find((term) => term.timestamp >= now) ||
+    deadlines[deadlines.length - 1];
+
+  return new Date(relevantDeadline.deadline).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
   });
+};
 
-  const [selectedSY, setSelectedSY] = useState("SY 2025-2026");
-  const [selectedSection, setSelectedSection] = useState(
-    activeClass?.sectionName || "All"
-  );
-  const [selectedGradeLevel, setSelectedGradeLevel] = useState("All");
-  const [selectedTeacher, setSelectedTeacher] = useState("All");
+// Default fallback placeholder rows if a section has no students yet
+const DEFAULT_EMPTY_ROWS = Array.from({ length: 10 }, (_, i) => ({
+  studentId: `placeholder-${i + 1}`,
+  studentSectionId: `placeholder-${i + 1}`,
+  lrn: "—",
+  displayName: "—",
+  firstName: "",
+  lastName: "",
+  sex: i < 5 ? "M" : "F",
+  grades: {
+    english: {
+      terms: [null, null, null],
+      finalGrade: null,
+    },
+  },
+  generalAverage: null,
+  isPlaceholder: true,
+}));
 
-  // Dropdown open states
-  const [openDropdown, setOpenDropdown] = useState(null);
+export default function DeptClassRecord() {
+  const currentUser = useMemo(() => getStoredUser(), []);
+  const effectiveUserId = useMemo(() => getUserId(currentUser), [currentUser]);
 
-  // Active Term
-  const [activeTerm, setActiveTerm] = useState("T1");
+  const [isLoadingOptions, setIsLoadingOptions] = useState(true);
+  const [isLoadingRecord, setIsLoadingRecord] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [toast, setToast] = useState(emptyToast);
 
-  // Print Modal & Missing Alert Modal states
-  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
-  const [isMissingAlertOpen, setIsMissingAlertOpen] = useState(false);
-  const [missingAlerts, setMissingAlerts] = useState([]);
-  const [reminderStatus, setReminderStatus] = useState({});
+  // Filters State
+  const [filterData, setFilterData] = useState(null);
+  const [selectedSchoolYearId, setSelectedSchoolYearId] = useState("1");
+  const [selectedGradeLevelId, setSelectedGradeLevelId] = useState("all");
+  const [selectedSectionId, setSelectedSectionId] = useState("1");
 
-  // Dynamic columns
-  const [writtenWorkColumns, setWrittenWorkColumns] = useState([
-    { id: "ww1", label: "1" },
-    { id: "ww2", label: "2" },
-    { id: "ww3", label: "3" },
-    { id: "ww4", label: "4" },
-    { id: "ww5", label: "5" },
-  ]);
+  // Record Data State
+  const [recordData, setRecordData] = useState(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
-  const [performanceTaskColumns, setPerformanceTaskColumns] = useState([
-    { id: "pt1", label: "1" },
-    { id: "pt2", label: "2" },
-    { id: "pt3", label: "3" },
-    { id: "pt4", label: "4" },
-    { id: "pt5", label: "5" },
-  ]);
-
-  // Grades state
-  const [grades, setGrades] = useState(() => createGradeState(MOCK_STUDENTS));
+  const departmentName = useMemo(() => {
+    return (
+      recordData?.department?.name ||
+      filterData?.department?.name ||
+      currentUser?.department_name ||
+      currentUser?.department ||
+      "English"
+    );
+  }, [recordData, filterData, currentUser]);
 
   // Load filter options on mount
   useEffect(() => {
-    getDeptFilterOptions(currentUser?.department_id).then(setFilterOptions);
-    getDeptMissingGradesAlerts(currentUser?.department_id, activeTerm).then((res) => {
-      setMissingAlerts(res?.alerts || []);
-    });
-  }, [currentUser, activeTerm]);
+    let isCancelled = false;
 
-  // Students by sex
-  const maleStudents = useMemo(
-    () => MOCK_STUDENTS.filter((student) => student.sex === "M"),
-    []
+    async function loadOptions() {
+      setIsLoadingOptions(true);
+      try {
+        const options = await getDeptFilterOptions(effectiveUserId);
+        if (isCancelled) return;
+
+        if (options && options.sections && options.sections.length > 0) {
+          setFilterData(options);
+
+          // Find current or first school year
+          const currentSy = options.schoolYears.find((sy) => sy.isCurrent) || options.schoolYears[0];
+          if (currentSy) {
+            setSelectedSchoolYearId(String(currentSy.id));
+          }
+
+          // Default to first section (e.g. Mahogany)
+          if (!selectedSectionId && options.sections[0]) {
+            setSelectedSectionId(String(options.sections[0].sectionId));
+          }
+        }
+      } catch (err) {
+        console.warn("Could not load filter options from API:", err);
+      } finally {
+        if (!isCancelled) {
+          setIsLoadingOptions(false);
+        }
+      }
+    }
+
+    loadOptions();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [effectiveUserId]);
+
+  // Fetch Class Record whenever selectedSectionId or selectedSchoolYearId changes
+  useEffect(() => {
+    if (!selectedSectionId) return;
+
+    let isCancelled = false;
+
+    async function loadRecord() {
+      setIsLoadingRecord(true);
+      try {
+        const data = await getDeptClassRecord({
+          sectionId: selectedSectionId,
+          schoolYearId: selectedSchoolYearId || "1",
+          userId: effectiveUserId,
+        });
+
+        if (isCancelled) return;
+        if (data) {
+          setRecordData(data);
+        }
+      } catch (err) {
+        console.warn("Error fetching department class record:", err);
+      } finally {
+        if (!isCancelled) {
+          setIsLoadingRecord(false);
+        }
+      }
+    }
+
+    loadRecord();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [selectedSectionId, selectedSchoolYearId, effectiveUserId]);
+
+  // Dropdown options
+  const schoolYearOptions = useMemo(() => {
+    if (filterData?.schoolYears?.length) {
+      return filterData.schoolYears.map((sy) => ({
+        value: String(sy.id),
+        label: `SY ${sy.label}${sy.isCurrent ? " (Current)" : ""}`,
+      }));
+    }
+    return [
+      { value: "1", label: "SY 2026-2027 (Current)" },
+      { value: "2", label: "SY 2025-2026" },
+      { value: "3", label: "SY 2027-2028" },
+    ];
+  }, [filterData]);
+
+  const gradeLevelOptions = useMemo(() => {
+    if (filterData?.gradeLevels?.length) {
+      return [
+        { value: "all", label: "All Grade Levels" },
+        ...filterData.gradeLevels.map((gl) => ({
+          value: String(gl.id),
+          label: formatGradeLevelLabel(gl.name),
+        })),
+      ];
+    }
+    return [
+      { value: "all", label: "All Grade Levels" },
+      { value: "1", label: "Grade 7" },
+      { value: "2", label: "Grade 8" },
+      { value: "3", label: "Grade 9" },
+      { value: "4", label: "Grade 10" },
+    ];
+  }, [filterData]);
+
+  // Sections filtered by selected Grade Level
+  const filteredSections = useMemo(() => {
+    const list = filterData?.sections || [
+      { sectionId: 1, sectionName: "Mahogany", gradeLevelId: 1, gradeLevelName: "G7" },
+      { sectionId: 2, sectionName: "Narra", gradeLevelId: 1, gradeLevelName: "G7" },
+      { sectionId: 7, sectionName: "Molave", gradeLevelId: 1, gradeLevelName: "G7" },
+      { sectionId: 17, sectionName: "Tanguile", gradeLevelId: 1, gradeLevelName: "G7" },
+      { sectionId: 8, sectionName: "Honesty", gradeLevelId: 2, gradeLevelName: "G8" },
+      { sectionId: 9, sectionName: "Fortitude", gradeLevelId: 2, gradeLevelName: "G8" },
+      { sectionId: 10, sectionName: "Wisdom", gradeLevelId: 2, gradeLevelName: "G8" },
+      { sectionId: 11, sectionName: "Opal", gradeLevelId: 3, gradeLevelName: "G9" },
+      { sectionId: 12, sectionName: "Sapphire", gradeLevelId: 3, gradeLevelName: "G9" },
+      { sectionId: 13, sectionName: "Emerald", gradeLevelId: 3, gradeLevelName: "G9" },
+      { sectionId: 14, sectionName: "Jupiter", gradeLevelId: 4, gradeLevelName: "G10" },
+      { sectionId: 15, sectionName: "Saturn", gradeLevelId: 4, gradeLevelName: "G10" },
+      { sectionId: 16, sectionName: "Venus", gradeLevelId: 4, gradeLevelName: "G10" },
+    ];
+
+    if (selectedGradeLevelId === "all") return list;
+    return list.filter(
+      (sec) => String(sec.gradeLevelId) === String(selectedGradeLevelId)
+    );
+  }, [filterData, selectedGradeLevelId]);
+
+  const sectionOptions = useMemo(() => {
+    return filteredSections.map((sec) => ({
+      value: String(sec.sectionId),
+      label: `${formatGradeLevelLabel(sec.gradeLevelName)} - ${sec.sectionName}`,
+    }));
+  }, [filteredSections]);
+
+  const handleSchoolYearChange = (syId) => {
+    setSelectedSchoolYearId(syId);
+  };
+
+  const handleGradeLevelChange = (glId) => {
+    setSelectedGradeLevelId(glId);
+    const newFiltered =
+      glId === "all"
+        ? filterData?.sections || []
+        : (filterData?.sections || []).filter(
+            (sec) => String(sec.gradeLevelId) === String(glId)
+          );
+    if (newFiltered.length > 0) {
+      const stillValid = newFiltered.some(
+        (sec) => String(sec.sectionId) === String(selectedSectionId)
+      );
+      if (!stillValid) {
+        setSelectedSectionId(String(newFiltered[0].sectionId));
+      }
+    }
+  };
+
+  const handleSectionChange = (secId) => {
+    setSelectedSectionId(secId);
+  };
+
+  // Determine current active section name and grade level
+  const currentSectionMeta = useMemo(() => {
+    const found = filteredSections.find(
+      (s) => String(s.sectionId) === String(selectedSectionId)
+    );
+    if (found) {
+      return {
+        sectionName: found.sectionName,
+        gradeLevel: formatGradeLevelLabel(found.gradeLevelName),
+      };
+    }
+    return {
+      sectionName: recordData?.section?.name || "Mahogany",
+      gradeLevel: formatGradeLevelLabel(recordData?.section?.gradeLevel || "Grade 7"),
+    };
+  }, [filteredSections, selectedSectionId, recordData]);
+
+  // Students list: Use actual students from backend, or placeholder blank rows so the table is ALWAYS visible
+  const activeStudents = useMemo(() => {
+    if (recordData?.students && recordData.students.length > 0) {
+      return recordData.students;
+    }
+    return DEFAULT_EMPTY_ROWS;
+  }, [recordData?.students]);
+
+  // Search filter (by student name or LRN)
+  const filteredStudents = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return activeStudents;
+    return activeStudents.filter(
+      (st) =>
+        (st.displayName && st.displayName.toLowerCase().includes(query)) ||
+        `${st.firstName || ""} ${st.lastName || ""}`.toLowerCase().includes(query) ||
+        (st.lrn && String(st.lrn).toLowerCase().includes(query))
+    );
+  }, [activeStudents, searchQuery]);
+
+  const groupedStudents = useMemo(() => {
+    const males = [];
+    const females = [];
+    const unspecified = [];
+    for (const student of filteredStudents) {
+      if (student.sex === "M") males.push(student);
+      else if (student.sex === "F") females.push(student);
+      else unspecified.push(student);
+    }
+    return { males, females, unspecified };
+  }, [filteredStudents]);
+
+  // Strictly Department-Specific Subject: English
+  const subjects = useMemo(() => {
+    if (recordData?.subjects && recordData.subjects.length > 0) {
+      return recordData.subjects;
+    }
+    return [{ key: "english", code: "ENG", label: "English", available: true }];
+  }, [recordData]);
+
+  const submissionDeadline = useMemo(
+    () => formatSubmissionDeadline(recordData?.terms),
+    [recordData?.terms]
   );
 
-  const femaleStudents = useMemo(
-    () => MOCK_STUDENTS.filter((student) => student.sex === "F"),
-    []
+  // Download Handler (Excel XLSX)
+  const handleDownload = async () => {
+    if (!selectedSectionId || isDownloading) return;
+    setIsDownloading(true);
+    try {
+      const { blob, filename } = await downloadDeptClassRecord({
+        sectionId: selectedSectionId,
+        schoolYearId: selectedSchoolYearId,
+        userId: effectiveUserId,
+      });
+
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+
+      setToast({
+        message: "Department class record spreadsheet downloaded successfully.",
+        variant: "success",
+        icon: FileSpreadsheet,
+      });
+    } catch (err) {
+      setToast({
+        message: err.message || "Failed to download class record spreadsheet.",
+        variant: "error",
+      });
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  // Group Header Row
+  const renderGroupHeader = (label, key) => (
+    <tr key={`group-${key}`} className="ms-group-header-row">
+      <td
+        colSpan={1 + subjects.length * 4 + 1}
+        className="ms-group-header-cell"
+      >
+        {label}
+      </td>
+    </tr>
   );
 
-  const handleAddWrittenWork = () => {
-    setWrittenWorkColumns((prev) => [
-      ...prev,
-      { id: `ww${prev.length + 1}`, label: String(prev.length + 1) },
-    ]);
+  // Student Rows (Strictly View Mode: Plain Text Cells)
+  const renderStudentRows = (studentList, groupKey) => {
+    if (!studentList.length) {
+      return (
+        <tr key={`empty-${groupKey}`} className="ms-empty-group-row">
+          <td
+            colSpan={1 + subjects.length * 4 + 1}
+            className="ms-empty-group-cell"
+          >
+            No {groupKey} learners match this search.
+          </td>
+        </tr>
+      );
+    }
+
+    return studentList.map((student, index) => (
+      <tr
+        key={student.studentId || student.studentSectionId || `row-${index}`}
+        className="ms-student-row"
+      >
+        <td className="ms-name-cell">
+          <span className="ms-name-cell__index">{index + 1}.</span>
+          <span className="ms-name-cell__label">
+            {student.displayName && student.displayName !== "—"
+              ? student.displayName
+              : student.isPlaceholder
+              ? ""
+              : "—"}
+          </span>
+          {student.lrn && student.lrn !== "—" && (
+            <span style={{ display: "block", fontSize: "0.72rem", color: "#8a99ad", marginTop: "2px" }}>
+              LRN: {student.lrn}
+            </span>
+          )}
+        </td>
+
+        {subjects.map((subject) => {
+          const grades = student.grades?.[subject.key] || {
+            terms: [null, null, null],
+            finalGrade: null,
+          };
+          return (
+            <Fragment
+              key={`${student.studentId || student.studentSectionId}-${subject.key}`}
+            >
+              {grades.terms.map((grade, termIdx) => (
+                <td
+                  key={`${subject.key}-term-${termIdx + 1}`}
+                  className="ms-grade-cell"
+                >
+                  {grade !== null && grade !== undefined ? grade : "—"}
+                </td>
+              ))}
+              <td className="ms-final-cell">
+                {grades.finalGrade !== null && grades.finalGrade !== undefined
+                  ? grades.finalGrade
+                  : "—"}
+              </td>
+            </Fragment>
+          );
+        })}
+
+        <td className="ms-gen-avg-cell">
+          {student.generalAverage !== null && student.generalAverage !== undefined
+            ? student.generalAverage
+            : "—"}
+        </td>
+      </tr>
+    ));
   };
 
-  const handleAddPerformanceTask = () => {
-    setPerformanceTaskColumns((prev) => [
-      ...prev,
-      { id: `pt${prev.length + 1}`, label: String(prev.length + 1) },
-    ]);
-  };
-
-  const handleGradeChange = (studentId, category, columnId, value) => {
-    setGrades((prev) => ({
-      ...prev,
-      [studentId]: {
-        ...prev[studentId],
-        [category]: {
-          ...prev[studentId][category],
-          [columnId]: value,
-        },
-      },
-    }));
-  };
-
-  const handleSingleGradeChange = (studentId, field, value) => {
-    setGrades((prev) => ({
-      ...prev,
-      [studentId]: {
-        ...prev[studentId],
-        [field]: value,
-      },
-    }));
-  };
-
-  const handleSendReminder = async (item) => {
-    const key = `${item.teacherId || item.teacher}-${item.sectionName}`;
-    const res = await sendTeacherGradeReminder({
-      teacherId: item.teacherId,
-      sectionName: item.sectionName,
-      subjectName: departmentName,
-      term: activeTerm,
-    });
-    setReminderStatus((prev) => ({ ...prev, [key]: "Sent" }));
-  };
-
-  const handleBack = () => {
-    if (onBack) onBack();
-    else navigate("/department-head/dashboard");
-  };
-
-  // Section resolution: If "All", check if we show empty prompt
-  const hasSectionSelected = selectedSection && selectedSection !== "All";
-  const isAvailable = activeTerm === "T1";
-  const displaySection = hasSectionSelected ? selectedSection : "Gemelina";
+  const isRefreshing = isLoadingRecord && Boolean(recordData);
 
   return (
-    <div className="class-record-page dept-class-record-page">
-      {/* 1. Department Head Header Banner */}
-      <header className="dept-header-banner">
-        <div className="dept-header-left">
-          <h1 className="dept-header-title">
-            Department Head - {departmentName}
+    <div className="ms-container" aria-busy={isRefreshing}>
+      <Toast toast={toast} setToast={setToast} />
+
+      {/* 1. Header & Selectors (Redundant notification bell button with label 7 is removed) */}
+      <div className="ms-page-header">
+        <div>
+          <p className="ms-page-eyebrow">Department Head Report · {departmentName}</p>
+          <h1>
+            {currentSectionMeta.gradeLevel} - {currentSectionMeta.sectionName}
           </h1>
-        </div>
-        <div className="dept-header-right">
-          <button
-            type="button"
-            className="dept-bell-btn"
-            title="Notifications"
-            onClick={() => setIsMissingAlertOpen(true)}
-          >
-            <Bell size={18} />
-            <span className="dept-bell-badge">7</span>
-          </button>
-        </div>
-      </header>
-
-      {/* 2. Top Filter Bar Card */}
-      <section className="dept-filters-card">
-        <div className="dept-filters-left">
-          <span className="dept-filters-label">Filters:</span>
-
-          {/* School Year Dropdown */}
-          <div className="dept-filter-dropdown-wrap">
-            <button
-              type="button"
-              className="dept-filter-dropdown-btn"
-              onClick={() =>
-                setOpenDropdown(openDropdown === "sy" ? null : "sy")
-              }
-            >
-              <span>{selectedSY}</span>
-              <ChevronDown size={14} />
-            </button>
-            {openDropdown === "sy" && (
-              <div className="dept-filter-menu">
-                {filterOptions.schoolYears.map((sy) => (
-                  <button
-                    key={sy}
-                    type="button"
-                    className={`dept-filter-item ${selectedSY === sy ? "active" : ""}`}
-                    onClick={() => {
-                      setSelectedSY(sy);
-                      setOpenDropdown(null);
-                    }}
-                  >
-                    {sy}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Section Dropdown */}
-          <div className="dept-filter-dropdown-wrap">
-            <button
-              type="button"
-              className="dept-filter-dropdown-btn"
-              onClick={() =>
-                setOpenDropdown(openDropdown === "sec" ? null : "sec")
-              }
-            >
-              <span>
-                {selectedSection === "All" ? "Section" : selectedSection}
-              </span>
-              <ChevronDown size={14} />
-            </button>
-            {openDropdown === "sec" && (
-              <div className="dept-filter-menu">
-                {filterOptions.sections.map((sec) => (
-                  <button
-                    key={sec}
-                    type="button"
-                    className={`dept-filter-item ${selectedSection === sec ? "active" : ""}`}
-                    onClick={() => {
-                      setSelectedSection(sec);
-                      setOpenDropdown(null);
-                    }}
-                  >
-                    {sec}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Grade Level Dropdown */}
-          <div className="dept-filter-dropdown-wrap">
-            <button
-              type="button"
-              className="dept-filter-dropdown-btn"
-              onClick={() =>
-                setOpenDropdown(openDropdown === "gl" ? null : "gl")
-              }
-            >
-              <span>
-                {selectedGradeLevel === "All"
-                  ? "Grade Level"
-                  : selectedGradeLevel}
-              </span>
-              <ChevronDown size={14} />
-            </button>
-            {openDropdown === "gl" && (
-              <div className="dept-filter-menu">
-                {filterOptions.gradeLevels.map((gl) => (
-                  <button
-                    key={gl}
-                    type="button"
-                    className={`dept-filter-item ${selectedGradeLevel === gl ? "active" : ""}`}
-                    onClick={() => {
-                      setSelectedGradeLevel(gl);
-                      setOpenDropdown(null);
-                    }}
-                  >
-                    {gl}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Teacher Dropdown */}
-          <div className="dept-filter-dropdown-wrap">
-            <button
-              type="button"
-              className="dept-filter-dropdown-btn"
-              onClick={() =>
-                setOpenDropdown(openDropdown === "tch" ? null : "tch")
-              }
-            >
-              <span>
-                {selectedTeacher === "All" ? "Teacher" : selectedTeacher}
-              </span>
-              <ChevronDown size={14} />
-            </button>
-            {openDropdown === "tch" && (
-              <div className="dept-filter-menu">
-                {filterOptions.teachers.map((tch) => (
-                  <button
-                    key={tch}
-                    type="button"
-                    className={`dept-filter-item ${selectedTeacher === tch ? "active" : ""}`}
-                    onClick={() => {
-                      setSelectedTeacher(tch);
-                      setOpenDropdown(null);
-                    }}
-                  >
-                    {tch}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Right Grade Missing Alert Button */}
-        <div className="dept-filters-right">
-          <button
-            type="button"
-            className="dept-missing-alert-btn"
-            onClick={() => setIsMissingAlertOpen(true)}
-          >
-            <Bell size={15} className="dept-missing-bell-icon" />
-            <span>Grade Missing Alert</span>
-          </button>
-        </div>
-      </section>
-
-      {/* 3. Class Record Content Area */}
-      {!hasSectionSelected ? (
-        <div className="dept-empty-record-card">
-          <Inbox size={48} className="dept-empty-record-icon" />
-          <h3>No Class Record Selected</h3>
           <p>
-            Please select a section from the filter above to view its electronic
-            class record.
+            {currentSectionMeta.gradeLevel} · SY{" "}
+            {recordData?.schoolYear?.label ||
+              schoolYearOptions.find((o) => o.value === selectedSchoolYearId)?.label ||
+              "2026-2027"}{" "}
+            · {departmentName} Department
           </p>
         </div>
-      ) : (
-        <>
-          <div className="class-record-subheader">
-            <div>
-              <h2>Section: {displaySection}</h2>
-              <p>Review and manage student grades per term</p>
-            </div>
 
-            <div className="class-record-actions">
-              {/* PRINT / PREVIEW */}
-              <button
-                type="button"
-                className="class-record-action-btn download-btn"
-                onClick={() => setIsPrintModalOpen(true)}
-              >
-                <Printer size={15} style={{ marginRight: "6px" }} />
-                Download / Print
-              </button>
-
-              {/* TERMS */}
-              <div className="term-buttons">
-                <button
-                  type="button"
-                  className={activeTerm === "T1" ? "term-btn active" : "term-btn"}
-                  onClick={() => setActiveTerm("T1")}
-                >
-                  T1
-                </button>
-                <button
-                  type="button"
-                  className={activeTerm === "T2" ? "term-btn active" : "term-btn"}
-                  onClick={() => setActiveTerm("T2")}
-                >
-                  T2
-                </button>
-                <button
-                  type="button"
-                  className={activeTerm === "T3" ? "term-btn active" : "term-btn"}
-                  onClick={() => setActiveTerm("T3")}
-                >
-                  T3
-                </button>
-              </div>
-            </div>
+        {/* Dropdown Filters: School Year, Year Level (Grade Level), Section */}
+        <div
+          className="ms-selectors"
+          aria-label="Department Head class record filters"
+        >
+          <div className="ms-selector-field">
+            <span>School year</span>
+            <DropdownSelect
+              label="School year"
+              value={selectedSchoolYearId}
+              options={schoolYearOptions}
+              onChange={handleSchoolYearChange}
+              disabled={isRefreshing}
+            />
           </div>
 
-          {/* UNAVAILABLE STATE */}
-          {!isAvailable ? (
-            <div className="unavailable-state">
-              <img
-                src={unavailableIconUrl}
-                alt="Unavailable"
-                className="unavailable-icon"
-              />
-              <h3>This grading term is currently unavailable.</h3>
-              <p>
-                Access will be enabled once the official grading period begins.
-              </p>
-            </div>
-          ) : (
-            /* CLASS RECORD TABLE */
-            <div className="class-record-content">
-              <div className="student-count">
-                Total Students: {MOCK_STUDENTS.length}
-              </div>
+          <div className="ms-selector-field">
+            <span>Year level</span>
+            <DropdownSelect
+              label="Year level"
+              value={selectedGradeLevelId}
+              options={gradeLevelOptions}
+              onChange={handleGradeLevelChange}
+              disabled={isRefreshing}
+            />
+          </div>
 
-              <div className="class-record-table-wrapper">
-                <table className="class-record-table">
-                  <thead>
-                    <tr>
-                      <th rowSpan="2" className="number-header">
-                        No.
-                      </th>
-                      <th rowSpan="2" className="lrn-header">
-                        LRN
-                      </th>
-                      <th rowSpan="2" className="name-header">
-                        Learners' Name
-                      </th>
-
-                      {/* WRITTEN WORKS */}
-                      <th
-                        colSpan={writtenWorkColumns.length + 3}
-                        className="category-header"
-                      >
-                        <div className="category-title">
-                          <span>Written Works (30%)</span>
-                          <button
-                            type="button"
-                            className="add-column-btn"
-                            onClick={handleAddWrittenWork}
-                          >
-                            + Add
-                          </button>
-                        </div>
-                      </th>
-
-                      {/* PERFORMANCE TASKS */}
-                      <th
-                        colSpan={performanceTaskColumns.length + 3}
-                        className="category-header"
-                      >
-                        <div className="category-title">
-                          <span>Performance Tasks (50%)</span>
-                          <button
-                            type="button"
-                            className="add-column-btn"
-                            onClick={handleAddPerformanceTask}
-                          >
-                            + Add
-                          </button>
-                        </div>
-                      </th>
-
-                      {/* QUARTERLY ASSESSMENT */}
-                      <th colSpan="3" className="category-header">
-                        Quarterly Assessment (20%)
-                      </th>
-
-                      {/* FINAL GRADES */}
-                      <th rowSpan="2" className="grade-header">
-                        Initial
-                        <br />
-                        Grade
-                      </th>
-                      <th rowSpan="2" className="grade-header">
-                        Quarterly
-                        <br />
-                        Grade
-                      </th>
-                    </tr>
-
-                    {/* SUB HEADER */}
-                    <tr>
-                      {/* WRITTEN WORKS */}
-                      {writtenWorkColumns.map((column) => (
-                        <th key={column.id} className="sub-header">
-                          {column.label}
-                        </th>
-                      ))}
-                      <th className="sub-header total-header">Total</th>
-                      <th className="sub-header">PS</th>
-                      <th className="sub-header">WS</th>
-
-                      {/* PERFORMANCE TASKS */}
-                      {performanceTaskColumns.map((column) => (
-                        <th key={column.id} className="sub-header">
-                          {column.label}
-                        </th>
-                      ))}
-                      <th className="sub-header total-header">Total</th>
-                      <th className="sub-header">PS</th>
-                      <th className="sub-header">WS</th>
-
-                      {/* QUARTERLY ASSESSMENT */}
-                      <th className="sub-header">1</th>
-                      <th className="sub-header">PS</th>
-                      <th className="sub-header">WS</th>
-                    </tr>
-                  </thead>
-
-                  <tbody>
-                    {/* MALE STUDENTS */}
-                    <tr className="gender-divider-row">
-                      <td
-                        colSpan={
-                          3 +
-                          writtenWorkColumns.length +
-                          3 +
-                          performanceTaskColumns.length +
-                          3 +
-                          3 +
-                          2
-                        }
-                      >
-                        MALE
-                      </td>
-                    </tr>
-                    {maleStudents.map((student, index) => (
-                      <StudentRow
-                        key={student.id}
-                        student={student}
-                        number={index + 1}
-                        grades={grades}
-                        writtenWorkColumns={writtenWorkColumns}
-                        performanceTaskColumns={performanceTaskColumns}
-                        handleGradeChange={handleGradeChange}
-                        handleSingleGradeChange={handleSingleGradeChange}
-                      />
-                    ))}
-
-                    {/* FEMALE STUDENTS */}
-                    <tr className="gender-divider-row">
-                      <td
-                        colSpan={
-                          3 +
-                          writtenWorkColumns.length +
-                          3 +
-                          performanceTaskColumns.length +
-                          3 +
-                          3 +
-                          2
-                        }
-                      >
-                        FEMALE
-                      </td>
-                    </tr>
-                    {femaleStudents.map((student, index) => (
-                      <StudentRow
-                        key={student.id}
-                        student={student}
-                        number={maleStudents.length + index + 1}
-                        grades={grades}
-                        writtenWorkColumns={writtenWorkColumns}
-                        performanceTaskColumns={performanceTaskColumns}
-                        handleGradeChange={handleGradeChange}
-                        handleSingleGradeChange={handleSingleGradeChange}
-                      />
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </>
-      )}
-
-      {/* 4. Grade Missing Alert Modal */}
-      {isMissingAlertOpen && (
-        <div className="dept-missing-modal-overlay">
-          <div className="dept-missing-modal-box">
-            <div className="dept-missing-modal-header">
-              <div className="dept-missing-modal-title">
-                <AlertTriangle size={20} className="dept-alert-icon" />
-                <h3>Grade Missing Alert - {departmentName}</h3>
-              </div>
-              <button
-                type="button"
-                className="dept-modal-close-btn"
-                onClick={() => setIsMissingAlertOpen(false)}
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="dept-missing-modal-body">
-              {missingAlerts.length > 0 ? (
-                <div className="dept-missing-list">
-                  {missingAlerts.map((item, idx) => {
-                    const key = `${item.teacherId || item.teacher}-${item.sectionName}`;
-                    const isSent = reminderStatus[key] === "Sent";
-                    return (
-                      <div key={idx} className="dept-missing-item">
-                        <div className="dept-missing-item-info">
-                          <span className="dept-missing-teacher">
-                            {item.teacher}
-                          </span>
-                          <span className="dept-missing-details">
-                            {item.sectionName} — {item.missingReason || "Pending Submission"}
-                          </span>
-                        </div>
-                        <button
-                          type="button"
-                          className={`dept-remind-btn ${isSent ? "sent" : ""}`}
-                          disabled={isSent}
-                          onClick={() => handleSendReminder(item)}
-                        >
-                          <Send size={13} />
-                          {isSent ? "Reminder Sent" : "Send Reminder"}
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="dept-missing-empty">
-                  <Inbox size={36} />
-                  <span>No missing grade submissions found for {activeTerm}.</span>
-                </div>
-              )}
-            </div>
-
-            <div className="dept-missing-modal-footer">
-              <button
-                type="button"
-                className="dept-modal-btn"
-                onClick={() => setIsMissingAlertOpen(false)}
-              >
-                Close
-              </button>
-            </div>
+          <div className="ms-selector-field">
+            <span>Section</span>
+            <DropdownSelect
+              label="Section"
+              value={selectedSectionId}
+              options={sectionOptions}
+              onChange={handleSectionChange}
+              disabled={isRefreshing}
+            />
           </div>
         </div>
-      )}
+      </div>
 
-      {/* 5. DepEd Class Record Print Modal */}
-      <DepEdClassRecordPrintModal
-        isOpen={isPrintModalOpen}
-        onClose={() => setIsPrintModalOpen(false)}
-        metadata={{
-          region: "Region X",
-          division: "Gingoog City",
-          schoolName: "Gingoog City Comprehensive National High School",
-          schoolId: "304018",
-          schoolYear: selectedSY.replace("SY ", ""),
-          quarterLabel: activeTerm === "T1" ? "1st Quarter" : activeTerm === "T2" ? "2nd Quarter" : "3rd Quarter",
-          gradeAndSection: `Grade 10 - ${displaySection}`,
-          teacherName: selectedTeacher !== "All" ? selectedTeacher : "Subject Teacher",
-          subjectName: departmentName,
-        }}
-        writtenWorkColumns={writtenWorkColumns}
-        performanceTaskColumns={performanceTaskColumns}
-        students={MOCK_STUDENTS}
-        grades={grades}
-      />
+      {/* 2. Controls Row: Dropdown counters, Search bar, and Download button */}
+      <div
+        className={`ms-sheet-content ${isRefreshing ? "ms-sheet-content--busy" : ""}`}
+      >
+        {isRefreshing && (
+          <div className="ms-refresh-overlay" role="status" aria-live="polite">
+            <LoaderCircle size={20} className="ms-spin" aria-hidden="true" />
+            <span>Loading class record…</span>
+          </div>
+        )}
+
+        <div className="ms-controls-row">
+          {/* Dropdown counters */}
+          <div className="ms-summary">
+            <span className="ms-summary__metric">
+              <strong>{recordData?.students ? filteredStudents.length : 0}</strong>
+              <span>Learners</span>
+            </span>
+            <span className="ms-summary__metric">
+              <strong>{recordData?.completeness?.completedTermGrades ?? 0}</strong>/
+              <strong>{recordData?.completeness?.expectedTermGrades ?? (activeStudents.length * 3)}</strong>
+              <span>Term grades complete</span>
+            </span>
+          </div>
+
+          {/* Actions: Search bar and Download button */}
+          <div className="ms-control-actions">
+            <fieldset
+              className="ms-search-fieldset"
+              disabled={isRefreshing}
+            >
+              <SearchBar
+                query={searchQuery}
+                setQuery={setSearchQuery}
+                placeholder="Search by student name or LRN..."
+              />
+            </fieldset>
+
+            <button
+              type="button"
+              className="ms-download-btn"
+              onClick={handleDownload}
+              disabled={isDownloading || isRefreshing}
+              title="Download official XLSX spreadsheet"
+            >
+              {isDownloading ? (
+                <LoaderCircle
+                  size={17}
+                  className="ms-spin"
+                  aria-hidden="true"
+                />
+              ) : (
+                <Download size={17} aria-hidden="true" />
+              )}
+              <span>{isDownloading ? "Preparing…" : "Download XLSX"}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* 3. Class Record Table: ALWAYS DISPLAYED with columns and rows */}
+        <div className="ms-table-wrapper">
+          <table className="ms-table">
+            <thead>
+              <tr className="ms-header-row-1">
+                <th className="ms-name-header-cell" rowSpan={3}>
+                  Names of Learners
+                </th>
+                {subjects.map((subject) => (
+                  <th
+                    key={subject.key}
+                    colSpan={4}
+                    className="ms-subject-header"
+                  >
+                    {subject.label}
+                  </th>
+                ))}
+                <th rowSpan={3} className="ms-gen-avg-header">
+                  General Average
+                </th>
+              </tr>
+              <tr className="ms-header-row-2">
+                {subjects.map((subject) => (
+                  <Fragment key={subject.key}>
+                    <th colSpan={3} className="ms-term-group-header">
+                      Term
+                    </th>
+                    <th rowSpan={2} className="ms-fg-header-cell">
+                      Final Grade
+                    </th>
+                  </Fragment>
+                ))}
+              </tr>
+              <tr className="ms-header-row-3">
+                {subjects.map((subject) => (
+                  <Fragment key={subject.key}>
+                    <th className="ms-term-cell">1</th>
+                    <th className="ms-term-cell">2</th>
+                    <th className="ms-term-cell">3</th>
+                  </Fragment>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {renderGroupHeader("Male", "male")}
+              {renderStudentRows(groupedStudents.males, "male")}
+              {renderGroupHeader("Female", "female")}
+              {renderStudentRows(groupedStudents.females, "female")}
+              {groupedStudents.unspecified.length > 0 && (
+                <>
+                  {renderGroupHeader("Unspecified", "unspecified")}
+                  {renderStudentRows(
+                    groupedStudents.unspecified,
+                    "unspecified"
+                  )}
+                </>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* 4. Footer with Deadline indicator (Strictly View Mode: No Save, Edit, or Submit buttons) */}
+        <footer className="ms-submission-footer">
+          <div className="ms-submission-footer__copy">
+            <span className="ms-submission-footer__icon" aria-hidden="true">
+              <FileSpreadsheet size={19} />
+            </span>
+            <div>
+              <strong>Deadline: {submissionDeadline}</strong>
+            </div>
+          </div>
+        </footer>
+      </div>
     </div>
   );
 }
 
-function StudentRow({
-  student,
-  number,
-  grades,
-  writtenWorkColumns,
-  performanceTaskColumns,
-  handleGradeChange,
-  handleSingleGradeChange,
-}) {
-  const studentGrades = grades[student.id] || {};
-
-  return (
-    <tr className="student-row">
-      <td className="number-cell">{number}</td>
-      <td className="lrn-cell">{student.lrn}</td>
-      <td className="name-cell">
-        {student.firstName} {student.lastName}
-      </td>
-
-      {/* WRITTEN WORKS */}
-      {writtenWorkColumns.map((column) => (
-        <td key={column.id} className="grade-input-cell">
-          <input
-            type="number"
-            min="0"
-            max="100"
-            value={studentGrades.writtenWorks?.[column.id] || ""}
-            onChange={(e) =>
-              handleGradeChange(
-                student.id,
-                "writtenWorks",
-                column.id,
-                e.target.value
-              )
-            }
-          />
-        </td>
-      ))}
-      <td className="computed-cell">-</td>
-      <td className="computed-cell">-</td>
-      <td className="computed-cell">-</td>
-
-      {/* PERFORMANCE TASKS */}
-      {performanceTaskColumns.map((column) => (
-        <td key={column.id} className="grade-input-cell">
-          <input
-            type="number"
-            min="0"
-            max="100"
-            value={studentGrades.performanceTasks?.[column.id] || ""}
-            onChange={(e) =>
-              handleGradeChange(
-                student.id,
-                "performanceTasks",
-                column.id,
-                e.target.value
-              )
-            }
-          />
-        </td>
-      ))}
-      <td className="computed-cell">-</td>
-      <td className="computed-cell">-</td>
-      <td className="computed-cell">-</td>
-
-      {/* QUARTERLY ASSESSMENT */}
-      <td className="grade-input-cell">
-        <input
-          type="number"
-          min="0"
-          max="100"
-          value={studentGrades.quarterlyAssessment || ""}
-          onChange={(e) =>
-            handleSingleGradeChange(
-              student.id,
-              "quarterlyAssessment",
-              e.target.value
-            )
-          }
-        />
-      </td>
-      <td className="computed-cell">-</td>
-      <td className="computed-cell">-</td>
-
-      {/* INITIAL GRADE */}
-      <td className="grade-input-cell final-grade-cell">
-        <input
-          type="number"
-          min="0"
-          max="100"
-          value={studentGrades.initialGrade || ""}
-          onChange={(e) =>
-            handleSingleGradeChange(student.id, "initialGrade", e.target.value)
-          }
-        />
-      </td>
-
-      {/* QUARTERLY GRADE */}
-      <td className="grade-input-cell final-grade-cell">
-        <input
-          type="number"
-          min="0"
-          max="100"
-          value={studentGrades.quarterlyGrade || ""}
-          onChange={(e) =>
-            handleSingleGradeChange(student.id, "quarterlyGrade", e.target.value)
-          }
-        />
-      </td>
-    </tr>
-  );
-}

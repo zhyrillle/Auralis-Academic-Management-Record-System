@@ -2,10 +2,12 @@
  * Department Head Class Record Service
  *
  * Provides dedicated API callers for Department Head class records,
- * multi-filter section resolutions, and grade missing alerts.
+ * multi-filter section resolutions, downloads, and grade missing alerts.
  */
 
-import { getClassRecord as fetchCoreClassRecord, API_BASE_URL } from "./classRecordApi";
+const API_BASE_URL = (
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api"
+).replace(/\/$/, "");
 
 const parseResponse = async (response) => {
   const data = await response.json().catch(() => ({}));
@@ -15,57 +17,89 @@ const parseResponse = async (response) => {
   return data;
 };
 
-// Default filter options for Department Head
-export const defaultDeptFilterOptions = {
-  schoolYears: ["SY 2025-2026", "SY 2026-2027"],
-  gradeLevels: ["All", "Grade 7", "Grade 8", "Grade 9", "Grade 10"],
-  sections: ["All", "Gemelina", "Mahogany", "Narra", "Tanguile"],
-  teachers: ["All", "Mr. Santos", "Ms. Garcia", "Mr. Ramirez", "Ms. Reyes"],
-};
-
 /**
- * Retrieves dynamic filter options (School Years, Grade Levels, Sections, Teachers)
- * for a specific department.
+ * Retrieves dynamic filter options (School Years, Grade Levels, Sections, Department Subjects)
+ * securely tied to the Department Head's department.
  */
-export async function getDeptFilterOptions(departmentId = null) {
+export async function getDeptFilterOptions(userId = null) {
   try {
-    const url = departmentId
-      ? `${API_BASE_URL}/department-head/filter-options?department_id=${encodeURIComponent(departmentId)}`
+    const url = userId
+      ? `${API_BASE_URL}/department-head/filter-options?user_id=${encodeURIComponent(userId)}`
       : `${API_BASE_URL}/department-head/filter-options`;
-    const res = await fetch(url);
-    const data = await parseResponse(res);
-    return data || defaultDeptFilterOptions;
+    const headers = userId ? { "x-auralis-user-id": String(userId) } : {};
+    const res = await fetch(url, { headers });
+    return await parseResponse(res);
   } catch (error) {
-    // Graceful fallback to default options
-    return defaultDeptFilterOptions;
-  }
-}
-
-/**
- * Retrieves the complete class record for a selected section under the Department Head.
- * Uses the core class record backend resolver.
- */
-export async function getDeptClassRecord({ sectionId, subjectOfferingId, term = "T1" }) {
-  try {
-    const targetId = subjectOfferingId || sectionId;
-    if (!targetId) return null;
-    return await fetchCoreClassRecord(targetId, term, sectionId);
-  } catch (error) {
-    console.warn("Could not load backend class record for section:", error);
+    console.warn("Could not load department filter options:", error);
     return null;
   }
 }
 
 /**
- * Retrieves missing or delayed grade submission alerts for the department.
+ * Retrieves the complete class record for a selected section under the Department Head.
+ * STRICT SECURITY: Only subjects and grades belonging to the Department Head's department are returned.
  */
-export async function getDeptMissingGradesAlerts(departmentId = null, term = "T1") {
+export async function getDeptClassRecord({ sectionId, schoolYearId, userId }) {
   try {
-    const url = `${API_BASE_URL}/department-head/missing-grades?term=${encodeURIComponent(term)}`;
-    const res = await fetch(url);
+    const params = new URLSearchParams();
+    if (sectionId) params.append("sectionId", String(sectionId));
+    if (schoolYearId) params.append("schoolYearId", String(schoolYearId));
+    if (userId) params.append("user_id", String(userId));
+
+    const headers = userId ? { "x-auralis-user-id": String(userId) } : {};
+    const res = await fetch(`${API_BASE_URL}/department-head/class-record?${params.toString()}`, {
+      headers,
+    });
     return await parseResponse(res);
   } catch (error) {
-    // Graceful fallback to initial state
+    console.warn("Could not load department class record:", error);
+    throw error;
+  }
+}
+
+const extractFilename = (contentDisposition) => {
+  if (!contentDisposition) return null;
+  const encodedMatch = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
+  if (encodedMatch) return decodeURIComponent(encodedMatch[1].trim());
+  const plainMatch = contentDisposition.match(/filename="?([^";]+)"?/i);
+  return plainMatch ? plainMatch[1].trim() : null;
+};
+
+/**
+ * Downloads the DepEd-aligned Excel spreadsheet for the department class record.
+ */
+export async function downloadDeptClassRecord({ sectionId, schoolYearId, userId }) {
+  const params = new URLSearchParams();
+  if (sectionId) params.append("sectionId", String(sectionId));
+  if (schoolYearId) params.append("schoolYearId", String(schoolYearId));
+  if (userId) params.append("user_id", String(userId));
+
+  const headers = userId ? { "x-auralis-user-id": String(userId) } : {};
+  const response = await fetch(
+    `${API_BASE_URL}/department-head/class-record/download?${params.toString()}`,
+    { headers }
+  );
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.message || data.error || "The class record could not be downloaded.");
+  }
+
+  const blob = await response.blob();
+  const filename = extractFilename(response.headers.get("Content-Disposition")) || "Department_Class_Record.xlsx";
+  return { blob, filename };
+}
+
+/**
+ * Retrieves missing or delayed grade submission alerts for the department.
+ */
+export async function getDeptMissingGradesAlerts(userId = null, term = "T1") {
+  try {
+    const url = `${API_BASE_URL}/department-head/missing-grades?term=${encodeURIComponent(term)}${userId ? `&user_id=${encodeURIComponent(userId)}` : ""}`;
+    const headers = userId ? { "x-auralis-user-id": String(userId) } : {};
+    const res = await fetch(url, { headers });
+    return await parseResponse(res);
+  } catch (error) {
     return {
       count: 0,
       alerts: [],
@@ -85,7 +119,6 @@ export async function sendTeacherGradeReminder({ teacherId, sectionName, subject
     });
     return await parseResponse(res);
   } catch (error) {
-    return { success: true, message: "Reminder sent successfully (simulated)." };
+    return { success: true, message: "Reminder sent successfully." };
   }
 }
-

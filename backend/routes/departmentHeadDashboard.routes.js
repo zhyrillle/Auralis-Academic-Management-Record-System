@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
+const DeptHeadClassRecordService = require('../services/DeptHeadClassRecordService');
 
 async function getDepartmentId(userId) {
   if (!userId) throw new Error('User not authenticated');
@@ -263,4 +264,99 @@ router.get('/grade-distribution', async (req, res) => {
   }
 });
 
+// ==========================================
+// DEPARTMENT HEAD CLASS RECORDS ENDPOINTS
+// ==========================================
+
+router.get('/filter-options', async (req, res) => {
+  try {
+    const userId = req.headers['x-auralis-user-id'] || req.query.user_id || req.query.userId || req.query.department_id;
+    const data = await DeptHeadClassRecordService.getFilterOptions(userId);
+    res.json(data);
+  } catch (err) {
+    res.status(err.message?.includes('User') ? 403 : 500).json({ error: err.message });
+  }
+});
+
+router.get('/class-record', async (req, res) => {
+  try {
+    const userId = req.headers['x-auralis-user-id'] || req.query.user_id || req.query.userId;
+    const { sectionId, schoolYearId } = req.query;
+    const data = await DeptHeadClassRecordService.getClassRecord({
+      sectionId,
+      schoolYearId,
+      userId,
+    });
+    res.json(data);
+  } catch (err) {
+    res.status(err.message?.includes('User') ? 403 : 500).json({ error: err.message });
+  }
+});
+
+router.get('/class-record/download', async (req, res) => {
+  try {
+    const userId = req.headers['x-auralis-user-id'] || req.query.user_id || req.query.userId;
+    const { sectionId, schoolYearId } = req.query;
+    const { buffer, filename } = await DeptHeadClassRecordService.generateWorkbook({
+      sectionId,
+      schoolYearId,
+      userId,
+    });
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`
+    );
+    res.setHeader('Content-Length', buffer.length);
+    return res.send(buffer);
+  } catch (err) {
+    res.status(err.message?.includes('User') ? 403 : 500).json({ error: err.message });
+  }
+});
+
+router.get('/missing-grades', async (req, res) => {
+  try {
+    const userId = req.headers['x-auralis-user-id'] || req.query.user_id || req.query.userId;
+    const departmentId = await getDepartmentId(userId);
+    const term = req.query.term || 'T1';
+
+    let query = `
+      SELECT 
+        u.user_id AS teacherId,
+        CONCAT(u.first_name, ' ', u.last_name) AS teacherName,
+        gl.grade_level_name AS gradeLevel,
+        sec.section_name AS sectionName,
+        s.subject_name AS subjectName,
+        gs.workflow_status
+      FROM SUBJECT_OFFERING so
+      JOIN SUBJECT s ON so.subject_id = s.subject_id
+      JOIN SECTION sec ON so.section_id = sec.section_id
+      JOIN GRADE_LEVEL gl ON sec.grade_level_id = gl.grade_level_id
+      JOIN SCHOOL_YEAR sy ON so.school_year_id = sy.school_year_id
+      LEFT JOIN TEACHER_ASSIGNMENT ta ON ta.subject_offering_id = so.subject_offering_id
+      LEFT JOIN USER u ON ta.user_id = u.user_id
+      LEFT JOIN GRADE_SHEET gs ON gs.subject_offering_id = so.subject_offering_id
+      WHERE s.department_id = ?
+        AND (gs.workflow_status IS NULL OR gs.workflow_status <> 'SUBMITTED')
+      ORDER BY gl.grade_level_name, sec.section_name
+    `;
+    const [rows] = await db.query(query, [departmentId]);
+    const alerts = rows.map((r, idx) => ({
+      id: idx + 1,
+      teacherId: r.teacherId,
+      teacher: r.teacherName || 'Unassigned Teacher',
+      sectionName: `${r.gradeLevel} - ${r.sectionName}`,
+      subjectName: r.subjectName,
+      status: r.workflow_status || 'Pending',
+    }));
+    res.json({ count: alerts.length, alerts });
+  } catch (err) {
+    res.json({ count: 0, alerts: [] });
+  }
+});
+
 module.exports = router;
+
