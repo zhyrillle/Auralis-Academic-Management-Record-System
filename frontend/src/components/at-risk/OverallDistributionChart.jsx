@@ -3,7 +3,7 @@ import React, { useState } from "react";
 const SEGMENT_COLORS = {
   high: "#dc2626",    // Red
   medium: "#d97706",  // Amber / Gold
-  low: "#16a34a",     // Green
+  low: "#16A34A",     // Green
 };
 
 const SEGMENT_LABELS = {
@@ -48,7 +48,7 @@ export default function OverallDistributionChart({ data, loading }) {
   // Active segments definition
   const rawSegments = [
     { key: "medium", label: "Medium", count: mediumCount, percent: medPct, color: SEGMENT_COLORS.medium, badgeBg: "#d97706" },
-    { key: "low", label: "Low", count: lowCount, percent: lowPct, color: SEGMENT_COLORS.low, badgeBg: "#16a34a" },
+    { key: "low", label: "Low", count: lowCount, percent: lowPct, color: SEGMENT_COLORS.low, badgeBg: "#16A34A" },
     { key: "high", label: "High", count: highCount, percent: highPct, color: SEGMENT_COLORS.high, badgeBg: "#dc2626" },
   ];
 

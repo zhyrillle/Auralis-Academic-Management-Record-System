@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { AlertCircle, MinusCircle, AlertTriangle, Users, Search, X, Moon, Bell } from "lucide-react";
+import { AlertCircle, MinusCircle, AlertTriangle, Users, Search, X } from "lucide-react";
 import TermTabs from "../../components/at-risk/TermTabs";
 import RiskStatCard from "../../components/at-risk/RiskStatCard";
 import RiskSection from "../../components/at-risk/RiskSection";
@@ -9,7 +9,6 @@ import {
   getAtRiskPredictionSummary,
   getStudentsByRiskLevel,
 } from "../../services/atRiskPredictionApi";
-import "../../styles/atRiskBreakdown.css";
 import "../../styles/atRiskPrediction.css";
 
 const EMPTY_SUMMARY = { lowRisk: 0, mediumRisk: 0, highRisk: 0, total: 0 };
@@ -148,21 +147,12 @@ export default function AtRiskPrediction() {
   };
 
   return (
-    <div className="ar-page">
+    <div className="ar-page ar-prediction-page">
       {/* Header */}
       <div className="ar-header">
         <div>
           <h1 className="ar-title">At-Risk Prediction</h1>
           <p className="ar-subtitle">Early Warning System | Updated Weekly</p>
-        </div>
-        <div className="ar-header-actions">
-          <button className="ar-icon-btn" type="button" aria-label="Toggle Dark Mode">
-            <Moon size={18} />
-          </button>
-          <button className="ar-icon-btn" type="button" aria-label="Notifications">
-            <Bell size={18} />
-            <span className="ar-badge-number">7</span>
-          </button>
         </div>
       </div>
 

@@ -1,15 +1,20 @@
 /* src/styles/atRiskBreakdown.css */
 
 /* ============================================================
-   At-Risk Breakdown & Prediction Shared Styles
+   At-Risk Breakdown Page Styles (Auralis Harmonized & Compact)
    ============================================================ */
 
-.ar-page {
+.ar-page,
+.ar-breakdown-page {
+  box-sizing: border-box;
+  width: calc(100% - 32px);
+  max-width: 1440px;
+  min-width: 0;
+  margin: 0 auto;
+  padding: 4px 0 24px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  width: 100%;
-  padding-bottom: 40px;
+  gap: 16px;
 }
 
 /* Header */
@@ -18,11 +23,12 @@
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+  min-height: 40px;
 }
 
 .ar-title {
   font-family: var(--font-dm-sans, 'DM Sans', sans-serif);
-  font-size: 26px;
+  font-size: 24px;
   font-weight: 700;
   color: #0f172a;
   margin: 0;
@@ -31,47 +37,8 @@
 .ar-subtitle {
   font-size: 13px;
   color: #64748b;
-  margin: 4px 0 0 0;
+  margin: 2px 0 0 0;
   font-weight: 500;
-}
-
-.ar-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.ar-icon-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
-  border: 1px solid #e2e8f0;
-  background: #ffffff;
-  color: #475569;
-  cursor: pointer;
-  position: relative;
-  transition: all 0.2s ease;
-}
-
-.ar-icon-btn:hover {
-  background: #f8fafc;
-  color: #112d61;
-}
-
-.ar-badge-number {
-  position: absolute;
-  top: -4px;
-  right: -4px;
-  background-color: #ef4444;
-  color: #ffffff;
-  font-size: 10px;
-  font-weight: 700;
-  border-radius: 10px;
-  padding: 1px 5px;
-  line-height: 1.2;
 }
 
 /* Filter Row */
@@ -79,22 +46,22 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
   flex-wrap: wrap;
 }
 
 /* Tabs */
 .ar-tabs {
   display: inline-flex;
-  gap: 4px;
+  gap: 3px;
   background: #e2e8f0;
-  padding: 4px;
-  border-radius: 24px;
+  padding: 3px;
+  border-radius: 20px;
 }
 
 .ar-tab {
-  padding: 6px 18px;
-  border-radius: 20px;
+  padding: 5px 16px;
+  border-radius: 16px;
   border: none;
   background: transparent;
   color: #64748b;
@@ -112,19 +79,14 @@
 .ar-tab.ar-tab-active {
   background: #000000;
   color: #ffffff;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
 }
 
-.ar-tab:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-/* Filter Controls */
+/* Filter Group */
 .ar-filter-group {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .ar-filter-control-compact {
@@ -132,7 +94,8 @@
 }
 
 .ar-filter-select-compact {
-  padding: 7px 14px;
+  padding: 6px 12px;
+  height: 36px;
   border-radius: 8px;
   border: 1px solid #cbd5e1;
   background: #ffffff;
@@ -143,50 +106,53 @@
   outline: none;
   cursor: pointer;
   transition: border-color 0.2s;
+  box-sizing: border-box;
 }
 
 .ar-filter-select-compact:focus {
   border-color: #112d61;
 }
 
+/* Error banner */
 .ar-error-banner {
   background: #fef2f2;
   color: #991b1b;
   border: 1px solid #fecaca;
-  border-radius: 10px;
-  padding: 10px 16px;
+  border-radius: 8px;
+  padding: 8px 14px;
   font-size: 13px;
   font-weight: 500;
 }
 
+/* Body */
 .ar-body {
   display: flex;
   flex-direction: column;
-  gap: 22px;
+  gap: 16px;
 }
 
 /* Top 4 KPI Cards */
 .ar-stats-row {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
+  gap: 12px;
 }
 
 .ar-stat-card {
   background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 12px;
-  padding: 18px 20px;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03);
+  padding: 12px 16px;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.03);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  min-height: 110px;
+  min-height: 96px;
   transition: transform 0.2s, box-shadow 0.2s;
 }
 
 .ar-stat-card:hover {
-  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
   transform: translateY(-1px);
 }
 
@@ -203,8 +169,8 @@
 }
 
 .ar-stat-icon-wrap {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -215,19 +181,19 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  margin-top: 6px;
+  margin-top: 4px;
 }
 
 .ar-stat-value {
   font-family: var(--font-dm-sans, sans-serif);
-  font-size: 26px;
+  font-size: 24px;
   font-weight: 700;
   color: #0f172a;
   line-height: 1.1;
 }
 
 .ar-stat-caption {
-  font-size: 12px;
+  font-size: 11.5px;
   color: #64748b;
   font-weight: 500;
 }
@@ -239,18 +205,18 @@
 .ar-charts-row {
   display: grid;
   grid-template-columns: 1fr 1.35fr;
-  gap: 20px;
+  gap: 16px;
 }
 
 .ar-chart-card {
   background: #ffffff;
   border: 1px solid #e2e8f0;
-  border-radius: 14px;
-  padding: 22px 24px;
-  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.03);
+  border-radius: 12px;
+  padding: 16px 20px;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.03);
   display: flex;
   flex-direction: column;
-  min-height: 340px;
+  min-height: 320px;
 }
 
 .ar-chart-header {
@@ -264,7 +230,7 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 
 .ar-chart-title {
@@ -286,7 +252,7 @@
 .ar-chart-legend-top {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .ar-legend-dot-item {
@@ -326,13 +292,13 @@
   align-items: center;
   justify-content: center;
   flex: 1;
-  min-height: 260px;
-  padding: 10px 0;
+  min-height: 240px;
+  padding: 8px 0;
 }
 
 .ar-overall-donut-svg {
-  width: 220px;
-  height: 220px;
+  width: 210px;
+  height: 210px;
   filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.05));
   overflow: visible;
 }
@@ -352,46 +318,43 @@
   position: absolute;
   color: #ffffff;
   font-family: var(--font-dm-sans, sans-serif);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
-  padding: 4px 11px;
-  border-radius: 20px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-  z-index: 5;
+  padding: 3px 8px;
+  border-radius: 12px;
+  user-select: none;
+  z-index: 2;
 }
 
+/* Badge Positioning Around Donut */
 .ar-badge-pos-medium {
-  top: 24px;
-  right: 75px;
+  top: 10px;
+  left: 36px;
 }
 
 .ar-badge-pos-low {
-  bottom: 28px;
-  right: 65px;
+  bottom: 24px;
+  left: 32px;
 }
 
 .ar-badge-pos-high {
-  bottom: 34px;
-  left: 60px;
+  top: 48%;
+  right: 28px;
+  transform: translateY(-50%);
 }
 
-.ar-donut-badge-pill:hover,
-.ar-donut-badge-pill.badge-hovered {
-  transform: scale(1.15) !important;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25) !important;
-}
-
-/* Donut Center text */
+/* Center Content */
 .ar-donut-center-content {
   position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   pointer-events: none;
   text-align: center;
-  transition: all 0.2s ease;
 }
 
 .ar-donut-center-num {
@@ -400,27 +363,26 @@
   font-weight: 800;
   color: #0f172a;
   line-height: 1;
-  transition: color 0.2s ease;
 }
 
 .ar-donut-center-sub {
   font-size: 12px;
-  color: #64748b;
   font-weight: 500;
-  margin-top: 2px;
-  transition: color 0.2s ease;
+  color: #64748b;
+  margin-top: 3px;
+  text-transform: lowercase;
 }
 
 /* ============================================================
-   Bar Chart: Breakdown by Grade Level
+   Bar Chart (Grade Level Breakdown)
    ============================================================ */
 
 .ar-bar-chart-wrapper {
   display: flex;
+  align-items: flex-end;
+  height: 200px;
+  margin-top: auto;
   gap: 12px;
-  flex: 1;
-  position: relative;
-  min-height: 220px;
   padding-bottom: 6px;
 }
 
@@ -428,74 +390,81 @@
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding: 6px 0 28px 0;
-  width: 20px;
-  text-align: right;
+  height: 100%;
+  padding-bottom: 22px;
 }
 
 .ar-bar-y-tick {
   font-size: 11px;
   font-weight: 600;
-  color: #475569;
+  color: #94a3b8;
   line-height: 1;
+  text-align: right;
+  min-width: 16px;
 }
 
 .ar-bar-canvas {
-  flex: 1;
   position: relative;
+  flex: 1;
+  height: 100%;
   display: flex;
   flex-direction: column;
+  justify-content: flex-end;
 }
 
 .ar-bar-grid-lines {
   position: absolute;
-  inset: 0 0 24px 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
+  inset: 0;
+  bottom: 22px;
   pointer-events: none;
 }
 
 .ar-bar-grid-line {
-  width: 100%;
-  border-top: 1px solid #e2e8f0;
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-bottom: 1px dashed #e2e8f0;
 }
 
 .ar-bar-groups-container {
   display: flex;
   align-items: flex-end;
   justify-content: space-around;
-  flex: 1;
-  position: relative;
-  z-index: 2;
-  padding: 0 10px 0 10px;
+  height: 100%;
+  padding-bottom: 22px;
+  z-index: 1;
 }
 
 .ar-grade-bar-group {
   display: flex;
   flex-direction: column;
   align-items: center;
+  height: 100%;
+  justify-content: flex-end;
   gap: 8px;
-  flex: 1;
 }
 
 .ar-grade-bars-row {
   display: flex;
   align-items: flex-end;
-  justify-content: center;
-  gap: 4px;
-  height: 210px;
-  width: 100%;
+  gap: 5px;
+  height: 100%;
 }
 
 .ar-single-bar {
-  width: 12px;
-  border-radius: 3px 3px 0 0;
-  min-height: 4px;
-  transition: height 0.3s ease;
+  width: 14px;
+  border-radius: 4px 4px 0 0;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+}
+
+.ar-single-bar:hover {
+  opacity: 0.85;
+  transform: scaleY(1.02);
 }
 
 .ar-grade-label {
+  font-family: var(--font-dm-sans, sans-serif);
   font-size: 12px;
   font-weight: 700;
   color: #334155;
@@ -508,24 +477,24 @@
 .ar-bottom-risk-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
+  gap: 14px;
 }
 
 .ar-risk-bottom-card {
   background: #ffffff;
   border: 1px solid #e2e8f0;
-  border-radius: 14px;
-  padding: 20px 22px;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03);
+  border-radius: 12px;
+  padding: 16px 18px;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.03);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  min-height: 190px;
+  min-height: 160px;
   transition: box-shadow 0.2s;
 }
 
 .ar-risk-bottom-card:hover {
-  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
 }
 
 .ar-risk-card-header {
@@ -537,8 +506,8 @@
 .ar-risk-pill {
   display: inline-flex;
   align-items: center;
-  padding: 4px 12px;
-  border-radius: 20px;
+  padding: 3px 10px;
+  border-radius: 16px;
   font-size: 12px;
   font-weight: 700;
 }
@@ -561,11 +530,10 @@
 .ar-risk-learners-count {
   font-size: 13px;
   font-weight: 700;
-  color: #0f172a;
 }
 
 .ar-risk-card-body {
-  margin-top: 40px;
+  margin-top: 18px;
 }
 
 .ar-risk-bullets-list {
@@ -574,7 +542,7 @@
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
 }
 
 .ar-risk-bullet-item {
@@ -588,7 +556,6 @@
 
 .ar-risk-bullet-dot {
   font-size: 14px;
-  color: #94a3b8;
   line-height: 1;
 }
 
@@ -598,13 +565,13 @@
 
 /* Skeletons */
 .ar-skeleton-ring {
-  width: 170px;
-  height: 170px;
+  width: 160px;
+  height: 160px;
   border-radius: 50%;
   background: linear-gradient(90deg, #eef2f6 25%, #f8fafc 50%, #eef2f6 75%);
   background-size: 200% 100%;
   animation: ar-shimmer 1.4s infinite;
-  margin: 30px auto;
+  margin: 24px auto;
 }
 
 .ar-skeleton-bars {
@@ -613,7 +580,7 @@
   background: linear-gradient(90deg, #eef2f6 25%, #f8fafc 50%, #eef2f6 75%);
   background-size: 200% 100%;
   animation: ar-shimmer 1.4s infinite;
-  margin-top: 20px;
+  margin-top: 16px;
 }
 
 .ar-skeleton-lines {
@@ -635,8 +602,16 @@
   100% { background-position: -200% 0; }
 }
 
-/* Responsive */
-@media (max-width: 1024px) {
+/* ============================================================
+   Responsive Tiers (Matching Auralis UI Handbook)
+   ============================================================ */
+
+@media (max-width: 1100px) {
+  .ar-page,
+  .ar-breakdown-page {
+    width: 100%;
+  }
+
   .ar-stats-row {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -652,16 +627,23 @@
 
 @media (max-width: 640px) {
   .ar-stats-row {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .ar-header {
-    flex-direction: column;
-    align-items: flex-start;
+    grid-template-columns: 1fr;
   }
 
   .ar-filter-row {
     flex-direction: column;
-    align-items: stretch;
+    align-items: flex-start;
+  }
+
+  .ar-filter-group {
+    width: 100%;
+  }
+
+  .ar-filter-control-compact {
+    flex: 1;
+  }
+
+  .ar-filter-select-compact {
+    width: 100%;
   }
 }

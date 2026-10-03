@@ -38,12 +38,12 @@ export default function RiskLevelCard({ riskLevel = "low", label, count, notes, 
   const bullets = notes && notes.length > 0 ? notes : config.defaultBullets;
 
   return (
-    <div className="ar-risk-bottom-card">
+    <div className="ar-risk-bottom-card" style={{ borderTop: `4px solid ${config.accent}` }}>
       <div className="ar-risk-card-header">
         <span className={`ar-risk-pill ${config.pillClass}`}>
           {label || config.label}
         </span>
-        <span className="ar-risk-learners-count">
+        <span className="ar-risk-learners-count" style={{ color: config.accent }}>
           {loading ? "—" : `${count} learners`}
         </span>
       </div>

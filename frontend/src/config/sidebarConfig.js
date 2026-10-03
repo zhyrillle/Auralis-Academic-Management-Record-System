@@ -73,11 +73,6 @@ export const sidebarConfig = {
   ],
   principal: [
     {
-      title: "Dashboard",
-      path: "/principal/dashboard",
-      icon: LayoutDashboard,
-    },
-    {
       title: "At-Risk Students",
       path: "/principal/at-risk-students",
       icon: AlertTriangle,

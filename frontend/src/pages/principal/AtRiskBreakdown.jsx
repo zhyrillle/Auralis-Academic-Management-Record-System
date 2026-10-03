@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { AlertCircle, MinusCircle, AlertTriangle, Users, Moon, Bell } from "lucide-react";
+import { AlertCircle, MinusCircle, AlertTriangle, Users } from "lucide-react";
 import TermTabs from "../../components/at-risk/TermTabs";
 import RiskStatCard from "../../components/at-risk/RiskStatCard";
 import OverallDistributionChart from "../../components/at-risk/OverallDistributionChart";
@@ -111,21 +111,12 @@ export default function AtRiskBreakdown() {
   }, [activeTerm, schoolYear]);
 
   return (
-    <div className="ar-page">
+    <div className="ar-page ar-breakdown-page">
       {/* Header */}
       <div className="ar-header">
         <div>
           <h1 className="ar-title">At-Risk Breakdown</h1>
           <p className="ar-subtitle">Distribution of flagged learners by risk</p>
-        </div>
-        <div className="ar-header-actions">
-          <button className="ar-icon-btn" type="button" aria-label="Toggle Dark Mode">
-            <Moon size={18} />
-          </button>
-          <button className="ar-icon-btn" type="button" aria-label="Notifications">
-            <Bell size={18} />
-            <span className="ar-badge-number">7</span>
-          </button>
         </div>
       </div>
 

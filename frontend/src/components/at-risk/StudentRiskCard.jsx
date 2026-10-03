@@ -59,7 +59,7 @@ export default function StudentRiskCard({ name, grade, section, adviser, riskSco
     <div className="ar-student-card" style={{ borderLeft: `5px solid ${config.accent}` }}>
       <div className="ar-student-main">
         <div className="ar-student-avatar" style={{ backgroundColor: "#112d61", color: "#ffffff" }}>
-          <User size={22} />
+          <User size={18} />
         </div>
         <div className="ar-student-info">
           <div className="ar-student-name">{name}</div>

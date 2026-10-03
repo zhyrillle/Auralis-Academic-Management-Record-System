@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Login from "./pages/Login";
 import ForgotPassword from "./pages/ForgotPassword";
 import OtpVerify from "./pages/OtpVerify";
@@ -12,7 +12,6 @@ import AcademicPeriod from "./pages/system-admin/AcademicPeriod";
 import AdviserDashboard from "./pages/adviser/AdviserDashboard";
 import DeptDashboard from "./pages/department-head/DeptDashboard";
 import DeptClassRecord from "./pages/department-head/DeptClassRecord";
-import PrincipalDashboard from "./pages/principal/PrincipalDashboard";
 import TeacherDashboard from "./pages/teacher/TeacherDashboard";
 import PerformanceReport from "./pages/adviser/PerformanceReport";
 import DashboardLayout from "./components/layout/DashboardLayout";
@@ -87,8 +86,19 @@ export default function App() {
           />
           <Route path="/system-admin/ws-config" element={<WSConfig />} />
 
-          {/* 2. Principal */}
-          <Route path="/principal/dashboard" element={<PrincipalDashboard />} />
+          {/* 2. Principal (Landing page is At-Risk Students) */}
+          <Route
+            path="/principal"
+            element={<Navigate to="/principal/at-risk-students/prediction" replace />}
+          />
+          <Route
+            path="/principal/dashboard"
+            element={<Navigate to="/principal/at-risk-students/prediction" replace />}
+          />
+          <Route
+            path="/principal/at-risk-students"
+            element={<Navigate to="/principal/at-risk-students/prediction" replace />}
+          />
           <Route
             path="/principal/at-risk-students/prediction"
             element={<AtRiskPrediction />}
