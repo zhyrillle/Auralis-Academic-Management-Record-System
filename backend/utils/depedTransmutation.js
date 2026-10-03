@@ -142,17 +142,9 @@ function calculateStudentGrades({ assessments = [], scores = {}, weights = {}, e
     (weights.EX !== undefined && Number(weights.EX) === 20 && weights.WW !== undefined && Number(weights.WW) === 20)
   );
 
-  const componentWeights = isMapehSubject
-    ? { WW: 20, PT: 60, QA: 20 }
-    : {
-        WW: weights.WW !== undefined ? Number(weights.WW) : DEFAULT_JHS_WEIGHTS.WW,
-        PT: weights.PT !== undefined ? Number(weights.PT) : DEFAULT_JHS_WEIGHTS.PT,
-        QA: weights.EX !== undefined
-          ? Number(weights.EX)
-          : weights.QA !== undefined
-          ? Number(weights.QA)
-          : (weights.STE !== undefined ? Number(weights.STE) : DEFAULT_JHS_WEIGHTS.EX),
-      };
+  // Main component weights come from WS Config; internal examination rules remain subject-specific.
+  const resolved = resolveComponentWeights(weights, isMapehSubject);
+  const componentWeights = { ...resolved.weights, QA: resolved.weights.EX };
 
   const defaultExamConfig = isMapehSubject
     ? { st1Weight: 25, st2Weight: 25, teWeight: 25 }
@@ -180,13 +172,13 @@ function calculateStudentGrades({ assessments = [], scores = {}, weights = {}, e
   const examItems = [];
 
   (assessments || []).forEach((assessment) => {
-    let compCode = assessment.component_code;
+    let compCode = canonicalComponent(assessment.component_code);
     if (compCode === 'STE' || compCode === 'EX') compCode = 'QA';
 
     const actName = String(assessment.activity_name || assessment.title || '').toUpperCase();
-    const isST1 = /\b(ST1|SUMMATIVE\s*TEST\s*1|SUMMATIVE\s*1)\b/i.test(actName);
-    const isST2 = /\b(ST2|SUMMATIVE\s*TEST\s*2|SUMMATIVE\s*2)\b/i.test(actName);
-    const isTE = /\b(TE|TERM\s*EXAM|QUARTERLY\s*ASSESSMENT|QUARTERLY)\b/i.test(actName);
+    const isST1 = assessment.exam_key === 'ST1' || /\b(ST1|SUMMATIVE\s*TEST\s*1|SUMMATIVE\s*1)\b/i.test(actName);
+    const isST2 = assessment.exam_key === 'ST2' || /\b(ST2|SUMMATIVE\s*TEST\s*2|SUMMATIVE\s*2)\b/i.test(actName);
+    const isTE = assessment.exam_key === 'TE' || /\b(TE|TERM\s*EXAM|QUARTERLY\s*ASSESSMENT|QUARTERLY)\b/i.test(actName);
 
     if (!components[compCode]) {
       components[compCode] = { totalRaw: 0, totalHps: 0, ps: 0, ws: 0, hasInput: false, isFailing: false };
@@ -279,7 +271,7 @@ function calculateStudentGrades({ assessments = [], scores = {}, weights = {}, e
   });
 
   // Initial Grade = WS_WW + WS_PT + WS_QA/EX
-  const initialGrade = hasAnyInput ? parseFloat(totalWS.toFixed(2)) : null;
+  const initialGrade = !resolved.error && hasAnyInput ? parseFloat(totalWS.toFixed(2)) : null;
   const quarterlyGrade = initialGrade !== null ? transmuteGrade(initialGrade) : null;
   const termGrade = quarterlyGrade;
   const descriptor = termGrade !== null ? getGradeDescriptor(termGrade) : '-';
@@ -287,6 +279,7 @@ function calculateStudentGrades({ assessments = [], scores = {}, weights = {}, e
 
   return {
     components,
+    calculationError: resolved.error,
     initialGrade,
     quarterlyGrade,
     termGrade,
@@ -294,6 +287,68 @@ function calculateStudentGrades({ assessments = [], scores = {}, weights = {}, e
     isFailing,
     remarks: quarterlyGrade !== null ? (quarterlyGrade >= 75 ? 'Passed' : 'Failed') : null,
   };
+}
+
+const MAPEH_WEIGHTS = { WW: 20, PT: 60, EX: 20, QA: 20 };
+
+function canonicalComponent(code) {
+  const normalized = String(code ?? '').trim().toUpperCase();
+  return ['EX', 'QA', 'STE'].includes(normalized) ? 'EX' : normalized;
+}
+
+function resolveComponentWeights(weights = {}, isMapeh = false) {
+  // Defaults are suggestions for callers with no weights, never replacements for saved values.
+  const supplied = Object.keys(weights ?? {}).length > 0;
+  const source = supplied ? weights : (isMapeh ? MAPEH_WEIGHTS : DEFAULT_JHS_WEIGHTS);
+  const examValues = ['EX', 'QA', 'STE'].filter((key) => source[key] !== undefined)
+    .map((key) => source[key] === null || source[key] === '' ? NaN : Number(source[key]));
+  const values = { WW: Number(source.WW), PT: Number(source.PT), EX: examValues[0] };
+  let error = null;
+  if (examValues.every(Number.isFinite) && examValues.some((value) => value !== values.EX)) error = 'CONFLICTING_EXAM_WEIGHTS';
+  if (!error && (source.WW == null || source.PT == null || source.WW === '' || source.PT === '' ||
+      examValues.some((value) => !Number.isFinite(value)) ||
+      Object.values(values).some((value) => !Number.isFinite(value) || value < 0 || value > 100))) {
+    error = 'INVALID_COMPONENT_WEIGHTS';
+  }
+  if (!error && Math.abs(values.WW + values.PT + values.EX - 100) > 0.001) {
+    error = 'INVALID_WEIGHT_TOTAL';
+  }
+  return { weights: values, error };
+}
+
+function weightsFromRows(rows) {
+  const weights = { WW: null, PT: null, EX: null };
+  const seen = new Set();
+  for (const row of rows) {
+    const code = canonicalComponent(row.component_code);
+    if (!Object.hasOwn(weights, code)) continue;
+    if (seen.has(code)) return { ...weights, EX: NaN }; // Duplicate aliases need review.
+    seen.add(code);
+    const value = row.weight_percentage ?? row.percentage;
+    weights[code] = value == null || value === '' ? NaN : Number(value);
+  }
+  const total = Object.values(weights).reduce((sum, value) => sum + (value ?? 0), 0);
+  if (Object.values(weights).every((value) => value !== null) && Math.abs(total - 1) < 0.001) {
+    for (const code of Object.keys(weights)) weights[code] *= 100;
+  }
+  return { ...weights, QA: weights.EX };
+}
+
+function isProtectedGradeSheet(sheet) {
+  const workflow = String(sheet.workflowStatus ?? sheet.workflow_status ?? '').toUpperCase();
+  const lock = String(sheet.lockStatus ?? sheet.lock_status ?? '').toUpperCase();
+  return workflow === 'SUBMITTED' || !['EDITABLE', 'OPEN', 'TEMPORARILY_REOPENED'].includes(lock);
+}
+
+function selectSavedSummary(savedGrade) {
+  const initialGrade = savedGrade?.initial_grade == null || savedGrade.initial_grade === '' ? null : Number(savedGrade.initial_grade);
+  const termGrade = savedGrade?.quarterly_grade == null || savedGrade.quarterly_grade === '' ? null : Number(savedGrade.quarterly_grade);
+  const valid = Number.isFinite(initialGrade) && initialGrade >= 0 && initialGrade <= 100
+    && Number.isFinite(termGrade) && termGrade >= 60 && termGrade <= 100;
+  return { initialGrade: valid ? initialGrade : null, termGrade: valid ? termGrade : null,
+    quarterlyGrade: valid ? termGrade : null, remarks: valid ? savedGrade.remarks : null,
+    isFailing: valid && termGrade < 75,
+    calculationError: valid ? null : 'SAVED_GRADE_REVIEW_REQUIRED' };
 }
 
 const calculateStudentSummary = calculateStudentGrades;
@@ -306,5 +361,8 @@ module.exports = {
   transmuteGrade,
   calculateStudentGrades,
   calculateStudentSummary,
+  resolveComponentWeights,
+  weightsFromRows,
+  isProtectedGradeSheet,
+  selectSavedSummary,
 };
-

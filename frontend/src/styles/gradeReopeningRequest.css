@@ -132,7 +132,17 @@
 }
 
 .grr-form-row.three-col {
-  grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(3, 1fr);
+}
+
+.grr-field-group .dropdown-select__trigger {
+  min-height: 40px;
+  font-size: 13.5px;
+  border-color: #cbd5e1;
+}
+
+.grr-field-group .dropdown-select__trigger.is-error {
+  border-color: #dc2626;
 }
 
 .grr-form-row.two-col {

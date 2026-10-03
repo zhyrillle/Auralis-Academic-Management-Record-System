@@ -3,14 +3,16 @@ const API_BASE_URL = (
 ).replace(/\/$/, "");
 const API_ORIGIN = new URL(API_BASE_URL, window.location.origin).origin;
 
-export const temporaryDurationOptions = [
-  { value: "1440", label: "24 hours" },
-  { value: "4320", label: "3 days" },
-  { value: "10080", label: "7 days" },
-  { value: "custom", label: "Custom" },
-];
-
 const MANILA_TIMEZONE = "Asia/Manila";
+
+export const eligibilityMessages = {
+  WINDOW_CLOSED: "The seven-day request window for this term has closed.",
+  WINDOW_NOT_OPEN: "Requests open after this grade sheet's term ends.",
+  WINDOW_NOT_CONFIGURED: "This term's end date needs administrator review.",
+  REQUEST_ALREADY_PENDING: "This grade sheet already has a pending request.",
+  TEMPORARY_ACCESS_ACTIVE: "This grade sheet already has temporary editing access.",
+  SHEET_NOT_ELIGIBLE: "This sheet must be submitted, or a term-locked draft for late submission.",
+};
 
 function authHeaders(userId, hasBody = false) {
   return {
@@ -133,6 +135,7 @@ function mapTerm(term) {
     isConfigured: true,
     label: formatTermLabel(term.term_name),
     status,
+    hasEnded: Boolean(term.ends_at) && new Date(term.ends_at).getTime() <= Date.now(),
     statusLabel: status.charAt(0).toUpperCase() + status.slice(1),
     progress: Number(term.progress || 0),
     periodLabel: formatPeriodRange(term.starts_at, term.ends_at),
@@ -256,6 +259,10 @@ function mapRequest(row) {
       month: "short", day: "numeric", year: "numeric",
       hour: "numeric", minute: "2-digit", timeZone: MANILA_TIMEZONE,
     }).format(new Date(row.requested_at)),
+    requestType:
+      String(row.workflow_status || "").toUpperCase() === "DRAFT"
+        ? "Late Submission"
+        : "Grade Correction",
     status: String(row.status || "pending").toLowerCase(),
   };
 }
@@ -280,6 +287,31 @@ function mapActive(row) {
     status: "temporarily-unlocked",
     approvedBy: row.approved_by || "System Administrator",
     durationLabel: minutes >= 1440 ? `${Math.round(minutes / 1440)} day${minutes >= 2880 ? "s" : ""}` : `${minutes} minutes`,
+  };
+}
+
+function mapSubmissionRecord(row) {
+  return {
+    id: String(row.grade_sheet_id),
+    gradeSheetId: String(row.grade_sheet_id),
+    termId: String(row.term_id),
+    teacherName: row.teacher_name || "Unassigned teacher",
+    subject: row.subject_name,
+    department: row.department_name || "Unassigned Department",
+    gradeLevel: row.grade_level_name,
+    section: row.section_name,
+    workflowStatus: String(row.workflow_status || "submitted").toLowerCase(),
+    lockStatus: String(row.lock_status || "").toLowerCase(),
+    submittedAt: row.submitted_at
+      ? new Intl.DateTimeFormat("en-US", {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+          timeZone: MANILA_TIMEZONE,
+        }).format(new Date(row.submitted_at))
+      : "Submission time unavailable",
   };
 }
 
@@ -331,11 +363,20 @@ export function mapGradingPeriodContext(payload) {
     };
   });
   const upcomingYear = payload.upcomingSchoolYear;
+  const submissionRecordsByTerm = Object.fromEntries(
+    Object.entries(payload.submissionRecordsByTerm || {}).map(
+      ([termId, records]) => [
+        String(termId),
+        Array.isArray(records) ? records.map(mapSubmissionRecord) : [],
+      ],
+    ),
+  );
   return {
     schoolYears,
     selectedSchoolYearId: String(payload.selectedSchoolYearId || ""),
     terms,
     departmentsByTerm: payload.departmentsByTerm || {},
+    submissionRecordsByTerm,
     reopeningRequests: payload.reopeningRequests.map((row) => ({ ...mapRequest(row), termId: String(row.term_id) })),
     activeReopenings: payload.activeReopenings.map((row) => ({ ...mapActive(row), termId: String(row.term_id) })),
     upcomingSchoolYear: upcomingYear ? {
@@ -402,6 +443,13 @@ export async function getReopeningGradeSheetOptions(userId) {
   return payload.gradeSheets || [];
 }
 
+export function getGradeSheetReopeningEligibility(userId, gradeSheetId) {
+  return request(
+    `/grading-periods/grade-sheets/${encodeURIComponent(gradeSheetId)}/reopening-eligibility`,
+    { userId },
+  );
+}
+
 export function createGradeSheetReopeningRequest(userId, gradeSheetId, reason) {
   return request(
     `/grading-periods/grade-sheets/${encodeURIComponent(gradeSheetId)}/reopening-requests`,
@@ -421,7 +469,7 @@ export async function getActiveSchoolYear(userId) {
       activeTerm: context.activeSchoolYear?.active_term || 'T1',
       ...context.activeSchoolYear,
     };
-  } catch (e) {
+  } catch {
     return { activeTerm: 'T1' };
   }
 }

@@ -44,6 +44,14 @@ export const fetchStudentSections = async () => {
   return Array.isArray(data) ? data : [];
 };
 
+/** Fetch school years for enrollment-based student filtering. */
+export const fetchSchoolYears = async () => {
+  const response = await fetch(`${API_BASE_URL}/school-years`);
+  const data = await parseResponse(response);
+  if (!Array.isArray(data)) throw new Error("Invalid school-year response.");
+  return data;
+};
+
 /**
  * Create a new section
  */

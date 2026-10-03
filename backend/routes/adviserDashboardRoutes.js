@@ -1176,7 +1176,7 @@ router.get('/grade-range-report', async (req, res) => {
         (activities || []).forEach((a) => {
           const aName = String(a.activity_name || '').toUpperCase();
           const code = String(a.component_code || '').toUpperCase();
-          if (code === 'QA' || code === 'EX' || aName.includes('EXAM') || aName.includes('QUARTERLY') || aName.includes('TE')) {
+          if (code === 'QA' || code === 'STE' || code === 'EX' || aName.includes('EXAM') || aName.includes('QUARTERLY') || aName.includes('TE')) {
             if (!/\b(ST1|ST2|SUMMATIVE\s*1|SUMMATIVE\s*2)\b/i.test(aName)) {
               if (/\b(TE|TERM\s*EXAM|QUARTERLY\s*ASSESSMENT|QUARTERLY)\b/i.test(aName) || !teActId) {
                 teActId = a.activity_id;

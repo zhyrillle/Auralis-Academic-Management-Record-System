@@ -79,7 +79,10 @@ export default function App() {
           {/* 1. System Administrator */}
           <Route path="/system-admin/dashboard" element={<AdminDashboard />} />
           <Route path="/system-admin/manage-users" element={<ManageUsers />} />
-          <Route path="/system-admin/student-section-management" element={<StudentSectionManagement />} />
+          <Route
+            path="/system-admin/student-section-management"
+            element={<StudentSectionManagement />}
+          />
           <Route
             path="/system-admin/grading-periods"
             element={<AcademicPeriod user={user} />}
@@ -89,15 +92,21 @@ export default function App() {
           {/* 2. Principal (Landing page is At-Risk Students) */}
           <Route
             path="/principal"
-            element={<Navigate to="/principal/at-risk-students/prediction" replace />}
+            element={
+              <Navigate to="/principal/at-risk-students/prediction" replace />
+            }
           />
           <Route
             path="/principal/dashboard"
-            element={<Navigate to="/principal/at-risk-students/prediction" replace />}
+            element={
+              <Navigate to="/principal/at-risk-students/prediction" replace />
+            }
           />
           <Route
             path="/principal/at-risk-students"
-            element={<Navigate to="/principal/at-risk-students/prediction" replace />}
+            element={
+              <Navigate to="/principal/at-risk-students/prediction" replace />
+            }
           />
           <Route
             path="/principal/at-risk-students/prediction"
@@ -168,10 +177,7 @@ export default function App() {
             path="/class-record/:sectionId/:subjectId"
             element={<ClassRecord />}
           />
-          <Route
-            path="/class-record/:sectionId"
-            element={<ClassRecord />}
-          />
+          <Route path="/class-record/:sectionId" element={<ClassRecord />} />
           <Route
             path="/adviser/class-record/:sectionId/:subjectId"
             element={<ClassRecord />}

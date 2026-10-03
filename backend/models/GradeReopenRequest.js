@@ -7,7 +7,7 @@ class GradeReopenRequest {
       return rows;
     } catch (err) {
       console.error("DEBUG [GradeReopenRequest.findAll] Error:", err.message, err.stack);
-      return [];
+      throw err;
     }
   }
 
@@ -24,7 +24,12 @@ class GradeReopenRequest {
         grr.*,
         sec.section_name,
         s.subject_name,
-        gs.term_id
+        gs.term_id,
+        gs.workflow_status,
+        tm.term_name,
+        CASE WHEN gs.workflow_status = 'DRAFT' THEN 'Late Submission' ELSE 'Grade Correction' END AS request_type,
+        (SELECT MAX(tr.expires_at) FROM TEMPORARY_REOPENING tr
+         WHERE tr.request_id = grr.request_id) AS access_until
 
       FROM GRADE_REOPEN_REQUEST grr
 
@@ -39,6 +44,8 @@ class GradeReopenRequest {
       INNER JOIN GRADE_SHEET gs
         ON grr.grade_sheet_id =
            gs.grade_sheet_id
+
+      INNER JOIN ACADEMIC_TERM tm ON tm.term_id = gs.term_id
 
       INNER JOIN SUBJECT s
         ON so.subject_id =
@@ -64,7 +71,7 @@ class GradeReopenRequest {
         err.message
       );
 
-      return [];
+      throw err;
     }
   }
 

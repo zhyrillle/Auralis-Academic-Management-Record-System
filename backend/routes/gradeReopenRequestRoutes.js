@@ -1,436 +1,83 @@
-const express = require("express");
+const express = require('express');
+const GradeReopenRequest = require('../models/GradeReopenRequest');
+const GradingPeriodService = require('../services/GradingPeriodService');
+const { resolveCurrentUser, requireSystemAdmin } = require('../middleware/resolveCurrentUser');
+const uploadRequestFile = require('../middleware/uploadRequestFile');
+const { uploadRequestFile: uploadToCloudinary } = require('../services/requestFileStorage');
 const router = express.Router();
 
-const db = require("../config/db");
-const GradeReopenRequest = require("../models/GradeReopenRequest");
-const AuditEvent = require("../models/AuditEvent");
+router.use(resolveCurrentUser);
+function handleError(error, res) {
+  const status = error.status || 500;
+  if (status === 500) console.error('Reopening request failed:', error.message);
+  return res.status(status).json({ code: error.code || 'REOPENING_REQUEST_ERROR',
+    error: status === 500 ? 'The reopening request could not be completed.' : error.message });
+}
 
-const uploadRequestFile = require("../middleware/uploadRequestFile");
-const {
-  uploadRequestFile: uploadToCloudinary,
-} = require("../services/requestFileStorage");
-
-
-// ============================================================
-// GET ALL REQUESTS
-// ============================================================
-
-router.get("/", async (req, res) => {
-  try {
-    const requests = await GradeReopenRequest.findAll();
-    res.json(requests);
-  } catch (err) {
-    console.error(
-      "[ERROR ROUTE] GET /api/reopen-requests:",
-      err.message,
-      err.stack
-    );
-
-    res.status(500).json({
-      error: err.message,
-    });
-  }
+router.get('/', requireSystemAdmin, async (_req, res) => {
+  try { return res.json(await GradeReopenRequest.findAll()); }
+  catch (error) { return handleError(error, res); }
 });
 
-
-// ============================================================
-// GET REQUESTS BY USER
-// ============================================================
-
-router.get("/user/:userId", async (req, res) => {
-  try {
-    const requests = await GradeReopenRequest.findByUserId(
-      req.params.userId
-    );
-
-    res.json(requests);
-  } catch (err) {
-    console.error(
-      `[ERROR ROUTE] GET /api/reopen-requests/user/${req.params.userId}:`,
-      err.message,
-      err.stack
-    );
-
-    res.status(500).json({
-      error: err.message,
-    });
+router.get('/user/:userId', async (req, res) => {
+  if (Number(req.params.userId) !== Number(req.currentUser.user_id)
+      && req.currentUser.normalized_role !== 'system_admin') {
+    return res.status(403).json({ error: 'You can only view your own requests.' });
   }
+  try { return res.json(await GradeReopenRequest.findByUserId(req.params.userId)); }
+  catch (error) { return handleError(error, res); }
 });
 
-
-// ============================================================
-// GET REQUEST BY ID
-// ============================================================
-
-router.get("/:id", async (req, res) => {
+router.get('/:id', async (req, res) => {
   try {
-    const request = await GradeReopenRequest.findById(
-      req.params.id
-    );
+    const request = req.currentUser.normalized_role === 'system_admin'
+      ? await GradeReopenRequest.findById(req.params.id)
+      : (await GradeReopenRequest.findByUserId(req.currentUser.user_id))
+        .find(row => Number(row.request_id) === Number(req.params.id));
+    if (!request) return res.status(404).json({ error: 'Reopening request not found.' });
+    return res.json(request);
+  } catch (error) { return handleError(error, res); }
+});
 
-    if (!request) {
-      return res.status(404).json({
-        message: "Reopen Request not found",
-      });
+// Keep multipart attachments, but use exactly the same policy and transaction as the JSON endpoint.
+router.post('/', (req, res, next) => {
+  uploadRequestFile.array('supporting_file', 10)(req, res, error => {
+    if (error) return res.status(400).json({ error: error.message });
+    return next();
+  });
+}, async (req, res) => {
+  try {
+    const eligibility = await GradingPeriodService.getReopeningEligibility(req.body.grade_sheet_id, req.currentUser.user_id);
+    if (!eligibility.eligible) {
+      return res.status(409).json({ code: eligibility.reason, error: 'This grade sheet is not accepting reopening requests.' });
     }
-
-    res.json(request);
-  } catch (err) {
-    console.error(
-      "[ERROR ROUTE] GET /api/reopen-requests/:id:",
-      err.message
-    );
-
-    res.status(500).json({
-      error: err.message,
-    });
-  }
-});
-
-
-// ============================================================
-// CREATE REOPEN REQUEST
-// ============================================================
-
-router.post(
-  "/",
-  (req, res, next) => {
-    uploadRequestFile.array("supporting_file", 10)(req, res, (err) => {
-      if (err) {
-        console.error("[ERROR ROUTE] Multer upload error:", err);
-        return res.status(400).json({
-          error: err.message || "File upload error",
-        });
-      }
-      next();
-    });
-  },
-  async (req, res) => {
-    try {
-      // --------------------------------------------------------
-      // 1. GET VALUES FROM FORM DATA
-      // --------------------------------------------------------
-
-      const {
-        teacher_assignment_id,
-        reason,
-        status,
-      } = req.body;
-
-
-      // --------------------------------------------------------
-      // 2. VALIDATE TEACHER ASSIGNMENT
-      // --------------------------------------------------------
-
-      if (!teacher_assignment_id) {
-        return res.status(400).json({
-          error: "Teacher Assignment ID is required.",
-        });
-      }
-
-
-      // --------------------------------------------------------
-      // 3. VALIDATE REASON
-      // --------------------------------------------------------
-
-      if (!reason || !reason.trim()) {
-        return res.status(400).json({
-          error: "Reason is required.",
-        });
-      }
-
-
-      // --------------------------------------------------------
-      // 4. CHECK EXISTING PENDING REQUEST
-      // --------------------------------------------------------
-
-      const existing =
-        await GradeReopenRequest.checkExistingRequest(
-          teacher_assignment_id
-        );
-
-      if (existing) {
-        return res.status(400).json({
-          error:
-            "You have already submitted a reopening request for this section.",
-        });
-      }
-
-
-      // --------------------------------------------------------
-      // 5. FIND GRADE SHEET FROM TEACHER ASSIGNMENT
-      //
-      // TEACHER_ASSIGNMENT -> subject_offering_id -> GRADE_SHEET
-      // --------------------------------------------------------
-
-      const [gsRows] = await db.execute(
-        `
-        SELECT
-          ta.teacher_assignment_id,
-          ta.subject_offering_id,
-          gs.grade_sheet_id,
-          gs.term_id
-
-        FROM TEACHER_ASSIGNMENT ta
-
-        INNER JOIN GRADE_SHEET gs
-          ON ta.subject_offering_id = gs.subject_offering_id
-
-        WHERE ta.teacher_assignment_id = ?
-
-        ORDER BY gs.grade_sheet_id DESC
-        LIMIT 1
-        `,
-        [teacher_assignment_id]
-      );
-
-
-      // --------------------------------------------------------
-      // 7. MAKE SURE GRADE SHEET EXISTS
-      // --------------------------------------------------------
-
-      if (gsRows.length === 0) {
-        return res.status(400).json({
-          error:
-            "No grade sheet found for this teacher assignment.",
-        });
-      }
-
-
-      const gradeSheetId =
-        gsRows[0].grade_sheet_id;
-
-
-      // --------------------------------------------------------
-      // 6. UPLOAD MULTIPLE FILES TO CLOUDINARY
-      // --------------------------------------------------------
-
-      const filesToProcess = req.files || (req.file ? [req.file] : []);
-      let uploadedFileNames = [];
-      let uploadedFilePaths = [];
-      let uploadedFileTypes = [];
-      let totalFileSize = 0;
-
-      if (filesToProcess.length > 0) {
-        for (const file of filesToProcess) {
-          const cloudinaryResult =
-            await uploadToCloudinary(
-              file.buffer,
-              file.originalname
-            );
-          uploadedFileNames.push(file.originalname);
-          uploadedFilePaths.push(cloudinaryResult.secureUrl);
-          uploadedFileTypes.push(file.mimetype);
-          totalFileSize += file.size;
-        }
-      }
-
-
-      // --------------------------------------------------------
-      // 7. CREATE DATABASE PAYLOAD
-      // --------------------------------------------------------
-
-      const payload = {
-        grade_sheet_id: gradeSheetId,
-
-        teacher_assignment_id:
-          Number(teacher_assignment_id),
-
-        reason: reason.trim(),
-
-        status: status || "PENDING",
-
-        file_name: uploadedFileNames.length > 0 ? uploadedFileNames.join(", ") : null,
-
-        file_path: uploadedFilePaths.length > 0 ? uploadedFilePaths.join(", ") : null,
-
-        file_type: uploadedFileTypes.length > 0 ? uploadedFileTypes.join(", ") : null,
-
-        file_size: totalFileSize > 0 ? totalFileSize : null,
-
-        requested_at: new Date()
-          .toISOString()
-          .slice(0, 19)
-          .replace("T", " "),
-      };
-
-
-      // --------------------------------------------------------
-      // 8. INSERT INTO DATABASE
-      // --------------------------------------------------------
-
-      const id =
-        await GradeReopenRequest.create(payload);
-
-      try {
-        const [taRows] = await db.execute(
-          `SELECT ta.user_id, sub.subject_name, sec.section_name, sy.starts_on, sy.ends_on, tm.term_name
-           FROM TEACHER_ASSIGNMENT ta
-           LEFT JOIN SUBJECT_OFFERING so ON ta.subject_offering_id = so.subject_offering_id
-           LEFT JOIN SUBJECT sub ON so.subject_id = sub.subject_id
-           LEFT JOIN SECTION sec ON so.section_id = sec.section_id
-           LEFT JOIN SCHOOL_YEAR sy ON so.school_year_id = sy.school_year_id
-           LEFT JOIN ACADEMIC_TERM tm ON tm.term_id = ?
-           WHERE ta.teacher_assignment_id = ?`,
-          [gsRows[0]?.term_id || 1, teacher_assignment_id]
-        );
-        const subjName = taRows[0]?.subject_name || "Subject";
-        const secName = taRows[0]?.section_name || "Section";
-        const termLabel = taRows[0]?.term_name || "Term 1";
-        const syLabel = taRows[0]?.starts_on && taRows[0]?.ends_on ? `${taRows[0].starts_on}–${taRows[0].ends_on}` : null;
-        const targetStr = `${subjName} — ${secName}`;
-        const teacherUserId = taRows[0]?.user_id || req.headers["x-auralis-user-id"] || null;
-
-        await AuditEvent.create({
-          user_id: teacherUserId ? Number(teacherUserId) : null,
-          actor_context: { source: "user", acting_as: "Subject Teacher", role: "subject_teacher" },
-          event_type: "GRADE_REOPEN_REQUEST_SUBMITTED",
-          module_name: "GRADE_LOCK",
-          entity_type: "GRADE_REOPEN_REQUEST",
-          entity_id: id,
-          after_data: { request_status: "PENDING", grade_sheet_id: gradeSheetId },
-          metadata: {
-            sheet_name: targetStr,
-            target: targetStr,
-            school_year: syLabel,
-            term: termLabel,
-            subject: subjName,
-            section: secName,
-            reason: reason.trim(),
-            summary: `Submitted grade reopening request for ${targetStr} (${reason.trim()}).`,
-            impact: "Medium",
-          },
-        });
-      } catch (auditErr) {
-        console.error("Failed to log reopen request audit:", auditErr.message);
-      }
-
-
-      // --------------------------------------------------------
-      // 9. RESPONSE
-      // --------------------------------------------------------
-
-      res.status(201).json({
-        message:
-          "Reopen Request submitted successfully",
-
-        request_id: id,
-
-        file: uploadedFileNames.length > 0
-          ? {
-            names: uploadedFileNames,
-            urls: uploadedFilePaths,
-            count: uploadedFileNames.length,
-          }
-          : null,
-      });
-
-    } catch (err) {
-
-      console.error(
-        "[ERROR ROUTE] POST /api/reopen-requests:",
-        err.message,
-        err.stack
-      );
-
-
-      // Multer errors
-      if (err instanceof Error) {
-
-        if (
-          err.message.includes("File too large")
-        ) {
-          return res.status(400).json({
-            error:
-              "File size exceeds maximum allowed limit of 10MB.",
-          });
-        }
-
-        if (
-          err.message.includes(
-            "Only PDF, JPG, and PNG files are allowed"
-          )
-        ) {
-          return res.status(400).json({
-            error:
-              "Only PDF, JPG, and PNG files are allowed.",
-          });
-        }
-      }
-
-
-      res.status(500).json({
-        error: err.message,
-      });
+    if (typeof req.body.reason !== 'string' || !req.body.reason.trim() || req.body.reason.trim().length > 1000) {
+      return res.status(400).json({ error: 'Provide a reason of 1 to 1000 characters.' });
     }
-  }
-);
-
-
-// ============================================================
-// UPDATE REQUEST
-// ============================================================
-
-router.put("/:id", async (req, res) => {
-  try {
-
-    const updated =
-      await GradeReopenRequest.update(
-        req.params.id,
-        req.body
-      );
-
-    res.json(updated);
-
-  } catch (err) {
-
-    console.error(
-      "[ERROR ROUTE] PUT /api/reopen-requests/:id:",
-      err.message
+    const files = req.files || [];
+    const uploads = [];
+    for (const file of files) uploads.push(await uploadToCloudinary(file.buffer, file.originalname));
+    const request = await GradingPeriodService.createReopeningRequest(
+      req.body.grade_sheet_id, req.body.reason, req.currentUser, {
+        file_name: files.map(file => file.originalname).join(', ') || null,
+        file_path: uploads.map(file => file.secureUrl).join(', ') || null,
+        file_type: files.map(file => file.mimetype).join(', ') || null,
+        file_size: files.reduce((sum, file) => sum + file.size, 0) || null,
+      },
     );
-
-    res.status(500).json({
-      error: err.message,
-    });
-  }
+    return res.status(201).json({ message: 'Reopening request submitted.', request_id: request.request_id, request });
+  } catch (error) { return handleError(error, res); }
 });
 
-
-// ============================================================
-// DELETE REQUEST
-// ============================================================
-
-router.delete("/:id", async (req, res) => {
-  try {
-
-    const success =
-      await GradeReopenRequest.delete(
-        req.params.id
-      );
-
-    if (!success) {
-      return res.status(404).json({
-        message: "Reopen Request not found",
-      });
-    }
-
-    res.json({
-      message:
-        "Reopen Request deleted successfully",
-    });
-
-  } catch (err) {
-
-    console.error(
-      "[ERROR ROUTE] DELETE /api/reopen-requests/:id:",
-      err.message
-    );
-
-    res.status(500).json({
-      error: err.message,
-    });
+router.put('/:id', async (req, res) => {
+  if (Object.keys(req.body).length !== 1 || req.body.status !== 'CANCELLED') {
+    return res.status(409).json({ code: 'WORKFLOW_REQUIRED', error: 'Use the authorized approval or denial workflow. Only cancellation is supported here.' });
   }
+  try { return res.json(await GradingPeriodService.cancelReopeningRequest(req.params.id, req.currentUser)); }
+  catch (error) { return handleError(error, res); }
 });
 
-
+router.delete('/:id', (_req, res) => res.status(405).json({
+  code: 'WORKFLOW_REQUIRED', error: 'Reopening history cannot be deleted. Cancel a pending request instead.',
+}));
 module.exports = router;

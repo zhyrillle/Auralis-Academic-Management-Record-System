@@ -2,7 +2,8 @@
  * Principal Performance Level Service
  *
  * REST API client connecting to backend /api/principal/performance routes.
- * Gracefully falls back to preview data if the backend is offline or empty.
+ * Section requests reject failed/incomplete responses so the page can show Retry.
+ * Other legacy endpoints retain their existing fallback behavior.
  */
 
 import { principalPerformancePreviewData } from "../data/principalPerformancePreviewData";
@@ -355,21 +356,24 @@ export async function getGradeLevelPerformance({ term = "overall", schoolYear = 
  * 2. By Sections
  */
 export async function getSectionPerformance({ term = "overall", schoolYear = "2026-2027", gradeLevel = "all" }) {
-  try {
-    const params = new URLSearchParams({ term, schoolYear, gradeLevel: String(gradeLevel) });
-    const res = await fetch(`${API_BASE_URL}/principal/performance/sections?${params.toString()}`);
-    if (res.ok) {
-      const data = await res.json();
-      if (data && Array.isArray(data.sections) && data.sections.length > 0) {
-        const hasDbData = data.sections.some((sec) => sec.learners > 0 || sec.averageGrade > 0);
-        if (hasDbData) return data;
-      }
-    }
-  } catch (err) {
-    console.warn("Using preview fallback for Section Performance:", err.message);
-  }
-
-  return getPreviewSections({ term, schoolYear, gradeLevel });
+  const params = new URLSearchParams({ term, schoolYear, gradeLevel: String(gradeLevel) });
+  const res = await fetch(`${API_BASE_URL}/principal/performance/sections?${params.toString()}`);
+  if (!res.ok) throw new Error(`Unable to load section performance (HTTP ${res.status}).`);
+  const data = await res.json();
+  const numeric = (value) => value != null && value !== "" && Number.isFinite(Number(value));
+  const summaryFields = ["averageGrade", "passRate", "failRate", "passingLearners", "failingLearners", "needsAttention"];
+  const valid = data && Array.isArray(data.sections) && Array.isArray(data.bands)
+    && Array.isArray(data.availableSchoolYears) && Array.isArray(data.availableGradeLevels)
+    && data.summary && summaryFields.every((field) => numeric(data.summary[field]))
+    && data.availableSchoolYears.every((year) => year && typeof year.value === "string" && typeof year.label === "string")
+    && data.availableGradeLevels.every(numeric)
+    && data.bands.every((band) => band && typeof band.label === "string" && numeric(band.count))
+    && data.sections.every((section) => section && typeof section.section === "string"
+      && typeof section.label === "string" && numeric(section.gradeLevel)
+      && section.distribution && ["needsAttention", "satisfactory", "verySatisfactory", "outstanding"]
+        .every((band) => numeric(section.distribution[band])));
+  if (!valid) throw new Error("The section performance response is incomplete. Please retry or contact the administrator.");
+  return data;
 }
 
 /**

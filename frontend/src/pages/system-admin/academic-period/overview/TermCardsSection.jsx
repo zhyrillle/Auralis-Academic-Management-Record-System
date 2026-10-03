@@ -16,6 +16,7 @@ function TermCard({
   onViewDetails,
   onManageReopenings,
 }) {
+  const canManageRequests = term.hasEnded || requestCount > 0 || activeCount > 0;
   const handleCardClick = (event) => {
     if (event.target.closest?.("button")) return;
     onSelect(term.id);
@@ -105,11 +106,11 @@ function TermCard({
         )}
       </dl>
 
-      {term.status === "finalized" && (
+      {canManageRequests && (
         <div className="term-card__reopening-summary">
           <span>
             <FileClock size={15} aria-hidden="true" />
-            {requestCount} correction {requestCount === 1 ? "request" : "requests"}
+            {requestCount} reopening {requestCount === 1 ? "request" : "requests"}
           </span>
           <span>
             <KeyRound size={15} aria-hidden="true" />
@@ -118,7 +119,7 @@ function TermCard({
         </div>
       )}
 
-      {term.status !== "finalized" && (
+      {!canManageRequests && (
         <div className="term-card__actions">
           <button
             type="button"
@@ -135,7 +136,7 @@ function TermCard({
         </div>
       )}
 
-      {term.status === "finalized" && (
+      {canManageRequests && (
         <div className="term-card__actions">
           <button
             type="button"

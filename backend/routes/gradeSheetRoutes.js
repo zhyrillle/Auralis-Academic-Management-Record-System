@@ -21,32 +21,17 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-router.post('/', async (req, res) => {
-  try {
-    const id = await GradeSheet.create(req.body);
-    res.status(201).json({ message: 'Grade Sheet created successfully', grade_sheet_id: id });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+// Lifecycle writes belong to Class Record submission and authorized reopening.
+// Generic CRUD must not manufacture sheets, unlock them, or erase their history.
+function blockDirectMutation(req, res) {
+  return res.status(405).json({
+    code: 'WORKFLOW_REQUIRED',
+    message: 'Use the Class Record and authorized reopening workflows to manage grade sheets.',
+  });
+}
 
-router.put('/:id', async (req, res) => {
-  try {
-    const updated = await GradeSheet.update(req.params.id, req.body);
-    res.json(updated);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-router.delete('/:id', async (req, res) => {
-  try {
-    const success = await GradeSheet.delete(req.params.id);
-    if (!success) return res.status(404).json({ message: 'Grade Sheet not found' });
-    res.json({ message: 'Grade Sheet deleted successfully' });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+router.post('/', blockDirectMutation);
+router.put('/:id', blockDirectMutation);
+router.delete('/:id', blockDirectMutation);
 
 module.exports = router;

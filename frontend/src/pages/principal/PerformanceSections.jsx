@@ -70,6 +70,7 @@ export default function PerformanceSections() {
       .finally(() => {
         if (currentRequest === requestId.current) setRequestMode("idle");
       });
+    return () => { requestId.current += 1; };
   }, [term, schoolYear, retryKey]);
 
   const changeFilter = (setter) => (value) => {
@@ -84,7 +85,7 @@ export default function PerformanceSections() {
   };
 
   if (requestMode === "initial" && !data) return <AnalyticsSkeleton table />;
-  if (!data && error)
+  if (!data)
     return (
       <main className="pa-page pp-page">
         <section className="pa-state-panel">
@@ -92,7 +93,7 @@ export default function PerformanceSections() {
             className="pa-empty-state"
             icon={AlertTriangle}
             title="Section performance is unavailable"
-            description={error}
+            description={error || "No section performance response is available."}
           />
           <button className="pa-retry-button" type="button" onClick={retry}>
             <RefreshCw size={16} />

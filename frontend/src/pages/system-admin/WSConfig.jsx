@@ -16,102 +16,68 @@ import { WSConfigSkeletonRows, WSConfigPlaceholder, WSConfigBusy } from "./ws-co
 import {
   getSchoolYears,
   getSubjectWeightConfiguration,
-  inheritSubjectWeightConfiguration,
   saveSubjectWeightConfiguration,
 } from "../../services/wsConfigService";
 import "../../styles/wsConfig.css";
+// WS configuration mapping: main component weights only.
+function canonicalComponent(code) {
+  const normalized = String(code ?? '').trim().toUpperCase();
+  return ['EX', 'QA', 'STE'].includes(normalized) ? 'EX' : normalized;
+}
 
-const weightFields = ["writtenWork", "performanceTasks", "assessment"];
-const componentFieldByCode = {
-  WW: "writtenWork",
-  PT: "performanceTasks",
-  QA: "assessment",
-};
+function getDefaultSubjectWeights(subjectCode) {
+  const code = String(subjectCode ?? '').trim().toUpperCase();
+  if (['MAPEH', 'TLE', 'EPP'].includes(code)) return { WW: 20, PT: 60, EX: 20 };
+  if (['ENG', 'ENGLISH', 'FIL', 'FILIPINO', 'AP', 'ESP', 'GMRC', 'VE', 'MATH', 'MATHEMATICS', 'SCI', 'SCIENCE'].includes(code)) {
+    return { WW: 20, PT: 50, EX: 30 };
+  }
+  return null;
+}
 
-const defaultWeightsBySubjectCode = {
-  ENG: { writtenWork: 30, performanceTasks: 50, assessment: 20 },
-  FIL: { writtenWork: 30, performanceTasks: 50, assessment: 20 },
-  AP: { writtenWork: 30, performanceTasks: 50, assessment: 20 },
-  ESP: { writtenWork: 20, performanceTasks: 60, assessment: 20 },
-  MATH: { writtenWork: 40, performanceTasks: 40, assessment: 20 },
-  SCI: { writtenWork: 40, performanceTasks: 40, assessment: 20 },
-  MAPEH: { writtenWork: 20, performanceTasks: 60, assessment: 20 },
-  TLE: { writtenWork: 20, performanceTasks: 60, assessment: 20 },
-};
-
-const getSubjectLabel = (subjectCode, subjectName) =>
-  ["AP", "ESP", "MAPEH", "TLE"].includes(subjectCode)
-    ? subjectCode
-    : subjectName;
-
-const mapConfigurationRows = (
-  rows,
-  { useDefaults = true, includeUnconfigured = true } = {},
-) => {
+const weightFields = ['writtenWork', 'performanceTasks', 'assessment'];
+const fieldByCode = { WW: 'writtenWork', PT: 'performanceTasks', EX: 'assessment' };
+function mapConfigurationRows(rows, { useDefaults = true, includeUnconfigured = true } = {}) {
   const subjects = new Map();
-
-  rows.forEach((row) => {
+  for (const row of rows) {
+    const field = fieldByCode[canonicalComponent(row.component_code)];
+    if (!field) continue;
     const subjectId = Number(row.subject_id);
-    const componentField = componentFieldByCode[row.component_code];
-
-    if (!componentField) {
-      return;
-    }
-
     if (!subjects.has(subjectId)) {
-      const defaults = (useDefaults
-        ? defaultWeightsBySubjectCode[row.subject_code]
-        : null) || {
-        writtenWork: "",
-        performanceTasks: "",
-        assessment: "",
-      };
-
-      subjects.set(subjectId, {
-        id: String(subjectId),
-        subjectId,
-        subjectCode: row.subject_code,
-        subject: getSubjectLabel(row.subject_code, row.subject_name),
-        ...defaults,
-        componentTypeIds: {},
-        configuredPercentages: [],
-      });
+      subjects.set(subjectId, { id: String(subjectId), subjectId, subjectCode: row.subject_code,
+        subject: ['AP', 'ESP', 'MAPEH', 'TLE'].includes(row.subject_code) ? row.subject_code : row.subject_name,
+        writtenWork: '', performanceTasks: '', assessment: '', componentTypeIds: {}, groups: {},
+        configurationError: '' });
     }
-
     const subject = subjects.get(subjectId);
-    subject.componentTypeIds[componentField] = Number(row.component_type_id);
-
-    if (row.percentage !== null && row.percentage !== undefined) {
-      subject.configuredPercentages.push({
-        field: componentField,
-        value: Number(row.percentage),
-      });
+    (subject.groups[field] ??= []).push(row);
+  }
+  return [...subjects.values()].map((subject) => {
+    const configured = [];
+    for (const field of weightFields) {
+      const group = subject.groups[field] ?? [];
+      const saved = group.filter((row) => row.percentage !== null && row.percentage !== undefined);
+      if (saved.length > 1) subject.configurationError = 'Duplicate saved component weights require review.';
+      // Preserve saved component IDs; a code rename must not create new weight records.
+      const selected = saved[0] ?? group.find((row) => row.component_code === 'STE') ?? group[0];
+      if (selected) subject.componentTypeIds[field] = Number(selected.component_type_id);
+      if (saved.length === 1) configured.push({ field, value: Number(saved[0].percentage) });
     }
-  });
-
-  return Array.from(subjects.values())
-    .map((subject) => {
-      const configuredTotal = subject.configuredPercentages.reduce(
-        (total, item) => total + item.value,
-        0,
-      );
-      const fractionScale =
-        subject.configuredPercentages.length > 0 && configuredTotal <= 1.001
-          ? 100
-          : 1;
-      const mappedSubject = { ...subject };
-      mappedSubject.needsInitialization =
-        subject.configuredPercentages.length < weightFields.length;
-
-      subject.configuredPercentages.forEach(({ field, value }) => {
-        mappedSubject[field] = Math.round(value * fractionScale * 100) / 100;
-      });
-
-      delete mappedSubject.configuredPercentages;
-      return mappedSubject;
-    })
-    .filter((subject) => includeUnconfigured || !subject.needsInitialization);
-};
+    subject.needsInitialization = configured.length < weightFields.length;
+    // Retain compatibility with older fractional storage (0.2/0.5/0.3).
+    const total = configured.reduce((sum, entry) => sum + entry.value, 0);
+    const scale = configured.length === 3 && total > 0 && total <= 1.001 ? 100 : 1;
+    for (const entry of configured) subject[entry.field] = Math.round(entry.value * scale * 100) / 100;
+    // Defaults are displayed only for wholly unconfigured subjects, never mixed into partial saved data.
+    const defaults = useDefaults && configured.length === 0 && !subject.configurationError
+      ? getDefaultSubjectWeights(subject.subjectCode) : null;
+    if (defaults) for (const [code, value] of Object.entries(defaults)) subject[fieldByCode[code]] = value;
+    if (weightFields.some((field) => !subject.componentTypeIds[field])) {
+      subject.configurationError = 'WW, PT and STs–TE component definitions are required.';
+    }
+    delete subject.groups;
+    return subject;
+  }).filter((subject) => includeUnconfigured || !subject.needsInitialization || subject.configurationError);
+}
 
 const selectCurrentSchoolYear = (schoolYears) =>
   [...schoolYears]
@@ -136,7 +102,6 @@ const fetchCurrentConfiguration = async () => {
     );
   }
 
-  await inheritSubjectWeightConfiguration(currentSchoolYear.school_year_id);
   const configuration = await getSubjectWeightConfiguration(
     currentSchoolYear.school_year_id,
   );
@@ -171,6 +136,7 @@ const getRowTotal = (weight) =>
   );
 
 const getRowError = (weight) => {
+  if (weight.configurationError) return weight.configurationError;
   const values = weightFields.map((field) => getDisplayedWeight(weight, field));
 
   if (values.some((value) => value === "")) {
@@ -671,9 +637,9 @@ export default function WSConfig() {
             <thead>
               <tr>
                 <th scope="col">Subject</th>
-                <th scope="col">Written Work</th>
-                <th scope="col">Performance Tasks</th>
-                <th scope="col">Assessment</th>
+                <th scope="col">WRITTEN WORKS (WW)</th>
+                <th scope="col">PERFORMANCE TASK (PT)</th>
+                <th scope="col">Summative Tests and Term Examination (STs–TE)</th>
                 <th scope="col">Total</th>
                 {isEditing && <th scope="col">Action</th>}
               </tr>
@@ -694,7 +660,7 @@ export default function WSConfig() {
                 </tr>
               ) : (
                 displayedWeights.map((weight) => {
-                  const rowError = isEditing ? getRowError(weight) : "";
+                  const rowError = getRowError(weight);
                   const rowTotal = getRowTotal(weight);
                   const savedWeight = savedWeights.find(
                     (savedWeightItem) => savedWeightItem.id === weight.id,
@@ -715,6 +681,7 @@ export default function WSConfig() {
                     >
                       <th scope="row" className="ws-config-subject">
                         {weight.subject}
+                        {weight.needsInitialization && <small> — Not saved</small>}
                       </th>
                       {weightFields.map((field) => (
                         <td key={field} className="ws-config-number-cell">
@@ -924,9 +891,9 @@ export default function WSConfig() {
                       <thead>
                         <tr>
                           <th scope="col">Subject</th>
-                          <th scope="col">Written Work</th>
-                          <th scope="col">Performance Tasks</th>
-                          <th scope="col">Assessment</th>
+                          <th scope="col">WRITTEN WORKS (WW)</th>
+                          <th scope="col">PERFORMANCE TASK (PT)</th>
+                          <th scope="col">Summative Tests and Term Examination (STs–TE)</th>
                           <th scope="col">Total</th>
                         </tr>
                       </thead>

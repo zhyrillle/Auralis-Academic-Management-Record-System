@@ -8,12 +8,18 @@ export default function DropdownSelect({
   options,
   onChange,
   disabled = false,
+  placeholder,
+  error = false,
+  id,
+  title,
   className = "",
 }) {
   const rootRef = useRef(null);
   const [isOpen, setIsOpen] = useState(false);
   const selectedOption =
-    options.find((option) => String(option.value) === String(value)) || options[0];
+    options.find((option) => String(option.value) === String(value))
+    || (placeholder === undefined ? options[0] : null);
+  const selectedLabel = selectedOption?.label ?? placeholder;
 
   useEffect(() => {
     if (!isOpen) return undefined;
@@ -33,12 +39,13 @@ export default function DropdownSelect({
     };
   }, [isOpen]);
 
-  const handleSelect = (nextValue) => {
-    onChange(nextValue);
+  const handleSelect = (option) => {
+    if (disabled || option.disabled) return;
+    onChange(option.value);
     setIsOpen(false);
   };
 
-  if (!selectedOption) return null;
+  if (selectedLabel === undefined) return null;
 
   return (
     <div
@@ -47,18 +54,21 @@ export default function DropdownSelect({
     >
       <button
         type="button"
-        className={`dropdown-select__trigger${isOpen ? " is-open" : ""}`}
+        id={id}
+        title={title}
+        className={`dropdown-select__trigger${isOpen ? " is-open" : ""}${error ? " is-error" : ""}`}
         onClick={() => setIsOpen((current) => !current)}
         disabled={disabled}
         aria-haspopup="listbox"
-        aria-expanded={isOpen}
-        aria-label={`${label}: ${selectedOption.label}`}
+        aria-expanded={isOpen && !disabled}
+        aria-invalid={Boolean(error)}
+        aria-label={`${label}: ${selectedLabel}`}
       >
-        <span>{selectedOption.label}</span>
+        <span>{selectedLabel}</span>
         <ChevronDown size={15} aria-hidden="true" />
       </button>
 
-      {isOpen && (
+      {isOpen && !disabled && (
         <div className="dropdown-select__menu" role="listbox" aria-label={label}>
           {options.map((option) => {
             const isSelected = String(option.value) === String(value);
@@ -67,7 +77,10 @@ export default function DropdownSelect({
                 key={String(option.value || "all")}
                 type="button"
                 className={isSelected ? "is-selected" : ""}
-                onClick={() => handleSelect(option.value)}
+                onClick={() => handleSelect(option)}
+                disabled={Boolean(option.disabled)}
+                title={option.title}
+                aria-disabled={Boolean(option.disabled)}
                 role="option"
                 aria-selected={isSelected}
               >

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { Eye, Download, FileText, Sparkles, Printer, FileSpreadsheet, CheckCircle2, Loader2 } from "lucide-react";
 import "../../styles/studentSF9.css";
 
@@ -14,7 +14,15 @@ import SF10PreviewModal from "../../components/SF10PreviewModal.jsx";
 import SF10Document from "../../components/SF10Document.jsx";
 import { generateSF10PdfFromPages } from "../../utils/sf10PdfGenerator.js";
 
-export default function StudentSF9Page({ student, onBack, userRole: propUserRole, initialTab, isAdviser: propIsAdviser }) {
+export default function StudentSF9Page(props) {
+  const student = props.student;
+  const identity = student?.student_id || student?.studentId || student?.student_section_id || student?.studentSectionId || student?.lrn || student?.id || "default";
+  const schoolYear = student?.schoolYearId || student?.schoolYear || "";
+  // Remount learner-specific state before showing another learner's report.
+  return <StudentSF9Details key={`${identity}:${schoolYear}:${props.reportIdentifier || ""}`} {...props} />;
+}
+
+function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab, isAdviser: propIsAdviser, reportIdentifier, loadReport = getStudentSF9Details }) {
   const storedUser = useMemo(() => getStoredUser(), []);
   const normRole = useMemo(() => normalizeRole(storedUser?.role, storedUser), [storedUser]);
   const userRole = propUserRole || (normRole === "adviser" ? "adviser" : normRole === "principal" ? "principal" : "teacher");
@@ -34,7 +42,10 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
   }, [isAdviser, activeTab]);
   const [viewMode, setViewMode] = useState("spread"); // "spread", "front", "back"
   const [sf9Data, setSf9Data] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const identifier = reportIdentifier || student?.student_id || student?.studentId || student?.student_section_id || student?.studentSectionId || student?.lrn || student?.id;
+  const [loading, setLoading] = useState(Boolean(identifier));
+  const [loadError, setLoadError] = useState(false);
+  const [requestAttempt, setRequestAttempt] = useState(0);
   const [isSF10Open, setIsSF10Open] = useState(false);
   const [downloadingSF10, setDownloadingSF10] = useState(false);
   const [cachedSF10Data, setCachedSF10Data] = useState(null);
@@ -46,49 +57,43 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
   const studentKey = student?.lrn || student?.student_id || student?.studentId || student?.id || "default";
   const storageKey = `sf9_comments_${studentKey}`;
 
-  const [comments, setComments] = useState({
-    term1: "",
-    term2: "",
-    term3: ""
-  });
-
-  useEffect(() => {
+  const [comments, setComments] = useState(() => {
+    if (userRole === "principal") return { term1: "", term2: "", term3: "" };
     try {
       const saved = localStorage.getItem(storageKey);
       if (saved) {
-        setComments(JSON.parse(saved));
-        return;
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          return { term1: "", term2: "", term3: "", ...parsed };
+        }
       }
     } catch (e) {
       console.error("Error loading saved SF9 comments:", e);
     }
-    setComments({ term1: "", term2: "", term3: "" });
-  }, [storageKey]);
+    return { term1: "", term2: "", term3: "" };
+  });
 
   const handleCommentChange = (term, val) => {
-    setComments(prev => {
-      const updated = { ...prev, [term]: val };
-      try {
-        localStorage.setItem(storageKey, JSON.stringify(updated));
-      } catch (e) {
-        console.error("Error saving SF9 comments:", e);
-      }
-      return updated;
-    });
+    const updated = { ...comments, [term]: val };
+    setComments(updated);
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(updated));
+    } catch (e) {
+      console.error("Error saving SF9 comments:", e);
+    }
   };
 
   useEffect(() => {
     let isMounted = true;
-    const identifier = student?.student_id || student?.studentId || student?.student_section_id || student?.studentSectionId || student?.lrn || student?.id;
     if (identifier) {
-      setLoading(true);
-      getStudentSF9Details(identifier)
+      loadReport(identifier)
         .then((data) => {
           if (isMounted && data) {
             setSf9Data(data);
           }
         })
         .catch((err) => {
+          if (isMounted) setLoadError(true);
           console.error("Failed to load dynamic SF9 data:", err);
         })
         .finally(() => {
@@ -96,7 +101,7 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
         });
     }
     return () => { isMounted = false; };
-  }, [student]);
+  }, [identifier, requestAttempt, loadReport]);
 
   // Dynamic student records matching official layout
   const studentProfile = useMemo(() => {
@@ -122,7 +127,7 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
       principalName: (() => {
         const raw = fetched.principalName || student?.principalName || "";
         if (!raw) return "";
-        return (raw.toUpperCase().includes("PH.D") || raw.toUpperCase().includes("PHD")) ? raw : `${raw}, Ph.D.`;
+        return raw;
       })(),
       admittedToGrade: "", // Leave blank as requested
       eligibleForAdmission: "" // Leave blank as requested
@@ -153,8 +158,8 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
     { scale: "90-100", desc: "Advancing", remarks: "Passed" },
     { scale: "80-89", desc: "Benchmarking", remarks: "Passed" },
     { scale: "75-79", desc: "Connecting", remarks: "Passed" },
-    { scale: "65-74", desc: "Developing", remarks: "Passed" },
-    { scale: "0-64", desc: "Emerging", remarks: "Passed" }
+    { scale: "65-74", desc: "Developing", remarks: "Failed" },
+    { scale: "0-64", desc: "Emerging", remarks: "Failed" }
   ];
 
   // Official Attendance Record Data (11 months: Jun - Apr)
@@ -179,7 +184,8 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
     }, 4000);
   };
 
-  const getAttendanceTotal = (arr) => arr.reduce((acc, curr) => acc + curr, 0);
+  const getAttendanceTotal = (arr) => arr.every(value => typeof value === "number" && Number.isFinite(value))
+    ? arr.reduce((acc, curr) => acc + curr, 0) : "";
 
   const getStudentLastName = () => {
     if (student?.last_name) return String(student.last_name).trim().toUpperCase().replace(/[^A-Z0-9_-]/gi, "");
@@ -200,6 +206,7 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
   };
 
   const handleDownloadPDF = async () => {
+    if (loading || loadError || !sf9Data) return;
     try {
       showToast(`Generating PDF for ${studentProfile.name || "Student"}...`, "info", CheckCircle2);
       await exportSf9Pdf({
@@ -219,6 +226,7 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
   };
 
   const handlePrint = () => {
+    if (loading || loadError || !sf9Data) return;
     const originalTitle = document.title;
     const lastName = getStudentLastName();
     const fileName = `${lastName}_SF9`;
@@ -288,7 +296,22 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
   };
 
   return (
-    <div className="student-sf9-container">
+    <div className={`student-sf9-container${reportIdentifier ? " sf9-principal-report" : ""}`} aria-busy={loading}>
+      {sf9Data?.warnings?.length > 0 && <aside className="sf9-report-warnings" aria-label="Report completeness notes">
+        <strong>Review before issuing</strong>
+        <ul>{sf9Data.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>
+      </aside>}
+      {loading && <p role="status" className="no-print">Loading student records…</p>}
+      {loadError && (
+        <div role="alert" className="no-print">
+          <p>Student records could not be loaded.</p>
+          <button type="button" onClick={() => {
+            setLoadError(false);
+            setLoading(true);
+            setRequestAttempt(attempt => attempt + 1);
+          }}>Try again</button>
+        </div>
+      )}
       {/* Top Navigation / Breadcrumb Area */}
       <div className="sf9-header-bar no-print">
         <button className="back-btn" onClick={onBack} title="Back to Class List">
@@ -315,7 +338,7 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
 
         {/* Term Grade average */}
         <div className="sf9-card term-grade-card">
-          <span className="term-grade-label">Term Grade: {studentProfile.termGrade}</span>
+          <span className="term-grade-label">{reportIdentifier ? "Final Average" : "Term Grade"}: {studentProfile.termGrade}</span>
           <span className="honor-badge">
             <Sparkles size={12} style={{ display: "inline-block", marginRight: "4px", verticalAlign: "middle" }} />
             {studentProfile.honorStatus}
@@ -352,12 +375,12 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
             >
               Official SF9 Form
             </button>
-            <button
+            {!reportIdentifier && <button
               className={`sf9-tab-button ${activeTab === "personal" ? "active" : ""}`}
               onClick={() => setActiveTab("personal")}
             >
               Personal Info
-            </button>
+            </button>}
           </div>
         ) : (
           <div className="sf9-tabs-outer">
@@ -402,13 +425,13 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
               <FileText size={16} />
               <span>Preview</span>
             </button>
-            <button className="sf9-download-btn" onClick={handleDownloadPDF} title="Download SF9 PDF">
+            <button className="sf9-download-btn" onClick={handleDownloadPDF} disabled={loading || loadError || !sf9Data} title="Download SF9 PDF">
               <Download size={16} />
               <span>Download PDF</span>
             </button>
-            <button className="sf9-print-btn" onClick={handlePrint} title="Print Official SF9 Document">
+            <button className="sf9-print-btn" onClick={handlePrint} disabled={loading || loadError || !sf9Data} title="Open browser print dialog to print or save SF9 as PDF">
               <Printer size={16} />
-              <span>Print SF9</span>
+              <span>Print / Save as PDF</span>
             </button>
           </div>
         )}
@@ -433,13 +456,13 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
                   <div className="sf9-header-text-center">
                     <p className="sf9-hdr-line">Republic of the Philippines</p>
                     <p className="sf9-hdr-line">Department of Education</p>
-                    <p className="sf9-hdr-line">Region X – Northern Mindanao</p>
-                    <p className="sf9-hdr-line font-bold">SCHOOLS DIVISION OFFICE OF GINGOOG CITY</p>
-                    <p className="sf9-hdr-line">West 1 District</p>
-                    <p className="sf9-hdr-line">Gingoog City, Misamis Oriental</p>
-                    <h3 className="sf9-school-name-title">GINGOOG CITY COMPREHENSIVE NATIONAL HIGH SCHOOL</h3>
+                    <p className="sf9-hdr-line">{reportIdentifier ? sf9Data?.school?.region || "" : "Region X – Northern Mindanao"}</p>
+                    <p className="sf9-hdr-line font-bold">{reportIdentifier ? sf9Data?.school?.division || "" : "SCHOOLS DIVISION OFFICE OF GINGOOG CITY"}</p>
+                    {!reportIdentifier && <><p className="sf9-hdr-line">West 1 District</p><p className="sf9-hdr-line">Gingoog City, Misamis Oriental</p></>}
+                    <h3 className="sf9-school-name-title">{reportIdentifier ? sf9Data?.school?.name || "" : "GINGOOG CITY COMPREHENSIVE NATIONAL HIGH SCHOOL"}</h3>
                     <h2 className="sf9-report-doc-title">LEARNER'S PERFORMANCE REPORT</h2>
                     <p className="sf9-school-year-title">School Year {studentProfile.schoolYear}</p>
+                    {reportIdentifier && sf9Data?.warnings?.length > 0 && <p className="sf9-export-review-note">For review — incomplete or unverified fields remain blank.</p>}
                   </div>
                   <div className="sf9-header-logo-right">
                     <img src={gccnhsLogo} alt="GCCNS Seal" className="sf9-logo-img" />
@@ -627,6 +650,7 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
                         className="sf9-comment-input"
                         rows="2"
                         value={comments.term1}
+                        readOnly={userRole === "principal"}
                         onChange={(e) => handleCommentChange("term1", e.target.value)}
                         placeholder="Enter comments for Term 1..."
                       />
@@ -640,6 +664,7 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
                         className="sf9-comment-input"
                         rows="2"
                         value={comments.term2}
+                        readOnly={userRole === "principal"}
                         onChange={(e) => handleCommentChange("term2", e.target.value)}
                         placeholder="Enter comments for Term 2..."
                       />
@@ -653,6 +678,7 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
                         className="sf9-comment-input"
                         rows="2"
                         value={comments.term3}
+                        readOnly={userRole === "principal"}
                         onChange={(e) => handleCommentChange("term3", e.target.value)}
                         placeholder="Enter comments for Term 3..."
                       />
