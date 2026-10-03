@@ -139,6 +139,8 @@ export default function StudentSectionManagement() {
   const [studentSectionFilter, setStudentSectionFilter] = useState("All Sections");
   const [studentStatusFilter, setStudentStatusFilter] = useState("All Students");
   const [selectedStudentIds, setSelectedStudentIds] = useState(new Set());
+  const [studentPage, setStudentPage] = useState(1);
+  const studentsPerPage = 10;
 
   // Modal states
   const [activeModal, setActiveModal] = useState(null);
@@ -236,17 +238,34 @@ export default function StudentSectionManagement() {
             const ssEntry = studentSectionMap.get(sId);
             const resolvedSectionId = st.section_id || ssEntry?.section_id || null;
             const secMatch = resolvedSectionId ? sectionMap.get(Number(resolvedSectionId)) : null;
-            const glId = Number(st.grade_level_id || secMatch?.grade_level_id);
-            const levelFromMap = gradeMap.get(glId);
+            const glId = secMatch?.grade_level_id
+              ? Number(secMatch.grade_level_id)
+              : (st.grade_level_id ? Number(st.grade_level_id) : null);
+            const levelFromMap = glId ? gradeMap.get(glId) : null;
             const resolvedGrade = resolvedSectionId
               ? (secMatch?.grade_level_name || secMatch?.level || levelFromMap || (glId === 2 ? "G8" : glId === 3 ? "G9" : glId === 4 ? "G10" : "G7"))
               : "Unassigned";
 
             const fullName = st.name || `${st.first_name || ""} ${st.middle_name ? st.middle_name + " " : ""}${st.last_name || ""}${st.extension_name ? " " + st.extension_name : ""}`.trim();
 
+            const isSecSpec = secMatch && Boolean(
+              Number(secMatch.is_specialized) === 1 &&
+              secMatch.program_id &&
+              [1, 2, 3].includes(Number(secMatch.program_id))
+            );
+            const resolvedProgramId = isSecSpec ? Number(secMatch.program_id) : (st.program_id ? Number(st.program_id) : 4);
+            const resolvedProgramCode = isSecSpec
+              ? (Number(secMatch.program_id) === 1 ? "STE" : Number(secMatch.program_id) === 2 ? "SPJ" : Number(secMatch.program_id) === 3 ? "SPA" : "EBEC")
+              : (st.program_code || "EBEC");
+            const resolvedIsSpec = isSecSpec ? 1 : (st.is_specialized || 0);
+
             return {
               id: sId,
               name: fullName,
+              first_name: st.first_name || "",
+              last_name: st.last_name || "",
+              middle_name: st.middle_name || "",
+              extension_name: st.extension_name || "",
               lrn: String(st.LRN || st.lrn || ""),
               grade_level_id: glId || null,
               gradeLevel: resolvedGrade,
@@ -254,6 +273,10 @@ export default function StudentSectionManagement() {
               section: secMatch ? (secMatch.section_name || secMatch.name) : (st.section || (resolvedSectionId ? `Section ${resolvedSectionId}` : "Unassigned")),
               student_section_id: st.student_section_id || ssEntry?.student_section_id || null,
               status: st.status || "Active",
+              program_id: resolvedProgramId,
+              program_code: resolvedProgramCode,
+              program_name: st.program_name || null,
+              is_specialized: resolvedIsSpec,
             };
           })
         );
@@ -314,6 +337,16 @@ export default function StudentSectionManagement() {
       return searchMatch && sectionMatch && statusMatch;
     });
   }, [students, studentSearch, studentSectionFilter, studentStatusFilter]);
+
+  const totalStudentPages = Math.ceil(filteredStudents.length / studentsPerPage) || 1;
+  const paginatedStudents = useMemo(() => {
+    const start = (studentPage - 1) * studentsPerPage;
+    return filteredStudents.slice(start, start + studentsPerPage);
+  }, [filteredStudents, studentPage, studentsPerPage]);
+
+  useEffect(() => {
+    setStudentPage(1);
+  }, [studentSearch, studentSectionFilter, studentStatusFilter]);
 
   const toggleStudentSelection = (id) => {
     const newSelected = new Set(selectedStudentIds);
@@ -413,6 +446,7 @@ export default function StudentSectionManagement() {
       const studentIdsArray = Array.from(selectedStudentIds);
       await bulkAssignStudents({
         studentIds: studentIdsArray,
+        sectionId: target.id,
         section_id: target.id,
       });
       showFeedback(
@@ -525,12 +559,13 @@ export default function StudentSectionManagement() {
     try {
       setIsSubmitting(true);
       const st = students.find((s) => s.id === studentId);
+      const sec = sections.find((s) => s.id === sectionId);
       await assignStudent({
         studentId,
         sectionId,
         studentSectionId: st?.student_section_id,
       });
-      const sec = sections.find((s) => s.id === sectionId);
+
       showFeedback(
         "success",
         `${st ? st.name : "Student"} assigned to ${sec ? sec.name : "section"}.`
@@ -655,21 +690,31 @@ export default function StudentSectionManagement() {
                         {sec.name}
                       </h3>
                       <span style={(() => {
+                        const isSpec = Boolean(
+                          Number(sec.is_specialized) === 1 &&
+                          sec.program_id &&
+                          [1, 2, 3].includes(Number(sec.program_id))
+                        );
                         const pid = String(sec.program_id);
-                        const isSpec = sec.is_specialized == 1 || sec.program_id;
                         const base = { padding: "4px 10px", borderRadius: "20px", fontSize: "0.75rem", fontWeight: "600" };
                         if (!isSpec) return { ...base, backgroundColor: "rgba(17,45,97,0.06)", color: "#112d61" };
                         if (pid === "1") return { ...base, backgroundColor: "rgba(37, 99, 235, 0.1)", color: "#2563eb" };
                         if (pid === "2") return { ...base, backgroundColor: "rgba(22, 163, 74, 0.1)", color: "#16a34a" };
                         if (pid === "3") return { ...base, backgroundColor: "rgba(202, 138, 4, 0.1)", color: "#ca8a04" };
-                        return { ...base, backgroundColor: "rgba(201, 162, 39, 0.1)", color: "#c9a227" };
+                        return { ...base, backgroundColor: "rgba(17,45,97,0.06)", color: "#112d61" };
                       })()}>
                         {formatLevelLabel(sec.level, sec.grade_level_id)}
                       </span>
                     </div>
                     <p style={{ color: "#64748b", fontSize: "0.85rem", margin: "0 0 16px 0", fontWeight: "500" }}>
-                      {(sec.is_specialized == 1 || sec.program_id)
-                        ? (String(sec.program_id) === "1" ? "Special Program - STE" : String(sec.program_id) === "2" ? "Special Program - SPJ" : String(sec.program_id) === "3" ? "Special Program - SPA" : "Special Program")
+                      {Number(sec.is_specialized) === 1 && sec.program_id && [1, 2, 3].includes(Number(sec.program_id))
+                        ? (Number(sec.program_id) === 1
+                            ? "Special Program - STE"
+                            : Number(sec.program_id) === 2
+                            ? "Special Program - SPJ"
+                            : Number(sec.program_id) === 3
+                            ? "Special Program - SPA"
+                            : "Regular Class")
                         : "Regular Class"}
                     </p>
                     <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
@@ -698,6 +743,408 @@ export default function StudentSectionManagement() {
               </div>
             )}
           </div>
+        </section>
+
+        {/* Students Panel */}
+        <section className="users-panel" style={{ marginTop: "28px" }}>
+          <div className="users-panel-header">
+            <div>
+              <h2>Students</h2>
+              <p>View all students and assign them to sections.</p>
+            </div>
+            <span className="users-result-count">
+              {isLoading ? "Loading..." : `${filteredStudents.length} students`}
+            </span>
+          </div>
+
+          {selectedStudentIds.size > 0 && (
+            <div className="bulk-action-bar">
+              <span>{selectedStudentIds.size} student(s) selected</span>
+              <button
+                type="button"
+                className="add-user-btn"
+                onClick={() => {
+                  setAssignFormData({ section_id: "" });
+                  setActiveModal("assignSelected");
+                }}
+                style={{ padding: "6px 14px", fontSize: "0.85rem", cursor: "pointer" }}
+              >
+                Assign Selected
+              </button>
+            </div>
+          )}
+
+          <div
+            className="filter-container"
+            style={{
+              display: "flex",
+              gap: "16px",
+              alignItems: "flex-end",
+              margin: "20px 0",
+              flexWrap: "wrap",
+            }}
+          >
+            <div
+              style={{
+                flex: "1 1 250px",
+                display: "flex",
+                alignItems: "center",
+                background: "#ffffff",
+                border: "1px solid #e2e8f0",
+                borderRadius: "8px",
+                padding: "0 12px",
+                height: "42px",
+              }}
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="#64748b"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+              <input
+                type="text"
+                placeholder="Search by student name or LRN..."
+                value={studentSearch}
+                onChange={(e) => setStudentSearch(e.target.value)}
+                style={{
+                  border: "none",
+                  outline: "none",
+                  background: "transparent",
+                  width: "100%",
+                  paddingLeft: "10px",
+                  color: "#1e293b",
+                  fontSize: "0.9rem",
+                  height: "100%",
+                }}
+              />
+            </div>
+
+            <div style={{ width: "200px" }}>
+              <DropdownSelect
+                label="Filter by Section"
+                value={studentSectionFilter}
+                options={[
+                  { value: "All Sections", label: "All Sections" },
+                  { value: "Unassigned", label: "Unassigned" },
+                  ...sections.map((s) => ({ value: s.name, label: s.name })),
+                ]}
+                onChange={setStudentSectionFilter}
+                className="manage-users-filter-select"
+              />
+            </div>
+
+            <div style={{ width: "200px" }}>
+              <DropdownSelect
+                label="Filter by Assignment"
+                value={studentStatusFilter}
+                options={[
+                  { value: "All Students", label: "All Students" },
+                  { value: "Assigned", label: "Assigned" },
+                  { value: "Unassigned", label: "Unassigned" },
+                ]}
+                onChange={setStudentStatusFilter}
+                className="manage-users-filter-select"
+              />
+            </div>
+          </div>
+
+          <div className="table-responsive">
+            <table className="users-table">
+              <thead>
+                <tr>
+                  <th style={{ width: "40px" }}>
+                    <input
+                      type="checkbox"
+                      checked={
+                        paginatedStudents.length > 0 &&
+                        paginatedStudents.every((s) => selectedStudentIds.has(s.id))
+                      }
+                      onChange={() => {
+                        const allOnPageSelected = paginatedStudents.every((s) =>
+                          selectedStudentIds.has(s.id)
+                        );
+                        const next = new Set(selectedStudentIds);
+                        if (allOnPageSelected) {
+                          paginatedStudents.forEach((s) => next.delete(s.id));
+                        } else {
+                          paginatedStudents.forEach((s) => next.add(s.id));
+                        }
+                        setSelectedStudentIds(next);
+                      }}
+                    />
+                  </th>
+                  <th>Student Name</th>
+                  <th>LRN</th>
+                  <th>Grade Level</th>
+                  <th>Section</th>
+                  <th>Program</th>
+                  <th>Status</th>
+                  <th style={{ textAlign: "right", paddingRight: "16px" }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {isLoading ? (
+                  <tr>
+                    <td colSpan="8" className="users-empty-state" style={{ padding: "32px" }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          gap: "8px",
+                        }}
+                      >
+                        <Loader2 className="animate-spin" size={18} />
+                        <span>Loading students from database...</span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : filteredStudents.length > 0 ? (
+                  paginatedStudents.map((student) => (
+                    <tr key={student.id}>
+                      <td>
+                        <input
+                          type="checkbox"
+                          checked={selectedStudentIds.has(student.id)}
+                          onChange={() => toggleStudentSelection(student.id)}
+                        />
+                      </td>
+                      <td>
+                        <div className="user-info">
+                          <span className="user-name" style={{ fontWeight: 600 }}>
+                            {student.name}
+                          </span>
+                          <span style={{ fontSize: "0.75rem", color: "#64748b" }}>
+                            ID #{student.id}
+                          </span>
+                        </div>
+                      </td>
+                      <td>
+                        <span className="user-email" style={{ fontFamily: "monospace" }}>
+                          {student.lrn}
+                        </span>
+                      </td>
+                      <td>
+                        <span
+                          style={{
+                            display: "inline-block",
+                            padding: "2px 8px",
+                            borderRadius: "12px",
+                            fontSize: "0.8rem",
+                            fontWeight: 600,
+                            backgroundColor: student.grade_level_id
+                              ? "rgba(17,45,97,0.06)"
+                              : "#f1f5f9",
+                            color: student.grade_level_id ? "#112d61" : "#64748b",
+                          }}
+                        >
+                          {formatLevelLabel(student.gradeLevel, student.grade_level_id)}
+                        </span>
+                      </td>
+                      <td>
+                        {student.section_id ? (
+                          <span className="role-badge adviser">{student.section}</span>
+                        ) : (
+                          <span
+                            className="role-badge"
+                            style={{
+                              backgroundColor: "#fef3c7",
+                              color: "#92400e",
+                              fontWeight: "600",
+                            }}
+                          >
+                            Unassigned
+                          </span>
+                        )}
+                      </td>
+                      <td>
+                        <span
+                          style={{
+                            display: "inline-block",
+                            padding: "2px 8px",
+                            borderRadius: "12px",
+                            fontSize: "0.75rem",
+                            fontWeight: 600,
+                            backgroundColor:
+                              String(student.program_id) === "1"
+                                ? "rgba(37, 99, 235, 0.1)"
+                                : String(student.program_id) === "2"
+                                ? "rgba(22, 163, 74, 0.1)"
+                                : String(student.program_id) === "3"
+                                ? "rgba(202, 138, 4, 0.1)"
+                                : "rgba(100, 116, 139, 0.1)",
+                            color:
+                              String(student.program_id) === "1"
+                                ? "#2563eb"
+                                : String(student.program_id) === "2"
+                                ? "#16a34a"
+                                : String(student.program_id) === "3"
+                                ? "#ca8a04"
+                                : "#475569",
+                          }}
+                        >
+                          {student.program_code || "EBEC"}
+                        </span>
+                      </td>
+                      <td>
+                        <StatusBadge status={student.status} />
+                      </td>
+                      <td style={{ textAlign: "right", paddingRight: "16px" }}>
+                        {!student.section_id ? (
+                          <button
+                            type="button"
+                            className="add-user-btn"
+                            style={{
+                              padding: "5px 12px",
+                              fontSize: "0.8rem",
+                              cursor: "pointer",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "4px",
+                            }}
+                            onClick={() => {
+                              setSelectedStudentIds(new Set([student.id]));
+                              setAssignFormData({ section_id: "" });
+                              setActiveModal("assignSelected");
+                            }}
+                          >
+                            + Assign
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            style={{
+                              padding: "5px 12px",
+                              fontSize: "0.8rem",
+                              cursor: "pointer",
+                              border: "1px solid #e2e8f0",
+                              borderRadius: "6px",
+                              background: "white",
+                              color: "#475569",
+                              fontWeight: 500,
+                            }}
+                            onClick={() => {
+                              setSelectedStudentIds(new Set([student.id]));
+                              setAssignFormData({ section_id: String(student.section_id) });
+                              setActiveModal("assignSelected");
+                            }}
+                          >
+                            Change
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="8" className="users-empty-state">
+                      No students found matching your criteria.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination */}
+          {filteredStudents.length > studentsPerPage && (
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                padding: "16px 20px",
+                borderTop: "1px solid #e2e8f0",
+                fontSize: "0.875rem",
+                color: "#64748b",
+              }}
+            >
+              <div>
+                Showing {(studentPage - 1) * studentsPerPage + 1} to{" "}
+                {Math.min(studentPage * studentsPerPage, filteredStudents.length)} of{" "}
+                {filteredStudents.length} students
+              </div>
+              <div style={{ display: "flex", gap: "6px" }}>
+                <button
+                  type="button"
+                  disabled={studentPage === 1}
+                  onClick={() => setStudentPage((p) => Math.max(p - 1, 1))}
+                  style={{
+                    padding: "6px 12px",
+                    borderRadius: "6px",
+                    border: "1px solid #e2e8f0",
+                    background: studentPage === 1 ? "#f8fafc" : "white",
+                    color: studentPage === 1 ? "#94a3b8" : "#1e293b",
+                    cursor: studentPage === 1 ? "not-allowed" : "pointer",
+                  }}
+                >
+                  Previous
+                </button>
+                {Array.from({ length: totalStudentPages }, (_, i) => i + 1).map((num) => {
+                  if (
+                    num === 1 ||
+                    num === totalStudentPages ||
+                    Math.abs(num - studentPage) <= 1
+                  ) {
+                    return (
+                      <button
+                        key={num}
+                        type="button"
+                        onClick={() => setStudentPage(num)}
+                        style={{
+                          padding: "6px 12px",
+                          borderRadius: "6px",
+                          border:
+                            num === studentPage
+                              ? "1px solid #112d61"
+                              : "1px solid #e2e8f0",
+                          background: num === studentPage ? "#112d61" : "white",
+                          color: num === studentPage ? "white" : "#1e293b",
+                          fontWeight: num === studentPage ? 600 : 400,
+                          cursor: "pointer",
+                        }}
+                      >
+                        {num}
+                      </button>
+                    );
+                  }
+                  if (num === 2 && studentPage > 3) {
+                    return <span key={num} style={{ padding: "6px 4px" }}>...</span>;
+                  }
+                  if (num === totalStudentPages - 1 && studentPage < totalStudentPages - 2) {
+                    return <span key={num} style={{ padding: "6px 4px" }}>...</span>;
+                  }
+                  return null;
+                })}
+                <button
+                  type="button"
+                  disabled={studentPage === totalStudentPages}
+                  onClick={() => setStudentPage((p) => Math.min(p + 1, totalStudentPages))}
+                  style={{
+                    padding: "6px 12px",
+                    borderRadius: "6px",
+                    border: "1px solid #e2e8f0",
+                    background:
+                      studentPage === totalStudentPages ? "#f8fafc" : "white",
+                    color: studentPage === totalStudentPages ? "#94a3b8" : "#1e293b",
+                    cursor:
+                      studentPage === totalStudentPages ? "not-allowed" : "pointer",
+                  }}
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </section>
 
         {/* MODALS */}
@@ -1000,14 +1447,48 @@ export default function StudentSectionManagement() {
                 style={{ overflowY: "auto", display: "flex", flexDirection: "column" }}
               >
                 {(() => {
-                  const filteredManageStudents = students.filter(
-                    (s) =>
-                      !s.section_id &&
-                      (Number(s.grade_level_id) === Number(targetSection.grade_level_id) || !s.grade_level_id) &&
-                      (manageSearch.trim() === "" ||
-                        s.name.toLowerCase().includes(manageSearch.toLowerCase()) ||
-                        s.lrn.includes(manageSearch))
+                  const isSectionSpec = Boolean(
+                    Number(targetSection.is_specialized) === 1 &&
+                    targetSection.program_id &&
+                    [1, 2, 3].includes(Number(targetSection.program_id))
                   );
+                  const targetProgId = isSectionSpec ? Number(targetSection.program_id) : 4;
+
+                  const filteredManageStudents = students.filter((s) => {
+                    if (s.section_id) return false;
+
+                    if (s.grade_level_id && Number(s.grade_level_id) !== Number(targetSection.grade_level_id)) {
+                      return false;
+                    }
+
+                    if (isSectionSpec) {
+                      const isConflictingSpec = Boolean(
+                        s.program_id &&
+                        [1, 2, 3].includes(Number(s.program_id)) &&
+                        Number(s.program_id) !== targetProgId
+                      );
+                      if (isConflictingSpec) {
+                        return false;
+                      }
+                    } else {
+                      const isStudentSpec = Boolean(
+                        s.is_specialized == 1 ||
+                        (s.program_id && [1, 2, 3].includes(Number(s.program_id)))
+                      );
+                      if (isStudentSpec) {
+                        return false;
+                      }
+                    }
+
+                    if (manageSearch.trim() !== "") {
+                      const q = manageSearch.toLowerCase();
+                      const nameMatch = s.name.toLowerCase().includes(q);
+                      const lrnMatch = String(s.lrn || "").includes(q);
+                      if (!nameMatch && !lrnMatch) return false;
+                    }
+
+                    return true;
+                  });
 
                   return (
                     <>
@@ -1046,31 +1527,39 @@ export default function StudentSectionManagement() {
                               />
                               <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "4px" }}>
                                 <strong style={{ lineHeight: "1.2" }}>{student.name}</strong>
-                                <span style={{ fontSize: "0.85rem", color: "#64748b", lineHeight: "1.2" }}>
-                                  LRN: {student.lrn} · {formatLevelLabel(student.gradeLevel, student.grade_level_id)}
-                                </span>
-                              </div>
-                              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                                <input
-                                  type="checkbox"
-                                  id={`spec-${student.id}`}
-                                  checked={studentSpecializations[student.id]?.isSpecialized || false}
-                                  onChange={(e) => setStudentSpecializations(prev => ({ ...prev, [student.id]: { ...prev[student.id], isSpecialized: e.target.checked, programId: e.target.checked ? "1" : "" } }))}
-                                  style={{ width: "14px", height: "14px", cursor: "pointer" }}
-                                />
-                                <label htmlFor={`spec-${student.id}`} style={{ fontSize: "0.8rem", color: "#64748b", cursor: "pointer" }}>Specialized</label>
-
-                                {studentSpecializations[student.id]?.isSpecialized && (
-                                  <select
-                                    value={studentSpecializations[student.id]?.programId || "1"}
-                                    onChange={(e) => setStudentSpecializations(prev => ({ ...prev, [student.id]: { ...prev[student.id], programId: e.target.value } }))}
-                                    style={{ fontSize: "0.8rem", padding: "4px", borderRadius: "4px", border: "1px solid #e2e8f0" }}
-                                  >
-                                    <option value="1">STE</option>
-                                    <option value="2">SPJ</option>
-                                    <option value="3">SPA</option>
-                                  </select>
-                                )}
+                                <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                                  <span style={{ fontSize: "0.85rem", color: "#64748b", lineHeight: "1.2" }}>
+                                    LRN: {student.lrn} · {formatLevelLabel(student.gradeLevel, student.grade_level_id)}
+                                  </span>
+                                  {student.program_code && (
+                                    <span
+                                      style={{
+                                        padding: "1px 6px",
+                                        borderRadius: "10px",
+                                        fontSize: "0.7rem",
+                                        fontWeight: 600,
+                                        backgroundColor:
+                                          String(student.program_id) === "1"
+                                            ? "rgba(37, 99, 235, 0.1)"
+                                            : String(student.program_id) === "2"
+                                            ? "rgba(22, 163, 74, 0.1)"
+                                            : String(student.program_id) === "3"
+                                            ? "rgba(202, 138, 4, 0.1)"
+                                            : "rgba(100, 116, 139, 0.1)",
+                                        color:
+                                          String(student.program_id) === "1"
+                                            ? "#2563eb"
+                                            : String(student.program_id) === "2"
+                                            ? "#16a34a"
+                                            : String(student.program_id) === "3"
+                                            ? "#ca8a04"
+                                            : "#475569",
+                                      }}
+                                    >
+                                      {student.program_code}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                               <button
                                 type="button"
@@ -1086,7 +1575,11 @@ export default function StudentSectionManagement() {
                           ))}
                           {filteredManageStudents.length === 0 && (
                             <p className="users-empty-state" style={{ padding: "16px 0", border: "none" }}>
-                              {manageSearch.trim() === "" ? `No unassigned Grade ${targetSection.grade_level_id === 1 ? '7' : targetSection.grade_level_id === 2 ? '8' : targetSection.grade_level_id === 3 ? '9' : targetSection.grade_level_id === 4 ? '10' : ''} students left to add.` : "No unassigned students found matching your search."}
+                              {manageSearch.trim() === ""
+                                ? isSectionSpec
+                                  ? `No unassigned students enrolled in this specialization (${targetSection.name}) available to add.`
+                                  : `No unassigned Grade ${targetSection.grade_level_id === 1 ? '7' : targetSection.grade_level_id === 2 ? '8' : targetSection.grade_level_id === 3 ? '9' : targetSection.grade_level_id === 4 ? '10' : ''} students left to add.`
+                                : "No unassigned students found matching your search."}
                             </p>
                           )}
                         </div>

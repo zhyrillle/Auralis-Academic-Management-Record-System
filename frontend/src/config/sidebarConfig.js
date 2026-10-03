@@ -29,8 +29,18 @@ export const sidebarConfig = {
     },
     {
       title: "Student Sections",
-      path: "/system-admin/student-section-management",
+      path: "/system-admin/student-sections",
       icon: BookOpen,
+      submenu: [
+        {
+          title: "Manage Sections",
+          path: "/system-admin/student-section-management",
+        },
+        {
+          title: "Manage Students",
+          path: "/system-admin/manage-students",
+        },
+      ],
     },
     {
       title: "Academic Periods",
@@ -57,8 +67,18 @@ export const sidebarConfig = {
     },
     {
       title: "Student Sections",
-      path: "/system-admin/student-section-management",
+      path: "/system-admin/student-sections",
       icon: BookOpen,
+      submenu: [
+        {
+          title: "Manage Sections",
+          path: "/system-admin/student-section-management",
+        },
+        {
+          title: "Manage Students",
+          path: "/system-admin/manage-students",
+        },
+      ],
     },
     {
       title: "Academic Periods",

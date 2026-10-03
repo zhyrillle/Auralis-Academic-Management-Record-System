@@ -89,15 +89,29 @@ export const deleteSection = async (sectionId) => {
 /**
  * Assign a single student to a section
  */
-export const assignStudent = async ({ studentId, sectionId, schoolYearId, studentSectionId }) => {
+export const assignStudent = async ({
+  studentId,
+  student_id,
+  sectionId,
+  section_id,
+  schoolYearId,
+  school_year_id,
+  studentSectionId,
+  student_section_id,
+}) => {
+  const targetStudentId = studentId || student_id;
+  const targetSectionId = sectionId || section_id;
+  const targetSyId = schoolYearId || school_year_id;
+  const targetSSIdParam = studentSectionId || student_section_id;
+
   try {
     const response = await fetch(`${API_BASE_URL}/student-sections/assign`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        student_id: studentId,
-        section_id: sectionId,
-        school_year_id: schoolYearId,
+        student_id: targetStudentId,
+        section_id: targetSectionId,
+        school_year_id: targetSyId,
       }),
     });
     if (response.ok) return await parseResponse(response);
@@ -106,11 +120,11 @@ export const assignStudent = async ({ studentId, sectionId, schoolYearId, studen
   }
 
   // Fallback if custom /assign endpoint is not available:
-  let targetSSId = studentSectionId;
+  let targetSSId = targetSSIdParam;
   if (!targetSSId) {
     try {
       const list = await fetchStudentSections();
-      const match = list.find((item) => Number(item.student_id) === Number(studentId));
+      const match = list.find((item) => Number(item.student_id) === Number(targetStudentId));
       if (match) targetSSId = match.student_section_id;
     } catch (e) {}
   }
@@ -119,7 +133,7 @@ export const assignStudent = async ({ studentId, sectionId, schoolYearId, studen
     const updateRes = await fetch(`${API_BASE_URL}/student-sections/${targetSSId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ section_id: sectionId }),
+      body: JSON.stringify({ section_id: targetSectionId }),
     });
     return parseResponse(updateRes);
   } else {
@@ -127,9 +141,9 @@ export const assignStudent = async ({ studentId, sectionId, schoolYearId, studen
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        student_id: studentId,
-        section_id: sectionId,
-        school_year_id: schoolYearId || 1,
+        student_id: targetStudentId,
+        section_id: targetSectionId,
+        school_year_id: targetSyId || 1,
       }),
     });
     return parseResponse(createRes);
@@ -139,15 +153,26 @@ export const assignStudent = async ({ studentId, sectionId, schoolYearId, studen
 /**
  * Bulk assign multiple students to a section
  */
-export const bulkAssignStudents = async ({ studentIds, sectionId, schoolYearId }) => {
+export const bulkAssignStudents = async ({
+  studentIds,
+  student_ids,
+  sectionId,
+  section_id,
+  schoolYearId,
+  school_year_id,
+}) => {
+  const targetStudentIds = studentIds || student_ids || [];
+  const targetSectionId = sectionId || section_id;
+  const targetSyId = schoolYearId || school_year_id;
+
   try {
     const response = await fetch(`${API_BASE_URL}/student-sections/bulk-assign`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        student_ids: studentIds,
-        section_id: sectionId,
-        school_year_id: schoolYearId,
+        student_ids: targetStudentIds,
+        section_id: targetSectionId,
+        school_year_id: targetSyId,
       }),
     });
     if (response.ok) return await parseResponse(response);
@@ -157,8 +182,8 @@ export const bulkAssignStudents = async ({ studentIds, sectionId, schoolYearId }
 
   // Fallback: assign each student individually
   const results = [];
-  for (const studentId of studentIds) {
-    const res = await assignStudent({ studentId, sectionId, schoolYearId });
+  for (const sId of targetStudentIds) {
+    const res = await assignStudent({ studentId: sId, sectionId: targetSectionId, schoolYearId: targetSyId });
     results.push(res);
   }
   return { message: "Students assigned successfully", count: results.length, results };
@@ -167,16 +192,30 @@ export const bulkAssignStudents = async ({ studentIds, sectionId, schoolYearId }
 /**
  * Unassign/remove a student from a section
  */
-export const unassignStudent = async ({ studentId, sectionId, schoolYearId, studentSectionId }) => {
+export const unassignStudent = async ({
+  studentId,
+  student_id,
+  sectionId,
+  section_id,
+  schoolYearId,
+  school_year_id,
+  studentSectionId,
+  student_section_id,
+}) => {
+  const targetStudentId = studentId || student_id;
+  const targetSectionId = sectionId || section_id;
+  const targetSyId = schoolYearId || school_year_id;
+  const targetSSIdParam = studentSectionId || student_section_id;
+
   try {
     const response = await fetch(`${API_BASE_URL}/student-sections/unassign`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        student_id: studentId,
-        section_id: sectionId,
-        school_year_id: schoolYearId,
-        student_section_id: studentSectionId,
+        student_id: targetStudentId,
+        section_id: targetSectionId,
+        school_year_id: targetSyId,
+        student_section_id: targetSSIdParam,
       }),
     });
     if (response.ok) return await parseResponse(response);

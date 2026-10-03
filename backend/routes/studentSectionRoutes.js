@@ -57,6 +57,15 @@ router.delete('/unassign', async (req, res) => {
   }
 });
 
+router.get('/eligible-students/:sectionId', async (req, res) => {
+  try {
+    const students = await StudentSection.getEligibleStudents(req.params.sectionId);
+    res.json(students);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/:id', async (req, res) => {
   try {
     const enrollment = await StudentSection.findById(req.params.id);

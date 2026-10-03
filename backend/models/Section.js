@@ -31,10 +31,22 @@ class Section {
         sec.section_name,
         sec.section_name AS name,
         sec.grade_level_id,
-        sec.program_id,
-        p.program_code,
-        p.program_name,
-        COALESCE(p.is_specialized, 0) AS is_specialized,
+        CASE 
+          WHEN sec.is_specialized = 1 AND sec.program_id IN (1, 2, 3) THEN sec.program_id
+          ELSE 4 
+        END AS program_id,
+        CASE 
+          WHEN sec.is_specialized = 1 AND sec.program_id IN (1, 2, 3) THEN p.program_code 
+          ELSE 'EBEC' 
+        END AS program_code,
+        CASE 
+          WHEN sec.is_specialized = 1 AND sec.program_id IN (1, 2, 3) THEN p.program_name 
+          ELSE 'Enhanced Basic Education Curriculum' 
+        END AS program_name,
+        CASE 
+          WHEN sec.is_specialized = 1 AND sec.program_id IN (1, 2, 3) THEN 1 
+          ELSE 0 
+        END AS is_specialized,
         COALESCE(gl.grade_level_name, 'G7') AS grade_level_name,
         COALESCE(gl.grade_level_name, 'G7') AS level,
         'Active' AS status,
@@ -57,10 +69,22 @@ class Section {
         sec.section_name,
         sec.section_name AS name,
         sec.grade_level_id,
-        sec.program_id,
-        p.program_code,
-        p.program_name,
-        COALESCE(p.is_specialized, 0) AS is_specialized,
+        CASE 
+          WHEN sec.is_specialized = 1 AND sec.program_id IN (1, 2, 3) THEN sec.program_id
+          ELSE 4 
+        END AS program_id,
+        CASE 
+          WHEN sec.is_specialized = 1 AND sec.program_id IN (1, 2, 3) THEN p.program_code 
+          ELSE 'EBEC' 
+        END AS program_code,
+        CASE 
+          WHEN sec.is_specialized = 1 AND sec.program_id IN (1, 2, 3) THEN p.program_name 
+          ELSE 'Enhanced Basic Education Curriculum' 
+        END AS program_name,
+        CASE 
+          WHEN sec.is_specialized = 1 AND sec.program_id IN (1, 2, 3) THEN 1 
+          ELSE 0 
+        END AS is_specialized,
         COALESCE(gl.grade_level_name, 'G7') AS grade_level_name,
         COALESCE(gl.grade_level_name, 'G7') AS level,
         'Active' AS status,
@@ -79,10 +103,12 @@ class Section {
     let { section_name, name, grade_level_id, level, program_id, is_specialized } = data;
     const finalName = (section_name || name || '').trim();
     const finalGradeLevelId = await this.resolveGradeLevelId(grade_level_id, level);
+    const finalIsSpec = is_specialized ? 1 : 0;
+    const finalProgId = finalIsSpec ? (program_id ? Number(program_id) : 1) : 4;
 
     const [result] = await db.execute(
       `INSERT INTO SECTION (section_name, grade_level_id, program_id, is_specialized) VALUES (?, ?, ?, ?)`,
-      [finalName, finalGradeLevelId, program_id || null, is_specialized ? 1 : 0]
+      [finalName, finalGradeLevelId, finalProgId, finalIsSpec]
     );
     return result.insertId;
   }
@@ -102,18 +128,42 @@ class Section {
       updates.push('grade_level_id = ?');
       values.push(finalGradeLevelId);
     }
-    if (program_id !== undefined) {
-      updates.push('program_id = ?');
-      values.push(program_id || null);
-    }
-    if (is_specialized !== undefined) {
+
+    const finalIsSpec = is_specialized !== undefined ? (is_specialized ? 1 : 0) : null;
+    let finalProgId = program_id !== undefined ? (program_id ? Number(program_id) : null) : null;
+
+    if (finalIsSpec !== null) {
       updates.push('is_specialized = ?');
-      values.push(is_specialized ? 1 : 0);
+      values.push(finalIsSpec);
+      if (finalIsSpec === 1) {
+        finalProgId = finalProgId || 1;
+        updates.push('program_id = ?');
+        values.push(finalProgId);
+      } else {
+        finalProgId = 4;
+        updates.push('program_id = ?');
+        values.push(4);
+      }
+    } else if (program_id !== undefined) {
+      updates.push('program_id = ?');
+      values.push(program_id || 4);
     }
+
     if (updates.length > 0) {
       values.push(id);
       await db.execute(`UPDATE SECTION SET ${updates.join(', ')} WHERE section_id = ?`, values);
     }
+
+    // Synchronize all students currently assigned to this section
+    if (finalProgId !== null) {
+      await db.execute(`
+        UPDATE STUDENT s
+        JOIN STUDENT_SECTION ss ON ss.student_id = s.student_id
+        SET s.program_id = ?
+        WHERE ss.section_id = ?
+      `, [finalProgId, id]);
+    }
+
     return this.findById(id);
   }
 
