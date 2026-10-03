@@ -1,4 +1,8 @@
-const API_BASE_URL = "http://localhost:5000/api/principal/at-risk-prediction";
+const BASE = (
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api"
+).replace(/\/$/, "");
+
+const API_BASE_URL = `${BASE}/principal/at-risk-prediction`;
 
 export async function getAtRiskSummary({ schoolYear, term } = {}) {
   const params = new URLSearchParams();
@@ -43,6 +47,7 @@ export async function getRiskLevelLearners({ schoolYear, term, riskLevel } = {})
   const data = await res.json();
   return {
     count: data.totalCount,
-    notes: data.students.map((s) => `${s.name} (${s.section}) — Risk Score: ${s.riskScore}`),
+    notes: (data.students || []).map((s) => `${s.name} (${s.section}) — Risk Score: ${s.riskScore}`),
   };
 }
+
