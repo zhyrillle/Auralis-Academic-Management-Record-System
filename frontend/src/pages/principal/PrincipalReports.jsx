@@ -1,16 +1,14 @@
 import React, { useState, useMemo } from "react";
 import {
-  ChevronLeft,
   ChevronDown,
   Eye,
   Printer,
   Download,
-  Moon,
-  Bell,
   User,
 } from "lucide-react";
 
 import StudentSF9Page from "../adviser/StudentSF9Page";
+import backIconUrl from "../../assets/backButton.svg";
 import "./PrincipalReports.css";
 
 // Sample Pre-labeled Report Records matching reference design
@@ -194,7 +192,7 @@ export default function PrincipalReports() {
               title="Back to Reports"
               onClick={() => setMode("list")}
             >
-              <ChevronLeft size={20} />
+              <img src={backIconUrl} alt="Back" width={17} height={17} />
             </button>
           )}
           <div>
@@ -203,13 +201,6 @@ export default function PrincipalReports() {
               Term based pass / fail overview across all grades · S.Y. 2024–2025
             </p>
           </div>
-        </div>
-
-        <div className="pr-header-actions">
-          <button type="button" className="pr-icon-btn" title="Notifications">
-            <Bell size={18} />
-            <span className="pr-badge">7</span>
-          </button>
         </div>
       </header>
 
@@ -385,13 +376,14 @@ export default function PrincipalReports() {
                       <td className="pr-td" style={{ textAlign: "right" }}>
                         <button
                           type="button"
-                          className="pr-action-view-btn"
+                          className="pr-btn-doc-action preview"
                           onClick={(e) => {
                             e.stopPropagation();
                             handleSelectStudent(item);
                           }}
                         >
-                          VIEW
+                          <Eye size={14} />
+                          <span>Preview</span>
                         </button>
                       </td>
                     </tr>
@@ -439,33 +431,27 @@ export default function PrincipalReports() {
                 Contains grades per subject, conduct ratings, and attendance summary.
               </p>
 
-              <div className="pr-doc-card-actions">
+              <div className="pr-doc-actions">
                 <button
                   type="button"
-                  className="pr-btn-view-doc"
+                  className="pr-btn-doc-action preview"
                   onClick={() => {
                     setDocTab("sf9");
                     setMode("sf9");
                   }}
+                  title="Preview SF9"
                 >
-                  <Eye size={16} />
-                  <span>VIEW SF9</span>
+                  <Eye size={14} />
+                  <span>Preview</span>
                 </button>
                 <button
                   type="button"
-                  className="pr-btn-print-doc"
-                  onClick={() => handleTriggerPrint("SF9")}
-                >
-                  <Printer size={16} />
-                  <span>Print</span>
-                </button>
-                <button
-                  type="button"
-                  className="pr-btn-download-icon"
-                  title="Download SF9"
+                  className="pr-btn-doc-action download"
                   onClick={() => handleDownload("SF9")}
+                  title="Download SF9"
                 >
-                  <Download size={18} />
+                  <Download size={14} />
+                  <span>Download</span>
                 </button>
               </div>
             </div>
@@ -482,33 +468,27 @@ export default function PrincipalReports() {
                 Contains grades per subject, conduct ratings, and attendance summary.
               </p>
 
-              <div className="pr-doc-card-actions">
+              <div className="pr-doc-actions">
                 <button
                   type="button"
-                  className="pr-btn-view-doc"
+                  className="pr-btn-doc-action preview"
                   onClick={() => {
                     setDocTab("personal");
                     setMode("sf9");
                   }}
+                  title="Preview SF10"
                 >
-                  <Eye size={16} />
-                  <span>VIEW SF10</span>
+                  <Eye size={14} />
+                  <span>Preview</span>
                 </button>
                 <button
                   type="button"
-                  className="pr-btn-print-doc"
-                  onClick={() => handleTriggerPrint("SF10")}
-                >
-                  <Printer size={16} />
-                  <span>Print</span>
-                </button>
-                <button
-                  type="button"
-                  className="pr-btn-download-icon"
-                  title="Download SF10"
+                  className="pr-btn-doc-action download"
                   onClick={() => handleDownload("SF10")}
+                  title="Download SF10"
                 >
-                  <Download size={18} />
+                  <Download size={14} />
+                  <span>Download</span>
                 </button>
               </div>
             </div>

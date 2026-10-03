@@ -6,13 +6,17 @@
 .pr-page-container {
   display: flex;
   flex-direction: column;
-  gap: 24px;
-  padding: 28px 36px 48px;
+  gap: 16px;
+  padding: 16px 20px 24px;
   background-color: #F8FAFC;
   min-height: 100%;
   color: #1E293B;
   font-family: inherit;
   box-sizing: border-box;
+  width: calc(100% - 32px);
+  max-width: 1440px;
+  margin: 0 auto;
+  min-width: 0;
 }
 
 /* --------------------------------------------------------------------------
@@ -34,19 +38,21 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  background-color: #1E293B;
-  color: #FFFFFF;
-  border: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  background-color: #ffffff;
+  color: #475569;
   cursor: pointer;
-  transition: background-color 0.2s ease, transform 0.15s ease;
+  transition: all 0.2s ease;
 }
 
 .pr-back-btn:hover {
-  background-color: #0F172A;
-  transform: translateX(-2px);
+  background-color: #f8fafc;
+  color: #123062;
+  border-color: #123062;
+  transform: translateX(-3px);
 }
 
 .pr-title {
@@ -63,48 +69,7 @@
   margin: 0;
 }
 
-.pr-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
 
-.pr-icon-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background-color: #FFFFFF;
-  border: 1px solid #E2E8F0;
-  color: #334155;
-  cursor: pointer;
-  position: relative;
-  transition: all 0.2s ease;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-}
-
-.pr-icon-btn:hover {
-  background-color: #F1F5F9;
-  border-color: #CBD5E1;
-}
-
-.pr-badge {
-  position: absolute;
-  top: -2px;
-  right: -2px;
-  background-color: #EF4444;
-  color: #FFFFFF;
-  font-size: 0.65rem;
-  font-weight: 700;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
 
 /* --------------------------------------------------------------------------
    Controls Bar (Terms & Dropdowns)
@@ -352,28 +317,7 @@
   color: #059669;
 }
 
-/* View Action Button */
-.pr-action-view-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 6px 16px;
-  border-radius: 6px;
-  background-color: #FFFFFF;
-  border: 1px solid #CBD5E1;
-  color: #334155;
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
 
-.pr-action-view-btn:hover {
-  background-color: #0F172A;
-  color: #FFFFFF;
-  border-color: #0F172A;
-}
 
 /* --------------------------------------------------------------------------
    Reports 2: Student Profile Card
@@ -488,69 +432,44 @@
   margin: 0;
 }
 
-.pr-doc-card-actions {
+.pr-doc-actions {
   display: flex;
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
 }
 
-.pr-btn-view-doc {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  border-radius: 8px;
-  background-color: #FFFFFF;
-  border: 1px solid #CBD5E1;
-  color: #1E293B;
-  font-size: 0.85rem;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.pr-btn-view-doc:hover {
-  background-color: #F1F5F9;
-  border-color: #94A3B8;
-}
-
-.pr-btn-print-doc {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  border-radius: 8px;
-  background-color: #FFFFFF;
-  border: 1px solid #CBD5E1;
-  color: #1E293B;
-  font-size: 0.85rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.pr-btn-print-doc:hover {
-  background-color: #F1F5F9;
-  border-color: #94A3B8;
-}
-
-.pr-btn-download-icon {
+.pr-btn-doc-action {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 38px;
-  height: 38px;
-  border-radius: 8px;
-  background-color: #1D4ED8;
-  color: #FFFFFF;
-  border: none;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 9999px;
+  font-size: 12.5px;
+  font-weight: 600;
   cursor: pointer;
+  border: none;
   transition: background-color 0.2s ease;
 }
 
-.pr-btn-download-icon:hover {
-  background-color: #1E40AF;
+.pr-btn-doc-action.preview {
+  background-color: #dbe2ea;
+  color: #475569;
+}
+
+.pr-btn-doc-action.preview:hover {
+  background-color: #cbd5e1;
+  color: #1e293b;
+}
+
+.pr-btn-doc-action.download {
+  background-color: #cca31d;
+  color: #ffffff;
+}
+
+.pr-btn-doc-action.download:hover {
+  background-color: #b88a1b;
 }
 
 /* --------------------------------------------------------------------------

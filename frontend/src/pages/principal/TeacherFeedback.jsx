@@ -6,8 +6,6 @@ import {
   Target,
   Search,
   ChevronDown,
-  Moon,
-  Bell,
   MessageSquareOff,
   Filter,
 } from "lucide-react";
@@ -138,26 +136,6 @@ export default function TeacherFeedback() {
           <p className="tf-subtitle">
             Anonymous teacher evaluation of principal leadership
           </p>
-        </div>
-
-        <div className="tf-header-actions">
-          <button
-            type="button"
-            className="tf-header-icon-btn"
-            title="Toggle theme"
-            aria-label="Toggle theme"
-          >
-            <Moon size={18} />
-          </button>
-          <button
-            type="button"
-            className="tf-header-icon-btn"
-            title="Notifications"
-            aria-label="Notifications"
-          >
-            <Bell size={18} />
-            <span className="tf-notif-badge">7</span>
-          </button>
         </div>
       </header>
 
