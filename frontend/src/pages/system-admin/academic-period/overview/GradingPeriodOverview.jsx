@@ -30,6 +30,7 @@ export default function GradingPeriodOverview({
   reopeningRequests,
   activeReopenings,
   departmentsByTerm,
+  submissionRecordsByTerm,
   onSelectTerm,
   onViewTermTimeline,
   onReviewRequest,
@@ -53,6 +54,8 @@ export default function GradingPeriodOverview({
   const selectedTerm =
     terms.find((term) => term.id === selectedTermId) || terms[0];
   const selectedDepartments = departmentsByTerm[selectedTermId] || [];
+  const selectedSubmissionRecords =
+    submissionRecordsByTerm[selectedTermId] || [];
   const selectedTermRequests = reopeningRequests.filter(
     (request) =>
       request.termId === selectedTermId && request.status === "pending",
@@ -132,7 +135,7 @@ export default function GradingPeriodOverview({
           <div>
             <h2 id="grading-operations-title">Grading Operations</h2>
             <p>
-              Review the selected term by submission progress or corrections.
+              Review submission progress, late submissions, and corrections.
             </p>
           </div>
 
@@ -152,7 +155,7 @@ export default function GradingPeriodOverview({
               <ClipboardList size={16} aria-hidden="true" />
               <span className="grading-operations-nav__label">
                 Submission Status
-                <small>{selectedDepartments.length} subjects</small>
+                <small>{selectedSubmissionRecords.length} submitted</small>
               </span>
             </button>
             <button
@@ -168,7 +171,7 @@ export default function GradingPeriodOverview({
                 Reopening Management
                 <small>
                   {selectedTermRequests.length + selectedTermReopenings.length}{" "}
-                  corrections
+                  requests
                 </small>
               </span>
             </button>
@@ -181,6 +184,7 @@ export default function GradingPeriodOverview({
               <SubmissionStatus
                 term={selectedTerm}
                 departments={selectedDepartments}
+                records={selectedSubmissionRecords}
               />
             </div>
           ) : (

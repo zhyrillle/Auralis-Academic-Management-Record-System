@@ -347,9 +347,11 @@ class MasterSheetService {
       }
     }
 
+    const notOfferedSubjects = [];
     const subjects = SUBJECT_DEFINITIONS.map((definition) => {
       const offerings = offeringsBySubjectKey.get(definition.key) || [];
-      if (offerings.length === 0) warnings.add(`${definition.label} is not offered for this section.`);
+      // A missing offering is a section-setup notice, not a learner-grade error.
+      if (offerings.length === 0) notOfferedSubjects.push(definition.label);
       if (offerings.length > 1) warnings.add(`${definition.label} has duplicate subject offerings.`);
       return {
         key: definition.key,
@@ -451,6 +453,11 @@ class MasterSheetService {
       },
       terms,
       subjects,
+      subjectSetup: {
+        configuredSubjectCount: subjects.length - notOfferedSubjects.length,
+        templateSubjectCount: subjects.length,
+        notOfferedSubjects,
+      },
       students,
       completeness: {
         studentCount: students.length,

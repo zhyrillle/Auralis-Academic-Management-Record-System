@@ -1,12 +1,15 @@
 import { useLocation, useNavigate } from "react-router-dom";
 import { Menu, ChevronRight, Bell } from "lucide-react";
+import { normalizeRole } from "../../utils/auth";
 
 export default function Navbar({
+  user,
   onToggleSidebar,
   onToggleMobileSidebar,
 }) {
   const location = useLocation();
   const navigate = useNavigate();
+  const showNotifications = !["system-admin", "principal"].includes(normalizeRole(user));
 
   // Dynamic breadcrumbs based on route
   const getBreadcrumbs = () => {
@@ -117,7 +120,7 @@ export default function Navbar({
       </div>
 
       {/* Right side: Notifications */}
-      <div className="navbar-right">
+      {showNotifications && <div className="navbar-right">
         <button
           type="button"
           className="toggle-sidebar-btn notification-button"
@@ -130,7 +133,7 @@ export default function Navbar({
             aria-hidden="true"
           />
         </button>
-      </div>
+      </div>}
     </header>
   );
 }

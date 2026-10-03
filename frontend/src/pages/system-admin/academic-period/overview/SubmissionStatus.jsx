@@ -27,7 +27,29 @@ function DepartmentRow({ department }) {
   );
 }
 
-export default function SubmissionStatus({ term, departments }) {
+function SubmissionRecordRow({ record }) {
+  const statusLabel =
+    record.lockStatus === "term_locked" ? "Term locked" : "Submitted";
+
+  return (
+    <div className="submission-records__row">
+      <div>
+        <strong>{record.teacherName}</strong>
+        <span>{record.department}</span>
+      </div>
+      <div>
+        <strong>{record.subject}</strong>
+        <span>
+          {record.gradeLevel} {record.section}
+        </span>
+      </div>
+      <time>{record.submittedAt}</time>
+      <span className="submission-records__status">{statusLabel}</span>
+    </div>
+  );
+}
+
+export default function SubmissionStatus({ term, departments, records = [] }) {
   const totals = departments.reduce(
     (summary, department) => ({
       submitted: summary.submitted + department.submitted,
@@ -94,22 +116,56 @@ export default function SubmissionStatus({ term, departments }) {
         </dl>
       </div>
 
-      <div className="submission-status__labels" aria-hidden="true">
-        <span>Department / Subject</span>
-        <span>Submitted</span>
-        <span>Progress</span>
-      </div>
+      <div className="submission-status__details">
+        <section aria-labelledby="department-progress-title">
+          <div className="submission-status__section-heading">
+            <h3 id="department-progress-title">Department progress</h3>
+            <span>{departments.length}</span>
+          </div>
+          <div className="submission-status__labels" aria-hidden="true">
+            <span>Department</span>
+            <span>Submitted</span>
+            <span>Progress</span>
+          </div>
 
-      <div className="submission-status__departments">
-        {departments.length > 0 ? (
-          departments.map((department) => (
-            <DepartmentRow key={department.id} department={department} />
-          ))
-        ) : (
-          <p className="submission-status__empty">
-            No subject offerings have been prepared for this academic period.
-          </p>
-        )}
+          <div className="submission-status__departments">
+            {departments.length > 0 ? (
+              departments.map((department) => (
+                <DepartmentRow key={department.id} department={department} />
+              ))
+            ) : (
+              <p className="submission-status__empty">
+                No subject offerings have been prepared for this academic period.
+              </p>
+            )}
+          </div>
+        </section>
+
+        <section aria-labelledby="submission-records-title">
+          <div className="submission-status__section-heading">
+            <h3 id="submission-records-title">Submission records</h3>
+            <span>{records.length}</span>
+          </div>
+          {records.length > 0 ? (
+            <>
+              <div className="submission-records__labels" aria-hidden="true">
+                <span>Teacher</span>
+                <span>Subject / Class</span>
+                <span>Submitted at</span>
+                <span>Status</span>
+              </div>
+              <div className="submission-records__list">
+                {records.map((record) => (
+                  <SubmissionRecordRow key={record.id} record={record} />
+                ))}
+              </div>
+            </>
+          ) : (
+            <p className="submission-status__empty">
+              No submitted grade sheets were found for this term.
+            </p>
+          )}
+        </section>
       </div>
     </section>
   );

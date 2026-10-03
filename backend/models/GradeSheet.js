@@ -34,11 +34,15 @@ class GradeSheet {
     return this.findById(id, connection);
   }
 
-  static async openTemporaryCorrection(id, connection = db) {
+  static async openTemporaryAccess(id, connection = db) {
     return this.update(id, {
       workflow_status: 'DRAFT',
       lock_status: 'TEMPORARILY_REOPENED',
     }, connection);
+  }
+
+  static async openTemporaryCorrection(id, connection = db) {
+    return this.openTemporaryAccess(id, connection);
   }
 
   static async restoreTermLock(id, connection = db) {

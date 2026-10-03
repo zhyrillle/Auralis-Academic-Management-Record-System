@@ -25,6 +25,9 @@ function ReopeningRequestCard({ request, onReview }) {
           </div>
           <span className="reopening-request__time">{request.requestedAt}</span>
         </div>
+        <div className="reopening-request__type">
+          <Badge variant="neutral">{request.requestType}</Badge>
+        </div>
         <p className="reopening-request__reason">
           <span>Reason</span>
           {request.reason}
@@ -73,6 +76,7 @@ export default function ReopeningRequests({
         request.subject,
         request.gradeLevel,
         request.section,
+        request.requestType,
       ]
         .join(" ")
         .toLowerCase();
@@ -84,21 +88,15 @@ export default function ReopeningRequests({
     });
   }, [departmentFilter, query, requests]);
   const emptyStateCopy =
-    term.status === "upcoming"
+    !term.hasEnded
       ? {
           title: "Requests are not available yet",
           description:
-            "Reopening requests become available after this term has been finalized.",
+            "Teachers may submit requests during the seven days after this term ends.",
         }
-      : term.status === "open"
-        ? {
-            title: "No reopening requests during the active term",
-            description:
-              "Post-deadline correction requests will appear here after the term is finalized.",
-          }
-        : {
+      : {
             title: "No pending requests",
-            description: `There are no reopening requests awaiting review for ${term.label}.`,
+            description: `There are no reopening requests awaiting review for ${term.label}. Valid in-window requests can still be reviewed after the request window closes.`,
           };
 
   return (
@@ -113,7 +111,7 @@ export default function ReopeningRequests({
         <div className="grade-lock-panel__heading">
           <div>
             <h2 id="reopening-requests-title">Reopening Requests</h2>
-            <p>Review scoped corrections for {term.label}.</p>
+            <p>Review late submissions and grade corrections for {term.label}.</p>
           </div>
           <Badge variant="attention">{requests.length} pending</Badge>
         </div>

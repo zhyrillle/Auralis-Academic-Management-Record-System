@@ -8,11 +8,10 @@ const {
   buildSuggestedTerms,
 } = require('./AcademicCalendarSuggestionService');
 
-const MAX_REOPENING_MINUTES = 7 * 24 * 60;
 const REOPENING_REQUEST_DAYS = 7;
 
-function deriveReopeningWindow(deadlineValue) {
-  const opensAt = new Date(deadlineValue);
+function deriveReopeningWindow(termEndValue) {
+  const opensAt = new Date(termEndValue ?? NaN);
   if (Number.isNaN(opensAt.getTime())) {
     return { opensAt: null, closesAt: null };
   }
@@ -21,8 +20,79 @@ function deriveReopeningWindow(deadlineValue) {
   return { opensAt, closesAt };
 }
 
-function isSubmittedWorkflow(status) {
-  return status === 'SUBMITTED';
+function requestWindowReason(termEnd, timestamp) {
+  const { opensAt, closesAt } = deriveReopeningWindow(termEnd);
+  const at = new Date(timestamp ?? NaN).getTime();
+  if (!opensAt || !closesAt || !Number.isFinite(at)) return 'WINDOW_NOT_CONFIGURED';
+  if (at < opensAt.getTime()) return 'WINDOW_NOT_OPEN';
+  if (at >= closesAt.getTime()) return 'WINDOW_CLOSED';
+  return null;
+}
+
+function getReopeningDefaultSchoolYear(gradeSheets, now = Date.now()) {
+  const ended = gradeSheets.filter(sheet => sheet.ends_at
+    && Number.isFinite(new Date(sheet.ends_at).getTime())
+    && new Date(sheet.ends_at).getTime() <= now);
+  const candidates = ended.length ? ended : gradeSheets;
+  const ordered = [...candidates].sort((a, b) => {
+    const first = ended.length ? new Date(a.ends_at).getTime() : Number(a.school_year_starts_on);
+    const second = ended.length ? new Date(b.ends_at).getTime() : Number(b.school_year_starts_on);
+    return (second - first) || Number(b.school_year_id) - Number(a.school_year_id);
+  });
+  return ordered[0]?.school_year_id ?? null;
+}
+
+function canRequestReopening(sheet) {
+  return isReopenableLockedSheet(sheet.workflow_status, sheet.lock_status)
+    || (sheet.workflow_status === 'SUBMITTED' && sheet.lock_status === 'EDITABLE');
+}
+
+function reopeningEligibility(sheet, now = Date.now()) {
+  let reason = requestWindowReason(sheet.ends_at, now);
+  if (!reason && sheet.has_active) reason = 'TEMPORARY_ACCESS_ACTIVE';
+  if (!reason && sheet.has_pending) reason = 'REQUEST_ALREADY_PENDING';
+  if (!reason && !canRequestReopening(sheet)) reason = 'SHEET_NOT_ELIGIBLE';
+  const window = deriveReopeningWindow(sheet.ends_at);
+  return {
+    eligible: !reason, reason,
+    request_type: getReopeningRequestType(sheet.workflow_status),
+    teacher_assignment_id: sheet.teacher_assignment_id,
+    reopening_requests_open_at: window.opensAt,
+    reopening_requests_close_at: window.closesAt,
+  };
+}
+
+function approvalExpiry(data, now = Date.now()) {
+  let expires;
+  if (data.expires_at !== undefined) {
+    if (typeof data.expires_at !== 'string' || !/(Z|[+-]\d{2}:\d{2})$/.test(data.expires_at)) {
+      throw serviceError(400, 'INVALID_EXPIRATION', 'Choose an editing deadline with an explicit time zone.');
+    }
+    expires = new Date(data.expires_at).getTime();
+  } else {
+    const minutes = Number(data.duration_minutes);
+    if (!Number.isSafeInteger(minutes) || minutes < 30) {
+      throw serviceError(400, 'INVALID_DURATION', 'Temporary access must last at least 30 minutes.');
+    }
+    expires = now + minutes * 60000;
+  }
+  if (!Number.isFinite(expires) || expires < now + 30 * 60000 || Number.isNaN(new Date(expires).getTime())) {
+    throw serviceError(400, 'INVALID_EXPIRATION', 'The editing deadline must be at least 30 minutes in the future.');
+  }
+  return new Date(expires);
+}
+
+function isReopenableLockedSheet(workflowStatus, lockStatus) {
+  return (
+    ['DRAFT', 'SUBMITTED'].includes(String(workflowStatus || '').toUpperCase())
+    && lockStatus === 'TERM_LOCKED'
+  );
+}
+
+function getReopeningRequestType(workflowStatus) {
+  return String(workflowStatus || '').toUpperCase() === 'DRAFT'
+    ? 'LATE_SUBMISSION'
+    : 'GRADE_CORRECTION';
 }
 
 function serviceError(status, code, message) {
@@ -157,6 +227,7 @@ async function releasePrematurelyLockedSheets() {
       gs.lock_status = 'EDITABLE',
       gs.updated_at = UTC_TIMESTAMP(6)
     WHERE at.grade_submission_deadline_at > UTC_TIMESTAMP(6)
+      AND at.ends_at > UTC_TIMESTAMP(6)
       AND gs.lock_status = 'TERM_LOCKED'`
   );
   return result.affectedRows;
@@ -279,8 +350,8 @@ async function getTerms(schoolYearId) {
       draft_count: Number(term.draft_count || 0),
       submitted_count: Number(term.submitted_count || 0),
       locked_count: Number(term.locked_count || 0),
-      reopening_requests_open_at: deriveReopeningWindow(term.grade_submission_deadline_at).opensAt,
-      reopening_requests_close_at: deriveReopeningWindow(term.grade_submission_deadline_at).closesAt,
+      reopening_requests_open_at: deriveReopeningWindow(term.ends_at).opensAt,
+      reopening_requests_close_at: deriveReopeningWindow(term.ends_at).closesAt,
     };
   });
 }
@@ -288,20 +359,20 @@ async function getTerms(schoolYearId) {
 async function getDepartmentStatus(termId) {
   const [rows] = await db.execute(
     `SELECT
-      d.department_id,
-      d.department_name,
+      COALESCE(d.department_id, 0) AS department_id,
+      COALESCE(d.department_name, 'Unassigned Department') AS department_name,
       COUNT(gs.grade_sheet_id) AS total,
       SUM(gs.workflow_status = 'SUBMITTED') AS submitted,
       SUM(gs.workflow_status = 'DRAFT') AS overdue
     FROM SUBJECT_OFFERING so
     INNER JOIN SUBJECT s ON s.subject_id = so.subject_id
-    INNER JOIN DEPARTMENT d ON d.department_id = s.department_id
+    LEFT JOIN DEPARTMENT d ON d.department_id = s.department_id
     INNER JOIN ACADEMIC_TERM at
       ON at.school_year_id = so.school_year_id AND at.term_id = ?
     LEFT JOIN GRADE_SHEET gs
       ON gs.subject_offering_id = so.subject_offering_id AND gs.term_id = at.term_id
     GROUP BY d.department_id, d.department_name
-    ORDER BY d.department_name`,
+    ORDER BY d.department_id IS NULL, d.department_name`,
     [termId]
   );
   return rows.map((row) => {
@@ -324,16 +395,19 @@ async function getReopeningRequests(termId) {
       grr.request_id,
       grr.grade_sheet_id,
       gs.term_id,
+      gs.workflow_status,
+      gs.lock_status,
       grr.teacher_assignment_id,
       grr.reason,
       grr.status,
       grr.requested_at,
       grr.reviewed_at,
+      grr.file_name, grr.file_path, grr.file_type, grr.file_size,
       requester.user_id AS teacher_id,
       CONCAT(requester.first_name, ' ', requester.last_name) AS teacher_name,
       s.subject_id,
       s.subject_name,
-      d.department_name,
+      COALESCE(d.department_name, 'Unassigned Department') AS department_name,
       sec.section_id,
       sec.section_name,
       gl.grade_level_name
@@ -341,7 +415,7 @@ async function getReopeningRequests(termId) {
     INNER JOIN GRADE_SHEET gs ON gs.grade_sheet_id = grr.grade_sheet_id
     INNER JOIN SUBJECT_OFFERING so ON so.subject_offering_id = gs.subject_offering_id
     INNER JOIN SUBJECT s ON s.subject_id = so.subject_id
-    INNER JOIN DEPARTMENT d ON d.department_id = s.department_id
+    LEFT JOIN DEPARTMENT d ON d.department_id = s.department_id
     INNER JOIN SECTION sec ON sec.section_id = so.section_id
     INNER JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
     INNER JOIN TEACHER_ASSIGNMENT ta
@@ -371,7 +445,7 @@ async function getActiveReopenings(termId) {
       CONCAT(teacher.first_name, ' ', teacher.last_name) AS teacher_name,
       s.subject_id,
       s.subject_name,
-      d.department_name,
+      COALESCE(d.department_name, 'Unassigned Department') AS department_name,
       sec.section_id,
       sec.section_name,
       gl.grade_level_name
@@ -380,7 +454,7 @@ async function getActiveReopenings(termId) {
     INNER JOIN GRADE_SHEET gs ON gs.grade_sheet_id = grr.grade_sheet_id
     INNER JOIN SUBJECT_OFFERING so ON so.subject_offering_id = gs.subject_offering_id
     INNER JOIN SUBJECT s ON s.subject_id = so.subject_id
-    INNER JOIN DEPARTMENT d ON d.department_id = s.department_id
+    LEFT JOIN DEPARTMENT d ON d.department_id = s.department_id
     INNER JOIN SECTION sec ON sec.section_id = so.section_id
     INNER JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
     INNER JOIN TEACHER_ASSIGNMENT ta
@@ -394,11 +468,74 @@ async function getActiveReopenings(termId) {
   return rows;
 }
 
+async function getSubmissionRecords(termId) {
+  const [rows] = await db.execute(
+    `SELECT
+      gs.grade_sheet_id,
+      gs.term_id,
+      gs.workflow_status,
+      gs.lock_status,
+      gs.submitted_at,
+      s.subject_id,
+      s.subject_name,
+      COALESCE(d.department_name, 'Unassigned Department') AS department_name,
+      sec.section_id,
+      sec.section_name,
+      gl.grade_level_name,
+      COALESCE(
+        NULLIF(
+          GROUP_CONCAT(
+            DISTINCT TRIM(CONCAT_WS(' ', teacher.first_name, teacher.last_name))
+            ORDER BY teacher.last_name, teacher.first_name
+            SEPARATOR ', '
+          ),
+          ''
+        ),
+        'Unassigned teacher'
+      ) AS teacher_name
+    FROM GRADE_SHEET gs
+    INNER JOIN SUBJECT_OFFERING so
+      ON so.subject_offering_id = gs.subject_offering_id
+    INNER JOIN SUBJECT s ON s.subject_id = so.subject_id
+    LEFT JOIN DEPARTMENT d ON d.department_id = s.department_id
+    INNER JOIN SECTION sec ON sec.section_id = so.section_id
+    INNER JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
+    LEFT JOIN TEACHER_ASSIGNMENT ta
+      ON ta.subject_offering_id = so.subject_offering_id
+    LEFT JOIN \`USER\` teacher ON teacher.user_id = ta.user_id
+    WHERE gs.term_id = ?
+      AND gs.workflow_status = 'SUBMITTED'
+    GROUP BY
+      gs.grade_sheet_id,
+      gs.term_id,
+      gs.workflow_status,
+      gs.lock_status,
+      gs.submitted_at,
+      s.subject_id,
+      s.subject_name,
+      d.department_name,
+      sec.section_id,
+      sec.section_name,
+      gl.grade_level_name
+    ORDER BY gs.submitted_at DESC, gs.grade_sheet_id DESC`,
+    [termId]
+  );
+  return rows;
+}
+
 async function getContext(requestedSchoolYearId) {
   await runLifecycleGuard();
   const schoolYears = await getSchoolYears();
   if (!schoolYears.length) {
-    return { schoolYears: [], selectedSchoolYearId: null, terms: [], departmentsByTerm: {}, reopeningRequests: [], activeReopenings: [] };
+    return {
+      schoolYears: [],
+      selectedSchoolYearId: null,
+      terms: [],
+      departmentsByTerm: {},
+      submissionRecordsByTerm: {},
+      reopeningRequests: [],
+      activeReopenings: [],
+    };
   }
 
   const requestedId = Number(requestedSchoolYearId);
@@ -419,11 +556,13 @@ async function getContext(requestedSchoolYearId) {
       )
     : [];
   const departmentsByTerm = {};
+  const submissionRecordsByTerm = {};
   const reopeningRequests = [];
   const activeReopenings = [];
 
   for (const term of terms) {
     departmentsByTerm[String(term.term_id)] = await getDepartmentStatus(term.term_id);
+    submissionRecordsByTerm[String(term.term_id)] = await getSubmissionRecords(term.term_id);
     reopeningRequests.push(...await getReopeningRequests(term.term_id));
     activeReopenings.push(...await getActiveReopenings(term.term_id));
   }
@@ -437,6 +576,7 @@ async function getContext(requestedSchoolYearId) {
     upcomingCalendarRule: upcomingSchoolYear ? CALENDAR_RULE : null,
     suggestedUpcomingTerms,
     departmentsByTerm,
+    submissionRecordsByTerm,
     reopeningRequests,
     activeReopenings,
   };
@@ -461,10 +601,6 @@ function validateTimeline(term, data) {
   if (end <= start || deadline < start) {
     throw serviceError(400, 'INVALID_TIMELINE', 'The term end and deadline must occur after the term begins.');
   }
-  const reopeningWindow = deriveReopeningWindow(deadline);
-  next.reopening_requests_open_at = toSqlDateTime(reopeningWindow.opensAt);
-  next.reopening_requests_close_at = toSqlDateTime(reopeningWindow.closesAt);
-
   const status = computedTermStatus(term);
   if (status === 'finalized') {
     throw serviceError(409, 'TERM_FINALIZED', 'A finalized grading period is read-only.');
@@ -477,6 +613,11 @@ function validateTimeline(term, data) {
       throw serviceError(409, 'DEADLINE_CANNOT_MOVE_EARLIER', 'An active term deadline may only be extended.');
     }
   }
+  // An open term keeps its existing end, even if an ignored edit was supplied.
+  const effectiveEnd = status === 'open' ? term.ends_at : end;
+  const reopeningWindow = deriveReopeningWindow(effectiveEnd);
+  next.reopening_requests_open_at = toSqlDateTime(reopeningWindow.opensAt);
+  next.reopening_requests_close_at = toSqlDateTime(reopeningWindow.closesAt);
   return next;
 }
 
@@ -559,17 +700,22 @@ async function createTerm(data, actor) {
 }
 
 async function approveRequest(requestId, data, actor) {
-  const durationMinutes = Number(data.duration_minutes);
-  if (!Number.isInteger(durationMinutes) || durationMinutes < 30 || durationMinutes > MAX_REOPENING_MINUTES) {
-    throw serviceError(400, 'INVALID_DURATION', 'Temporary access must be between 30 minutes and 7 days.');
-  }
+  if (actor.normalized_role !== 'system_admin') throw serviceError(403, 'SYSTEM_ADMIN_REQUIRED', 'Only a System Administrator can approve reopening.');
+  const expiresAt = approvalExpiry(data);
   const connection = await db.getConnection();
   try {
     await connection.beginTransaction();
     const [rows] = await connection.execute(
-      `SELECT grr.*, gs.workflow_status, gs.lock_status
+      `SELECT grr.*, gs.workflow_status, gs.lock_status, at.ends_at,
+        gs.subject_offering_id, ta.subject_offering_id AS assignment_offering_id,
+        EXISTS(SELECT 1 FROM TEMPORARY_REOPENING tr
+          INNER JOIN GRADE_REOPEN_REQUEST existing ON existing.request_id = tr.request_id
+          WHERE existing.grade_sheet_id = gs.grade_sheet_id
+            AND tr.status = 'ACTIVE' AND tr.expires_at > UTC_TIMESTAMP(6)) AS has_active
        FROM GRADE_REOPEN_REQUEST grr
        INNER JOIN GRADE_SHEET gs ON gs.grade_sheet_id = grr.grade_sheet_id
+       INNER JOIN ACADEMIC_TERM at ON at.term_id = gs.term_id
+       INNER JOIN TEACHER_ASSIGNMENT ta ON ta.teacher_assignment_id = grr.teacher_assignment_id
        WHERE grr.request_id = ? FOR UPDATE`,
       [requestId]
     );
@@ -578,32 +724,54 @@ async function approveRequest(requestId, data, actor) {
     if (request.status !== 'PENDING') {
       throw serviceError(409, 'REQUEST_ALREADY_REVIEWED', 'This request has already been reviewed.');
     }
-    if (request.lock_status !== 'TERM_LOCKED' || !isSubmittedWorkflow(request.workflow_status)) {
-      throw serviceError(409, 'SHEET_NOT_ELIGIBLE', 'Only a submitted, term-locked grade sheet can be reopened.');
+    if (requestWindowReason(request.ends_at, request.requested_at) || new Date(request.requested_at).getTime() > Date.now()) {
+      throw serviceError(409, 'REQUEST_OUTSIDE_WINDOW', 'This request was not submitted within seven days after its term ended. Review the linked sheet and request date.');
     }
+    if (Number(request.subject_offering_id) !== Number(request.assignment_offering_id)) {
+      throw serviceError(409, 'REQUEST_SHEET_MISMATCH', 'The request assignment does not match its grade sheet.');
+    }
+    if (request.has_active) throw serviceError(409, 'TEMPORARY_ACCESS_ACTIVE', 'This sheet already has active temporary access.');
+    if (!canRequestReopening(request)) {
+      throw serviceError(409, 'SHEET_NOT_ELIGIBLE', 'Only a submitted sheet or a term-locked draft can receive temporary access after term end.');
+    }
+
+    const requestType = getReopeningRequestType(request.workflow_status);
 
     const [insertResult] = await connection.execute(
       `INSERT INTO TEMPORARY_REOPENING (request_id, starts_at, expires_at, status)
-       VALUES (?, UTC_TIMESTAMP(6), DATE_ADD(UTC_TIMESTAMP(6), INTERVAL ? MINUTE), 'ACTIVE')`,
-      [requestId, durationMinutes]
+       VALUES (?, UTC_TIMESTAMP(6), ?, 'ACTIVE')`,
+      [requestId, toSqlDateTime(expiresAt)]
     );
     await GradeReopenRequest.update(requestId, {
       status: 'APPROVED',
       reviewed_by_user_id: actor.user_id,
       reviewed_at: toSqlDateTime(new Date()),
     }, connection);
-    await GradeSheet.openTemporaryCorrection(request.grade_sheet_id, connection);
+    await GradeSheet.openTemporaryAccess(request.grade_sheet_id, connection);
     await recordAudit(connection, {
       userId: actor.user_id,
       eventType: 'GRADE_REOPEN_REQUEST_APPROVED',
       entityType: 'TEMPORARY_REOPENING',
       entityId: insertResult.insertId,
-      beforeData: { request_status: request.status, lock_status: request.lock_status },
-      afterData: { request_status: 'APPROVED', lock_status: 'TEMPORARILY_REOPENED' },
-      metadata: { admin_note: data.admin_note || null, duration_minutes: durationMinutes },
+      beforeData: {
+        request_status: request.status,
+        workflow_status: request.workflow_status,
+        lock_status: request.lock_status,
+      },
+      afterData: {
+        request_status: 'APPROVED',
+        workflow_status: 'DRAFT',
+        lock_status: 'TEMPORARILY_REOPENED',
+      },
+      metadata: {
+        admin_note: data.admin_note || null,
+        expires_at: expiresAt.toISOString(),
+        request_type: requestType,
+      },
     });
+    const reopening = await TemporaryReopening.findById(insertResult.insertId, connection);
     await connection.commit();
-    return TemporaryReopening.findById(insertResult.insertId);
+    return reopening;
   } catch (error) {
     await connection.rollback();
     throw error;
@@ -613,10 +781,12 @@ async function approveRequest(requestId, data, actor) {
 }
 
 async function denyRequest(requestId, data, actor) {
+  if (actor.normalized_role !== 'system_admin') throw serviceError(403, 'SYSTEM_ADMIN_REQUIRED', 'Only a System Administrator can deny reopening.');
   const connection = await db.getConnection();
   try {
     await connection.beginTransaction();
-    const request = await GradeReopenRequest.findById(requestId, connection);
+    const [rows] = await connection.execute('SELECT * FROM GRADE_REOPEN_REQUEST WHERE request_id = ? FOR UPDATE', [requestId]);
+    const request = rows[0];
     if (!request) throw serviceError(404, 'REQUEST_NOT_FOUND', 'Reopening request not found.');
     if (request.status !== 'PENDING') {
       throw serviceError(409, 'REQUEST_ALREADY_REVIEWED', 'This request has already been reviewed.');
@@ -645,12 +815,12 @@ async function denyRequest(requestId, data, actor) {
   }
 }
 
-async function getReopeningEligibility(gradeSheetId, userId) {
-  await runLifecycleGuard();
-  const [rows] = await db.execute(
+async function findOwnedReopeningSheet(gradeSheetId, userId, connection = db, lock = false) {
+  if (!/^[1-9]\d*$/.test(String(gradeSheetId))) throw serviceError(400, 'INVALID_GRADE_SHEET', 'Choose an exact grade sheet.');
+  const [rows] = await connection.execute(
     `SELECT
       gs.grade_sheet_id, gs.workflow_status, gs.lock_status,
-      at.grade_submission_deadline_at,
+      at.ends_at, at.grade_submission_deadline_at,
       ta.teacher_assignment_id,
       EXISTS(
         SELECT 1 FROM GRADE_REOPEN_REQUEST pending
@@ -668,29 +838,17 @@ async function getReopeningEligibility(gradeSheetId, userId) {
       ON ta.subject_offering_id = gs.subject_offering_id AND ta.user_id = ?
     WHERE gs.grade_sheet_id = ?
       AND (ta.assigned_until IS NULL OR ta.assigned_until >= UTC_DATE())
-    LIMIT 1`,
+    LIMIT 1${lock ? ' FOR UPDATE' : ''}`,
     [userId, gradeSheetId]
   );
   const sheet = rows[0];
   if (!sheet) throw serviceError(404, 'GRADE_SHEET_NOT_FOUND', 'No accessible grade sheet was found.');
-  const now = Date.now();
-  const reopeningWindow = deriveReopeningWindow(sheet.grade_submission_deadline_at);
-  const opens = reopeningWindow.opensAt?.getTime();
-  const closes = reopeningWindow.closesAt?.getTime();
-  let reason = null;
-  if (!Number.isFinite(opens) || !Number.isFinite(closes)) reason = 'WINDOW_NOT_CONFIGURED';
-  else if (now < opens) reason = 'WINDOW_NOT_OPEN';
-  else if (now > closes) reason = 'WINDOW_CLOSED';
-  else if (!isSubmittedWorkflow(sheet.workflow_status) || sheet.lock_status !== 'TERM_LOCKED') reason = 'SHEET_NOT_SUBMITTED_AND_LOCKED';
-  else if (sheet.has_pending) reason = 'REQUEST_ALREADY_PENDING';
-  else if (sheet.has_active) reason = 'TEMPORARY_ACCESS_ACTIVE';
-  return {
-    eligible: !reason,
-    reason,
-    teacher_assignment_id: sheet.teacher_assignment_id,
-    reopening_requests_open_at: reopeningWindow.opensAt,
-    reopening_requests_close_at: reopeningWindow.closesAt,
-  };
+  return sheet;
+}
+
+async function getReopeningEligibility(gradeSheetId, userId) {
+  await runLifecycleGuard();
+  return reopeningEligibility(await findOwnedReopeningSheet(gradeSheetId, userId));
 }
 
 async function getReopeningOptions(userId) {
@@ -702,12 +860,16 @@ async function getReopeningOptions(userId) {
       gs.lock_status,
       at.term_id,
       at.term_name,
+      at.ends_at,
       at.grade_submission_deadline_at,
       sy.school_year_id,
       sy.starts_on AS school_year_starts_on,
       sy.ends_on AS school_year_ends_on,
-      ta.teacher_assignment_id,
-      s.subject_name,
+        ta.teacher_assignment_id,
+        so.subject_offering_id,
+        s.subject_id,
+        sec.section_id,
+        s.subject_name,
       sec.section_name,
       gl.grade_level_name,
       EXISTS(
@@ -738,41 +900,68 @@ async function getReopeningOptions(userId) {
     [userId]
   );
 
-  return rows.map((sheet) => {
-    const reopeningWindow = deriveReopeningWindow(sheet.grade_submission_deadline_at);
-    const now = Date.now();
-    let reason = null;
-    if (now < reopeningWindow.opensAt.getTime()) reason = 'WINDOW_NOT_OPEN';
-    else if (now > reopeningWindow.closesAt.getTime()) reason = 'WINDOW_CLOSED';
-    else if (!isSubmittedWorkflow(sheet.workflow_status) || sheet.lock_status !== 'TERM_LOCKED') {
-      reason = 'SHEET_NOT_SUBMITTED_AND_LOCKED';
-    } else if (sheet.has_pending) reason = 'REQUEST_ALREADY_PENDING';
-    else if (sheet.has_active) reason = 'TEMPORARY_ACCESS_ACTIVE';
-
-    return {
-      ...sheet,
-      eligible: !reason,
-      reason,
-      reopening_requests_open_at: reopeningWindow.opensAt,
-      reopening_requests_close_at: reopeningWindow.closesAt,
-    };
-  });
+  return rows.map((sheet) => ({ ...sheet, ...reopeningEligibility(sheet) }));
 }
 
-async function createReopeningRequest(gradeSheetId, reason, actor) {
-  if (!String(reason || '').trim()) {
-    throw serviceError(400, 'REASON_REQUIRED', 'A correction reason is required.');
+async function createReopeningRequest(gradeSheetId, reason, actor, attachments = {}) {
+  if (typeof reason !== 'string' || !reason.trim() || reason.trim().length > 1000) {
+    throw serviceError(400, 'REASON_REQUIRED', 'Provide a reopening reason of 1 to 1000 characters.');
   }
-  const eligibility = await getReopeningEligibility(gradeSheetId, actor.user_id);
-  if (!eligibility.eligible) {
-    throw serviceError(409, eligibility.reason, 'This grade sheet is not currently accepting reopening requests.');
+  await runLifecycleGuard();
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+    const sheet = await findOwnedReopeningSheet(gradeSheetId, actor.user_id, connection, true);
+    const eligibility = reopeningEligibility(sheet);
+    if (!eligibility.eligible) {
+      throw serviceError(409, eligibility.reason, 'This grade sheet is not currently accepting reopening requests.');
+    }
+    const requestId = await GradeReopenRequest.create({
+      grade_sheet_id: Number(gradeSheetId),
+      teacher_assignment_id: eligibility.teacher_assignment_id,
+      reason: reason.trim(), status: 'PENDING', requested_at: toSqlDateTime(new Date()),
+      file_name: attachments.file_name || null, file_path: attachments.file_path || null,
+      file_type: attachments.file_type || null, file_size: attachments.file_size || null,
+    }, connection);
+    await recordAudit(connection, {
+      userId: actor.user_id, eventType: 'GRADE_REOPEN_REQUEST_SUBMITTED',
+      entityType: 'GRADE_REOPEN_REQUEST', entityId: requestId,
+      afterData: { status: 'PENDING', grade_sheet_id: Number(gradeSheetId) },
+      metadata: { request_type: eligibility.request_type },
+    });
+    const request = await GradeReopenRequest.findById(requestId, connection);
+    await connection.commit();
+    return request;
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
   }
-  const requestId = await GradeReopenRequest.create({
-    grade_sheet_id: gradeSheetId,
-    teacher_assignment_id: eligibility.teacher_assignment_id,
-    reason: String(reason).trim(),
-  });
-  return GradeReopenRequest.findById(requestId);
+}
+
+async function cancelReopeningRequest(requestId, actor) {
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [rows] = await connection.execute(`SELECT grr.*, ta.user_id
+      FROM GRADE_REOPEN_REQUEST grr
+      INNER JOIN TEACHER_ASSIGNMENT ta ON ta.teacher_assignment_id = grr.teacher_assignment_id
+      WHERE grr.request_id = ? FOR UPDATE`, [requestId]);
+    const request = rows[0];
+    if (!request) throw serviceError(404, 'REQUEST_NOT_FOUND', 'Reopening request not found.');
+    if (Number(request.user_id) !== Number(actor.user_id)) throw serviceError(403, 'REQUEST_OWNER_REQUIRED', 'Only the requesting teacher can cancel this request.');
+    if (request.status !== 'PENDING') throw serviceError(409, 'REQUEST_ALREADY_REVIEWED', 'Only pending requests can be cancelled.');
+    const updated = await GradeReopenRequest.update(requestId, { status: 'CANCELLED' }, connection);
+    await recordAudit(connection, { userId: actor.user_id, eventType: 'GRADE_REOPEN_REQUEST_CANCELLED',
+      entityType: 'GRADE_REOPEN_REQUEST', entityId: requestId,
+      beforeData: { status: 'PENDING' }, afterData: { status: 'CANCELLED' } });
+    await connection.commit();
+    return updated;
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally { connection.release(); }
 }
 
 async function getReopeningActivity(temporaryReopeningId) {
@@ -801,8 +990,24 @@ module.exports = {
   denyRequest,
   getReopeningEligibility,
   getReopeningOptions,
+  getReopeningDefaultSchoolYear,
   createReopeningRequest,
+  cancelReopeningRequest,
   getReopeningActivity,
   runLifecycleGuard,
   ensureUpcomingSchoolYear,
+  __test: {
+    getReopeningDefaultSchoolYear,
+    validateTimeline,
+    deriveReopeningWindow,
+    requestWindowReason,
+    reopeningEligibility,
+    approvalExpiry,
+    isReopenableLockedSheet,
+    getReopeningRequestType,
+    getDepartmentStatus,
+    getReopeningRequests,
+    getActiveReopenings,
+    getSubmissionRecords,
+  },
 };

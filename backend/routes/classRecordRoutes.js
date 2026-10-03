@@ -5,6 +5,9 @@ const StudentGrade = require('../models/StudentGrade');
 const AuditEvent = require('../models/AuditEvent');
 const {
   DEFAULT_JHS_WEIGHTS,
+  weightsFromRows,
+  isProtectedGradeSheet,
+  selectSavedSummary,
   calculateStudentSummary,
   calculateStudentGrades,
   transmuteGrade,
@@ -255,18 +258,7 @@ async function ensureGradeSheet(subjectOfferingId, schoolYearId, termName) {
   );
 
   if (sheetRows.length > 0) {
-    let currentLockStatus = sheetRows[0].lock_status || 'EDITABLE';
-    const deadline = sheetRows[0].grade_submission_deadline_at ? new Date(sheetRows[0].grade_submission_deadline_at) : null;
-    const isPastDeadline = deadline ? deadline <= new Date() : false;
-
-    // Self-healing guard: If marked TERM_LOCKED prematurely before term deadline, auto-repair to EDITABLE
-    if (currentLockStatus === 'TERM_LOCKED' && !isPastDeadline) {
-      currentLockStatus = 'EDITABLE';
-      await db.execute(
-        `UPDATE GRADE_SHEET SET lock_status = 'EDITABLE', updated_at = UTC_TIMESTAMP(6) WHERE grade_sheet_id = ?`,
-        [sheetRows[0].grade_sheet_id]
-      );
-    }
+    const currentLockStatus = sheetRows[0].lock_status || 'EDITABLE';
 
     return {
       gradeSheetId: sheetRows[0].grade_sheet_id,
@@ -636,7 +628,7 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
     const isDeadlinePast = activeTerm?.grade_submission_deadline_at
       ? new Date(activeTerm.grade_submission_deadline_at) <= new Date()
       : false;
-    const isEditable = isTermActive && (
+    const isEditable = !isProtectedGradeSheet(sheetData) && isTermActive && (
       !isDeadlinePast ||
       lockStatus === 'EDITABLE' ||
       lockStatus === 'OPEN' ||
@@ -653,10 +645,12 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
     const activeMapehComponent = isMapeh ? normalizeMapehComponent(rawComponent) : null;
 
     // Ensure default assessment activities (WW, PT, QA) exist for this sheet
-    await ensureDefaultActivitiesForSheet(gradeSheetId, subjectId, schoolYearId, activeMapehComponent);
+    if (isEditable) {
+      await ensureDefaultActivitiesForSheet(gradeSheetId, subjectId, schoolYearId, activeMapehComponent);
+    }
 
     // 3. Fetch component weights from SUBJECT_COMPONENT_WEIGHT + COMPONENT_TYPE
-    let weights = { ...DEFAULT_JHS_WEIGHTS };
+    let weights;
     let componentTypes = [];
 
     const [weightRows] = await db.execute(
@@ -673,24 +667,13 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
     );
 
     if (weightRows.length > 0) {
-      weightRows.forEach((w) => {
-        const { code } = normalizeAssessmentType(w.component_code);
-        if (code === 'WW' || code === 'PT' || code === 'QA') {
-          weights[code] = Number(w.weight_percentage);
-        }
-      });
       componentTypes = weightRows;
     } else {
       const [allCt] = await db.execute('SELECT * FROM COMPONENT_TYPE');
       componentTypes = allCt;
     }
 
-    if (isMapeh) {
-      weights.WW = 20;
-      weights.PT = 60;
-      weights.QA = 20;
-      weights.EX = 20;
-    }
+    weights = weightsFromRows(weightRows);
 
     // 4. Fetch active assessment columns from GRADE_ACTIVITY for this grade_sheet_id
     const activityCondition = isMapeh ? 'ga.mapeh_component = ?' : '(ga.mapeh_component IS NULL OR ga.mapeh_component = \'\')';
@@ -813,12 +796,17 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
     });
 
     let otherGradeMap = {};
+    const combinedGradeMap = {};
     if (isMapeh) {
       const otherMapehComp = activeMapehComponent === 'MA' ? 'PEH' : 'MA';
       const otherSaved = await StudentGrade.findByOfferingAndTerm(actualOfferingId, termCode, otherMapehComp);
       otherSaved.forEach((g) => {
         otherGradeMap[g.student_id] = g;
       });
+      if (!isEditable) {
+        const combinedSaved = await StudentGrade.findByOfferingAndTerm(actualOfferingId, termCode, null);
+        combinedSaved.forEach((g) => { combinedGradeMap[g.student_id] = g; });
+      }
     }
 
     // Resolve specific activity IDs for ST1, ST2, and TE
@@ -856,28 +844,26 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
         ? { st1Weight: 25, st2Weight: 25, teWeight: 25, st1HPS: 25, st2HPS: 25, teHPS: 25 }
         : { st1Weight: 30, st2Weight: 30, teWeight: 40 };
 
-      const summary = calculateStudentSummary({
+      const calculated = isEditable ? calculateStudentSummary({
         assessments,
         scores: rawScores,
         weights,
         examConfig: defaultExamConfig,
         isMapeh,
-      });
+      }) : null;
 
       const savedGrade = gradeMap[studentId];
+      const summary = calculated || {
+        ...selectSavedSummary(savedGrade),
+        descriptor: getGradeDescriptor(savedGrade?.quarterly_grade),
+      };
       // Single Source of Truth Alignment: computed summary from component scores is authoritative
-      const initialGrade = summary.initialGrade !== null
-        ? summary.initialGrade
-        : (savedGrade?.initial_grade !== null && savedGrade?.initial_grade !== undefined ? Number(savedGrade.initial_grade) : null);
-
-      const quarterlyGrade = summary.quarterlyGrade !== null
-        ? summary.quarterlyGrade
-        : (savedGrade?.quarterly_grade !== null && savedGrade?.quarterly_grade !== undefined ? Number(savedGrade.quarterly_grade) : null);
-
-      const remarks = summary.remarks || savedGrade?.remarks;
+      const initialGrade = summary.initialGrade;
+      const quarterlyGrade = summary.quarterlyGrade;
+      const remarks = summary.remarks;
 
       if (
-        summary.initialGrade !== null &&
+        isEditable && summary.initialGrade !== null &&
         (!savedGrade ||
           Number(savedGrade.initial_grade) !== Number(summary.initialGrade) ||
           Number(savedGrade.quarterly_grade) !== Number(summary.quarterlyGrade))
@@ -895,8 +881,9 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
       }
 
       // Compute and auto-sync combined Final MAPEH Quarterly Grade if both components are available
-      let finalMapehQuarterly = null;
-      if (isMapeh) {
+      let finalMapehQuarterly = isMapeh && !isEditable
+        ? selectSavedSummary(combinedGradeMap[studentId]).termGrade : null;
+      if (isMapeh && isEditable) {
         const otherSaved = otherGradeMap[studentId];
         if (quarterlyGrade !== null && otherSaved && otherSaved.quarterly_grade !== null && otherSaved.quarterly_grade !== undefined) {
           finalMapehQuarterly = Math.round((Number(quarterlyGrade) + Number(otherSaved.quarterly_grade)) / 2);
@@ -929,6 +916,8 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
         scores: rawScores,
         examinations: studentExaminations,
         computed: summary,
+        saved_summary: !isEditable ? selectSavedSummary(savedGrade) : undefined,
+        calculation_review: summary.calculationError || null,
         initial_grade: initialGrade,
         quarterly_grade: quarterlyGrade,
         remarks,
@@ -936,7 +925,7 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
       };
     });
 
-    if (gradesToAutoSync.length > 0) {
+    if (isEditable && gradesToAutoSync.length > 0) {
       for (const g of gradesToAutoSync) {
         await db.execute(
           `INSERT INTO STUDENT_GRADE (
@@ -998,12 +987,16 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
         division: classContext.division || 'GINGOOG CITY',
         teacher_name: classContext.teacher_name || '',
       },
-      component_weights: isMapeh ? { WW: 20, PT: 60, QA: 20, EX: 20 } : weights,
+      component_weights: weights,
       component_types: componentTypes,
       total_highest_possible_scores: totalHps,
-      exam_config: isMapeh
-        ? { st1Weight: 25, st2Weight: 25, teWeight: 25, st1HPS: 25, st2HPS: 25, teHPS: 25, st1Id: st1ActId, st2Id: st2ActId, teId: teActId, isMapeh: true }
-        : { st1Weight: 30, st2Weight: 30, teWeight: 40, st1HPS: 30, st2HPS: 30, teHPS: 40, st1Id: st1ActId, st2Id: st2ActId, teId: teActId, isMapeh: false },
+      exam_config: {
+        ...(isMapeh ? { st1Weight: 25, st2Weight: 25, teWeight: 25 }
+          : { st1Weight: 30, st2Weight: 30, teWeight: 40 }),
+        st1HPS: assessments.find((a) => a.assessment_id === st1ActId)?.max_score ?? (isMapeh ? 25 : 30),
+        st2HPS: assessments.find((a) => a.assessment_id === st2ActId)?.max_score ?? (isMapeh ? 25 : 30),
+        teHPS: assessments.find((a) => a.assessment_id === teActId)?.max_score ?? (isMapeh ? 25 : 40),
+        st1Id: st1ActId, st2Id: st2ActId, teId: teActId, isMapeh },
       assessments,
       students: computedStudents,
     });
@@ -1072,7 +1065,7 @@ async function handleCreateAssessment(req, res) {
     const isDeadlinePast = activeTerm?.grade_submission_deadline_at
       ? new Date(activeTerm.grade_submission_deadline_at) <= new Date()
       : false;
-    const isEditable = isTermActive && (
+    const isEditable = !isProtectedGradeSheet(sheetData) && isTermActive && (
       !isDeadlinePast ||
       lockStatus === 'EDITABLE' ||
       lockStatus === 'OPEN' ||
@@ -1091,7 +1084,7 @@ async function handleCreateAssessment(req, res) {
 
     if (!targetComponentTypeId) {
       let lookupCodes = [code];
-      if (code === 'QA') lookupCodes.push('STE');
+      if (code === 'QA') lookupCodes.push('STE', 'EX');
       const [ctRows] = await db.execute(
         `SELECT component_type_id FROM COMPONENT_TYPE 
          WHERE UPPER(component_code) IN (${lookupCodes.map(() => '?').join(',')}) 
@@ -1130,6 +1123,7 @@ async function handleCreateAssessment(req, res) {
     const actCompCondition = isMapeh ? 'ga.mapeh_component = ?' : '(ga.mapeh_component IS NULL OR ga.mapeh_component = \'\')';
     const actCompParams = isMapeh ? [gradeSheetId, finalMapehComponent] : [gradeSheetId];
 
+    const activityCodes = code === 'QA' ? ['QA', 'STE', 'EX'] : [code];
     const [countRows] = await db.execute(
       `SELECT COUNT(*) AS total 
        FROM GRADE_ACTIVITY ga
@@ -1137,10 +1131,10 @@ async function handleCreateAssessment(req, res) {
        LEFT JOIN COMPONENT_TYPE ct ON ct.component_type_id = scw.component_type_id
        WHERE ga.grade_sheet_id = ? 
          AND ${actCompCondition}
-         AND (ct.component_code = ? OR (ct.component_code IS NULL AND (ga.subj_comp_weight_id = ? OR ga.activity_name LIKE ?)))
+         AND (UPPER(ct.component_code) IN (${activityCodes.map(() => '?').join(',')}) OR (ct.component_code IS NULL AND (ga.subj_comp_weight_id = ? OR ga.activity_name LIKE ?)))
          AND (ga.status = 'ACTIVE' OR ga.status IS NULL)
          AND ga.status != 'ARCHIVED'`,
-      [...actCompParams, code, targetSubjCompWeightId, `${defaultTypeName}%`]
+      [...actCompParams, ...activityCodes, targetSubjCompWeightId, `${defaultTypeName}%`]
     );
     componentActivityCount = Number(countRows[0]?.total || 0);
 
@@ -1254,7 +1248,7 @@ async function handleUpdateAssessment(req, res) {
 
     // Check if the assessment belongs to a locked grade sheet
     const [actSheetRows] = await db.execute(
-      `SELECT ga.grade_sheet_id, gs.lock_status, gs.term_id, so.school_year_id, at.term_name
+      `SELECT ga.grade_sheet_id, gs.lock_status, gs.workflow_status, gs.term_id, so.school_year_id, at.term_name
        FROM GRADE_ACTIVITY ga
        JOIN GRADE_SHEET gs ON gs.grade_sheet_id = ga.grade_sheet_id
        JOIN SUBJECT_OFFERING so ON so.subject_offering_id = gs.subject_offering_id
@@ -1270,7 +1264,7 @@ async function handleUpdateAssessment(req, res) {
       const isDeadlinePast = activeTerm?.grade_submission_deadline_at
         ? new Date(activeTerm.grade_submission_deadline_at) <= new Date()
         : false;
-      const isEditable = isTermActive && (
+      const isEditable = !isProtectedGradeSheet(row) && isTermActive && (
         !isDeadlinePast ||
         row.lock_status === 'EDITABLE' ||
         row.lock_status === 'OPEN' ||
@@ -1372,7 +1366,7 @@ router.delete('/assessments/:id', async (req, res) => {
 
     // Check if the assessment belongs to a locked grade sheet
     const [actSheetRows] = await db.execute(
-      `SELECT ga.grade_sheet_id, gs.lock_status, gs.term_id, so.school_year_id, at.term_name
+      `SELECT ga.grade_sheet_id, gs.lock_status, gs.workflow_status, gs.term_id, so.school_year_id, at.term_name
        FROM GRADE_ACTIVITY ga
        JOIN GRADE_SHEET gs ON gs.grade_sheet_id = ga.grade_sheet_id
        JOIN SUBJECT_OFFERING so ON so.subject_offering_id = gs.subject_offering_id
@@ -1388,7 +1382,7 @@ router.delete('/assessments/:id', async (req, res) => {
       const isDeadlinePast = activeTerm?.grade_submission_deadline_at
         ? new Date(activeTerm.grade_submission_deadline_at) <= new Date()
         : false;
-      const isEditable = isTermActive && (
+      const isEditable = !isProtectedGradeSheet(row) && isTermActive && (
         !isDeadlinePast ||
         row.lock_status === 'EDITABLE' ||
         row.lock_status === 'OPEN' ||
@@ -1454,7 +1448,7 @@ async function handleBatchScores(req, res) {
     const isDeadlinePast = activeTerm?.grade_submission_deadline_at
       ? new Date(activeTerm.grade_submission_deadline_at) <= new Date()
       : false;
-    const isEditable = isTermActive && (
+    const isEditable = !isProtectedGradeSheet(sheetData) && isTermActive && (
       !isDeadlinePast ||
       lockStatus === 'EDITABLE' ||
       lockStatus === 'OPEN' ||
@@ -1755,7 +1749,7 @@ async function handleBatchScores(req, res) {
       effectiveExamConfig = { st1Weight: 30, st2Weight: 30, teWeight: 40 };
     }
 
-    let weights = isMapeh ? { WW: 20, PT: 60, QA: 20, EX: 20 } : { ...DEFAULT_JHS_WEIGHTS };
+    let weights;
     const [weightRows] = await connection.execute(
       `SELECT scw.percentage AS weight_percentage, ct.component_code
        FROM SUBJECT_COMPONENT_WEIGHT scw
@@ -1764,14 +1758,7 @@ async function handleBatchScores(req, res) {
       [subject_id, school_year_id]
     );
 
-    if (weightRows.length > 0 && !isMapeh) {
-      weightRows.forEach((w) => {
-        const { code } = normalizeAssessmentType(w.component_code);
-        if (code === 'WW' || code === 'PT' || code === 'QA') {
-          weights[code] = Number(w.weight_percentage);
-        }
-      });
-    }
+    weights = weightsFromRows(weightRows);
 
     const actCondition = isMapeh ? 'ga.mapeh_component = ?' : '(ga.mapeh_component IS NULL OR ga.mapeh_component = \'\')';
     const actParams = isMapeh ? [gradeSheetId, activeMapehComponent] : [gradeSheetId];
@@ -2972,4 +2959,3 @@ async function syncOfferingGradesInternal(subjectOfferingId, termCode = 'T1') {
 
 router.syncOfferingGradesInternal = syncOfferingGradesInternal;
 module.exports = router;
-

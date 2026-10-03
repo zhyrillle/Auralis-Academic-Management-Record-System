@@ -9,16 +9,8 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import DropdownSelect from "../../../components/common/DropdownSelect";
-import { temporaryDurationOptions } from "../../../services/gradingPeriodService";
 import AttachmentPreviewModal from "./AttachmentPreviewModal";
 import "../../../styles/ReviewRequestDrawer.css";
-
-const customDurationUnitOptions = [
-  { value: "minutes", label: "Minutes" },
-  { value: "hours", label: "Hours" },
-  { value: "days", label: "Days" },
-];
 
 function formatAttachmentSize(value) {
   const bytes = Number(value);
@@ -40,31 +32,26 @@ function attachmentTypeLabel(attachment) {
   return extension ? `${extension.toUpperCase()} file` : "File type unavailable";
 }
 
-function getDurationMinutes(durationValue, customDuration, customDurationUnit) {
-  const multipliers = { minutes: 1, hours: 60, days: 1440 };
-  const customValue = Number(customDuration);
-  const minutes =
-    durationValue === "custom"
-      ? customValue * (multipliers[customDurationUnit] || 1)
-      : Number(durationValue);
-
-  return Number.isFinite(minutes) && minutes > 0 ? minutes : 1440;
-}
-
 export default function ReviewRequestDrawer({
   request,
   onClose,
   onDeny,
   onApprove,
+  isSaving = false,
 }) {
-  const [durationValue, setDurationValue] = useState("1440");
-  const [customDurationMinutes, setCustomDurationMinutes] = useState("90");
-  const [customDurationUnit, setCustomDurationUnit] = useState("minutes");
+  const [editingDeadline, setEditingDeadline] = useState(() =>
+    new Date(Date.now() + 86400000 + 8 * 3600000).toISOString().slice(0, 16));
+  const [now, setNow] = useState(Date.now);
   const [adminNote, setAdminNote] = useState("");
   const [previewAttachment, setPreviewAttachment] = useState(null);
   const surfaceRef = useRef(null);
   const previewOpenRef = useRef(false);
   const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 30000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     onCloseRef.current = onClose;
@@ -107,36 +94,15 @@ export default function ReviewRequestDrawer({
     return null;
   }
 
-  const customDurationLimits = {
-    minutes: { min: 5, max: 43200 },
-    hours: { min: 1, max: 720 },
-    days: { min: 1, max: 30 },
-  };
-  const selectedLimits =
-    customDurationLimits[customDurationUnit] || customDurationLimits.minutes;
-  const customDurationNumber = Number(customDurationMinutes);
-  const hasInvalidCustomDuration =
-    durationValue === "custom" &&
-    (!customDurationNumber ||
-      customDurationNumber < selectedLimits.min ||
-      customDurationNumber > selectedLimits.max);
-
-  const handleCustomDurationUnitChange = (unit) => {
-    setCustomDurationUnit(unit);
-    setCustomDurationMinutes(
-      unit === "minutes" ? "90" : unit === "hours" ? "2" : "1",
-    );
-  };
-
+  const deadline = new Date(`${editingDeadline}:00+08:00`);
+  const hasInvalidDeadline = !editingDeadline || !Number.isFinite(deadline.getTime())
+    || deadline.getTime() < now + 30 * 60000;
   const handleApprove = () => {
-    onApprove(request.id, {
-      duration_minutes: getDurationMinutes(
-        durationValue,
-        customDurationMinutes,
-        customDurationUnit,
-      ),
-      admin_note: adminNote.trim() || null,
-    });
+    if (hasInvalidDeadline || isSaving || deadline.getTime() < Date.now() + 30 * 60000) {
+      setNow(Date.now());
+      return;
+    }
+    onApprove(request.id, { expires_at: deadline.toISOString(), admin_note: adminNote.trim() || null });
   };
 
   const handleDeny = () => {
@@ -155,12 +121,15 @@ export default function ReviewRequestDrawer({
         >
         <div className="grade-lock-surface__header">
           <div>
-            <h2 id="review-request-drawer-title">Review Reopening Request</h2>
+            <h2 id="review-request-drawer-title">
+              Review {request.requestType} Request
+            </h2>
           </div>
           <button
             type="button"
             className="grade-lock-icon-button"
             onClick={onClose}
+            disabled={isSaving}
             aria-label="Close review request"
           >
             <X size={19} />
@@ -176,6 +145,10 @@ export default function ReviewRequestDrawer({
               <div>
                 <dt>Teacher</dt>
                 <dd>{request.teacherName}</dd>
+              </div>
+              <div>
+                <dt>Request type</dt>
+                <dd>{request.requestType}</dd>
               </div>
               <div>
                 <dt>Subject</dt>
@@ -242,10 +215,12 @@ export default function ReviewRequestDrawer({
             >
               <Info size={17} aria-hidden="true" />
               <div id="correction-policy-description">
-                <strong>Correction policy</strong>
+                <strong>Reopening policy</strong>
                 <p>
-                  Requests are accepted for seven days after the submission
-                  deadline. Approved access applies only to this grade sheet.
+                  Late-submission and correction requests are accepted for seven
+                  days after the term ends. A request submitted in that window may
+                  be approved later. The administrator sets a separate editing
+                  deadline for this grade sheet.
                 </p>
               </div>
             </div>
@@ -256,44 +231,19 @@ export default function ReviewRequestDrawer({
             aria-labelledby="temporary-duration-title"
           >
             <h3 id="temporary-duration-title" className="grade-lock-form-title">
-              Temporary Access Duration
+              Temporary Editing Deadline
             </h3>
             <div className="grade-lock-field review-duration-field">
-              <span>Duration</span>
-              <DropdownSelect
-                className="review-duration-dropdown"
-                label="Temporary access duration"
-                value={durationValue}
-                options={temporaryDurationOptions}
-                onChange={setDurationValue}
+              <label htmlFor="reopening-editing-deadline">Due date and time (Philippine time)</label>
+              <input
+                id="reopening-editing-deadline"
+                type="datetime-local"
+                value={editingDeadline}
+                disabled={isSaving}
+                onChange={event => setEditingDeadline(event.target.value)}
               />
+              {hasInvalidDeadline && <p role="alert">Choose a deadline at least 30 minutes in the future.</p>}
             </div>
-
-            {durationValue === "custom" && (
-              <div className="grade-lock-field review-duration-field">
-                <span>Custom duration</span>
-                <div className="custom-duration-control">
-                  <input
-                    type="number"
-                    min={selectedLimits.min}
-                    max={selectedLimits.max}
-                    step="1"
-                    value={customDurationMinutes}
-                    aria-label="Custom duration value"
-                    onChange={(event) =>
-                      setCustomDurationMinutes(event.target.value)
-                    }
-                  />
-                  <DropdownSelect
-                    className="review-duration-unit-dropdown"
-                    label="Custom duration unit"
-                    value={customDurationUnit}
-                    options={customDurationUnitOptions}
-                    onChange={handleCustomDurationUnitChange}
-                  />
-                </div>
-              </div>
-            )}
 
             <div
               className="grade-lock-info-box"
@@ -304,7 +254,7 @@ export default function ReviewRequestDrawer({
               <AlarmClock size={19} aria-hidden="true" />
               <div id="temporary-access-expiration-description">
                 <strong>Temporary Access expiration</strong>
-                <p>Editing access will end when this period expires.</p>
+                <p>Access ends at the selected deadline, independently of the seven-day request window.</p>
               </div>
             </div>
           </section>
@@ -319,6 +269,7 @@ export default function ReviewRequestDrawer({
             <textarea
               id="reopening-admin-note"
               value={adminNote}
+              disabled={isSaving}
               maxLength="500"
               rows="4"
               placeholder="Add a note for this reopening..."
@@ -332,6 +283,7 @@ export default function ReviewRequestDrawer({
             type="button"
             className="grade-lock-button grade-lock-button--danger-outline"
             onClick={handleDeny}
+            disabled={isSaving}
           >
             Deny Request
           </button>
@@ -339,10 +291,10 @@ export default function ReviewRequestDrawer({
             type="button"
             className="grade-lock-button grade-lock-button--primary"
             onClick={handleApprove}
-            disabled={hasInvalidCustomDuration}
+            disabled={isSaving || hasInvalidDeadline}
           >
             <RotateCcwKey size={16} aria-hidden="true" />
-            Approve Reopening
+            {isSaving ? "Saving…" : "Approve Temporary Access"}
           </button>
         </div>
         </aside>

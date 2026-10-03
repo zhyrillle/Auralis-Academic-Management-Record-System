@@ -44,7 +44,7 @@ function createSuggestedTerm({
   end,
 }) {
   const deadline = addDays(end, 7);
-  const reopeningClose = addDays(deadline, 7);
+  const reopeningClose = addDays(end, 7);
 
   return {
     school_year_id: schoolYearId,
@@ -52,7 +52,7 @@ function createSuggestedTerm({
     starts_at: toSqlDateTime(start),
     ends_at: toSqlDateTime(end, 23, 59, 59),
     grade_submission_deadline_at: toSqlDateTime(deadline, 17),
-    reopening_requests_open_at: toSqlDateTime(deadline, 17),
+    reopening_requests_open_at: toSqlDateTime(end, 23, 59, 59),
     reopening_requests_close_at: toSqlDateTime(reopeningClose, 23, 59, 59),
     status: 'upcoming',
     suggestion_rule_version: CALENDAR_RULE.version,

@@ -133,7 +133,6 @@ export function calculateStudentGrades({
   quarterlyAssessment = "",
   writtenWorkColumns = [],
   performanceTaskColumns = [],
-  quarterlyAssessmentHPS = 50,
   examConfig = {
     st1HPS: 25,
     st2HPS: 25,
@@ -142,9 +141,10 @@ export function calculateStudentGrades({
     st2Weight: 30,
     teWeight: 40,
   },
-  weights = DEFAULT_JHS_WEIGHTS,
+  weights = {},
   isMapeh = false,
   isMapehSubject = false,
+  savedSummary,
 }) {
   const effectiveIsMapeh = Boolean(
     isMapeh ||
@@ -154,13 +154,11 @@ export function calculateStudentGrades({
     (weights?.EX !== undefined && Number(weights.EX) === 20 && weights?.WW !== undefined && Number(weights.WW) === 20)
   );
 
-  const wwWeight = effectiveIsMapeh ? 20 : (weights?.WW !== undefined ? Number(weights.WW) : DEFAULT_JHS_WEIGHTS.WW);
-  const ptWeight = effectiveIsMapeh ? 60 : (weights?.PT !== undefined ? Number(weights.PT) : DEFAULT_JHS_WEIGHTS.PT);
-  const exWeight = effectiveIsMapeh ? 20 : (weights?.EX !== undefined
-    ? Number(weights.EX)
-    : weights?.QA !== undefined
-    ? Number(weights.QA)
-    : DEFAULT_JHS_WEIGHTS.EX);
+  // WS Config controls the three main weights, not the internal examination distribution.
+  const resolved = resolveComponentWeights(weights, effectiveIsMapeh);
+  const wwWeight = resolved.weights.WW;
+  const ptWeight = resolved.weights.PT;
+  const exWeight = resolved.weights.EX;
 
   // 1. Written Works (Weight = 20%)
   let wwTotalRaw = 0;
@@ -287,8 +285,8 @@ export function calculateStudentGrades({
 
   const exHasInput = hasST1 || hasST2 || hasTE;
 
-  let exPS = 0;
-  let exWS = 0;
+  let exPS;
+  let exWS;
 
   if (effectiveIsMapeh) {
     // MAPEH Examination formula: sum of ST1 + ST2 + TE raw scores over total HPS (75) times 20%
@@ -309,11 +307,14 @@ export function calculateStudentGrades({
   const hasAnyInput = wwHasInput || ptHasInput || exHasInput;
 
   // Initial Grade = WS_WW + WS_PT + WS_EX
-  const initialGrade = hasAnyInput ? parseFloat((wwWS + ptWS + exWS).toFixed(2)) : null;
-  const termGrade = initialGrade !== null ? transmuteGrade(initialGrade) : null;
+  const initialGrade = savedSummary !== undefined ? savedSummary.initialGrade
+    : !resolved.error && hasAnyInput ? parseFloat((wwWS + ptWS + exWS).toFixed(2)) : null;
+  const termGrade = savedSummary !== undefined ? savedSummary.termGrade
+    : initialGrade !== null ? transmuteGrade(initialGrade) : null;
   const descriptor = termGrade !== null ? getGradeDescriptor(termGrade) : "-";
 
   return {
+    calculationError: savedSummary !== undefined ? savedSummary.calculationError : resolved.error,
     writtenWorks: {
       total: wwHasInput ? wwTotalRaw : "-",
       ps: wwHasInput ? wwPS.toFixed(2) : "-",
@@ -357,6 +358,28 @@ export function calculateStudentGrades({
     isFailing: termGrade !== null && termGrade < 75,
     remarks: termGrade !== null ? (termGrade >= 75 ? "Passed" : "Failed") : "-",
   };
+}
+
+const MAPEH_WEIGHTS = { WW: 20, PT: 60, EX: 20, QA: 20 };
+
+export function resolveComponentWeights(weights = {}, isMapeh = false) {
+  // Defaults are suggestions for callers with no weights, never replacements for saved values.
+  const supplied = Object.keys(weights ?? {}).length > 0;
+  const source = supplied ? weights : (isMapeh ? MAPEH_WEIGHTS : DEFAULT_JHS_WEIGHTS);
+  const examValues = ['EX', 'QA', 'STE'].filter((key) => source[key] !== undefined)
+    .map((key) => source[key] === null || source[key] === '' ? NaN : Number(source[key]));
+  const values = { WW: Number(source.WW), PT: Number(source.PT), EX: examValues[0] };
+  let error = null;
+  if (examValues.every(Number.isFinite) && examValues.some((value) => value !== values.EX)) error = 'CONFLICTING_EXAM_WEIGHTS';
+  if (!error && (source.WW == null || source.PT == null || source.WW === '' || source.PT === '' ||
+      examValues.some((value) => !Number.isFinite(value)) ||
+      Object.values(values).some((value) => !Number.isFinite(value) || value < 0 || value > 100))) {
+    error = 'INVALID_COMPONENT_WEIGHTS';
+  }
+  if (!error && Math.abs(values.WW + values.PT + values.EX - 100) > 0.001) {
+    error = 'INVALID_WEIGHT_TOTAL';
+  }
+  return { weights: values, error };
 }
 
 export const calculateStudentRow = calculateStudentGrades;

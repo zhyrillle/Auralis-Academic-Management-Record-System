@@ -100,7 +100,10 @@ router.get('/grade-sheets/reopening-options', async (req, res) => {
     const gradeSheets = await GradingPeriodService.getReopeningOptions(
       req.currentUser.user_id
     );
-    return res.json({ gradeSheets });
+    return res.json({
+      gradeSheets,
+      defaultSchoolYearId: GradingPeriodService.getReopeningDefaultSchoolYear(gradeSheets),
+    });
   } catch (error) {
     return handleError(error, res);
   }

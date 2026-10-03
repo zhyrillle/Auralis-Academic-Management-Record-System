@@ -422,6 +422,42 @@
   font-weight: 800;
 }
 
+.submission-status__details {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  scrollbar-color: #b9c5d3 transparent;
+  scrollbar-width: thin;
+}
+
+.submission-status__section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 42px;
+  padding: 10px 22px;
+  background: #ffffff;
+  border-bottom: 1px solid #edf2f7;
+}
+
+.submission-status__section-heading h3 {
+  color: #334155;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.submission-status__section-heading span {
+  min-width: 24px;
+  padding: 2px 7px;
+  color: #475569;
+  background: #eef2f7;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  text-align: center;
+}
+
 .submission-status__labels,
 .submission-status__department-row {
   display: grid;
@@ -447,10 +483,6 @@
 
 .submission-status__departments {
   min-height: 0;
-  flex: 1;
-  overflow-y: auto;
-  scrollbar-color: #b9c5d3 transparent;
-  scrollbar-width: thin;
 }
 
 .submission-status__department-row {
@@ -505,6 +537,68 @@
   color: #64748b;
   font-size: 12px;
   text-align: center;
+}
+
+.submission-records__labels,
+.submission-records__row {
+  display: grid;
+  grid-template-columns:
+    minmax(155px, 1.1fr)
+    minmax(160px, 1fr)
+    minmax(140px, 0.8fr)
+    90px;
+  align-items: center;
+  gap: 14px;
+}
+
+.submission-records__labels {
+  padding: 11px 22px;
+  color: #8a9ab2;
+  background: #fbfcfe;
+  border-bottom: 1px solid #edf2f7;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.submission-records__row {
+  min-height: 62px;
+  padding: 12px 22px;
+  border-bottom: 1px solid #e7edf4;
+}
+
+.submission-records__row > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.submission-records__row strong {
+  overflow: hidden;
+  color: #334155;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.submission-records__row div span,
+.submission-records__row time {
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.submission-records__status {
+  display: inline-flex;
+  justify-content: center;
+  padding: 5px 8px;
+  color: #166534;
+  background: #ecfdf3;
+  border: 1px solid #bbf7d0;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
 }
 
 .reopening-management {
@@ -971,6 +1065,10 @@
   white-space: nowrap;
 }
 
+.reopening-request__type {
+  margin-top: 8px;
+}
+
 .reopening-request__reason {
   margin: 10px 0 12px !important;
   color: #475569;
@@ -1330,7 +1428,8 @@
     min-height: 430px;
   }
 
-  .submission-status__labels {
+  .submission-status__labels,
+  .submission-records__labels {
     display: none;
   }
 
@@ -1342,6 +1441,27 @@
 
   .submission-status__department-progress {
     grid-column: 1 / -1;
+  }
+
+  .submission-status__section-heading,
+  .submission-records__row {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  .submission-records__row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px 12px;
+  }
+
+  .submission-records__row > div:nth-child(2),
+  .submission-records__row time {
+    grid-column: 1 / 2;
+  }
+
+  .submission-records__status {
+    grid-column: 2;
+    grid-row: 1 / span 2;
   }
 
   .reopening-request {
@@ -1388,4 +1508,5 @@
   .active-reopening__timing {
     grid-template-columns: 1fr;
   }
+}
 

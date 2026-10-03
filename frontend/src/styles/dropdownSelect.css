@@ -96,3 +96,18 @@
   border-color: #7393c4;
   box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1);
 }
+
+.dropdown-select__trigger.is-error {
+  border-color: #dc2626;
+}
+
+.dropdown-select__menu button:disabled {
+  color: #94a3b8;
+  background: transparent;
+  cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dropdown-select__menu { animation: none; }
+  .dropdown-select__trigger > svg { transition: none; }
+}
