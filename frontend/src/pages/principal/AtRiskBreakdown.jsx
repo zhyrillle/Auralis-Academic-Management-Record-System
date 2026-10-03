@@ -172,21 +172,24 @@ export default function AtRiskBreakdown() {
           <RiskLevelCard
             riskLevel="low"
             label="Low Risk"
-            count={summary.lowRisk || 2}
+            count={summary.lowRisk}
+            students={lowNotes.students}
             notes={lowNotes.notes}
             loading={loading}
           />
           <RiskLevelCard
             riskLevel="medium"
             label="Medium Risk"
-            count={summary.mediumRisk || 4}
+            count={summary.mediumRisk}
+            students={mediumNotes.students}
             notes={mediumNotes.notes}
             loading={loading}
           />
           <RiskLevelCard
             riskLevel="high"
             label="High Risk"
-            count={summary.highRisk || 1}
+            count={summary.highRisk}
+            students={highNotes.students}
             notes={highNotes.notes}
             loading={loading}
           />
