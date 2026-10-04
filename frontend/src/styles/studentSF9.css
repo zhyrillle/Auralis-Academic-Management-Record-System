@@ -1180,8 +1180,10 @@
   }
 
   .sf9-document-spread,
-  .sf9-document-spread * {
-    visibility: visible;
+  .sf9-document-spread *,
+  .sf10-document-wrapper,
+  .sf10-document-wrapper * {
+    visibility: visible !important;
   }
 
   .sf9-document-spread {

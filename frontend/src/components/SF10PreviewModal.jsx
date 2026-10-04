@@ -172,13 +172,173 @@ function SF10PreviewModalContent({ isOpen, onClose, student }) {
   }, [isOpen, onClose]);
 
   const getLastNameForFile = () => {
-    const nameParts = parseNameParts(student?.name);
-    const raw = sf10Data?.learner?.last_name || student?.last_name || student?.lastName || nameParts.last || "STUDENT";
-    return safeStr(raw).trim().toUpperCase().replace(/[^A-Z0-9_-]/gi, "") || "STUDENT";
+    let raw = "";
+    if (sf10Data?.learner?.last_name) {
+      raw = sf10Data.learner.last_name;
+    } else if (student?.last_name) {
+      raw = student.last_name;
+    } else if (student?.lastName) {
+      raw = student.lastName;
+    } else {
+      const fullName =
+        sf10Data?.learner?.full_name ||
+        sf10Data?.learner?.name ||
+        student?.name ||
+        student?.fullName ||
+        student?.student_name ||
+        "";
+      if (fullName) {
+        const parts = parseNameParts(fullName);
+        raw = parts.last;
+      }
+    }
+    const sanitized = safeStr(raw).trim().toUpperCase().replace(/[^A-Z0-9_-]/gi, "");
+    return sanitized || "STUDENT";
   };
 
+  // Sync window document.title while preview is open so browser "Save as PDF" defaults to {studentsurname}_SF10
+  useEffect(() => {
+    if (!isOpen) return;
+    const originalTitle = document.title;
+    const saveTitle = `${getLastNameForFile()}_SF10`;
+    document.title = saveTitle;
+    if (window.top && window.top.document) {
+      try {
+        window.top.document.title = saveTitle;
+      } catch (e) {
+        // Cross-origin fallback ignore
+      }
+    }
+
+    return () => {
+      document.title = originalTitle;
+      if (window.top && window.top.document) {
+        try {
+          window.top.document.title = originalTitle;
+        } catch (e) {
+          // Cross-origin fallback ignore
+        }
+      }
+    };
+  }, [isOpen, sf10Data, student]);
+
   const handlePrint = () => {
-    window.print();
+    const docElem = document.querySelector(".sf10-document-wrapper");
+    const printFileName = `${getLastNameForFile()}_SF10`;
+    const originalTitle = document.title;
+
+    // Ensure host document title reflects {studentsurname}_SF10 prior to triggering browser print preview
+    document.title = printFileName;
+    if (window.top && window.top.document) {
+      try {
+        window.top.document.title = printFileName;
+      } catch (e) {
+        // Cross-origin fallback ignore
+      }
+    }
+
+    if (!docElem) {
+      window.print();
+      return;
+    }
+
+    // Collect all stylesheets from head and body
+    const styleTags = Array.from(document.querySelectorAll("style, link[rel='stylesheet']"))
+      .map((node) => node.outerHTML)
+      .join("\n");
+
+    const iframe = document.createElement("iframe");
+    iframe.style.position = "fixed";
+    iframe.style.right = "0";
+    iframe.style.bottom = "0";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "0";
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow.document;
+    doc.open();
+    doc.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>${printFileName}</title>
+          ${styleTags}
+          <style>
+            @page {
+              size: A4 portrait;
+              margin: 8mm 10mm;
+            }
+            html, body {
+              background: #ffffff !important;
+              margin: 0 !important;
+              padding: 0 !important;
+              width: 100% !important;
+              height: auto !important;
+              overflow: visible !important;
+            }
+            .sf10-document-wrapper {
+              display: block !important;
+              width: 100% !important;
+              margin: 0 !important;
+              padding: 0 !important;
+              visibility: visible !important;
+              position: static !important;
+            }
+            .sf10-page-sheet {
+              box-shadow: none !important;
+              margin: 0 auto !important;
+              padding: 0 !important;
+              width: 100% !important;
+              max-width: 100% !important;
+              visibility: visible !important;
+              background: #ffffff !important;
+              page-break-inside: avoid !important;
+              break-inside: avoid !important;
+            }
+            #sf10-page-1 {
+              page-break-after: always !important;
+              break-after: page !important;
+            }
+            #sf10-page-2 {
+              page-break-before: always !important;
+              break-before: page !important;
+            }
+            * {
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+              color-adjust: exact !important;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="sf10-document-wrapper">
+            ${docElem.innerHTML}
+          </div>
+        </body>
+      </html>
+    `);
+    doc.close();
+
+    if (doc) {
+      doc.title = printFileName;
+    }
+
+    iframe.contentWindow.focus();
+    setTimeout(() => {
+      try {
+        iframe.contentWindow.print();
+      } catch (printErr) {
+        console.warn("Iframe print failed, falling back to window.print():", printErr);
+        window.print();
+      } finally {
+        setTimeout(() => {
+          if (document.body.contains(iframe)) {
+            document.body.removeChild(iframe);
+          }
+        }, 1500);
+      }
+    }, 350);
   };
 
   const handleDownloadExcel = async () => {

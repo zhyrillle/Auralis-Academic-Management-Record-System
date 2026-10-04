@@ -1,6 +1,6 @@
 import ExcelJS from "exceljs/dist/exceljs.min.js";
 import depedLogoUrl from "../assets/deped_logo.png";
-import gccnhsLogoUrl from "../assets/gccnhs_logo.png";
+import depedGifLogoUrl from "../assets/deped-logo.gif";
 
 /**
  * Defensive string sanitizer
@@ -63,7 +63,13 @@ async function fetchImageBase64(url) {
       reader.onloadend = () => {
         const result = reader.result;
         if (typeof result === "string" && result.includes(",")) {
-          resolve(result.split(",")[1]);
+          const mimeMatch = result.match(/data:([^;]+);/);
+          const mime = mimeMatch ? mimeMatch[1] : "";
+          const ext = mime.includes("gif") ? "gif" : (mime.includes("jpeg") || mime.includes("jpg")) ? "jpeg" : "png";
+          resolve({
+            base64: result.split(",")[1],
+            extension: ext
+          });
         } else {
           resolve(null);
         }
@@ -200,27 +206,58 @@ function findSubjectGrade(gradesList, def) {
 
 /**
  * Apply box perimeter border helper:
- * Outer perimeter: 'medium'
- * Inner gridlines: 'thin'
- * Eliminates all heavy/double internal borders!
+ * Outer perimeter: 'medium' on ALL 4 sides (top, bottom, left, AND right)
+ * Inner gridlines: strictly uniform 'thin'
+ * Eliminates all asymmetric border clipping and double internal borders!
  */
-function applyBoxBorders(worksheet, startRow, endRow, startCol, endCol) {
+function applyScholasticBoxBorders(worksheet, startRow, endRow, startCol = 2, endCol = 12) {
+  // Pass 1: Set all interior gridlines strictly to thin with black stroke
   for (let r = startRow; r <= endRow; r++) {
-    const row = worksheet.getRow(r);
     for (let c = startCol; c <= endCol; c++) {
-      const cell = row.getCell(c);
-      const isTop = (r === startRow);
-      const isBottom = (r === endRow);
-      const isLeft = (c === startCol);
-      const isRight = (c === endCol);
-
-      cell.border = {
-        top: { style: isTop ? "medium" : "thin", color: { argb: COLORS.black } },
-        bottom: { style: isBottom ? "medium" : "thin", color: { argb: COLORS.black } },
-        left: { style: isLeft ? "medium" : "thin", color: { argb: COLORS.black } },
-        right: { style: isRight ? "medium" : "thin", color: { argb: COLORS.black } },
+      worksheet.getCell(r, c).border = {
+        top: { style: "thin", color: { argb: "000000" } },
+        bottom: { style: "thin", color: { argb: "000000" } },
+        left: { style: "thin", color: { argb: "000000" } },
+        right: { style: "thin", color: { argb: "000000" } },
       };
     }
+  }
+
+  // Pass 2: Enforce medium borders strictly on the outer perimeter box
+  // Top perimeter
+  for (let c = startCol; c <= endCol; c++) {
+    const topCell = worksheet.getCell(startRow, c);
+    topCell.border = {
+      ...topCell.border,
+      top: { style: "medium", color: { argb: "000000" } },
+    };
+  }
+
+  // Bottom perimeter
+  for (let c = startCol; c <= endCol; c++) {
+    const bottomCell = worksheet.getCell(endRow, c);
+    bottomCell.border = {
+      ...bottomCell.border,
+      bottom: { style: "medium", color: { argb: "000000" } },
+    };
+  }
+
+  // Left perimeter (Column 2)
+  for (let r = startRow; r <= endRow; r++) {
+    const leftCell = worksheet.getCell(r, startCol);
+    leftCell.border = {
+      ...leftCell.border,
+      left: { style: "medium", color: { argb: "000000" } },
+    };
+  }
+
+  // Right perimeter (Column 12)
+  for (let r = startRow; r <= endRow; r++) {
+    const rightCell = worksheet.getCell(r, endCol);
+    rightCell.border = {
+      ...rightCell.border,
+      right: { style: "medium", color: { argb: "000000" } },
+    };
   }
 }
 
@@ -234,7 +271,7 @@ function addSectionBanner(worksheet, rowNum, title) {
   const cell = worksheet.getCell(rowNum, 2);
   cell.value = title;
   cell.alignment = { horizontal: "center", vertical: "middle" };
-  cell.font = { name: "Arial", size: 9.5, bold: true, color: { argb: COLORS.black } };
+  cell.font = { name: "Arial", size: 9, bold: true, color: { argb: COLORS.black } };
 
   for (let c = 2; c <= 12; c++) {
     const current = worksheet.getCell(rowNum, c);
@@ -246,7 +283,7 @@ function addSectionBanner(worksheet, rowNum, title) {
     current.border = {}; // Clean border-free styling as specified
     current.protection = { locked: true };
   }
-  worksheet.getRow(rowNum).height = 18;
+  worksheet.getRow(rowNum).height = 15;
 }
 
 /**
@@ -265,52 +302,112 @@ function renderScholasticBlockExcel(worksheet, record, defaultGradeNum, startRow
   const recRegion = isPop && record?.region ? safeStr(record.region) : "Region X";
   const genAvg = record?.general_average || {};
 
-  const boxStartRow = startRowNum;
   let curr = startRowNum;
 
-  // 1. Meta Row 1: School, School ID, District, Division, Region
-  worksheet.mergeCells(curr, 2, curr, 4);
-  worksheet.getCell(curr, 2).value = `School: ${recSchool}`;
-  worksheet.mergeCells(curr, 5, curr, 6);
-  worksheet.getCell(curr, 5).value = `School ID: ${recSchoolId}`;
-  worksheet.mergeCells(curr, 7, curr, 8);
-  worksheet.getCell(curr, 7).value = `District: ${recDistrict}`;
-  worksheet.mergeCells(curr, 9, curr, 10);
-  worksheet.getCell(curr, 9).value = `Division: ${recDivision}`;
-  worksheet.mergeCells(curr, 11, curr, 12);
-  worksheet.getCell(curr, 11).value = `Region: ${recRegion}`;
+  // 1. Meta Row 1: School (B..D, cols 2-4), School ID (E..F, cols 5-6), District (G..H, cols 7-8), Division (I..J, cols 9-10), Region (K..L, cols 11-12)
+  const metaRow1 = curr;
+  worksheet.mergeCells(metaRow1, 2, metaRow1, 4);
+  worksheet.getCell(metaRow1, 2).value = `School: ${recSchool}`;
+
+  worksheet.mergeCells(metaRow1, 5, metaRow1, 6);
+  worksheet.getCell(metaRow1, 5).value = `School ID: ${recSchoolId}`;
+
+  worksheet.mergeCells(metaRow1, 7, metaRow1, 8);
+  worksheet.getCell(metaRow1, 7).value = `District: ${recDistrict}`;
+
+  worksheet.mergeCells(metaRow1, 9, metaRow1, 10);
+  worksheet.getCell(metaRow1, 9).value = `Division: ${recDivision}`;
+
+  worksheet.mergeCells(metaRow1, 11, metaRow1, 12);
+  worksheet.getCell(metaRow1, 11).value = `Region: ${recRegion}`;
 
   for (let c = 2; c <= 12; c++) {
-    const cell = worksheet.getCell(curr, c);
+    const cell = worksheet.getCell(metaRow1, c);
     cell.font = { name: "Arial", size: 8.5 };
     cell.alignment = { vertical: "middle" };
     cell.protection = { locked: true };
   }
-  worksheet.getRow(curr).height = 18;
+  worksheet.getRow(metaRow1).height = 14;
   curr++;
 
-  // 2. Meta Row 2: Classified as Grade, Section, School Year, Adviser, Signature
-  worksheet.mergeCells(curr, 2, curr, 3);
-  worksheet.getCell(curr, 2).value = `Classified as Grade: ${gradeLevel}`;
-  worksheet.mergeCells(curr, 4, curr, 5);
-  worksheet.getCell(curr, 4).value = `Section: ${section}`;
-  worksheet.mergeCells(curr, 6, curr, 7);
-  worksheet.getCell(curr, 6).value = `School Year: ${sy}`;
-  worksheet.mergeCells(curr, 8, curr, 10);
-  worksheet.getCell(curr, 8).value = `Name of Adviser/Teacher: ${adviser}`;
-  worksheet.mergeCells(curr, 11, curr, 12);
-  worksheet.getCell(curr, 11).value = `Signature: __________`;
+  // 2. Meta Row 2: Classified as Grade (B, col 2), Section (C, col 3), School Year (D..F, cols 4-6), Adviser (G..J, cols 7-10), Signature (K..L, cols 11-12)
+  const metaRow2 = curr;
+  worksheet.getCell(metaRow2, 2).value = `Classified as Grade: ${gradeLevel}`;
+  worksheet.getCell(metaRow2, 3).value = `Section: ${section}`;
+
+  worksheet.mergeCells(metaRow2, 4, metaRow2, 6);
+  worksheet.getCell(metaRow2, 4).value = `School Year: ${sy}`;
+
+  worksheet.mergeCells(metaRow2, 7, metaRow2, 10);
+  worksheet.getCell(metaRow2, 7).value = `Name of Adviser/Teacher: ${adviser}`;
+
+  worksheet.mergeCells(metaRow2, 11, metaRow2, 12);
+  worksheet.getCell(metaRow2, 11).value = `Signature: ________________`;
 
   for (let c = 2; c <= 12; c++) {
-    const cell = worksheet.getCell(curr, c);
+    const cell = worksheet.getCell(metaRow2, c);
     cell.font = { name: "Arial", size: 8.5 };
     cell.alignment = { vertical: "middle" };
     cell.protection = { locked: true };
   }
-  worksheet.getRow(curr).height = 18;
+  worksheet.getRow(metaRow2).height = 14;
   curr++;
+
+  // Reset internal cells to borderless, and apply medium outer perimeter box
+  for (let c = 2; c <= 12; c++) {
+    worksheet.getCell(metaRow1, c).border = {};
+    worksheet.getCell(metaRow2, c).border = {};
+  }
+
+  // Top perimeter of metadata box (metaRow1)
+  for (let c = 2; c <= 12; c++) {
+    const cell1 = worksheet.getCell(metaRow1, c);
+    cell1.border = { ...cell1.border, top: { style: "medium", color: { argb: "000000" } } };
+  }
+
+  // Bottom perimeter of metadata box (metaRow2)
+  for (let c = 2; c <= 12; c++) {
+    const cell2 = worksheet.getCell(metaRow2, c);
+    cell2.border = { ...cell2.border, bottom: { style: "medium", color: { argb: "000000" } } };
+  }
+
+  // Left perimeter of metadata box (Col 2)
+  const r1MasterLeft = worksheet.getCell(metaRow1, 2);
+  r1MasterLeft.border = {
+    ...r1MasterLeft.border,
+    left: { style: "medium", color: { argb: "000000" } },
+  };
+  const r2MasterLeft = worksheet.getCell(metaRow2, 2);
+  r2MasterLeft.border = {
+    ...r2MasterLeft.border,
+    left: { style: "medium", color: { argb: "000000" } },
+  };
+
+  // Right perimeter of metadata box (Cols 11 & 12)
+  const r1RightMaster = worksheet.getCell(metaRow1, 11);
+  r1RightMaster.border = {
+    ...r1RightMaster.border,
+    right: { style: "medium", color: { argb: "000000" } },
+  };
+  const r1Col12 = worksheet.getCell(metaRow1, 12);
+  r1Col12.border = {
+    ...r1Col12.border,
+    right: { style: "medium", color: { argb: "000000" } },
+  };
+
+  const r2RightMaster = worksheet.getCell(metaRow2, 11);
+  r2RightMaster.border = {
+    ...r2RightMaster.border,
+    right: { style: "medium", color: { argb: "000000" } },
+  };
+  const r2Col12 = worksheet.getCell(metaRow2, 12);
+  r2Col12.border = {
+    ...r2Col12.border,
+    right: { style: "medium", color: { argb: "000000" } },
+  };
 
   // 3. Table Header Row 1
+  const tableStartRow = curr;
   const thRow1 = curr;
   const thRow2 = curr + 1;
 
@@ -339,7 +436,7 @@ function renderScholasticBlockExcel(worksheet, record, defaultGradeNum, startRow
   cellRem.alignment = { horizontal: "center", vertical: "middle" };
   cellRem.font = { name: "Arial", size: 8.5, bold: true };
 
-  worksheet.getRow(thRow1).height = 16;
+  worksheet.getRow(thRow1).height = 14;
   curr++;
 
   // 4. Table Header Row 2: Sub-columns for 3 Terms: 1, 2, 3
@@ -360,7 +457,7 @@ function renderScholasticBlockExcel(worksheet, record, defaultGradeNum, startRow
       if (!cell.alignment) cell.alignment = { horizontal: "center", vertical: "middle" };
     }
   }
-  worksheet.getRow(thRow2).height = 15;
+  worksheet.getRow(thRow2).height = 13;
   curr++;
 
   // 5. Build subject list: Canonical 10 items + SPA Specialization if active
@@ -386,15 +483,11 @@ function renderScholasticBlockExcel(worksheet, record, defaultGradeNum, startRow
 
     if (subDef.isSubSubject) {
       titleCell.value = `    ${subDef.name}`;
-      titleCell.font = { name: "Arial", size: 8.5 };
-      titleCell.alignment = { horizontal: "left", vertical: "middle", indent: 1 };
-    } else if (subDef.isHeader) {
-      titleCell.value = subDef.name;
       titleCell.font = { name: "Arial", size: 8.5, bold: true };
-      titleCell.alignment = { horizontal: "left", vertical: "middle" };
+      titleCell.alignment = { horizontal: "left", vertical: "middle", indent: 1 };
     } else {
       titleCell.value = subDef.name;
-      titleCell.font = { name: "Arial", size: 8.5 };
+      titleCell.font = { name: "Arial", size: 8.5, bold: true };
       titleCell.alignment = { horizontal: "left", vertical: "middle" };
     }
 
@@ -452,7 +545,7 @@ function renderScholasticBlockExcel(worksheet, record, defaultGradeNum, startRow
       worksheet.getCell(curr, c).protection = { locked: true };
     }
 
-    worksheet.getRow(curr).height = 16;
+    worksheet.getRow(curr).height = 13.5;
     curr++;
   });
 
@@ -490,7 +583,7 @@ function renderScholasticBlockExcel(worksheet, record, defaultGradeNum, startRow
     cell.protection = { locked: true };
   }
 
-  worksheet.getRow(curr).height = 17;
+  worksheet.getRow(curr).height = 14;
   curr++;
 
   // 7. Remedial Classes Sub-block
@@ -516,7 +609,7 @@ function renderScholasticBlockExcel(worksheet, record, defaultGradeNum, startRow
     };
     cell.protection = { locked: true };
   }
-  worksheet.getRow(remHdrRow).height = 16;
+  worksheet.getRow(remHdrRow).height = 13.5;
   curr++;
 
   // Remedial Table Headers
@@ -542,7 +635,7 @@ function renderScholasticBlockExcel(worksheet, record, defaultGradeNum, startRow
     };
     cell.protection = { locked: true };
   }
-  worksheet.getRow(remThRow).height = 16;
+  worksheet.getRow(remThRow).height = 13.5;
   curr++;
 
   // 2 Blank Remedial Data Input Rows (Unlocked for Teacher input)
@@ -560,14 +653,14 @@ function renderScholasticBlockExcel(worksheet, record, defaultGradeNum, startRow
       // Teachers can manually write remediation records if applicable
       cell.protection = { locked: false };
     }
-    worksheet.getRow(rData).height = 15;
+    worksheet.getRow(rData).height = 13;
     curr++;
   }
 
   const boxEndRow = curr - 1;
 
-  // Apply medium border to outer perimeter, thin to all inner gridlines
-  applyBoxBorders(worksheet, boxStartRow, boxEndRow, 2, 12);
+  // Apply medium border to outer perimeter, strictly thin to all inner gridlines of the table
+  applyScholasticBoxBorders(worksheet, tableStartRow, boxEndRow, 2, 12);
 
   return curr;
 }
@@ -585,83 +678,152 @@ function renderCertificationBlockExcel(worksheet, cert, startRowNum, isTransfer 
     subHdr.font = { name: "Arial", size: 8.5, italic: true };
     subHdr.alignment = { horizontal: "left", vertical: "middle" };
     for (let c = 2; c <= 12; c++) worksheet.getCell(curr, c).protection = { locked: true };
-    worksheet.getRow(curr).height = 15;
+    worksheet.getRow(curr).height = 13.5;
     curr++;
   }
 
-  addSectionBanner(worksheet, curr, "CERTIFICATION");
-  curr++;
-
+  // Box starts directly here with internal top padding (NO colored block banner!)
   const certBoxStart = curr;
 
-  const isEligibleG11 = isTransfer && recordG10?.general_average?.remarks === "Passed";
-  const nextGrade = isEligibleG11 ? "Grade 11 (SHS)" : (cert.eligible_for_admission_to_grade || "____");
+  // 1. Top padding row inside certification box
+  worksheet.mergeCells(curr, 2, curr, 12);
+  for (let c = 2; c <= 12; c++) worksheet.getCell(curr, c).protection = { locked: true };
+  worksheet.getRow(curr).height = 4.5;
+  curr++;
 
-  // Cert statement Line 1
+  // 2. CERTIFICATION Header inside the box (plain white background, bold, centered)
+  worksheet.mergeCells(curr, 2, curr, 12);
+  const certTitle = worksheet.getCell(curr, 2);
+  certTitle.value = "CERTIFICATION";
+  certTitle.font = { name: "Arial", size: 9, bold: true };
+  certTitle.alignment = { horizontal: "center", vertical: "middle" };
+  for (let c = 2; c <= 12; c++) {
+    worksheet.getCell(curr, c).protection = { locked: true };
+  }
+  worksheet.getRow(curr).height = 14;
+  curr++;
+
+  const isEligibleG11 = isTransfer && recordG10?.general_average?.remarks === "Passed";
+  const rawNextGrade = isEligibleG11 ? "Grade 11 (SHS)" : (cert.eligible_for_admission_to_grade || "____");
+  const nextGradeClean = String(rawNextGrade).trim();
+  const admissionGradeDisplay = nextGradeClean.toLowerCase().startsWith("grade")
+    ? nextGradeClean
+    : `Grade ${nextGradeClean}`;
+
+  // 3. Cert statement Line 1 (with left margin/indent)
   worksheet.mergeCells(curr, 2, curr, 12);
   const certP1 = worksheet.getCell(curr, 2);
-  certP1.value = `I CERTIFY that this is a true record of ${cert.true_record_of} with LRN ${cert.lrn} and that he/she is eligible for admission to Grade ${nextGrade}.`;
+  certP1.value = `  I CERTIFY that this is a true record of ${cert.true_record_of} with LRN ${cert.lrn} and that he/she is eligible for admission to ${admissionGradeDisplay}.`;
   certP1.font = { name: "Arial", size: 8.5 };
-  certP1.alignment = { vertical: "middle", wrapText: true };
+  certP1.alignment = { vertical: "middle", wrapText: true, indent: 1 };
   for (let c = 2; c <= 12; c++) worksheet.getCell(curr, c).protection = { locked: true };
-  worksheet.getRow(curr).height = 17;
+  worksheet.getRow(curr).height = 14;
   curr++;
 
-  // Cert statement Line 2
+  // 4. Cert statement Line 2 (with left margin/indent)
   worksheet.mergeCells(curr, 2, curr, 12);
   const certP2 = worksheet.getCell(curr, 2);
-  certP2.value = `Name of School: ${cert.school_name}   School ID: ${cert.school_id}   Last School Year Attended: ${cert.last_school_year_attended}`;
+  certP2.value = `  Name of School: ${cert.school_name}   School ID: ${cert.school_id}   Last School Year Attended: ${cert.last_school_year_attended}`;
   certP2.font = { name: "Arial", size: 8.5 };
-  certP2.alignment = { vertical: "middle", wrapText: true };
+  certP2.alignment = { vertical: "middle", wrapText: true, indent: 1 };
   for (let c = 2; c <= 12; c++) worksheet.getCell(curr, c).protection = { locked: true };
-  worksheet.getRow(curr).height = 16;
+  worksheet.getRow(curr).height = 14;
   curr++;
 
-  // Signature row 1: lines
-  const sigLineRow = curr;
-  worksheet.mergeCells(sigLineRow, 2, sigLineRow, 4);
-  worksheet.getCell(sigLineRow, 2).value = "________________________";
-  worksheet.getCell(sigLineRow, 2).alignment = { horizontal: "center", vertical: "bottom" };
+  // 5. Signature row 1: Stacked values (Date value & Principal name) separated by gap at Col 4
+  const sigValRow = curr;
+  worksheet.mergeCells(sigValRow, 2, sigValRow, 3);
+  const cellDateVal = worksheet.getCell(sigValRow, 2);
+  cellDateVal.value = cert.date_issued;
+  cellDateVal.alignment = { horizontal: "center", vertical: "bottom" };
+  cellDateVal.font = { name: "Arial", size: 8.5 };
 
-  worksheet.mergeCells(sigLineRow, 5, sigLineRow, 9);
-  worksheet.getCell(sigLineRow, 5).value = `____________________________________`;
-  worksheet.getCell(sigLineRow, 5).alignment = { horizontal: "center", vertical: "bottom" };
+  // Spacer gap at Col 4 (no underline)
+  worksheet.getCell(sigValRow, 4).value = "";
 
-  worksheet.mergeCells(sigLineRow, 10, sigLineRow, 12);
-  worksheet.getCell(sigLineRow, 10).value = "";
+  worksheet.mergeCells(sigValRow, 5, sigValRow, 9);
+  const cellPrinVal = worksheet.getCell(sigValRow, 5);
+  cellPrinVal.value = cert.principal_name;
+  cellPrinVal.alignment = { horizontal: "center", vertical: "bottom" };
+  cellPrinVal.font = { name: "Arial", size: 8.5, bold: true };
+
+  worksheet.mergeCells(sigValRow, 10, sigValRow, 12);
+  worksheet.getCell(sigValRow, 10).value = "";
 
   for (let c = 2; c <= 12; c++) {
-    const cell = worksheet.getCell(sigLineRow, c);
-    cell.font = { name: "Arial", size: 8.5 };
-    cell.protection = { locked: true };
+    worksheet.getCell(sigValRow, c).protection = { locked: true };
   }
-  worksheet.getRow(sigLineRow).height = 14;
+  worksheet.getRow(sigValRow).height = 18;
   curr++;
 
-  // Signature row 2: labels and values
-  const sigLabelRow = curr;
-  worksheet.mergeCells(sigLabelRow, 2, sigLabelRow, 4);
-  worksheet.getCell(sigLabelRow, 2).value = `Date: ${cert.date_issued}`;
-  worksheet.getCell(sigLabelRow, 2).alignment = { horizontal: "center", vertical: "top" };
+  // 6. Signature row 2: Labels below underline (Date label, Gap, Principal label, Affix Seal)
+  const sigLblRow = curr;
+  worksheet.mergeCells(sigLblRow, 2, sigLblRow, 3);
+  const cellDateLbl = worksheet.getCell(sigLblRow, 2);
+  cellDateLbl.value = "Date";
+  cellDateLbl.alignment = { horizontal: "center", vertical: "top" };
+  cellDateLbl.font = { name: "Arial", size: 8 };
 
-  worksheet.mergeCells(sigLabelRow, 5, sigLabelRow, 9);
-  worksheet.getCell(sigLabelRow, 5).value = `${cert.principal_name}\nName of Principal/School Head over Printed Name`;
-  worksheet.getCell(sigLabelRow, 5).alignment = { horizontal: "center", vertical: "top", wrapText: true };
+  worksheet.getCell(sigLblRow, 4).value = "";
 
-  worksheet.mergeCells(sigLabelRow, 10, sigLabelRow, 12);
-  worksheet.getCell(sigLabelRow, 10).value = "(Affix School Seal here)";
-  worksheet.getCell(sigLabelRow, 10).alignment = { horizontal: "center", vertical: "middle" };
+  worksheet.mergeCells(sigLblRow, 5, sigLblRow, 9);
+  const cellPrinLbl = worksheet.getCell(sigLblRow, 5);
+  cellPrinLbl.value = "Name of Principal/School Head over Printed Name";
+  cellPrinLbl.alignment = { horizontal: "center", vertical: "top" };
+  cellPrinLbl.font = { name: "Arial", size: 8 };
+
+  worksheet.mergeCells(sigLblRow, 10, sigLblRow, 12);
+  const cellSeal = worksheet.getCell(sigLblRow, 10);
+  cellSeal.value = "(Affix School Seal here)";
+  cellSeal.alignment = { horizontal: "center", vertical: "middle" };
+  cellSeal.font = { name: "Arial", size: 8, italic: true };
 
   for (let c = 2; c <= 12; c++) {
-    const cell = worksheet.getCell(sigLabelRow, c);
-    cell.font = { name: "Arial", size: 8 };
-    cell.protection = { locked: true };
+    worksheet.getCell(sigLblRow, c).protection = { locked: true };
   }
-  worksheet.getRow(sigLabelRow).height = 24;
+  worksheet.getRow(sigLblRow).height = 14;
+  curr++;
+
+  // 7. Bottom padding row inside certification box
+  worksheet.mergeCells(curr, 2, curr, 12);
+  for (let c = 2; c <= 12; c++) worksheet.getCell(curr, c).protection = { locked: true };
+  worksheet.getRow(curr).height = 5;
   curr++;
 
   const certBoxEnd = curr - 1;
-  applyBoxBorders(worksheet, certBoxStart, certBoxEnd, 2, 12);
+
+  // 8. Remove all internal vertical grid borders across the certification box
+  for (let r = certBoxStart; r <= certBoxEnd; r++) {
+    for (let c = 2; c <= 12; c++) {
+      worksheet.getCell(r, c).border = {};
+    }
+  }
+
+  // 9. Separate underlines: only under Date (Cols 2..3) and Principal (Cols 5..9); Col 4 is completely clear!
+  for (let c = 2; c <= 3; c++) {
+    worksheet.getCell(sigValRow, c).border = {
+      bottom: { style: "thin", color: { argb: "000000" } }
+    };
+  }
+  for (let c = 5; c <= 9; c++) {
+    worksheet.getCell(sigValRow, c).border = {
+      bottom: { style: "thin", color: { argb: "000000" } }
+    };
+  }
+
+  // 10. Apply medium outer perimeter strictly around the 4 sides of the Certification box
+  for (let c = 2; c <= 12; c++) {
+    const topCell = worksheet.getCell(certBoxStart, c);
+    topCell.border = { ...topCell.border, top: { style: "medium", color: { argb: "000000" } } };
+    const bottomCell = worksheet.getCell(certBoxEnd, c);
+    bottomCell.border = { ...bottomCell.border, bottom: { style: "medium", color: { argb: "000000" } } };
+  }
+  for (let r = certBoxStart; r <= certBoxEnd; r++) {
+    const leftCell = worksheet.getCell(r, 2);
+    leftCell.border = { ...leftCell.border, left: { style: "medium", color: { argb: "000000" } } };
+    const rightCell = worksheet.getCell(r, 12);
+    rightCell.border = { ...rightCell.border, right: { style: "medium", color: { argb: "000000" } } };
+  }
 
   return curr;
 }
@@ -680,11 +842,11 @@ export async function exportSf10Excel({ student = {}, sf10Data = null, fileName 
 
   const worksheet = workbook.addWorksheet("SF10-JHS", {
     pageSetup: {
-      paperSize: 1, // Letter size
+      paperSize: 9, // A4
       orientation: "portrait",
       fitToPage: true,
       fitToWidth: 1,
-      fitToHeight: 0,
+      fitToHeight: 0, // Honor manual row page break while fitting to 1 page width
       margins: {
         left: 0.25,
         right: 0.25,
@@ -699,25 +861,30 @@ export async function exportSf10Excel({ student = {}, sf10Data = null, fileName 
 
   // 12 Columns Grid:
   // Col 1 (A): Margin spacer (width: 3)
-  // Col 2-7 (B-G): Learning Areas & Left Demographics (combined width ~ 56)
-  // Col 8 (H): Term 1 (width: 8)
-  // Col 9 (I): Term 2 (width: 8)
-  // Col 10 (J): Term 3 (width: 8)
-  // Col 11 (K): Final Rating (width: 12)
-  // Col 12 (L): Remarks (width: 14)
+  // Col 2 (B): Classified as Grade / Learning Areas pt 1 (width: 15)
+  // Col 3 (C): Section / Learning Areas pt 2 (width: 13)
+  // Col 4 (D): School pt 3 / School Year pt 1 / Learning Areas pt 3 (width: 10)
+  // Col 5 (E): School pt 4 / School Year pt 2 / Learning Areas pt 4 (width: 10) -> B..E = 48 width for School
+  // Col 6 (F): School ID pt 1 / School Year pt 3 / Learning Areas pt 5 (width: 11)
+  // Col 7 (G): School ID pt 2 / Adviser pt 1 / Learning Areas pt 6 (width: 11) -> F..G = 22 width for School ID
+  // Col 8 (H): Term 1 / District pt 1 / Adviser pt 2 (width: 8.5)
+  // Col 9 (I): Term 2 / District pt 2 / Adviser pt 3 (width: 8.5) -> H..I = 17 width for District
+  // Col 10 (J): Term 3 / Division pt 1 / Signature pt 1 (width: 8.5)
+  // Col 11 (K): FINAL RATING / Division pt 2 / Signature pt 2 (width: 11) -> J..K = 19.5 width for Division
+  // Col 12 (L): REMARKS / Region / Signature pt 3 (width: 14.5) -> L = 14.5 width for Region
   worksheet.columns = [
-    { width: 3 },  // A: Left margin spacer
-    { width: 9 },  // B
-    { width: 9 },  // C
-    { width: 9 },  // D
-    { width: 11 }, // E
-    { width: 11 }, // F
-    { width: 13 }, // G
-    { width: 8 },  // H: Term 1
-    { width: 8 },  // I: Term 2
-    { width: 8 },  // J: Term 3
-    { width: 12 }, // K: FINAL RATING
-    { width: 14 }, // L: REMARKS
+    { width: 3 },    // A: Left margin spacer
+    { width: 20.5 }, // B: Col 2 (Grade / School pt 1 / Learning Areas pt 1)
+    { width: 18 },   // C: Col 3 (Section / School pt 2 / Learning Areas pt 2)
+    { width: 9.5 },  // D: Col 4 (School pt 3 / School Year pt 1 / Learning Areas pt 3)
+    { width: 9.5 },  // E: Col 5 (School ID pt 1 / School Year pt 2 / Learning Areas pt 4)
+    { width: 9.5 },  // F: Col 6 (School ID pt 2 / School Year pt 3 / Learning Areas pt 5)
+    { width: 11 },   // G: Col 7 (Adviser pt 1 / District pt 1 / Learning Areas pt 6)
+    { width: 9.5 },  // H: Col 8 (Adviser pt 2 / District pt 2 / Term 1)
+    { width: 9.5 },  // I: Col 9 (Adviser pt 3 / Division pt 1 / Term 2)
+    { width: 9.5 },  // J: Col 10 (Adviser pt 4 / Division pt 2 / Term 3)
+    { width: 11 },   // K: Col 11 (Signature pt 1 / Region pt 1 / FINAL RATING)
+    { width: 14.5 }, // L: Col 12 (Signature pt 2 / Region pt 2 / REMARKS)
   ];
 
   // ============================================================
@@ -831,29 +998,29 @@ export async function exportSf10Excel({ student = {}, sf10Data = null, fileName 
 
   // Row 1: Code Tag
   worksheet.getCell(row, 2).value = "SF 10 - JHS";
-  worksheet.getCell(row, 2).font = { name: "Arial", size: 9, bold: true };
+  worksheet.getCell(row, 2).font = { name: "Arial", size: 8.5, bold: true };
   worksheet.getCell(row, 2).protection = { locked: true };
-  worksheet.getRow(row).height = 14;
+  worksheet.getRow(row).height = 13;
   row++;
 
-  // Embed Official Logos if available
+  // Embed Official Logos: Left: Republic Seal, Right: Official DepEd Logo
   try {
-    const depedLogoBase64 = await fetchImageBase64(depedLogoUrl);
-    const gccnhsLogoBase64 = await fetchImageBase64(gccnhsLogoUrl);
+    const leftLogoData = await fetchImageBase64(depedLogoUrl); // Republic of the Philippines Seal
+    const rightLogoData = await fetchImageBase64(depedGifLogoUrl); // Official DepEd Logo
 
-    if (depedLogoBase64) {
-      const img1 = workbook.addImage({ base64: depedLogoBase64, extension: "png" });
+    if (leftLogoData?.base64) {
+      const img1 = workbook.addImage({ base64: leftLogoData.base64, extension: leftLogoData.extension || "png" });
       worksheet.addImage(img1, {
-        tl: { col: 1.1, row: 1.2 },
-        ext: { width: 50, height: 50 }
+        tl: { col: 1.1, row: 1.15 },
+        ext: { width: 48, height: 48 }
       });
     }
 
-    if (gccnhsLogoBase64) {
-      const img2 = workbook.addImage({ base64: gccnhsLogoBase64, extension: "png" });
+    if (rightLogoData?.base64) {
+      const img2 = workbook.addImage({ base64: rightLogoData.base64, extension: rightLogoData.extension || "gif" });
       worksheet.addImage(img2, {
-        tl: { col: 10.6, row: 1.2 },
-        ext: { width: 50, height: 50 }
+        tl: { col: 11.0, row: 1.15 },
+        ext: { width: 95, height: 44 }
       });
     }
   } catch (imgErr) {
@@ -862,10 +1029,10 @@ export async function exportSf10Excel({ student = {}, sf10Data = null, fileName 
 
   // Rows 2-5: Document Official Header
   const headerLines = [
-    { text: "Republic of the Philippines", size: 9, bold: false, italic: false },
-    { text: "Department of Education", size: 9, bold: false, italic: false },
-    { text: "Learner's Permanent Academic Record for Junior High School (SF10-JHS)", size: 10.5, bold: true, italic: false },
-    { text: "(Formerly Form 137)", size: 8.5, bold: false, italic: true }
+    { text: "Republic of the Philippines", size: 8.5, bold: false, italic: false },
+    { text: "Department of Education", size: 8.5, bold: false, italic: false },
+    { text: "Learner's Permanent Academic Record for Junior High School (SF10-JHS)", size: 10, bold: true, italic: false },
+    { text: "(Formerly Form 137)", size: 8, bold: false, italic: true }
   ];
 
   headerLines.forEach((hl) => {
@@ -875,7 +1042,7 @@ export async function exportSf10Excel({ student = {}, sf10Data = null, fileName 
     c.alignment = { horizontal: "center", vertical: "middle" };
     c.font = { name: "Arial", size: hl.size, bold: hl.bold, italic: hl.italic };
     for (let col = 2; col <= 12; col++) worksheet.getCell(row, col).protection = { locked: true };
-    worksheet.getRow(row).height = 15;
+    worksheet.getRow(row).height = 13;
     row++;
   });
 
@@ -897,7 +1064,7 @@ export async function exportSf10Excel({ student = {}, sf10Data = null, fileName 
     cell.alignment = { vertical: "middle" };
     cell.protection = { locked: true };
   }
-  worksheet.getRow(row).height = 17;
+  worksheet.getRow(row).height = 14;
   row++;
 
   // Learner Info Line 2: LRN, Birthdate, Sex
@@ -914,11 +1081,11 @@ export async function exportSf10Excel({ student = {}, sf10Data = null, fileName 
     cell.alignment = { vertical: "middle" };
     cell.protection = { locked: true };
   }
-  worksheet.getRow(row).height = 17;
+  worksheet.getRow(row).height = 14;
   row++;
 
   // Blank spacer
-  worksheet.getRow(row).height = 6;
+  worksheet.getRow(row).height = 4;
   row++;
 
   // Section 2: ELIGIBILITY FOR JHS ENROLMENT
@@ -940,7 +1107,7 @@ export async function exportSf10Excel({ student = {}, sf10Data = null, fileName 
     // Rule: Unlocked for manual input fields in Eligibility
     cell.protection = { locked: false };
   }
-  worksheet.getRow(row).height = 17;
+  worksheet.getRow(row).height = 14;
   row++;
 
   // Eligibility Line 2: School Name, School ID, Address
@@ -957,7 +1124,7 @@ export async function exportSf10Excel({ student = {}, sf10Data = null, fileName 
     cell.alignment = { vertical: "middle" };
     cell.protection = { locked: false };
   }
-  worksheet.getRow(row).height = 17;
+  worksheet.getRow(row).height = 14;
   row++;
 
   // Eligibility Line 3: Other Credential Presented
@@ -966,7 +1133,7 @@ export async function exportSf10Excel({ student = {}, sf10Data = null, fileName 
   worksheet.getCell(row, 2).font = { name: "Arial", size: 8.5, italic: true };
   worksheet.getCell(row, 2).alignment = { vertical: "middle" };
   for (let c = 2; c <= 12; c++) worksheet.getCell(row, c).protection = { locked: true };
-  worksheet.getRow(row).height = 15;
+  worksheet.getRow(row).height = 13;
   row++;
 
   // Eligibility Line 4: PEPT Passer, ALS Passer, Others
@@ -983,7 +1150,7 @@ export async function exportSf10Excel({ student = {}, sf10Data = null, fileName 
     cell.alignment = { vertical: "middle" };
     cell.protection = { locked: false };
   }
-  worksheet.getRow(row).height = 17;
+  worksheet.getRow(row).height = 14;
   row++;
 
   // Eligibility Line 5: Exam Date, Testing Center
@@ -998,11 +1165,11 @@ export async function exportSf10Excel({ student = {}, sf10Data = null, fileName 
     cell.alignment = { vertical: "middle" };
     cell.protection = { locked: false };
   }
-  worksheet.getRow(row).height = 17;
+  worksheet.getRow(row).height = 14;
   row++;
 
   // Blank spacer
-  worksheet.getRow(row).height = 6;
+  worksheet.getRow(row).height = 4;
   row++;
 
   // Section 3: SCHOLASTIC RECORD - GRADE 7
@@ -1011,49 +1178,57 @@ export async function exportSf10Excel({ student = {}, sf10Data = null, fileName 
   row = renderScholasticBlockExcel(worksheet, recordG7, "7", row, isSpaActive);
 
   // Blank spacer between blocks
-  worksheet.getRow(row).height = 8;
+  worksheet.getRow(row).height = 5;
   row++;
 
   // SCHOLASTIC RECORD - GRADE 8
   row = renderScholasticBlockExcel(worksheet, recordG8, "8", row, isSpaActive);
 
   // Blank spacer
-  worksheet.getRow(row).height = 8;
+  worksheet.getRow(row).height = 5;
   row++;
 
   // Page 1 Certification
   row = renderCertificationBlockExcel(worksheet, cert, row, false);
 
+  // Blank spacer at bottom of Page 1 with explicit page break
+  // In Excel OpenXML, row.addPageBreak() breaks AFTER the row.
+  // Placing the break on page1SpacerRow ensures Page 1 ends here, and Page 2 header starts cleanly on the next row.
+  const page1SpacerRow = worksheet.getRow(row);
+  page1SpacerRow.height = 4;
+  page1SpacerRow.addPageBreak();
+  row++;
+
   // ============================================================
   // PAGE 2 (GRADE 9 & GRADE 10)
   // ============================================================
-  // Add explicit horizontal page break before Page 2
-  worksheet.getRow(row).addPageBreak();
+  // Row 1 of Page 2: "SF 10-JHS" and "Page 2 of 2" Header
+  const page2StartRowIndex = row;
 
   // Page 2 Top bar
-  worksheet.getCell(row, 2).value = "SF 10-JHS";
-  worksheet.getCell(row, 2).font = { name: "Arial", size: 9, bold: true };
-  worksheet.mergeCells(row, 11, row, 12);
-  const p2Tag = worksheet.getCell(row, 11);
+  worksheet.getCell(page2StartRowIndex, 2).value = "SF 10-JHS";
+  worksheet.getCell(page2StartRowIndex, 2).font = { name: "Arial", size: 8.5, bold: true };
+  worksheet.mergeCells(page2StartRowIndex, 11, page2StartRowIndex, 12);
+  const p2Tag = worksheet.getCell(page2StartRowIndex, 11);
   p2Tag.value = "Page 2 of 2";
-  p2Tag.font = { name: "Arial", size: 9, bold: true };
+  p2Tag.font = { name: "Arial", size: 8.5, bold: true };
   p2Tag.alignment = { horizontal: "right" };
-  for (let c = 2; c <= 12; c++) worksheet.getCell(row, c).protection = { locked: true };
-  worksheet.getRow(row).height = 16;
+  for (let c = 2; c <= 12; c++) worksheet.getCell(page2StartRowIndex, c).protection = { locked: true };
+  worksheet.getRow(page2StartRowIndex).height = 14;
   row++;
 
   // SCHOLASTIC RECORD - GRADE 9
   row = renderScholasticBlockExcel(worksheet, recordG9, "9", row, isSpaActive);
 
   // Blank spacer
-  worksheet.getRow(row).height = 8;
+  worksheet.getRow(row).height = 6;
   row++;
 
   // SCHOLASTIC RECORD - GRADE 10
   row = renderScholasticBlockExcel(worksheet, recordG10, "10", row, isSpaActive);
 
   // Blank spacer
-  worksheet.getRow(row).height = 8;
+  worksheet.getRow(row).height = 6;
   row++;
 
   // Transfer Out / Completer Certification
@@ -1069,7 +1244,7 @@ export async function exportSf10Excel({ student = {}, sf10Data = null, fileName 
   fnTag.font = { name: "Arial", size: 7.5, italic: true };
   fnTag.alignment = { horizontal: "right" };
   for (let c = 2; c <= 12; c++) worksheet.getCell(row, c).protection = { locked: true };
-  worksheet.getRow(row).height = 14;
+  worksheet.getRow(row).height = 12;
   row++;
 
   // ============================================================
