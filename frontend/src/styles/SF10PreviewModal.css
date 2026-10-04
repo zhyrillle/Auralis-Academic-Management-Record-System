@@ -206,16 +206,17 @@
   object-fit: contain;
 }
 
-/* Section Header Banners */
+/* Section Header Banners: Clean border-free styling with official hex #DDD9C4 */
 .sf10-section-banner {
-  background-color: #e2e8f0;
-  border: 1px solid #000000;
+  background-color: #DDD9C4;
+  border: none;
+  color: #000000;
   text-align: center;
   font-weight: bold;
   font-size: 9.5px;
-  padding: 2px 4px;
-  margin-top: 4px;
-  margin-bottom: 4px;
+  padding: 3px 4px;
+  margin-top: 5px;
+  margin-bottom: 5px;
   letter-spacing: 0.5px;
   text-transform: uppercase;
 }
@@ -267,10 +268,10 @@
   vertical-align: middle;
 }
 
-/* Scholastic Record Block */
+/* Scholastic Record Block - Medium perimeter border */
 .sf10-scholastic-block {
   margin-bottom: 6px;
-  border: 1px solid #000000;
+  border: 1.5px solid #000000;
 }
 
 .sf10-block-meta-row {
@@ -376,9 +377,9 @@
   font-weight: bold;
 }
 
-/* Remedial Sub-Table */
+/* Remedial Sub-Table: Clean borders without double lines */
 .sf10-remedial-box {
-  border-top: 1px solid #000000;
+  border-top: none;
   background-color: #ffffff;
 }
 
@@ -391,6 +392,7 @@
   font-size: 8px;
   font-weight: bold;
   background-color: #f8fafc;
+  border-top: 1px solid #000000;
   border-bottom: 1px solid #000000;
 }
 
@@ -408,6 +410,7 @@
 }
 
 .sf10-remedial-table th {
+  border-top: none;
   background-color: #ffffff;
   font-weight: bold;
 }

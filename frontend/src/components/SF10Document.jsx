@@ -145,11 +145,18 @@ export default function SF10Document({ student, sf10Data, page1Ref, page2Ref }) 
     date_issued: safeStr(rawCert.date_issued || new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }))
   };
 
+  const isSpaActive = Boolean(
+    String(student?.program || "").toUpperCase().includes("SPA") ||
+    String(student?.program_code || "").toUpperCase() === "SPA" ||
+    (Array.isArray(student?.grades) && student.grades.some(g => String(g.code || g.name).toUpperCase().includes("SPA"))) ||
+    scholasticRecords.some(r => Array.isArray(r.grades) && r.grades.some(g => String(g.code || g.name).toUpperCase().includes("SPA")))
+  );
+
   // Helper to render scholastic table rows with DepEd subject list
   const renderScholasticRows = (record) => {
-    const grades = Array.isArray(record?.grades) ? record.grades : [];
+    let grades = Array.isArray(record?.grades) ? [...record.grades] : [];
     if (grades.length === 0) {
-      // Default blank template rows (exactly 5 grade/remark columns matching the 6-column thead)
+      // Default blank template rows (strictly matching the DepEd order)
       const defaultRows = [
         { code: "fil", name: "Filipino", isHeader: false, isSubSubject: false },
         { code: "eng", name: "English", isHeader: false, isSubSubject: false },
@@ -162,6 +169,9 @@ export default function SF10Document({ student, sf10Data, page1Ref, page2Ref }) 
         { code: "music_arts", name: "Music and Arts", isHeader: false, isSubSubject: true },
         { code: "pe_health", name: "Physical Education and Health", isHeader: false, isSubSubject: true },
       ];
+      if (isSpaActive) {
+        defaultRows.push({ code: "spa_spec", name: "SPA Specialization", isHeader: false, isSubSubject: false });
+      }
 
       return defaultRows.map((subj) => (
         <tr key={subj.code}>
@@ -175,6 +185,10 @@ export default function SF10Document({ student, sf10Data, page1Ref, page2Ref }) 
           <td className="sf10-td-center">&nbsp;</td>
         </tr>
       ));
+    }
+
+    if (isSpaActive && !grades.some(g => String(g.code || g.name).toUpperCase().includes("SPA"))) {
+      grades.push({ code: "spa_spec", name: "SPA Specialization", t1: "", t2: "", t3: "", final: "", remarks: "" });
     }
 
     return grades.map((g, idx) => (
