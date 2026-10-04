@@ -20,33 +20,6 @@
   align-items: center;
 }
 
-.sf10-inline { width: 100%; min-width: 0; }
-.sf10-inline .sf10-modal-container { max-width: none; min-width: 0; }
-.sf10-inline .sf10-toolbar { position: static; max-width: none; gap: 16px; flex-wrap: wrap; border: 1px solid #e2e8f0; background: #fff; color: #123062; box-shadow: none; }
-.sf10-inline .sf10-toolbar-badge { background: #edf3fa; color: #123062; }
-.sf10-inline .sf10-btn { background: #123062; color: #fff; }
-.sf10-inline .sf10-btn:hover:not(:disabled) { background: #1e4782; }
-.sf10-inline .sf10-btn:disabled { opacity: .5; cursor: not-allowed; }
-.sf10-inline-document { width: 100%; overflow-x: auto; padding: 4px 4px 20px; }
-.sf10-inline .sf10-document-wrapper { width: max-content; min-width: 100%; }
-.sf10-page-navigation { display: flex; align-items: center; gap: 8px; color: #475569; font-size: 12px; white-space: nowrap; }
-.sf10-page-navigation button { display: flex; align-items: center; justify-content: center; width: 32px; height: 34px; border: 1px solid #e2e8f0; border-radius: 6px; background: #fff; color: #123062; cursor: pointer; }
-.sf10-page-navigation button:disabled { opacity: .4; cursor: not-allowed; }
-.sf10-page-navigation button:focus-visible { outline: 2px solid #123062; outline-offset: 2px; }
-@media screen { .sf10-page-hidden { display: none; } }
-.sf10-inline .sf10-page-sheet { box-shadow: none; border: 1px solid #e2e8f0; }
-.sf10-inline-error { padding: 16px; color: #b91c1c; background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; }
-.sf10-loading-skeleton { width: 100%; max-width: 816px; padding: 32px 24px; border: 1px solid #e5e7eb; background: #fff; border-radius: 10px; }
-.sf10-loading-skeleton span { display: block; height: 18px; margin: 20px 0; border-radius: 4px; background: #f1f3f5; }
-.sf10-loading-skeleton .sf10-skeleton-title { width: 50%; height: 24px; margin: 0 auto 32px; }
-@media (max-width: 640px) {
-  .sf10-inline .sf10-toolbar { padding: 12px; }
-  .sf10-inline .sf10-toolbar-title { flex-wrap: wrap; }
-  .sf10-inline .sf10-btn { min-height: 44px; }
-  .sf10-page-navigation button { min-width: 44px; min-height: 44px; }
-  .sf9-controls-row:has(.sf10-page-navigation) .sf9-actions-toolbar { flex-wrap: wrap; }
-}
-
 /* Modal Toolbar */
 .sf10-toolbar {
   position: sticky;
@@ -505,12 +478,7 @@
 
 /* Print CSS */
 @media print {
-  @page sf10-record {
-    size: letter portrait;
-    margin: 33.75pt;
-  }
-
-  body:has(.sf10-modal-overlay, .sf10-inline) * {
+  body * {
     visibility: hidden;
   }
 
@@ -525,43 +493,26 @@
     display: none !important;
   }
 
-  body:has(.sf10-modal-overlay, .sf10-inline) .sf10-document-wrapper,
-  body:has(.sf10-modal-overlay, .sf10-inline) .sf10-document-wrapper * {
+  .sf10-document-wrapper,
+  .sf10-document-wrapper * {
     visibility: visible;
   }
 
   .sf10-document-wrapper {
-    position: absolute !important;
-    left: 0 !important;
-    top: 0 !important;
+    position: absolute;
+    left: 0;
+    top: 0;
     width: 100% !important;
-    min-width: 0 !important;
-    display: block !important;
     gap: 0 !important;
-    margin: 0 !important;
-    padding: 0 !important;
   }
 
   .sf10-page-sheet {
-    display: block !important;
     box-shadow: none !important;
     margin: 0 !important;
-    page: sf10-record;
-    border: none !important;
-    padding: 0 !important;
-    height: auto !important;
-    min-height: 0 !important;
+    padding: 15px 20px !important;
     width: 100% !important;
     max-width: none !important;
     page-break-after: always !important;
     break-after: page !important;
-    break-inside: avoid !important;
   }
-  .sf10-page-sheet:last-child { page-break-after: auto !important; break-after: auto !important; }
-  body:has(.sf10-document-wrapper) *:has(.sf10-document-wrapper) {
-    position: static !important;
-    transform: none !important;
-    overflow: visible !important;
-  }
-  .sf10-inline-document { overflow: visible !important; padding: 0 !important; }
 }

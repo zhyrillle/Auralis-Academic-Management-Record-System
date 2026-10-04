@@ -1,6 +1,6 @@
 import ExcelJS from "exceljs/dist/exceljs.min.js";
 import depedLogoUrl from "../assets/deped_logo.png";
-import depedWordmarkUrl from "../assets/deped-logo.gif";
+import gccnhsLogoUrl from "../assets/gccnhs_logo.png";
 
 /**
  * Defensive string sanitizer
@@ -57,7 +57,6 @@ async function fetchImageBase64(url) {
   if (!url || typeof window === "undefined" || !window.fetch) return null;
   try {
     const res = await fetch(url);
-    if (!res.ok) throw new Error("Logo image could not be loaded.");
     const blob = await res.blob();
     return new Promise((resolve) => {
       const reader = new FileReader();
@@ -840,28 +839,21 @@ export async function exportSf10Excel({ student = {}, sf10Data = null, fileName 
   // Embed Official Logos if available
   try {
     const depedLogoBase64 = await fetchImageBase64(depedLogoUrl);
-    const depedWordmarkBase64 = await fetchImageBase64(depedWordmarkUrl);
-    // Preserve the wordmark's aspect ratio, top-align both logos, and inset the right edge by 1px.
-    const wordmarkWidth = 80;
-    const wordmarkHeight = wordmarkWidth * 156 / 287;
-    const logoRowOffset = 36000;
-    // Excel's default font uses a 7px maximum digit width. Drawing offsets are EMUs (9525/px).
-    const lastColumnPixels = Math.floor((256 * worksheet.getColumn(12).width + Math.floor(128 / 7)) / 256 * 7);
-    const wordmarkColumnOffset = Math.round((lastColumnPixels - wordmarkWidth - 1) * 9525);
+    const gccnhsLogoBase64 = await fetchImageBase64(gccnhsLogoUrl);
 
     if (depedLogoBase64) {
       const img1 = workbook.addImage({ base64: depedLogoBase64, extension: "png" });
       worksheet.addImage(img1, {
-        tl: { nativeCol: 1, nativeColOff: 9000, nativeRow: 1, nativeRowOff: logoRowOffset },
+        tl: { col: 1.1, row: 1.2 },
         ext: { width: 50, height: 50 }
       });
     }
 
-    if (depedWordmarkBase64) {
-      const img2 = workbook.addImage({ base64: depedWordmarkBase64, extension: "gif" });
+    if (gccnhsLogoBase64) {
+      const img2 = workbook.addImage({ base64: gccnhsLogoBase64, extension: "png" });
       worksheet.addImage(img2, {
-        tl: { nativeCol: 11, nativeColOff: wordmarkColumnOffset, nativeRow: 1, nativeRowOff: logoRowOffset },
-        ext: { width: wordmarkWidth, height: wordmarkHeight }
+        tl: { col: 10.6, row: 1.2 },
+        ext: { width: 50, height: 50 }
       });
     }
   } catch (imgErr) {

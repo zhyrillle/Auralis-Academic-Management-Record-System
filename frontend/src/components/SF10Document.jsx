@@ -66,7 +66,7 @@ export const createDefaultRecord = (levelNum) => ({
 /**
  * Pure presentational SF10 2-page DepEd document
  */
-export default function SF10Document({ student, sf10Data, page1Ref, page2Ref, selectedPage = null }) {
+export default function SF10Document({ student, sf10Data, page1Ref, page2Ref }) {
   const nameParts = parseNameParts(student?.name);
 
   // Demographics sanitized
@@ -341,7 +341,12 @@ export default function SF10Document({ student, sf10Data, page1Ref, page2Ref, se
       {/* ============================================================
           PAGE 1 OF SF10: LEARNER INFO, ELIGIBILITY, GRADE 7 & 8
          ============================================================ */}
-      <div className={`sf10-page-sheet${selectedPage === 2 ? " sf10-page-hidden" : ""}`} ref={page1Ref} id="sf10-page-1">
+      <div className="sf10-page-sheet" ref={page1Ref} id="sf10-page-1">
+        <div className="sf10-doc-top-bar">
+          <span className="sf10-code-tag">SF 10 - JHS</span>
+          <span className="sf10-page-tag">&nbsp;</span>
+        </div>
+
         {/* Official Header */}
         <div className="sf10-header-grid">
           <div className="sf10-header-logo-left">
@@ -495,8 +500,9 @@ export default function SF10Document({ student, sf10Data, page1Ref, page2Ref, se
       {/* ============================================================
           PAGE 2 OF SF10: GRADE 9, GRADE 10 & TRANSFER CERTIFICATION
          ============================================================ */}
-      <div className={`sf10-page-sheet${selectedPage === 1 ? " sf10-page-hidden" : ""}`} ref={page2Ref} id="sf10-page-2">
+      <div className="sf10-page-sheet" ref={page2Ref} id="sf10-page-2">
         <div className="sf10-doc-top-bar" style={{ marginBottom: "8px" }}>
+          <span className="sf10-code-tag">SF 10-JHS</span>
           <span className="sf10-page-tag">Page 2 of 2</span>
         </div>
 
