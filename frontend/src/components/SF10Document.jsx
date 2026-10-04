@@ -222,49 +222,51 @@ export default function SF10Document({ student, sf10Data, page1Ref, page2Ref }) 
 
     return (
       <div className="sf10-scholastic-block">
-        <div className="sf10-block-meta-row">
-          <div className="sf10-block-meta-field">
-            <span className="lbl">School:</span>
-            <span className="val" style={{ minWidth: "160px" }}>{recSchool}</span>
+        <div className="sf10-scholastic-meta-container">
+          <div className="sf10-block-meta-row sf10-meta-row-1">
+            <div className="sf10-block-meta-field meta-school">
+              <span className="lbl">School:</span>
+              <span className="val">{recSchool}</span>
+            </div>
+            <div className="sf10-block-meta-field meta-school-id">
+              <span className="lbl">School ID:</span>
+              <span className="val">{recSchoolId}</span>
+            </div>
+            <div className="sf10-block-meta-field meta-district">
+              <span className="lbl">District:</span>
+              <span className="val">{recDistrict}</span>
+            </div>
+            <div className="sf10-block-meta-field meta-division">
+              <span className="lbl">Division:</span>
+              <span className="val">{recDivision}</span>
+            </div>
+            <div className="sf10-block-meta-field meta-region">
+              <span className="lbl">Region:</span>
+              <span className="val">{recRegion}</span>
+            </div>
           </div>
-          <div className="sf10-block-meta-field">
-            <span className="lbl">School ID:</span>
-            <span className="val" style={{ minWidth: "55px" }}>{recSchoolId}</span>
-          </div>
-          <div className="sf10-block-meta-field">
-            <span className="lbl">District:</span>
-            <span className="val" style={{ minWidth: "85px" }}>{recDistrict}</span>
-          </div>
-          <div className="sf10-block-meta-field">
-            <span className="lbl">Division:</span>
-            <span className="val" style={{ minWidth: "90px" }}>{recDivision}</span>
-          </div>
-          <div className="sf10-block-meta-field">
-            <span className="lbl">Region:</span>
-            <span className="val" style={{ minWidth: "50px" }}>{recRegion}</span>
-          </div>
-        </div>
 
-        <div className="sf10-block-meta-row">
-          <div className="sf10-block-meta-field">
-            <span className="lbl">Classified as Grade:</span>
-            <span className="val" style={{ minWidth: "40px", textAlign: "center" }}>{gradeLevel}</span>
-          </div>
-          <div className="sf10-block-meta-field">
-            <span className="lbl">Section:</span>
-            <span className="val" style={{ minWidth: "100px" }}>{section}</span>
-          </div>
-          <div className="sf10-block-meta-field">
-            <span className="lbl">School Year:</span>
-            <span className="val" style={{ minWidth: "80px", textAlign: "center" }}>{sy}</span>
-          </div>
-          <div className="sf10-block-meta-field">
-            <span className="lbl">Name of Adviser/Teacher:</span>
-            <span className="val" style={{ minWidth: "150px" }}>{adviser}</span>
-          </div>
-          <div className="sf10-block-meta-field">
-            <span className="lbl">Signature:</span>
-            <span className="val" style={{ minWidth: "65px" }}>&nbsp;</span>
+          <div className="sf10-block-meta-row sf10-meta-row-2">
+            <div className="sf10-block-meta-field meta-grade">
+              <span className="lbl">Classified as Grade:</span>
+              <span className="val">{gradeLevel}</span>
+            </div>
+            <div className="sf10-block-meta-field meta-section">
+              <span className="lbl">Section:</span>
+              <span className="val">{section}</span>
+            </div>
+            <div className="sf10-block-meta-field meta-sy">
+              <span className="lbl">School Year:</span>
+              <span className="val">{sy}</span>
+            </div>
+            <div className="sf10-block-meta-field meta-adviser">
+              <span className="lbl">Name of Adviser/Teacher:</span>
+              <span className="val">{adviser}</span>
+            </div>
+            <div className="sf10-block-meta-field meta-signature">
+              <span className="lbl">Signature:</span>
+              <span className="val val-signature">&nbsp;</span>
+            </div>
           </div>
         </div>
 
@@ -477,18 +479,18 @@ export default function SF10Document({ student, sf10Data, page1Ref, page2Ref }) 
         <div className="sf10-cert-section">
           <div className="sf10-cert-header">CERTIFICATION</div>
           <p className="sf10-cert-text">
-            I CERTIFY that this is a true record of <span style={{ textDecoration: "underline", fontWeight: "bold" }}>{cert.true_record_of}</span> with LRN <span style={{ textDecoration: "underline", fontWeight: "bold" }}>{cert.lrn}</span> and that he/she is eligible for admission to Grade <span style={{ textDecoration: "underline", fontWeight: "bold" }}>{cert.eligible_for_admission_to_grade || "________"}</span>.
+            I CERTIFY that this is a true record of <span style={{ textDecoration: "underline", fontWeight: "bold" }}>{cert.true_record_of}</span> with LRN <span style={{ textDecoration: "underline", fontWeight: "bold" }}>{cert.lrn}</span> and that he/she is eligible for admission to <span style={{ textDecoration: "underline", fontWeight: "bold" }}>{cert.eligible_for_admission_to_grade?.startsWith("Grade") ? cert.eligible_for_admission_to_grade : `Grade ${cert.eligible_for_admission_to_grade || "________"}`}</span>.
             <br />
             Name of School: <span style={{ textDecoration: "underline", fontWeight: "bold" }}>{cert.school_name}</span> School ID: <span style={{ textDecoration: "underline", fontWeight: "bold" }}>{cert.school_id}</span> Last School Year Attended: <span style={{ textDecoration: "underline", fontWeight: "bold" }}>{cert.last_school_year_attended}</span>
           </p>
           <div className="sf10-cert-sign-grid">
             <div className="sf10-cert-sign-col">
               <div className="sf10-cert-sign-line">{cert.date_issued}</div>
-              <span>Date</span>
+              <span className="sf10-cert-sign-lbl">Date</span>
             </div>
             <div className="sf10-cert-sign-col">
               <div className="sf10-cert-sign-line">{cert.principal_name}</div>
-              <span>Name of Principal/School Head over Printed Name</span>
+              <span className="sf10-cert-sign-lbl">Name of Principal/School Head over Printed Name</span>
             </div>
             <div className="sf10-cert-sign-col sf10-seal-box">
               <span>(Affix School Seal here)</span>
@@ -500,8 +502,8 @@ export default function SF10Document({ student, sf10Data, page1Ref, page2Ref }) 
       {/* ============================================================
           PAGE 2 OF SF10: GRADE 9, GRADE 10 & TRANSFER CERTIFICATION
          ============================================================ */}
-      <div className="sf10-page-sheet" ref={page2Ref} id="sf10-page-2">
-        <div className="sf10-doc-top-bar" style={{ marginBottom: "8px" }}>
+      <div className="sf10-page-sheet" ref={page2Ref} id="sf10-page-2" style={{ pageBreakBefore: "always", breakBefore: "page" }}>
+        <div className="sf10-doc-top-bar sf10-page-2-header" style={{ marginBottom: "8px", pageBreakBefore: "always", breakBefore: "page" }}>
           <span className="sf10-code-tag">SF 10-JHS</span>
           <span className="sf10-page-tag">Page 2 of 2</span>
         </div>
@@ -513,32 +515,34 @@ export default function SF10Document({ student, sf10Data, page1Ref, page2Ref }) 
         {renderScholasticBlock(recordG10, "10")}
 
         {/* TRANSFER OUT / JHS COMPLETER CERTIFICATION */}
-        <div className="sf10-cert-section" style={{ marginTop: "16px" }}>
-          <div className="sf10-cert-header" style={{ textAlign: "left", fontSize: "8.5px", fontStyle: "italic", marginBottom: "4px" }}>
+        <div style={{ marginTop: "14px" }}>
+          <div style={{ textAlign: "left", fontSize: "8.5px", fontStyle: "italic", marginBottom: "3px" }}>
             For Transfer Out / JHS Completer Only
           </div>
-          <div className="sf10-cert-header">CERTIFICATION</div>
+          <div className="sf10-cert-section">
+            <div className="sf10-cert-header">CERTIFICATION</div>
           <p className="sf10-cert-text">
-            I CERTIFY that this is a true record of <span style={{ textDecoration: "underline", fontWeight: "bold" }}>{cert.true_record_of}</span> with LRN <span style={{ textDecoration: "underline", fontWeight: "bold" }}>{cert.lrn}</span> and that he/she is eligible for admission to Grade <span style={{ textDecoration: "underline", fontWeight: "bold" }}>{recordG10.general_average?.remarks === "Passed" ? "Grade 11 (SHS)" : "________"}</span>.
+            I CERTIFY that this is a true record of <span style={{ textDecoration: "underline", fontWeight: "bold" }}>{cert.true_record_of}</span> with LRN <span style={{ textDecoration: "underline", fontWeight: "bold" }}>{cert.lrn}</span> and that he/she is eligible for admission to <span style={{ textDecoration: "underline", fontWeight: "bold" }}>{recordG10.general_average?.remarks === "Passed" ? "Grade 11 (SHS)" : (cert.eligible_for_admission_to_grade?.startsWith("Grade") ? cert.eligible_for_admission_to_grade : `Grade ${cert.eligible_for_admission_to_grade || "________"}`)}</span>.
             <br />
             Name of School: <span style={{ textDecoration: "underline", fontWeight: "bold" }}>{cert.school_name}</span> School ID: <span style={{ textDecoration: "underline", fontWeight: "bold" }}>{cert.school_id}</span> Last School Year Attended: <span style={{ textDecoration: "underline", fontWeight: "bold" }}>{cert.last_school_year_attended}</span>
           </p>
           <div className="sf10-cert-sign-grid">
             <div className="sf10-cert-sign-col">
               <div className="sf10-cert-sign-line">{cert.date_issued}</div>
-              <span>Date</span>
+              <span className="sf10-cert-sign-lbl">Date</span>
             </div>
             <div className="sf10-cert-sign-col">
               <div className="sf10-cert-sign-line">{cert.principal_name}</div>
-              <span>Name of Principal/School Head over Printed Name</span>
+              <span className="sf10-cert-sign-lbl">Name of Principal/School Head over Printed Name</span>
             </div>
             <div className="sf10-cert-sign-col sf10-seal-box">
               <span>(Affix School Seal here)</span>
             </div>
           </div>
         </div>
+      </div>
 
-        <div className="sf10-footnote">
+      <div className="sf10-footnote">
           <span>(May add Certification box if needed)</span>
           <span>SFRT Revised 2017</span>
         </div>
