@@ -220,14 +220,21 @@ export default function AdviserSections({ userRole: propUserRole }) {
       const rawSecId = classObj?.section_id || classObj?.sectionId || (typeof classId === 'string' && classId.startsWith('sec-') ? Number(classId.replace('sec-', '')) : null);
       const rawOffId = classObj?.subject_offering_id || classObj?.offering_id;
 
+      const user = getStoredUser();
+      const currentUserId = user?.user_id || user?.id || null;
+
       await fetch("http://localhost:5000/api/class-record/submit", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(currentUserId ? { "x-auralis-user-id": String(currentUserId) } : {}),
+        },
         body: JSON.stringify({
           subject_offering_id: rawOffId,
           section_id: rawSecId,
           term: "T1",
           students: studentsForClass,
+          user_id: currentUserId,
         }),
       });
     } catch (e) {

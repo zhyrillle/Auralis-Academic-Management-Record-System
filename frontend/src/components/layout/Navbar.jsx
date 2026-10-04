@@ -125,7 +125,15 @@ export default function Navbar({
           type="button"
           className="toggle-sidebar-btn notification-button"
           aria-label="Notifications"
-          onClick={() => navigate("/adviser/notifications")}
+          onClick={() => {
+            if (location.pathname.startsWith("/department-head")) {
+              navigate("/department-head/notifications");
+            } else if (location.pathname.startsWith("/teacher")) {
+              navigate("/teacher/notifications");
+            } else {
+              navigate("/adviser/notifications");
+            }
+          }}
         >
           <Bell size={20} />
           <span

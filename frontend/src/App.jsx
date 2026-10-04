@@ -13,6 +13,7 @@ import AcademicPeriod from "./pages/system-admin/AcademicPeriod";
 import AdviserDashboard from "./pages/adviser/AdviserDashboard";
 import DeptDashboard from "./pages/department-head/DeptDashboard";
 import DeptClassRecord from "./pages/department-head/DeptClassRecord";
+import DeptHeadNotifications from "./pages/department-head/DeptHeadNotifications";
 import TeacherDashboard from "./pages/teacher/TeacherDashboard";
 import PerformanceReport from "./pages/adviser/PerformanceReport";
 import DashboardLayout from "./components/layout/DashboardLayout";
@@ -161,6 +162,10 @@ export default function App() {
           <Route
             path="/department-head/class-records"
             element={<DeptClassRecord />}
+          />
+          <Route
+            path="/department-head/notifications"
+            element={<DeptHeadNotifications />}
           />
 
           {/* 4. Adviser */}
