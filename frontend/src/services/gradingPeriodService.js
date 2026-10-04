@@ -290,17 +290,18 @@ function mapActive(row) {
   };
 }
 
-function mapSubmissionRecord(row) {
+function mapGradeSheetRecord(row) {
   return {
     id: String(row.grade_sheet_id),
     gradeSheetId: String(row.grade_sheet_id),
     termId: String(row.term_id),
     teacherName: row.teacher_name || "Unassigned teacher",
+    subjectId: String(row.subject_id || ""),
     subject: row.subject_name,
     department: row.department_name || "Unassigned Department",
     gradeLevel: row.grade_level_name,
     section: row.section_name,
-    workflowStatus: String(row.workflow_status || "submitted").toLowerCase(),
+    workflowStatus: String(row.workflow_status || "").toLowerCase(),
     lockStatus: String(row.lock_status || "").toLowerCase(),
     submittedAt: row.submitted_at
       ? new Intl.DateTimeFormat("en-US", {
@@ -316,6 +317,10 @@ function mapSubmissionRecord(row) {
 }
 
 export function mapGradingPeriodContext(payload) {
+  if (!payload.gradeSheetRecordsByTerm || typeof payload.gradeSheetRecordsByTerm !== "object"
+      || Array.isArray(payload.gradeSheetRecordsByTerm)) {
+    throw new Error("Grade-sheet details are unavailable. Restart the updated backend and try again.");
+  }
   const schoolYears = payload.schoolYears.map((year) => ({
     id: String(year.school_year_id),
     label: formatSchoolYear(year),
@@ -367,7 +372,15 @@ export function mapGradingPeriodContext(payload) {
     Object.entries(payload.submissionRecordsByTerm || {}).map(
       ([termId, records]) => [
         String(termId),
-        Array.isArray(records) ? records.map(mapSubmissionRecord) : [],
+        Array.isArray(records) ? records.map(mapGradeSheetRecord) : [],
+      ],
+    ),
+  );
+  const gradeSheetRecordsByTerm = Object.fromEntries(
+    Object.entries(payload.gradeSheetRecordsByTerm || {}).map(
+      ([termId, records]) => [
+        String(termId),
+        Array.isArray(records) ? records.map(mapGradeSheetRecord) : [],
       ],
     ),
   );
@@ -376,7 +389,9 @@ export function mapGradingPeriodContext(payload) {
     selectedSchoolYearId: String(payload.selectedSchoolYearId || ""),
     terms,
     departmentsByTerm: payload.departmentsByTerm || {},
+    subjectsByTerm: payload.subjectsByTerm || {},
     submissionRecordsByTerm,
+    gradeSheetRecordsByTerm,
     reopeningRequests: payload.reopeningRequests.map((row) => ({ ...mapRequest(row), termId: String(row.term_id) })),
     activeReopenings: payload.activeReopenings.map((row) => ({ ...mapActive(row), termId: String(row.term_id) })),
     upcomingSchoolYear: upcomingYear ? {

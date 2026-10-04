@@ -7,6 +7,76 @@ const GradeSheet = require('../models/GradeSheet');
 const GradeReopenRequest = require('../models/GradeReopenRequest');
 const TemporaryReopening = require('../models/TemporaryReopening');
 const Module = require('node:module');
+const AcademicTerm = require('../models/AcademicTerm');
+
+test('term status uses start/deadline boundaries independently of a stale stored label', () => {
+  const { computedTermStatus } = GradingPeriodService.__test;
+  const term = { starts_at: '2026-09-16T00:00:00Z',
+    ends_at: '2026-10-01T00:00:00Z', grade_submission_deadline_at: '2026-10-02T00:00:00Z',
+    status: 'upcoming' };
+  assert.equal(computedTermStatus(term, new Date('2026-09-15T23:59:59.999Z')), 'upcoming');
+  assert.equal(computedTermStatus(term, new Date(term.starts_at)), 'open');
+  assert.equal(computedTermStatus(term, new Date(term.ends_at)), 'open');
+  assert.equal(computedTermStatus(term, new Date('2026-10-01T23:59:59.999Z')), 'open');
+  assert.equal(computedTermStatus(term, new Date(term.grade_submission_deadline_at)), 'finalized');
+  assert.equal(computedTermStatus({ ...term, status: 'ongoing' }, new Date('2026-10-04T00:00:00Z')), 'finalized');
+});
+
+test('status synchronization changes only mismatched labels, uses UTC, and leaves incomplete timelines untouched', async () => {
+  const queries = [];
+  const connection = { execute: async (sql, params) => {
+    queries.push({ sql, params });
+    return [{ affectedRows: 2 }];
+  } };
+  assert.equal(await AcademicTerm.synchronizeStatuses(connection), 2);
+  assert.equal(await AcademicTerm.synchronizeStatuses(connection, 4), 2);
+  const { sql } = queries[0];
+  assert.match(sql, /UPDATE ACADEMIC_TERM\s+SET status = CASE/);
+  assert.match(sql, /WHEN starts_at > UTC_TIMESTAMP\(6\) THEN 'upcoming'/);
+  assert.match(sql, /WHEN grade_submission_deadline_at > UTC_TIMESTAMP\(6\) THEN 'ongoing'/);
+  assert.match(sql, /ELSE 'completed'/);
+  assert.match(sql, /starts_at IS NOT NULL/);
+  assert.match(sql, /grade_submission_deadline_at IS NOT NULL/);
+  assert.match(sql, /grade_submission_deadline_at >= starts_at/);
+  assert.match(sql, /NOT \(status <=> CASE/);
+  assert.doesNotMatch(sql, /\b(GRADE_SHEET|ends_at|reopening_requests_open_at|reopening_requests_close_at)\b/);
+  assert.deepEqual(queries[0].params, []);
+  assert.match(queries[1].sql, /AND term_id = \?/);
+  assert.deepEqual(queries[1].params, [4]);
+});
+
+test('term creation and timeline saves synchronize the saved term immediately using the same connection', async (t) => {
+  const events = [];
+  const connection = { execute: async (sql, params) => {
+    events.push({ sql, params });
+    if (sql.includes('INSERT INTO')) return [{ insertId: 4 }];
+    if (sql.startsWith('SELECT')) return [[{ term_id: 4, status: 'ongoing' }]];
+    return [{ affectedRows: 1 }];
+  } };
+  t.mock.method(AcademicTerm, 'synchronizeStatuses', async (activeConnection, id) => {
+    assert.equal(activeConnection, connection);
+    assert.equal(id, 4);
+    events.push('SYNC_STATUS');
+  });
+  assert.equal(await AcademicTerm.create({ school_year_id: 1, term_name: '2nd',
+    starts_at: '2026-09-16 00:00:00', ends_at: '2026-12-18 23:59:00',
+    grade_submission_deadline_at: '2026-12-18 23:59:00' }, connection), 4);
+  assert.equal(events[1], 'SYNC_STATUS');
+  events.length = 0;
+  const updated = await AcademicTerm.update(4, { grade_submission_deadline_at: '2026-12-20 23:59:00' }, connection);
+  assert.match(events[0].sql, /UPDATE ACADEMIC_TERM SET grade_submission_deadline_at = \?/);
+  assert.equal(events[1], 'SYNC_STATUS');
+  assert.match(events[2].sql, /SELECT/);
+  assert.equal(updated.status, 'ongoing');
+});
+
+test('the lifecycle check synchronizes term labels before enforcing sheet locks', async (t) => {
+  const fixture = serviceFixture(t);
+  await GradingPeriodService.runLifecycleGuard();
+  const updates = fixture.queries.filter(query => /^\s*UPDATE/.test(query.sql));
+  assert.match(updates[0].sql, /UPDATE ACADEMIC_TERM/);
+  assert.match(updates[1].sql, /UPDATE GRADE_SHEET/);
+});
 
 test('Academic Period queries preserve records without department metadata', async (t) => {
   const originalExecute = db.execute;
@@ -33,7 +103,7 @@ test('Academic Period queries preserve records without department metadata', asy
       return [[{ temporary_reopening_id: 1 }]];
     }
     if (/FROM GRADE_SHEET gs/.test(sql)) {
-      return [[{ grade_sheet_id: 2, term_id: 1 }]];
+      return [[{ grade_sheet_id: 2, term_id: 1, workflow_status: 'SUBMITTED' }]];
     }
     throw new Error(`Unexpected query: ${sql}`);
   };
@@ -52,6 +122,91 @@ test('Academic Period queries preserve records without department metadata', asy
   assert.equal(results[3][0].grade_sheet_id, 2);
   assert.equal(queries.length, 4);
   for (const sql of queries) assert.match(sql, /LEFT JOIN DEPARTMENT d/);
+});
+
+test('grade sheet details include locked drafts, submitted sheets and unassigned teachers in the selected term', async (t) => {
+  const rows = [
+    { grade_sheet_id: 2, term_id: 1, workflow_status: 'DRAFT', lock_status: 'TERM_LOCKED',
+      teacher_name: 'Assigned Teacher', subject_name: 'English', section_name: 'Banana' },
+    { grade_sheet_id: 3, term_id: 1, workflow_status: 'SUBMITTED', lock_status: 'TERM_LOCKED',
+      teacher_name: 'Unassigned teacher', subject_name: 'Mathematics', section_name: 'Banana' },
+  ];
+  const queries = [];
+  t.mock.method(db, 'execute', async (sql, params) => {
+    queries.push({ sql, params });
+    return [rows];
+  });
+  assert.deepEqual(await GradingPeriodService.__test.getGradeSheetRecords(1), rows);
+  assert.deepEqual(await GradingPeriodService.__test.getSubmissionRecords(1), [rows[1]]);
+  for (const { sql, params } of queries) {
+    assert.deepEqual(params, [1]);
+    assert.match(sql, /WHERE gs\.term_id = \?/);
+    assert.doesNotMatch(sql, /AND gs\.workflow_status = 'SUBMITTED'/);
+    assert.match(sql, /LEFT JOIN TEACHER_ASSIGNMENT/);
+    assert.match(sql, /'Unassigned teacher'/);
+    assert.match(sql, /gs\.workflow_status/);
+    assert.match(sql, /gs\.lock_status/);
+    assert.match(sql, /GROUP BY\s+gs\.grade_sheet_id/);
+    assert.doesNotMatch(sql, /\b(INSERT|UPDATE|DELETE)\b/);
+  }
+});
+
+test('subject progress includes catalog subjects without sheets and separates subjects in the same department', async (t) => {
+  const rows = [
+    { subject_id: 11, subject_name: 'Research', department_name: 'Science', total: 0, submitted: null, draft: null },
+    { subject_id: 12, subject_name: 'Science', department_name: 'Science', total: 4, submitted: 1, draft: 3 },
+    { subject_id: 13, subject_name: 'SPA', department_name: 'Unassigned Department', total: 2, submitted: 2, draft: 0 },
+  ];
+  t.mock.method(db, 'execute', async (sql, params) => {
+    assert.match(sql, /FROM SUBJECT s/);
+    assert.match(sql, /LEFT JOIN SUBJECT_OFFERING so/);
+    assert.match(sql, /so\.school_year_id = at\.school_year_id/);
+    assert.match(sql, /gs\.term_id = at\.term_id/);
+    assert.doesNotMatch(sql, /s\.status/);
+    assert.match(sql, /GROUP BY s\.subject_id, s\.subject_name/);
+    assert.doesNotMatch(sql, /\b(INSERT|UPDATE|DELETE)\b/);
+    assert.deepEqual(params, [7]);
+    return [rows];
+  });
+  const subjects = await GradingPeriodService.__test.getSubjectStatus(7);
+  assert.equal(subjects.length, 3);
+  assert.equal(subjects[0].id, '11');
+  assert.equal(subjects[0].total, 0);
+  assert.equal(subjects[0].progress, null);
+  assert.equal(subjects[1].department, 'Science');
+  assert.equal(subjects[1].progress, 25);
+  assert.equal(subjects[2].progress, 100);
+});
+
+test('Academic Period context keeps submitted-only compatibility while exposing all grade sheet details', async (t) => {
+  const sheets = [
+    { grade_sheet_id: 2, term_id: 1, workflow_status: 'DRAFT', lock_status: 'TERM_LOCKED' },
+    { grade_sheet_id: 3, term_id: 1, workflow_status: 'SUBMITTED', lock_status: 'TERM_LOCKED' },
+  ];
+  t.mock.method(db, 'getConnection', async () => ({
+    beginTransaction: async () => {}, commit: async () => {}, rollback: async () => {},
+    release: () => {}, execute: async () => [[]],
+  }));
+  t.mock.method(db, 'execute', async (sql) => {
+    if (/^\s*UPDATE/.test(sql)) return [{ affectedRows: 0 }];
+    if (sql.includes('FROM SCHOOL_YEAR')) return [[{ school_year_id: 7, starts_on: 2026, status: 'active' }]];
+    if (sql.includes('FROM ACADEMIC_TERM at')) return [[{ term_id: 1, school_year_id: 7,
+      starts_at: '2026-06-01T00:00:00Z', ends_at: '2026-09-01T00:00:00Z',
+      grade_submission_deadline_at: '2026-09-02T00:00:00Z' }]];
+    if (sql.includes('FROM SUBJECT_OFFERING so')) return [[{ department_id: 1, department_name: 'English',
+      total: 2, submitted: 1, overdue: 1 }]];
+    if (sql.includes('FROM SUBJECT s')) return [[{ subject_id: 4, subject_name: 'English', department_name: 'English',
+      total: 2, submitted: 1, draft: 1 }]];
+    if (sql.includes('FROM GRADE_SHEET gs')) return [sheets];
+    if (sql.includes('FROM GRADE_REOPEN_REQUEST grr') || sql.includes('FROM TEMPORARY_REOPENING tr')) return [[]];
+    throw new Error('Unexpected query');
+  });
+  const context = await GradingPeriodService.getContext(7);
+  assert.deepEqual(context.gradeSheetRecordsByTerm['1'], sheets);
+  assert.deepEqual(context.submissionRecordsByTerm['1'], [sheets[1]]);
+  assert.equal(context.departmentsByTerm['1'][0].submitted, 1);
+  assert.equal(context.subjectsByTerm['1'][0].id, '4');
+  assert.equal(context.subjectsByTerm['1'][0].progress, 50);
 });
 
 test('request window is exactly seven days after term end, independent of submission deadline', () => {

@@ -30,7 +30,8 @@ export default function GradingPeriodOverview({
   reopeningRequests,
   activeReopenings,
   departmentsByTerm,
-  submissionRecordsByTerm,
+  subjectsByTerm = {},
+  gradeSheetRecordsByTerm,
   onSelectTerm,
   onViewTermTimeline,
   onReviewRequest,
@@ -54,8 +55,12 @@ export default function GradingPeriodOverview({
   const selectedTerm =
     terms.find((term) => term.id === selectedTermId) || terms[0];
   const selectedDepartments = departmentsByTerm[selectedTermId] || [];
-  const selectedSubmissionRecords =
-    submissionRecordsByTerm[selectedTermId] || [];
+  const selectedSubjects = subjectsByTerm[selectedTermId] || [];
+  const selectedGradeSheetRecords =
+    gradeSheetRecordsByTerm[selectedTermId] || [];
+  const submittedRecordCount = selectedGradeSheetRecords.filter(
+    record => record.workflowStatus === "submitted",
+  ).length;
   const selectedTermRequests = reopeningRequests.filter(
     (request) =>
       request.termId === selectedTermId && request.status === "pending",
@@ -155,7 +160,7 @@ export default function GradingPeriodOverview({
               <ClipboardList size={16} aria-hidden="true" />
               <span className="grading-operations-nav__label">
                 Submission Status
-                <small>{selectedSubmissionRecords.length} submitted</small>
+                <small>{submittedRecordCount} submitted</small>
               </span>
             </button>
             <button
@@ -182,9 +187,11 @@ export default function GradingPeriodOverview({
           {operationsView === "submissions" ? (
             <div id="submission-status-panel" role="tabpanel">
               <SubmissionStatus
+                key={selectedTermId}
                 term={selectedTerm}
                 departments={selectedDepartments}
-                records={selectedSubmissionRecords}
+                subjects={selectedSubjects}
+                records={selectedGradeSheetRecords}
               />
             </div>
           ) : (

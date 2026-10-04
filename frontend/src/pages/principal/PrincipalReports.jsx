@@ -1,20 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
-import { Download, Eye, FileText, Printer, User, Users } from "lucide-react";
+import { Eye, Users } from "lucide-react";
 import DropdownSelect from "../../components/common/DropdownSelect";
 import EmptyState from "../../components/common/EmptyState";
 import SearchBar from "../../components/common/SearchBar";
 import Badge from "../../components/common/Badge";
 import AnalyticsTermTabs from "./analytics/AnalyticsTermTabs";
-import backIconUrl from "../../assets/backButton.svg";
+import StudentSF9Page from "../adviser/StudentSF9Page";
 import {
   fetchStudents, fetchSections, fetchStudentSections, fetchGradeLevels, fetchSchoolYears,
 } from "../../services/studentSectionService";
 import "./PrincipalReports.css";
-
-const DOCUMENTS = [
-  { form: "SF9", title: "Report Card", description: "Learner progress, subject grades, conduct ratings, and attendance." },
-  { form: "SF10", title: "Learner’s Permanent Record", description: "The learner’s cumulative academic record across school years." },
-];
 
 const REPORT_TERMS = [
   { id: "overall", label: "Overall" },
@@ -94,10 +89,13 @@ export default function PrincipalReports() {
       const section = sections.get(String(enrollment.section_id));
       if (!student || !section) return [];
       return [{
+        ...student,
         id: String(student.student_id), name: student.name.replace(/\s+/g, " ").trim(),
         lrn: String(student.lrn ?? student.LRN ?? ""),
         gradeId: String(section.grade_level_id), sectionId: String(section.section_id),
         gradeSection: `${section.grade_level_name} · ${section.section_name}`,
+        gradeLevel: section.grade_level_name, section: section.section_name,
+        schoolYearId, studentSectionId: enrollment.student_section_id,
       }];
     }).sort((a, b) => a.name.localeCompare(b.name));
   }, [data, schoolYearId]);
@@ -109,22 +107,27 @@ export default function PrincipalReports() {
       && (!query || learner.name.toLowerCase().includes(query) || learner.lrn.includes(query)));
   }, [learners, gradeId, sectionId, search]);
 
+  if (selectedStudent) {
+    return <div className="pr-page-container pr-page-container--report">
+      <StudentSF9Page student={selectedStudent} userRole="principal" isAdviser
+        onBack={() => setSelectedStudent(null)} />
+    </div>;
+  }
+
   return (
-    <div className={`pr-page-container ${selectedStudent ? "pr-page-container--detail" : "pr-page-container--list"}`}>
+    <div className="pr-page-container pr-page-container--list">
       <header className="pr-header">
         <div className="pr-header-left">
           <div>
             <div className="pr-title-row">
-              {selectedStudent && <button type="button" className="pr-back-btn" aria-label="Back to Reports" title="Back to Reports"
-                onClick={() => setSelectedStudent(null)}><img src={backIconUrl} alt="" /></button>}
             <h1 className="pr-title">Student Reports</h1>
             </div>
-            <p className="pr-subtitle">{selectedStudent ? "Learner overview and school forms." : "Browse learner records by school year, grade, and section."}</p>
+            <p className="pr-subtitle">Browse learner records by school year, grade, and section.</p>
           </div>
         </div>
       </header>
 
-      {!selectedStudent ? <>
+      <>
         <section className="pr-controls-bar" aria-label="Student filters">
           <div className="pr-term-control">
             <AnalyticsTermTabs options={REPORT_TERMS} value={selectedTerm} onChange={setSelectedTerm} ariaLabel="Report term" />
@@ -172,11 +175,12 @@ export default function PrincipalReports() {
                     <Badge className="pr-form-badge pr-form-badge--sf9">SF9</Badge>
                     <Badge className="pr-form-badge pr-form-badge--sf10">SF10</Badge>
                   </span></td>
-                  <td title={`${termLabel} SF9/SF10 report status has not been connected yet.`}>
-                    <Badge className="pr-status-pill pr-status-pill--unavailable">Not available</Badge>
+                  <td title="Report issuance status is not tracked. Use View to preview or download school forms.">
+                    <Badge className="pr-status-pill pr-status-pill--unavailable">Not tracked</Badge>
                   </td>
-                  <td className="pr-th-actions"><button type="button" className="pr-action-view-btn"
-                    aria-label={`View ${learner.name}`} onClick={() => setSelectedStudent(learner)}>VIEW</button></td>
+                  <td className="pr-th-actions"><button type="button" className="pr-action-eye-btn"
+                    title={`View ${learner.name}`} aria-label={`View ${learner.name}`}
+                    onClick={() => setSelectedStudent(learner)}><Eye size={20} aria-hidden="true" /></button></td>
                 </tr>) : <tr><td colSpan={6}><EmptyState className="pr-empty" icon={Users}
                   title="No learners found" description={search.trim() ? "Try a different student name or LRN."
                     : "No enrolled learners match this school year, grade, and section."} /></td></tr>}
@@ -184,39 +188,7 @@ export default function PrincipalReports() {
             </table>
           </div>
         </section>
-      </> : <>
-        <section className="pr-student-profile-card">
-          <div className="pr-student-info-left">
-            <div className="pr-student-avatar"><User size={28} aria-hidden="true" /></div>
-            <div className="pr-student-details">
-              <h2 className="pr-student-name">{selectedStudent.name}</h2>
-              <dl className="pr-student-metadata">
-                <div><dt>LRN</dt><dd>{selectedStudent.lrn || "Not recorded"}</dd></div>
-                <div><dt>Grade / Section</dt><dd><Badge className="pr-section-badge">{selectedStudent.gradeSection}</Badge></dd></div>
-                <div><dt>Reporting period</dt><dd>{yearLabel} · {termLabel}</dd></div>
-              </dl>
-            </div>
-          </div>
-          <span className="pr-student-tag-badge">Student</span>
-        </section>
-        <section className="pr-cards-grid">
-          {DOCUMENTS.map((document) => <div className={`pr-doc-card pr-doc-card--${document.form.toLowerCase()}`} key={document.form}>
-            <div className="pr-doc-card-header"><div className="pr-doc-heading">
-              <span className="pr-doc-icon"><FileText size={20} aria-hidden="true" /></span>
-              <h3 className="pr-doc-card-title">{document.title}</h3></div>
-              <span className="pr-doc-form-tag">{document.form}</span></div>
-            <p className="pr-doc-card-desc">{document.description}</p>
-            <p className="pr-doc-availability">Awaiting report integration</p>
-            <div className="pr-doc-card-actions">
-              <button type="button" className="pr-btn-view-doc" disabled title="Awaiting report integration">
-                <Eye size={16} /> VIEW {document.form}</button>
-              <button type="button" className="pr-btn-print-doc" disabled title="Awaiting report integration"><Printer size={16} /> Print</button>
-              <button type="button" className="pr-btn-download-icon" disabled title="Awaiting report integration"
-                aria-label={`Download ${document.form} (unavailable)`}><Download size={18} /></button>
-            </div>
-          </div>)}
-        </section>
-      </>}
+      </>
     </div>
   );
 }

@@ -1,6 +1,30 @@
 const db = require('../config/db');
 
 class AcademicTerm {
+  static async synchronizeStatuses(connection = db, termId = null) {
+    // Match Academic Period's date-based status without changing its timeline.
+    // The stored enum uses ongoing/completed for the UI's open/finalized states.
+    const [result] = await connection.execute(
+      `UPDATE ACADEMIC_TERM
+       SET status = CASE
+         WHEN starts_at > UTC_TIMESTAMP(6) THEN 'upcoming'
+         WHEN grade_submission_deadline_at > UTC_TIMESTAMP(6) THEN 'ongoing'
+         ELSE 'completed'
+       END
+       WHERE starts_at IS NOT NULL
+         AND grade_submission_deadline_at IS NOT NULL
+         AND grade_submission_deadline_at >= starts_at
+         AND NOT (status <=> CASE
+           WHEN starts_at > UTC_TIMESTAMP(6) THEN 'upcoming'
+           WHEN grade_submission_deadline_at > UTC_TIMESTAMP(6) THEN 'ongoing'
+           ELSE 'completed'
+         END)
+         ${termId === null ? '' : 'AND term_id = ?'}`,
+      termId === null ? [] : [termId]
+    );
+    return result.affectedRows;
+  }
+
   static async findAll() {
     const [rows] = await db.execute('SELECT * FROM ACADEMIC_TERM');
     return rows;
@@ -44,6 +68,7 @@ class AcademicTerm {
         status || 'upcoming',
       ]
     );
+    await this.synchronizeStatuses(connection, result.insertId);
     return result.insertId;
   }
 
@@ -63,6 +88,7 @@ class AcademicTerm {
     const values = entries.map(([, value]) => value);
     const setClause = keys.map(key => `${key} = ?`).join(', ');
     await connection.execute(`UPDATE ACADEMIC_TERM SET ${setClause} WHERE term_id = ?`, [...values, id]);
+    await this.synchronizeStatuses(connection, id);
     return this.findById(id, connection);
   }
 

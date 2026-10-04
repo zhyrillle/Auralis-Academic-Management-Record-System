@@ -1,5 +1,5 @@
-import { useState, useMemo, useEffect, useRef } from "react";
-import { Eye, Download, FileText, Sparkles, Printer, FileSpreadsheet, CheckCircle2, Loader2 } from "lucide-react";
+import { useState, useMemo, useEffect } from "react";
+import { Eye, Download, FileText, Printer, FileSpreadsheet, CheckCircle2, Loader2 } from "lucide-react";
 import "../../styles/studentSF9.css";
 
 import depedLogo from "../../assets/deped_logo.png";
@@ -11,7 +11,6 @@ import { getStudentSF10Details } from "../../services/reportService";
 import Toast from "../../components/common/Toast.jsx";
 import { exportSf9Pdf } from "../../utils/exportSf9Pdf";
 import SF10PreviewModal from "../../components/SF10PreviewModal.jsx";
-import SF10Document from "../../components/SF10Document.jsx";
 import { exportSf10Excel } from "../../utils/exportSf10Excel.js";
 
 export default function StudentSF9Page(props) {
@@ -19,10 +18,36 @@ export default function StudentSF9Page(props) {
   const identity = student?.student_id || student?.studentId || student?.student_section_id || student?.studentSectionId || student?.lrn || student?.id || "default";
   const schoolYear = student?.schoolYearId || student?.schoolYear || "";
   // Remount learner-specific state before showing another learner's report.
-  return <StudentSF9Details key={`${identity}:${schoolYear}:${props.reportIdentifier || ""}`} {...props} />;
+  return <StudentSF9Details key={`${identity}:${schoolYear}`} {...props} />;
 }
 
-function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab, isAdviser: propIsAdviser, reportIdentifier, loadReport = getStudentSF9Details }) {
+function StudentReportSkeleton({ student, onBack }) {
+  return <div className="student-sf9-container" role="status" aria-label="Loading learner report" aria-busy="true">
+    <div className="sf9-header-bar no-print">
+      <button className="back-btn" onClick={onBack} aria-label="Back"><img src={backIconUrl} alt="" width={17} height={17} /></button>
+      <h1 className="sf9-section-title">{student?.section || "Student Reports"}</h1>
+    </div>
+    <div className="student-header-grid sf9-report-skeleton" aria-hidden="true">
+      {Array.from({ length: 5 }, (_, index) => <div className="sf9-skeleton-card" key={index}>
+        <span className="sf9-skeleton-block sf9-skeleton-heading" /><span className="sf9-skeleton-block" />
+      </div>)}
+    </div>
+    <div className="sf9-skeleton-tabs" aria-hidden="true">
+      {Array.from({ length: 3 }, (_, index) => <span className="sf9-skeleton-block" key={index} />)}
+    </div>
+    <div className="sf9-skeleton-sheet" aria-hidden="true">
+      <span className="sf9-skeleton-block sf9-skeleton-title" />
+      <span className="sf9-skeleton-block sf9-skeleton-subtitle" />
+      <div className="sf9-skeleton-table">
+        {Array.from({ length: 7 }, (_, row) => <div className="sf9-skeleton-row" key={row}>
+          {Array.from({ length: 4 }, (_, column) => <span className="sf9-skeleton-block" key={column} />)}
+        </div>)}
+      </div>
+    </div>
+  </div>;
+}
+
+function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab, isAdviser: propIsAdviser }) {
   const storedUser = useMemo(() => getStoredUser(), []);
   const normRole = useMemo(() => normalizeRole(storedUser?.role, storedUser), [storedUser]);
   const userRole = propUserRole || (normRole === "adviser" ? "adviser" : normRole === "principal" ? "principal" : "teacher");
@@ -30,28 +55,23 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
     ? propIsAdviser
     : (userRole === "adviser" || userRole === "principal");
 
-  const [activeTab, setActiveTab] = useState(() => {
+  const [requestedTab, setActiveTab] = useState(() => {
     if (!isAdviser) return "personal";
     return initialTab || "sf9";
   });
 
-  useEffect(() => {
-    if (!isAdviser && activeTab !== "personal") {
-      setActiveTab("personal");
-    }
-  }, [isAdviser, activeTab]);
+  const activeTab = isAdviser ? requestedTab : "personal";
   const [viewMode, setViewMode] = useState("spread"); // "spread", "front", "back"
+  const [sf10ToolbarHost, setSF10ToolbarHost] = useState(null);
   const [sf9Data, setSf9Data] = useState(null);
-  const identifier = reportIdentifier || student?.student_id || student?.studentId || student?.student_section_id || student?.studentSectionId || student?.lrn || student?.id;
+  const identifier = student?.student_id || student?.studentId || student?.student_section_id || student?.studentSectionId || student?.lrn || student?.id;
+  const schoolYearId = student?.schoolYearId;
   const [loading, setLoading] = useState(Boolean(identifier));
   const [loadError, setLoadError] = useState(false);
   const [requestAttempt, setRequestAttempt] = useState(0);
-  const [isSF10Open, setIsSF10Open] = useState(false);
   const [downloadingSF10, setDownloadingSF10] = useState(false);
+  // This details component remounts for a different learner/school year.
   const [cachedSF10Data, setCachedSF10Data] = useState(null);
-
-  const offscreenPage1Ref = useRef(null);
-  const offscreenPage2Ref = useRef(null);
 
   // Teacher Comments/Remarks state for terms with frontend localStorage persistence
   const studentKey = student?.lrn || student?.student_id || student?.studentId || student?.id || "default";
@@ -86,7 +106,7 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
   useEffect(() => {
     let isMounted = true;
     if (identifier) {
-      loadReport(identifier)
+      getStudentSF9Details(identifier, { schoolYearId })
         .then((data) => {
           if (isMounted && data) {
             setSf9Data(data);
@@ -101,7 +121,7 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
         });
     }
     return () => { isMounted = false; };
-  }, [identifier, requestAttempt, loadReport]);
+  }, [identifier, schoolYearId, requestAttempt]);
 
   // Dynamic student records matching official layout
   const studentProfile = useMemo(() => {
@@ -118,7 +138,7 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
       schoolYear: fetched.schoolYear || student?.schoolYear || "",
       dateOfBirth: fetched.dateOfBirth || student?.dateOfBirth || "",
       address: fetched.address || student?.address || "",
-      termGrade: fetched.termGrade ?? student?.grade ?? "",
+      termGrade: fetched.termGrade ?? student?.termGrade ?? "",
       honorStatus: fetched.honorStatus || student?.honorStatus || "",
       daysPresent: fetched.daysPresent ?? student?.daysPresent ?? 0,
       daysAbsent: fetched.daysAbsent ?? student?.daysAbsent ?? 0,
@@ -152,6 +172,24 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
       { code: "pe_health", name: "Physical Education and Health", t1: "", t2: "", t3: "", final: "", remark: "", isSubSubject: true },
     ];
   }, [sf9Data]);
+
+  const termAvailability = useMemo(() => {
+    // Count learning areas once; MAPEH uses its combined grade, not duplicate sub-rows.
+    const subjects = grades.filter(grade => !grade.isSubSubject);
+    return [1, 2, 3].map(term => {
+      const field = `t${term}`;
+      const missing = subjects.filter(grade => !Number.isFinite(grade[field]));
+      const available = subjects.length - missing.length;
+      const status = loadError ? "unavailable" : available === 0 ? "missing"
+        : missing.length === 0 ? "available" : "partial";
+      return { term, status, available, total: subjects.length,
+        label: status === "available" ? "Available" : status === "partial" ? "Partial"
+          : status === "unavailable" ? "Unavailable" : "Not available",
+        hint: loadError ? "The learner's grades could not be loaded. Retry loading the report."
+          : `${available}/${subjects.length} learning areas have a term grade${missing.length
+            ? `. Missing: ${missing.map(grade => grade.name).join(", ")}` : "."}` };
+    });
+  }, [grades, loadError]);
 
   // Performance Descriptors matching the official layout
   const performanceDescriptors = [
@@ -268,9 +306,11 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
           data = await getStudentSF10Details(identifier);
           if (data) setCachedSF10Data(data);
         } catch (fetchErr) {
+          if (userRole === "principal") throw fetchErr;
           console.warn("Could not fetch remote SF10 data, using client fallback:", fetchErr);
         }
       }
+      if (userRole === "principal" && !data) throw new Error("Official SF10 records are unavailable.");
 
       const lastName = getStudentLastName();
       const fileName = `${lastName}_SF10.xlsx`;
@@ -289,13 +329,14 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
     }
   };
 
+  if (loading) return <StudentReportSkeleton student={student} onBack={onBack} />;
+
   return (
-    <div className={`student-sf9-container${reportIdentifier ? " sf9-principal-report" : ""}`} aria-busy={loading}>
+    <div className="student-sf9-container" aria-busy={loading}>
       {sf9Data?.warnings?.length > 0 && <aside className="sf9-report-warnings" aria-label="Report completeness notes">
         <strong>Review before issuing</strong>
         <ul>{sf9Data.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>
       </aside>}
-      {loading && <p role="status" className="no-print">Loading student records…</p>}
       {loadError && (
         <div role="alert" className="no-print">
           <p>Student records could not be loaded.</p>
@@ -308,7 +349,7 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
       )}
       {/* Top Navigation / Breadcrumb Area */}
       <div className="sf9-header-bar no-print">
-        <button className="back-btn" onClick={onBack} title="Back to Class List">
+        <button className="back-btn" onClick={onBack} title={userRole === "principal" ? "Back to Reports" : "Back to Class List"}>
           <img src={backIconUrl} alt="Back" width={17} height={17} />
         </button>
         <h1 className="sf9-section-title">{studentProfile.section}</h1>
@@ -330,13 +371,16 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
           </div>
         </div>
 
-        {/* Term Grade average */}
+        {/* Availability of the selected school year's term grades */}
         <div className="sf9-card term-grade-card">
-          <span className="term-grade-label">{reportIdentifier ? "Final Average" : "Term Grade"}: {studentProfile.termGrade}</span>
-          <span className="honor-badge">
-            <Sparkles size={12} style={{ display: "inline-block", marginRight: "4px", verticalAlign: "middle" }} />
-            {studentProfile.honorStatus}
-          </span>
+          <span className="term-grade-label">Term Grade Availability</span>
+          <div className="sf9-term-availability" aria-label="Term grade availability">
+            {termAvailability.map(({ term, status, label, hint }) => (
+              <span className={`sf9-term-availability-item ${status}`} key={term} title={hint}>
+                <strong>T{term}</strong><span>{label}</span>
+              </span>
+            ))}
+          </div>
         </div>
 
         {/* Present Days */}
@@ -365,16 +409,21 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
           <div className="sf9-tabs-outer">
             <button
               className={`sf9-tab-button ${activeTab === "sf9" ? "active" : ""}`}
+              aria-pressed={activeTab === "sf9"}
               onClick={() => setActiveTab("sf9")}
             >
               Official SF9 Form
             </button>
-            {!reportIdentifier && <button
+            <button className={`sf9-tab-button ${activeTab === "sf10" ? "active" : ""}`}
+              aria-pressed={activeTab === "sf10"}
+              onClick={() => setActiveTab("sf10")}>Official SF10 Form</button>
+            <button
               className={`sf9-tab-button ${activeTab === "personal" ? "active" : ""}`}
+              aria-pressed={activeTab === "personal"}
               onClick={() => setActiveTab("personal")}
             >
               Personal Info
-            </button>}
+            </button>
           </div>
         ) : (
           <div className="sf9-tabs-outer">
@@ -385,6 +434,9 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
         )}
 
         {/* View Mode & Print Action Toolbar (Adviser SF9 view) */}
+        {activeTab === "sf10" && isAdviser && (
+          <div className="sf9-actions-toolbar" ref={setSF10ToolbarHost} />
+        )}
         {activeTab === "sf9" && isAdviser && (
           <div className="sf9-actions-toolbar">
             <div className="sf9-view-modes">
@@ -411,14 +463,6 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
               </button>
             </div>
 
-            <button
-              className="sf9-print-btn"
-              onClick={() => setIsSF10Open(true)}
-              title="Preview Form 10 (SF10)"
-            >
-              <FileText size={16} />
-              <span>Preview</span>
-            </button>
             <button className="sf9-download-btn" onClick={handleDownloadPDF} disabled={loading || loadError || !sf9Data} title="Download SF9 PDF">
               <Download size={16} />
               <span>Download PDF</span>
@@ -450,13 +494,12 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
                   <div className="sf9-header-text-center">
                     <p className="sf9-hdr-line">Republic of the Philippines</p>
                     <p className="sf9-hdr-line">Department of Education</p>
-                    <p className="sf9-hdr-line">{reportIdentifier ? sf9Data?.school?.region || "" : "Region X – Northern Mindanao"}</p>
-                    <p className="sf9-hdr-line font-bold">{reportIdentifier ? sf9Data?.school?.division || "" : "SCHOOLS DIVISION OFFICE OF GINGOOG CITY"}</p>
-                    {!reportIdentifier && <><p className="sf9-hdr-line">West 1 District</p><p className="sf9-hdr-line">Gingoog City, Misamis Oriental</p></>}
-                    <h3 className="sf9-school-name-title">{reportIdentifier ? sf9Data?.school?.name || "" : "GINGOOG CITY COMPREHENSIVE NATIONAL HIGH SCHOOL"}</h3>
+                    <p className="sf9-hdr-line">Region X – Northern Mindanao</p>
+                    <p className="sf9-hdr-line font-bold">SCHOOLS DIVISION OFFICE OF GINGOOG CITY</p>
+                    <p className="sf9-hdr-line">West 1 District</p><p className="sf9-hdr-line">Gingoog City, Misamis Oriental</p>
+                    <h3 className="sf9-school-name-title">GINGOOG CITY COMPREHENSIVE NATIONAL HIGH SCHOOL</h3>
                     <h2 className="sf9-report-doc-title">LEARNER'S PERFORMANCE REPORT</h2>
                     <p className="sf9-school-year-title">School Year {studentProfile.schoolYear}</p>
-                    {reportIdentifier && sf9Data?.warnings?.length > 0 && <p className="sf9-export-review-note">For review — incomplete or unverified fields remain blank.</p>}
                   </div>
                   <div className="sf9-header-logo-right">
                     <img src={gccnhsLogo} alt="GCCNS Seal" className="sf9-logo-img" />
@@ -758,6 +801,11 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
             </div>
 
         </div>
+      ) : activeTab === "sf10" && isAdviser ? (
+        <SF10PreviewModal isOpen inline student={sf10StudentProp}
+          toolbarTarget={sf10ToolbarHost}
+          initialData={cachedSF10Data} onDataLoaded={setCachedSF10Data}
+          requireOfficialData={userRole === "principal"} onClose={() => setActiveTab("sf9")} />
       ) : (
         /* Personal Info Tab Layout */
         <div className="personal-info-grid" style={!isAdviser ? { gridTemplateColumns: "1fr" } : undefined}>
@@ -773,27 +821,27 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
               <div className="profile-fields-list">
                 <div className="profile-field-group">
                   <span className="profile-field-label">Full Name</span>
-                  <span className="profile-field-value">{studentProfile.name || "CRUZ, ALEX MATTHEW"}</span>
+                  <span className="profile-field-value">{studentProfile.name || "—"}</span>
                 </div>
 
                 <div className="profile-field-group">
                   <span className="profile-field-label">Learner Reference Number</span>
-                  <span className="profile-field-value">{studentProfile.lrn || "145783920614"}</span>
+                  <span className="profile-field-value">{studentProfile.lrn || "—"}</span>
                 </div>
 
                 <div className="profile-field-group">
                   <span className="profile-field-label">Sex</span>
-                  <span className="profile-field-value">{studentProfile.sex || "Male"}</span>
+                  <span className="profile-field-value">{studentProfile.sex || "—"}</span>
                 </div>
 
                 <div className="profile-field-group">
                   <span className="profile-field-label">Date of Birth</span>
-                  <span className="profile-field-value">{studentProfile.dateOfBirth || "January 15, 2010"}</span>
+                  <span className="profile-field-value">{studentProfile.dateOfBirth || "—"}</span>
                 </div>
 
                 <div className="profile-field-group">
                   <span className="profile-field-label">Address</span>
-                  <span className="profile-field-value">{studentProfile.address || "123 Rizal Street, Brgy. San Isidro, Manila"}</span>
+                  <span className="profile-field-value">{studentProfile.address || "—"}</span>
                 </div>
               </div>
             </div>
@@ -821,7 +869,7 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
                       <div className="doc-actions">
                         <button
                           className="btn-doc-action preview"
-                          onClick={() => setIsSF10Open(true)}
+                          onClick={() => setActiveTab("sf10")}
                           title="Preview Form 10"
                         >
                           <Eye size={14} />
@@ -851,7 +899,7 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
                 </div>
 
                 {/* Bulk Actions Card */}
-                <div className="doc-card">
+                {userRole !== "principal" && <div className="doc-card">
                   <div className="doc-details">
                     <h4 className="doc-title">Bulk Actions</h4>
                     <p className="doc-subtitle">Perform actions on multiple documents</p>
@@ -863,7 +911,7 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
                       </button>
                     </div>
                   </div>
-                </div>
+                </div>}
 
                 {/* Form 9 Card */}
                 <div className="doc-card">
@@ -880,7 +928,8 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
                           <Eye size={14} />
                           <span>Preview</span>
                         </button>
-                        <button className="btn-doc-action download" onClick={handleDownloadPDF} title="Download SF9">
+                        <button className="btn-doc-action download" onClick={handleDownloadPDF}
+                          disabled={loadError || !sf9Data} title="Download SF9">
                           <Download size={14} />
                           <span>Download</span>
                         </button>
@@ -894,36 +943,6 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
           )}
         </div>
       )}
-
-      {/* SF10 Preview Modal */}
-      <SF10PreviewModal
-        isOpen={isSF10Open}
-        onClose={() => setIsSF10Open(false)}
-        student={sf10StudentProp}
-      />
-
-      {/* Background Offscreen SF10 Document Template for Direct PDF Download */}
-      <div
-        aria-hidden="true"
-        style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          width: "816px",
-          height: "auto",
-          zIndex: -9999,
-          opacity: 0.001,
-          pointerEvents: "none",
-          overflow: "hidden"
-        }}
-      >
-        <SF10Document
-          student={sf10StudentProp}
-          sf10Data={cachedSF10Data}
-          page1Ref={offscreenPage1Ref}
-          page2Ref={offscreenPage2Ref}
-        />
-      </div>
 
       {/* Confirmation Toast Notification */}
       <Toast
