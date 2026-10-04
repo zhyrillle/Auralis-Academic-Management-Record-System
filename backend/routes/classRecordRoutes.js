@@ -1,8 +1,9 @@
-const express = require('express');
-const router = express.Router();
-const db = require('../config/db');
-const StudentGrade = require('../models/StudentGrade');
-const AuditEvent = require('../models/AuditEvent');
+const express             = require('express');
+const router              = express.Router();
+const db                  = require('../config/db');
+const StudentGrade        = require('../models/StudentGrade');
+const AuditEvent          = require('../models/AuditEvent');
+const NotificationService = require('../services/NotificationService');
 const {
   DEFAULT_JHS_WEIGHTS,
   weightsFromRows,
@@ -2768,9 +2769,8 @@ router.post('/class-record/submit', async (req, res) => {
     // Resolve subject offerings to submit
     let offeringIds = [];
     if (subject_offering_id) {
-      offeringIds.push(subject_offering_id);
-    }
-    if (section_id) {
+      offeringIds.push(Number(subject_offering_id));
+    } else if (section_id) {
       const [offerings] = await connection.execute(
         'SELECT subject_offering_id FROM SUBJECT_OFFERING WHERE section_id = ?',
         [section_id]
@@ -2842,11 +2842,17 @@ router.post('/class-record/submit', async (req, res) => {
           }
         }
       }
-      // Audit log the submission
+      // Resolve teacher, adviser, and offering info for audit and notifications
+      const actorUserId = req.headers['x-auralis-user-id'] || req.body.user_id || null;
+      let subjName = 'Subject';
+      let secName  = 'Section';
+      let syLabel  = null;
+      let teacherName = 'Subject Teacher';
+      let isAdviser = false;
+
       try {
-        const actorUserId = req.headers['x-auralis-user-id'] || req.body.user_id || null;
         const [targetInfo] = await connection.execute(
-          `SELECT sub.subject_name, sec.section_name, sy.starts_on, sy.ends_on
+          `SELECT sub.subject_name, sec.section_name, sec.section_id, sy.starts_on, sy.ends_on
            FROM SUBJECT_OFFERING so
            LEFT JOIN SUBJECT sub ON so.subject_id = sub.subject_id
            LEFT JOIN SECTION sec ON so.section_id = sec.section_id
@@ -2854,14 +2860,72 @@ router.post('/class-record/submit', async (req, res) => {
            WHERE so.subject_offering_id = ?`,
           [offId]
         );
-        const subjName = targetInfo[0]?.subject_name || 'Subject';
-        const secName = targetInfo[0]?.section_name || 'Section';
-        const syLabel = targetInfo[0]?.starts_on && targetInfo[0]?.ends_on ? `${targetInfo[0].starts_on}–${targetInfo[0].ends_on}` : null;
-        const targetStr = `${subjName} — ${secName}`;
+        subjName = targetInfo[0]?.subject_name || 'Subject';
+        secName  = targetInfo[0]?.section_name || 'Section';
+        syLabel  = targetInfo[0]?.starts_on && targetInfo[0]?.ends_on ? `${targetInfo[0].starts_on}–${targetInfo[0].ends_on}` : null;
+        const resolvedSecId = targetInfo[0]?.section_id || section_id;
 
+        if (actorUserId) {
+          const [uRows] = await connection.execute(
+            `SELECT CONCAT(first_name, ' ', last_name) AS full_name, role FROM USER WHERE user_id = ?`,
+            [actorUserId]
+          );
+          if (uRows.length && uRows[0].full_name && uRows[0].full_name.trim()) {
+            teacherName = uRows[0].full_name.trim();
+          }
+
+          if (resolvedSecId) {
+            const [advCheck] = await connection.execute(
+              `SELECT adviser_assignment_id FROM SECTION_ADVISER_ASSIGNMENT WHERE user_id = ? AND section_id = ? LIMIT 1`,
+              [actorUserId, resolvedSecId]
+            );
+            if (advCheck.length > 0) {
+              isAdviser = true;
+            }
+          }
+        } else {
+          // If no actorUserId in request, resolve assigned teacher or adviser for this class
+          const [taRows] = await connection.execute(
+            `SELECT CONCAT(u.first_name, ' ', u.last_name) AS full_name
+             FROM TEACHER_ASSIGNMENT ta
+             JOIN USER u ON ta.user_id = u.user_id
+             WHERE ta.subject_offering_id = ?
+             LIMIT 1`,
+            [offId]
+          );
+          if (taRows.length && taRows[0].full_name && taRows[0].full_name.trim()) {
+            teacherName = taRows[0].full_name.trim();
+          } else if (resolvedSecId) {
+            const [saaRows] = await connection.execute(
+              `SELECT CONCAT(u.first_name, ' ', u.last_name) AS full_name
+               FROM SECTION_ADVISER_ASSIGNMENT saa
+               JOIN USER u ON saa.user_id = u.user_id
+               WHERE saa.section_id = ?
+               LIMIT 1`,
+              [resolvedSecId]
+            );
+            if (saaRows.length && saaRows[0].full_name && saaRows[0].full_name.trim()) {
+              teacherName = saaRows[0].full_name.trim();
+              isAdviser = true;
+            }
+          }
+        }
+      } catch (infoErr) {
+        console.warn('Failed to resolve offering/actor info:', infoErr.message);
+      }
+
+      const submitterRoleLabel = isAdviser ? 'Adviser' : 'Subject Teacher';
+      const targetStr = `${subjName} — ${secName}`;
+
+      // Audit log the submission
+      try {
         await AuditEvent.create({
           user_id: actorUserId ? Number(actorUserId) : null,
-          actor_context: { source: 'user', acting_as: 'Subject Teacher', role: 'subject_teacher' },
+          actor_context: {
+            source: 'user',
+            acting_as: isAdviser ? 'Class Adviser' : 'Subject Teacher',
+            role: isAdviser ? 'adviser' : 'subject_teacher',
+          },
           event_type: 'GRADE_SHEET_SUBMITTED',
           module_name: 'GRADING',
           entity_type: 'GRADE_SHEET',
@@ -2873,12 +2937,28 @@ router.post('/class-record/submit', async (req, res) => {
             subject: subjName,
             section: secName,
             target: targetStr,
-            summary: `Submitted ${termName} ${subjName} grade sheet for ${secName}.`,
-            impact: 'Medium',
-          }
-        }, connection);
+            summary: `${teacherName} (${submitterRoleLabel}) submitted ${termName} ${subjName} grade sheet for ${secName}.`,
+          },
+        });
       } catch (auditErr) {
         console.error('Failed to log grade sheet submission audit:', auditErr.message);
+      }
+
+      // ── Notify Department Head of grade submission via NotificationService ──
+      try {
+        await NotificationService.notifyGradeSubmission({
+          subjectOfferingId: offId,
+          gradeSheetId,
+          teacherName,
+          submitterRole: isAdviser ? 'Adviser' : null,
+          subjectName: subjName,
+          sectionName: secName,
+          termName,
+          connection,   // reuse transaction connection so notifs are part of the same commit
+        });
+      } catch (notifErr) {
+        // Notification failure must never roll back the grade submission itself
+        console.warn('[classRecordRoutes] Failed to send dept-head notification:', notifErr.message);
       }
     }
 

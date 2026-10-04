@@ -1,6 +1,7 @@
 const express = require('express');
 const GradeReopenRequest = require('../models/GradeReopenRequest');
 const GradingPeriodService = require('../services/GradingPeriodService');
+const NotificationService = require('../services/NotificationService');
 const { resolveCurrentUser, requireSystemAdmin } = require('../middleware/resolveCurrentUser');
 const uploadRequestFile = require('../middleware/uploadRequestFile');
 const { uploadRequestFile: uploadToCloudinary } = require('../services/requestFileStorage');
@@ -65,6 +66,22 @@ router.post('/', (req, res, next) => {
         file_size: files.reduce((sum, file) => sum + file.size, 0) || null,
       },
     );
+
+    // ── Notify Department Head via NotificationService ──
+    try {
+      const teacherName = `${req.currentUser?.first_name || ''} ${req.currentUser?.last_name || ''}`.trim() || 'Subject Teacher';
+      await NotificationService.notifyReopenRequest({
+        requestId: request.request_id,
+        teacherName,
+        subjectName: eligibility.subject_name || 'Subject',
+        sectionName: eligibility.section_name || 'Section',
+        reason: req.body.reason.trim(),
+        subjectOfferingId: eligibility.subject_offering_id || null,
+      });
+    } catch (notifErr) {
+      console.warn('[gradeReopenRequestRoutes] Failed to send reopen notification:', notifErr.message);
+    }
+
     return res.status(201).json({ message: 'Reopening request submitted.', request_id: request.request_id, request });
   } catch (error) { return handleError(error, res); }
 });
@@ -80,4 +97,5 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', (_req, res) => res.status(405).json({
   code: 'WORKFLOW_REQUIRED', error: 'Reopening history cannot be deleted. Cancel a pending request instead.',
 }));
+
 module.exports = router;
