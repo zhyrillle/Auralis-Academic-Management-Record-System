@@ -234,6 +234,7 @@ async function releasePrematurelyLockedSheets() {
 }
 
 async function runLifecycleGuard() {
+  await AcademicTerm.synchronizeStatuses();
   await expireTemporaryReopenings();
   await finalizePastDeadlineSheets();
   await releasePrematurelyLockedSheets();
@@ -389,6 +390,37 @@ async function getDepartmentStatus(termId) {
   });
 }
 
+async function getSubjectStatus(termId) {
+  // SUBJECT has no status column. Use its full catalog, with sheet counts scoped to the selected term/year.
+  const [rows] = await db.execute(
+    `SELECT s.subject_id, s.subject_name,
+      COALESCE(d.department_name, 'Unassigned Department') AS department_name,
+      COUNT(gs.grade_sheet_id) AS total,
+      SUM(gs.workflow_status = 'SUBMITTED') AS submitted,
+      SUM(gs.workflow_status = 'DRAFT') AS draft
+    FROM SUBJECT s
+    INNER JOIN ACADEMIC_TERM at ON at.term_id = ?
+    LEFT JOIN DEPARTMENT d ON d.department_id = s.department_id
+    LEFT JOIN SUBJECT_OFFERING so
+      ON so.subject_id = s.subject_id AND so.school_year_id = at.school_year_id
+    LEFT JOIN GRADE_SHEET gs
+      ON gs.subject_offering_id = so.subject_offering_id AND gs.term_id = at.term_id
+    GROUP BY s.subject_id, s.subject_name, d.department_name
+    ORDER BY s.subject_name`,
+    [termId]
+  );
+  return rows.map(row => {
+    const total = Number(row.total || 0);
+    const submitted = Number(row.submitted || 0);
+    return {
+      id: String(row.subject_id), name: row.subject_name,
+      department: row.department_name, total, submitted,
+      draft: Number(row.draft || 0),
+      progress: total ? Math.round(submitted / total * 100) : null,
+    };
+  });
+}
+
 async function getReopeningRequests(termId) {
   const [rows] = await db.execute(
     `SELECT
@@ -468,7 +500,7 @@ async function getActiveReopenings(termId) {
   return rows;
 }
 
-async function getSubmissionRecords(termId) {
+async function getGradeSheetRecords(termId) {
   const [rows] = await db.execute(
     `SELECT
       gs.grade_sheet_id,
@@ -504,7 +536,6 @@ async function getSubmissionRecords(termId) {
       ON ta.subject_offering_id = so.subject_offering_id
     LEFT JOIN \`USER\` teacher ON teacher.user_id = ta.user_id
     WHERE gs.term_id = ?
-      AND gs.workflow_status = 'SUBMITTED'
     GROUP BY
       gs.grade_sheet_id,
       gs.term_id,
@@ -523,6 +554,10 @@ async function getSubmissionRecords(termId) {
   return rows;
 }
 
+async function getSubmissionRecords(termId) {
+  return (await getGradeSheetRecords(termId)).filter(row => row.workflow_status === 'SUBMITTED');
+}
+
 async function getContext(requestedSchoolYearId) {
   await runLifecycleGuard();
   const schoolYears = await getSchoolYears();
@@ -532,7 +567,9 @@ async function getContext(requestedSchoolYearId) {
       selectedSchoolYearId: null,
       terms: [],
       departmentsByTerm: {},
+      subjectsByTerm: {},
       submissionRecordsByTerm: {},
+      gradeSheetRecordsByTerm: {},
       reopeningRequests: [],
       activeReopenings: [],
     };
@@ -556,13 +593,19 @@ async function getContext(requestedSchoolYearId) {
       )
     : [];
   const departmentsByTerm = {};
+  const subjectsByTerm = {};
   const submissionRecordsByTerm = {};
+  const gradeSheetRecordsByTerm = {};
   const reopeningRequests = [];
   const activeReopenings = [];
 
   for (const term of terms) {
     departmentsByTerm[String(term.term_id)] = await getDepartmentStatus(term.term_id);
-    submissionRecordsByTerm[String(term.term_id)] = await getSubmissionRecords(term.term_id);
+    subjectsByTerm[String(term.term_id)] = await getSubjectStatus(term.term_id);
+    const records = await getGradeSheetRecords(term.term_id);
+    gradeSheetRecordsByTerm[String(term.term_id)] = records;
+    // Preserve the submitted-only response for existing consumers.
+    submissionRecordsByTerm[String(term.term_id)] = records.filter(row => row.workflow_status === 'SUBMITTED');
     reopeningRequests.push(...await getReopeningRequests(term.term_id));
     activeReopenings.push(...await getActiveReopenings(term.term_id));
   }
@@ -576,7 +619,9 @@ async function getContext(requestedSchoolYearId) {
     upcomingCalendarRule: upcomingSchoolYear ? CALENDAR_RULE : null,
     suggestedUpcomingTerms,
     departmentsByTerm,
+    subjectsByTerm,
     submissionRecordsByTerm,
+    gradeSheetRecordsByTerm,
     reopeningRequests,
     activeReopenings,
   };
@@ -997,6 +1042,7 @@ module.exports = {
   runLifecycleGuard,
   ensureUpcomingSchoolYear,
   __test: {
+    computedTermStatus,
     getReopeningDefaultSchoolYear,
     validateTimeline,
     deriveReopeningWindow,
@@ -1006,8 +1052,10 @@ module.exports = {
     isReopenableLockedSheet,
     getReopeningRequestType,
     getDepartmentStatus,
+    getSubjectStatus,
     getReopeningRequests,
     getActiveReopenings,
     getSubmissionRecords,
+    getGradeSheetRecords,
   },
 };

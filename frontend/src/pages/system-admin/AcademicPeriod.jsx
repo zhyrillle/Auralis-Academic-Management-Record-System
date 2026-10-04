@@ -64,7 +64,8 @@ export default function AcademicPeriod({ user }) {
   const [selectedTermId, setSelectedTermId] = useState(null);
   const [terms, setTerms] = useState([]);
   const [departmentsByTerm, setDepartmentsByTerm] = useState({});
-  const [submissionRecordsByTerm, setSubmissionRecordsByTerm] = useState({});
+  const [subjectsByTerm, setSubjectsByTerm] = useState({});
+  const [gradeSheetRecordsByTerm, setGradeSheetRecordsByTerm] = useState({});
   const [reopeningRequests, setReopeningRequests] = useState([]);
   const [activeReopenings, setActiveReopenings] = useState([]);
   const [upcomingSchoolYear, setUpcomingSchoolYear] = useState(null);
@@ -111,7 +112,8 @@ export default function AcademicPeriod({ user }) {
         setSelectedSchoolYearId(context.selectedSchoolYearId);
         setTerms(context.terms);
         setDepartmentsByTerm(context.departmentsByTerm);
-        setSubmissionRecordsByTerm(context.submissionRecordsByTerm);
+        setSubjectsByTerm(context.subjectsByTerm);
+        setGradeSheetRecordsByTerm(context.gradeSheetRecordsByTerm);
         setReopeningRequests(context.reopeningRequests);
         setActiveReopenings(context.activeReopenings);
         setUpcomingSchoolYear(context.upcomingSchoolYear);
@@ -417,7 +419,8 @@ export default function AcademicPeriod({ user }) {
               reopeningRequests={reopeningRequests}
               activeReopenings={activeReopenings}
               departmentsByTerm={departmentsByTerm}
-              submissionRecordsByTerm={submissionRecordsByTerm}
+              subjectsByTerm={subjectsByTerm}
+              gradeSheetRecordsByTerm={gradeSheetRecordsByTerm}
               onSelectTerm={handleSelectTerm}
               onViewTermTimeline={handleViewTermTimeline}
               onReviewRequest={setReviewRequestId}
