@@ -64,9 +64,6 @@
 .pr-status-pill--unavailable { color: #64748b; background: #f1f5f9; }
 .pr-action-view-btn { display: inline-flex; align-items: center; justify-content: center; padding: 6px 16px; border: 1px solid #cbd5e1; border-radius: 7px; color: var(--pr-navy); background: #fff; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
 .pr-action-view-btn:hover { color: #fff; background: var(--pr-navy); border-color: var(--pr-navy); }
-.pr-action-eye-btn { display: inline-flex; align-items: center; justify-content: center; width: 65px; height: 28px; padding: 0; border: 0; border-radius: 8px; background: var(--button-secondary-color, #c9a227); color: var(--white-text-color, #fff); cursor: pointer; transition: background-color 0.15s ease; }
-.pr-action-eye-btn:hover { background: var(--button-secondary-darker-color, #886c14); }
-.pr-action-eye-btn:focus-visible { outline: 2px solid var(--pr-navy); outline-offset: 3px; }
 .pr-empty { padding: 28px 8px; color: #64748b; }
 .pr-empty > svg { margin-bottom: 12px; }
 .pr-empty p { margin: 8px 0 16px; }
@@ -129,7 +126,6 @@
   .pr-cards-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 640px) {
-  .pr-action-eye-btn { min-height: 44px; }
   .pr-title { font-size: 24px; }
   .pr-term-control { width: 100%; }
   .pr-term-control .pa-term-tabs { display: flex; width: 100%; }
