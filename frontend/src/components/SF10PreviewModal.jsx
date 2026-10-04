@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
-import { X, Printer, Download, Loader2, AlertCircle } from "lucide-react";
+import { X, Printer, Download, FileSpreadsheet, Loader2, AlertCircle } from "lucide-react";
 import SF10Document, { safeStr, parseNameParts } from "./SF10Document";
+import { exportSf10Excel } from "../utils/exportSf10Excel";
 import { generateSF10PdfFromPages } from "../utils/sf10PdfGenerator";
 import { getStudentSF10Details } from "../services/reportService";
 import "../styles/SF10PreviewModal.css";
@@ -180,16 +181,19 @@ function SF10PreviewModalContent({ isOpen, onClose, student }) {
     window.print();
   };
 
-  const handleDownloadPdf = async () => {
-    if (!page1Ref.current || !page2Ref.current) return;
+  const handleDownloadExcel = async () => {
     setDownloading(true);
 
     try {
-      const fileName = `${getLastNameForFile()}_SF10.pdf`;
-      await generateSF10PdfFromPages(page1Ref.current, page2Ref.current, fileName);
+      const fileName = `${getLastNameForFile()}_SF10.xlsx`;
+      await exportSf10Excel({
+        student,
+        sf10Data,
+        fileName
+      });
     } catch (err) {
-      console.error("Error generating SF10 PDF:", err);
-      alert("Failed to export PDF document. Please try using the Print option instead.");
+      console.error("Error generating SF10 Excel:", err);
+      alert("Failed to export Excel document. Please try again.");
     } finally {
       setDownloading(false);
     }
@@ -212,12 +216,12 @@ function SF10PreviewModalContent({ isOpen, onClose, student }) {
             </button>
             <button
               className="sf10-btn sf10-btn-download"
-              onClick={handleDownloadPdf}
+              onClick={handleDownloadExcel}
               disabled={downloading || loading}
-              title="Download 2-Page PDF"
+              title="Download Form 10 Excel (.xlsx)"
             >
-              {downloading ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
-              <span>{downloading ? "Generating PDF..." : "Download PDF"}</span>
+              {downloading ? <Loader2 size={15} className="animate-spin" /> : <FileSpreadsheet size={15} />}
+              <span>{downloading ? "Generating Excel..." : "Download (.xlsx)"}</span>
             </button>
             <button className="sf10-btn-close" onClick={onClose} title="Close Preview">
               <X size={18} />

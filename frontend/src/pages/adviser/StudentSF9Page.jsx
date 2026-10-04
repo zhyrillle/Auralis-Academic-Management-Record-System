@@ -12,7 +12,7 @@ import Toast from "../../components/common/Toast.jsx";
 import { exportSf9Pdf } from "../../utils/exportSf9Pdf";
 import SF10PreviewModal from "../../components/SF10PreviewModal.jsx";
 import SF10Document from "../../components/SF10Document.jsx";
-import { generateSF10PdfFromPages } from "../../utils/sf10PdfGenerator.js";
+import { exportSf10Excel } from "../../utils/exportSf10Excel.js";
 
 export default function StudentSF9Page(props) {
   const student = props.student;
@@ -252,7 +252,7 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
   const handleDirectDownloadSF10 = async () => {
     if (downloadingSF10) return;
     setDownloadingSF10(true);
-    showToast("Generating Form 10 PDF...", "info");
+    showToast("Generating Form 10 Excel (.xlsx)...", "info");
 
     try {
       let data = cachedSF10Data;
@@ -272,24 +272,18 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
         }
       }
 
-      // Small delay to ensure any data update has flushed to the offscreen DOM
-      await new Promise((resolve) => setTimeout(resolve, 300));
-
-      const page1 = offscreenPage1Ref.current;
-      const page2 = offscreenPage2Ref.current;
-
-      if (!page1 || !page2) {
-        throw new Error("SF10 document template not ready.");
-      }
-
       const lastName = getStudentLastName();
-      const fileName = `${lastName}_SF10.pdf`;
+      const fileName = `${lastName}_SF10.xlsx`;
 
-      await generateSF10PdfFromPages(page1, page2, fileName);
+      await exportSf10Excel({
+        student: sf10StudentProp,
+        sf10Data: data,
+        fileName
+      });
       showToast(`Successfully downloaded ${fileName}!`, "success");
     } catch (err) {
-      console.error("Direct SF10 download error:", err);
-      showToast("Failed to generate Form 10 PDF. Please try again.", "error");
+      console.error("Direct SF10 Excel download error:", err);
+      showToast("Failed to generate Form 10 Excel file. Please try again.", "error");
     } finally {
       setDownloadingSF10(false);
     }
@@ -818,11 +812,11 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
                 <div className="doc-card">
                   <div className="doc-card-top">
                     <div className="doc-icon-box">
-                      <FileText size={22} />
+                      <FileSpreadsheet size={22} />
                     </div>
                     <div className="doc-details">
                       <h4 className="doc-title">Form 10 - Permanent Record</h4>
-                      <p className="doc-subtitle">Official cumulative student record</p>
+                      <p className="doc-subtitle">Official cumulative student record (.xlsx)</p>
                       <span className="doc-status-badge">Available</span>
                       <div className="doc-actions">
                         <button
@@ -837,7 +831,7 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
                           className="btn-doc-action download"
                           onClick={handleDirectDownloadSF10}
                           disabled={downloadingSF10}
-                          title="Download Form 10"
+                          title="Download Form 10 Excel (.xlsx)"
                         >
                           {downloadingSF10 ? (
                             <>
@@ -846,8 +840,8 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
                             </>
                           ) : (
                             <>
-                              <Download size={14} />
-                              <span>Download</span>
+                              <FileSpreadsheet size={14} />
+                              <span>Download (.xlsx)</span>
                             </>
                           )}
                         </button>
