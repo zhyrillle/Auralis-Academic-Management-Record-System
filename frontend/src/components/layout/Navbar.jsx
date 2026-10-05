@@ -11,11 +11,22 @@ export default function Navbar({
   const navigate = useNavigate();
   const showNotifications = !["system-admin", "principal"].includes(normalizeRole(user));
 
+  const isDeptHeadClassRecord =
+    location.pathname.startsWith("/department-head/class-records") ||
+    location.pathname === "/department-head/class-records";
+
   // Dynamic breadcrumbs based on route
   const getBreadcrumbs = () => {
     const pathname = location.pathname;
 
-    // Check for Section Details or Class Record routes
+    if (isDeptHeadClassRecord) {
+      return [
+        { label: "Class records", link: "/department-head/class-records" },
+        { label: "Records", link: "/department-head/class-records" },
+      ];
+    }
+
+    // Check for Section Details or Class Record routes (Adviser / Teacher)
     const isSectionDetails =
       pathname === "/adviser/sections/details" ||
       pathname === "/teacher/sections/details" ||
@@ -23,7 +34,7 @@ export default function Navbar({
 
     const isClassRecord =
       pathname.startsWith("/class-record") ||
-      pathname.includes("/class-record");
+      (pathname.includes("/class-record") && !pathname.includes("/department-head"));
 
     if (isSectionDetails || isClassRecord) {
       return [
@@ -49,10 +60,11 @@ export default function Navbar({
 
   const breadcrumbs = getBreadcrumbs();
 
-  const currentTitle =
-    breadcrumbs.length > 0
-      ? breadcrumbs[breadcrumbs.length - 1].label
-      : "Dashboard";
+  const currentTitle = isDeptHeadClassRecord
+    ? "Class records"
+    : breadcrumbs.length > 0
+    ? breadcrumbs[breadcrumbs.length - 1].label
+    : "Dashboard";
 
   return (
     <header className="navbar-container">
@@ -83,13 +95,15 @@ export default function Navbar({
 
           {breadcrumbs.length > 0 && (
             <div className="navbar-breadcrumbs">
-              <span
-                onClick={() => navigate("/")}
-                style={{ cursor: "pointer" }}
-                title="Go to Home"
-              >
-                Home
-              </span>
+              {!isDeptHeadClassRecord && (
+                <span
+                  onClick={() => navigate("/")}
+                  style={{ cursor: "pointer" }}
+                  title="Go to Home"
+                >
+                  Home
+                </span>
+              )}
 
               {breadcrumbs.map((bc, index) => (
                 <span
@@ -100,7 +114,7 @@ export default function Navbar({
                     gap: "4px",
                   }}
                 >
-                  <ChevronRight size={12} />
+                  {(!isDeptHeadClassRecord || index > 0) && <ChevronRight size={12} />}
                   {index < breadcrumbs.length - 1 ? (
                     <span
                       onClick={() => navigate(bc.link)}
