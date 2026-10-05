@@ -1145,6 +1145,12 @@
   background-color: #b88a1b;
 }
 
+.btn-doc-action:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
 @media screen {
   .sf9-official-sheet.hide-on-screen {
     display: none !important;
