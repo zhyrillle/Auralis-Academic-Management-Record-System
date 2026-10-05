@@ -835,7 +835,7 @@ function renderCertificationBlockExcel(worksheet, cert, startRowNum, isTransfer 
  * enforces worksheet protection with cell locking rules, eliminates double borders,
  * uses hex #DDD9C4 for title headers, and strictly follows the required learning area sequence.
  */
-export async function exportSf10Excel({ student = {}, sf10Data = null, fileName = "" }) {
+export async function exportSf10Excel({ student = {}, sf10Data = null, fileName = "", skipDownload = false }) {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "Auralis Academic Record Management System";
   workbook.created = new Date();
@@ -1259,12 +1259,12 @@ export async function exportSf10Excel({ student = {}, sf10Data = null, fileName 
   // WRITE & TRIGGER BROWSER DOWNLOAD
   // ============================================================
   const resolvedFileName = fileName || `${learner.last_name || "STUDENT"}_SF10.xlsx`;
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
 
-  if (typeof window !== "undefined" && window.document) {
-    const buffer = await workbook.xlsx.writeBuffer();
-    const blob = new Blob([buffer], {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    });
+  if (!skipDownload && typeof window !== "undefined" && window.document) {
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
@@ -1274,6 +1274,10 @@ export async function exportSf10Excel({ student = {}, sf10Data = null, fileName 
     document.body.removeChild(link);
     window.URL.revokeObjectURL(url);
   }
+
+  workbook.blob = blob;
+  workbook.buffer = buffer;
+  workbook.fileName = resolvedFileName;
 
   return workbook;
 }

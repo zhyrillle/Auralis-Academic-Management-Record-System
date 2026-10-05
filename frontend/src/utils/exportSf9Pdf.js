@@ -14,6 +14,7 @@ export async function exportSf9Pdf({
   comments = { term1: "", term2: "", term3: "" },
   depedLogo,
   gccnhsLogo,
+  skipDownload = false,
 }) {
   const container = document.createElement("div");
   container.style.position = "absolute";
@@ -384,7 +385,14 @@ export async function exportSf9Pdf({
 
     const nameParts = (studentProfile.name || "STUDENT").split(",");
     const lastName = nameParts[0].trim().toUpperCase().replace(/[^A-Z0-9_-]/gi, "");
-    pdf.save(`${lastName || "STUDENT"}_SF9.pdf`);
+    const resolvedFileName = `${lastName || "STUDENT"}_SF9.pdf`;
+
+    if (!skipDownload) {
+      pdf.save(resolvedFileName);
+    }
+
+    const blob = pdf.output("blob");
+    return { pdf, blob, fileName: resolvedFileName };
   } finally {
     document.body.removeChild(container);
   }

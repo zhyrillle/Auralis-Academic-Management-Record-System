@@ -326,6 +326,13 @@
   transform: scale(0.98);
 }
 
+.adviser-dashboard__doc-download-btn:disabled,
+.adviser-dashboard__bulk-download-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
 /* Entry Progress Gauge Card */
 .adviser-dashboard__entry-gauge-card {
   background: linear-gradient(to bottom, #FFFFFF 0%, #FFF3B0 100%);

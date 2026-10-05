@@ -1,13 +1,29 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   FileText,
   Download,
   AlertCircle,
+  Loader2,
+  CheckCircle2,
 } from "lucide-react";
+import JSZip from "jszip";
 
 // Auth
 import { getStoredUser } from "../../utils/auth";
+
+// Exporters & Assets
+import { exportSf9Pdf } from "../../utils/exportSf9Pdf";
+import { exportSf10Excel } from "../../utils/exportSf10Excel";
+import depedLogo from "../../assets/deped_logo.png";
+import gccnhsLogo from "../../assets/gccnhs_logo.png";
+import Toast from "../../components/common/Toast.jsx";
+
+// Student & Report Services
+import { getStudentSF9Details } from "../../services/studentSf9Service";
+import { getStudentSF10Details } from "../../services/reportService";
+import { getAdviserSections, getStudentsBySection } from "../../services/sectionService";
+import { getSectionDetails } from "../../services/sectionDetailsService";
 
 // Services
 import {
@@ -274,8 +290,296 @@ export default function AdviserDashboard() {
     );
   };
 
-  const handleDownloadDoc = (docType) => {
-    alert(`Generating and downloading ${docType}...`);
+  const toastTimerRef = useRef(null);
+  const [downloadingDoc, setDownloadingDoc] = useState(null);
+  const [toast, setToast] = useState({ message: "", variant: "info", icon: null, persistent: false });
+
+  const showToast = (message, variant = "info", icon = null, persistent = false) => {
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+      toastTimerRef.current = null;
+    }
+
+    setToast({ message, variant, icon, persistent });
+
+    // Only set auto-dismiss timer for non-persistent toasts (e.g. final success or error message)
+    if (!persistent && (variant === "success" || variant === "error")) {
+      toastTimerRef.current = setTimeout(() => {
+        setToast({ message: "", variant: "info", icon: null, persistent: false });
+        toastTimerRef.current = null;
+      }, 5000);
+    }
+  };
+
+  const handleDownloadDoc = async (docType) => {
+    if (downloadingDoc) return;
+    setDownloadingDoc(docType);
+
+    const isSF9 = docType === "SF9 Report Card";
+    const isSF10 = docType === "SF10 Permanent Record";
+    const isBulk = docType === "Bulk Documents" || (!isSF9 && !isSF10);
+
+    const docLabel = isSF9 ? "SF9 Report Cards" : isSF10 ? "SF10 Permanent Records" : "SF9 & SF10 Documents";
+    showToast(`Preparing ${docLabel} bulk download...`, "info", Loader2, true);
+
+    try {
+      const userId = currentUser?.user_id || currentUser?.id;
+
+      // 1. Locate the logged-in user's advisory class
+      let advClass = assignedClasses.find(
+        (c) =>
+          c.isAdviser === true ||
+          c.assignmentType === "advisory" ||
+          (typeof c.classType === "string" && c.classType.toLowerCase().includes("advisory"))
+      );
+
+      if (!advClass && userId) {
+        try {
+          const sections = await getAdviserSections(userId);
+          if (Array.isArray(sections) && sections.length > 0) {
+            advClass =
+              sections.find(
+                (s) =>
+                  s.isAdviser === true ||
+                  (typeof s.classType === "string" && s.classType.toLowerCase().includes("advisory"))
+              ) || sections[0];
+          }
+        } catch (e) {
+          console.warn("Could not fetch adviser sections:", e);
+        }
+      }
+
+      if (!advClass && assignedClasses.length > 0) {
+        advClass = assignedClasses[0];
+      }
+
+      if (!advClass) {
+        throw new Error("No Advisory Class found for your account.");
+      }
+
+      const sectionId = advClass.section_id || advClass.id;
+      const sectionName = advClass.sectionName || advClass.section || "Advisory_Class";
+      const cleanSectionName = String(sectionName).trim().replace(/[^a-zA-Z0-9_-]/g, "_");
+
+      // 2. Fetch students enrolled in this advisory class
+      showToast(`Loading students for section ${sectionName}...`, "info", Loader2, true);
+      let students = [];
+
+      if (sectionId) {
+        try {
+          students = await getStudentsBySection(sectionId);
+        } catch (e) {
+          console.warn("getStudentsBySection failed, trying getSectionDetails:", e);
+        }
+      }
+
+      const assignmentId =
+        advClass.assignmentId ||
+        advClass.adviser_assignment_id ||
+        advClass.section_id;
+
+      if ((!students || students.length === 0) && assignmentId && userId) {
+        try {
+          const details = await getSectionDetails({
+            assignmentType: "advisory",
+            assignmentId,
+            userId,
+            term: "T1",
+          });
+          if (details?.learners && Array.isArray(details.learners)) {
+            students = details.learners;
+          }
+        } catch (e) {
+          console.warn("getSectionDetails failed:", e);
+        }
+      }
+
+      if (!students || students.length === 0) {
+        throw new Error(`No students found in advisory section ${sectionName}.`);
+      }
+
+      showToast(`Generating documents for ${students.length} students...`, "info", Loader2, true);
+
+      // 3. Initialize ZIP and folder structure
+      const zip = new JSZip();
+      const sf9Folder = isBulk ? zip.folder("SF9") : zip;
+      const sf10Folder = isBulk ? zip.folder("SF10") : zip;
+
+      const usedSf9Names = new Set();
+      const usedSf10Names = new Set();
+
+      const makeUniqueName = (base, ext, set) => {
+        let name = `${base}.${ext}`;
+        let counter = 1;
+        while (set.has(name)) {
+          name = `${base}_${counter}.${ext}`;
+          counter++;
+        }
+        set.add(name);
+        return name;
+      };
+
+      let successCount = 0;
+
+      // 4. Sequentially process each student to prevent memory spikes & provide clear progress
+      for (let i = 0; i < students.length; i++) {
+        const student = students[i];
+        const studentIdentifier =
+          student.student_id ||
+          student.studentId ||
+          student.student_section_id ||
+          student.studentSectionId ||
+          student.lrn ||
+          student.id;
+
+        const lastName = String(
+          student.lastName ||
+          student.last_name ||
+          (student.name ? student.name.split(",")[0] : "STUDENT")
+        ).trim().toUpperCase().replace(/[^A-Z0-9_-]/gi, "") || "STUDENT";
+
+        const firstName = String(
+          student.firstName ||
+          student.first_name ||
+          (student.name && student.name.includes(",") ? student.name.split(",")[1].trim().split(/\s+/)[0] : "")
+        ).trim().toUpperCase().replace(/[^A-Z0-9_-]/gi, "");
+
+        const studentBaseName = firstName ? `${lastName}_${firstName}` : lastName;
+
+        showToast(
+          `Generating documents (${i + 1}/${students.length}): ${student.name || `${lastName}, ${firstName}`}...`,
+          "info",
+          Loader2,
+          true
+        );
+
+        // --- Generate SF9 if requested ---
+        if (isSF9 || isBulk) {
+          try {
+            let sf9Data = null;
+            if (studentIdentifier) {
+              try {
+                sf9Data = await getStudentSF9Details(studentIdentifier, {
+                  schoolYearId: advClass.schoolYearId || advClass.school_year_id,
+                });
+              } catch (sf9FetchErr) {
+                console.warn(`Could not fetch dynamic SF9 data for student ${studentIdentifier}:`, sf9FetchErr);
+              }
+            }
+
+            const studentProfile = {
+              ...(sf9Data?.studentProfile || {}),
+              name: sf9Data?.studentProfile?.name || student.name || `${lastName}, ${firstName}`.trim(),
+              lrn: sf9Data?.studentProfile?.lrn || student.lrn || "",
+              gradeLevel: sf9Data?.studentProfile?.gradeLevel || advClass.gradeLevel || advClass.grade_level_name || "",
+              grade: sf9Data?.studentProfile?.grade || advClass.gradeLevel || advClass.grade_level_name || "",
+              section: sf9Data?.studentProfile?.section || advClass.sectionName || advClass.section || sectionName,
+              program: sf9Data?.studentProfile?.program || advClass.program_name || advClass.program || "",
+              sex: sf9Data?.studentProfile?.sex || student.sex || "",
+              age: sf9Data?.studentProfile?.age ?? student.age ?? "",
+              schoolYear: sf9Data?.studentProfile?.schoolYear || advClass.schoolYear || advClass.school_year || "",
+            };
+
+            const sf9Result = await exportSf9Pdf({
+              studentProfile,
+              grades: sf9Data?.grades || [],
+              performanceDescriptors: sf9Data?.performanceDescriptors || [],
+              attendanceData: sf9Data?.attendanceData || {
+                months: ["Jun", "Jul", "Aug", "Sept", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr"],
+                classDays: new Array(11).fill(0),
+                daysPresent: new Array(11).fill(0),
+                daysAbsent: new Array(11).fill(0),
+              },
+              comments: { term1: "", term2: "", term3: "" },
+              depedLogo,
+              gccnhsLogo,
+              skipDownload: true,
+            });
+
+            if (sf9Result?.blob) {
+              const uniqueSf9FileName = makeUniqueName(`${studentBaseName}_SF9`, "pdf", usedSf9Names);
+              sf9Folder.file(uniqueSf9FileName, sf9Result.blob);
+              successCount++;
+            }
+          } catch (sf9Err) {
+            console.error(`Error generating SF9 for student ${studentIdentifier}:`, sf9Err);
+          }
+        }
+
+        // --- Generate SF10 if requested ---
+        if (isSF10 || isBulk) {
+          try {
+            let sf10Data = null;
+            if (studentIdentifier) {
+              try {
+                sf10Data = await getStudentSF10Details(studentIdentifier);
+              } catch (sf10FetchErr) {
+                console.warn(`Could not fetch dynamic SF10 data for student ${studentIdentifier}:`, sf10FetchErr);
+              }
+            }
+
+            const sf10StudentProp = {
+              ...student,
+              studentId: student.student_id || student.id,
+              studentSectionId: student.student_section_id || student.studentSectionId,
+              lrn: student.lrn,
+              name: student.name || `${lastName}, ${firstName}`.trim(),
+              section: advClass.sectionName || advClass.section || sectionName,
+              gradeLevel: advClass.gradeLevel || advClass.grade_level_name || "",
+            };
+
+            const uniqueSf10FileName = makeUniqueName(`${studentBaseName}_SF10`, "xlsx", usedSf10Names);
+
+            const sf10Result = await exportSf10Excel({
+              student: sf10StudentProp,
+              sf10Data,
+              fileName: uniqueSf10FileName,
+              skipDownload: true,
+            });
+
+            const sf10Blob = sf10Result?.blob || sf10Result?.buffer;
+            if (sf10Blob) {
+              sf10Folder.file(uniqueSf10FileName, sf10Blob);
+              successCount++;
+            }
+          } catch (sf10Err) {
+            console.error(`Error generating SF10 for student ${studentIdentifier}:`, sf10Err);
+          }
+        }
+      }
+
+      if (successCount === 0) {
+        throw new Error("No document files could be generated.");
+      }
+
+      // 5. Compress and download ZIP
+      showToast("Compressing files into ZIP archive...", "info", Loader2, true);
+      const zipBlob = await zip.generateAsync({ type: "blob" });
+
+      const zipFileName = isSF9
+        ? `${cleanSectionName}_All_SF9_Report_Cards.zip`
+        : isSF10
+        ? `${cleanSectionName}_All_SF10_Permanent_Records.zip`
+        : `${cleanSectionName}_All_Documents_SF9_SF10.zip`;
+
+      if (typeof window !== "undefined" && window.document) {
+        const url = window.URL.createObjectURL(zipBlob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = zipFileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      }
+
+      showToast(`Successfully downloaded ${zipFileName}!`, "success", CheckCircle2, false);
+    } catch (err) {
+      console.error("Bulk document download error:", err);
+      showToast(err.message || "Failed to download documents. Please try again.", "error", AlertCircle, false);
+    } finally {
+      setDownloadingDoc(null);
+    }
   };
 
   return (
@@ -461,10 +765,15 @@ export default function AdviserDashboard() {
                 <button
                   type="button"
                   className="adviser-dashboard__doc-download-btn"
-                  title="Download SF9 Report Card"
+                  title="Download All SF9 Report Cards (ZIP)"
                   onClick={() => handleDownloadDoc("SF9 Report Card")}
+                  disabled={Boolean(downloadingDoc)}
                 >
-                  <Download size={15} />
+                  {downloadingDoc === "SF9 Report Card" ? (
+                    <Loader2 size={15} className="animate-spin" />
+                  ) : (
+                    <Download size={15} />
+                  )}
                 </button>
               </div>
 
@@ -478,10 +787,15 @@ export default function AdviserDashboard() {
                 <button
                   type="button"
                   className="adviser-dashboard__doc-download-btn"
-                  title="Download SF10 Permanent Record"
+                  title="Download All SF10 Permanent Records (ZIP)"
                   onClick={() => handleDownloadDoc("SF10 Permanent Record")}
+                  disabled={Boolean(downloadingDoc)}
                 >
-                  <Download size={15} />
+                  {downloadingDoc === "SF10 Permanent Record" ? (
+                    <Loader2 size={15} className="animate-spin" />
+                  ) : (
+                    <Download size={15} />
+                  )}
                 </button>
               </div>
             </div>
@@ -490,8 +804,16 @@ export default function AdviserDashboard() {
               type="button"
               className="adviser-dashboard__bulk-download-btn"
               onClick={() => handleDownloadDoc("Bulk Documents")}
+              disabled={Boolean(downloadingDoc)}
             >
-              Bulk Download
+              {downloadingDoc === "Bulk Documents" ? (
+                <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
+                  <Loader2 size={15} className="animate-spin" />
+                  Downloading All Documents (ZIP)...
+                </span>
+              ) : (
+                "Bulk Download"
+              )}
             </button>
           </div>
         )}
@@ -606,6 +928,23 @@ export default function AdviserDashboard() {
           />
 
         </section>
+      )}
+
+      {/* Toast Notification */}
+      {toast.message && (
+        <Toast
+          message={toast.message}
+          variant={toast.variant}
+          icon={toast.icon}
+          persistent={toast.persistent}
+          onDismiss={downloadingDoc ? undefined : () => {
+            if (toastTimerRef.current) {
+              clearTimeout(toastTimerRef.current);
+              toastTimerRef.current = null;
+            }
+            setToast({ message: "", variant: "info", icon: null, persistent: false });
+          }}
+        />
       )}
     </div>
   );

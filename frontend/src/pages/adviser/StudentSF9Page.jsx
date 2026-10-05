@@ -12,6 +12,7 @@ import Toast from "../../components/common/Toast.jsx";
 import { exportSf9Pdf } from "../../utils/exportSf9Pdf";
 import SF10PreviewModal from "../../components/SF10PreviewModal.jsx";
 import { exportSf10Excel } from "../../utils/exportSf10Excel.js";
+import JSZip from "jszip";
 
 export default function StudentSF9Page(props) {
   const student = props.student;
@@ -70,6 +71,7 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
   const [loadError, setLoadError] = useState(false);
   const [requestAttempt, setRequestAttempt] = useState(0);
   const [downloadingSF10, setDownloadingSF10] = useState(false);
+  const [downloadingZip, setDownloadingZip] = useState(false);
   // This details component remounts for a different learner/school year.
   const [cachedSF10Data, setCachedSF10Data] = useState(null);
 
@@ -311,16 +313,89 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
     }
   };
 
-  const handleBulkDownload = async () => {
-    showToast("Preparing bulk download for student records...", "info", Download);
+  const handleDownloadZip = async () => {
+    if (downloadingZip || loading || loadError || !sf9Data) return;
+    setDownloadingZip(true);
+    showToast("Preparing documents for ZIP export...", "info");
+
     try {
-      if (sf9Data) {
-        await handleDownloadPDF();
+      let data = cachedSF10Data;
+      const identifier =
+        sf10StudentProp.studentId ||
+        sf10StudentProp.student_id ||
+        sf10StudentProp.studentSectionId ||
+        sf10StudentProp.lrn ||
+        sf10StudentProp.id;
+
+      if (!data && identifier) {
+        try {
+          data = await getStudentSF10Details(identifier);
+          if (data) setCachedSF10Data(data);
+        } catch (fetchErr) {
+          if (userRole === "principal") throw fetchErr;
+          console.warn("Could not fetch remote SF10 data, using client fallback:", fetchErr);
+        }
       }
-      await handleDirectDownloadSF10();
-      showToast("Completed downloading student documents!", "success");
-    } catch {
-      showToast("Triggered download of available forms.", "info");
+      if (userRole === "principal" && !data) {
+        throw new Error("Official SF10 records are unavailable.");
+      }
+
+      const lastName = getStudentLastName();
+
+      showToast("Generating SF9 Performance Report PDF...", "info");
+      const sf9Result = await exportSf9Pdf({
+        studentProfile,
+        grades,
+        performanceDescriptors,
+        attendanceData,
+        comments,
+        depedLogo,
+        gccnhsLogo,
+        skipDownload: true,
+      });
+
+      showToast("Generating Form 10 Excel (.xlsx)...", "info");
+      const sf10FileName = `${lastName}_SF10.xlsx`;
+      const sf10Result = await exportSf10Excel({
+        student: sf10StudentProp,
+        sf10Data: data,
+        fileName: sf10FileName,
+        skipDownload: true,
+      });
+
+      showToast("Bundling documents into ZIP...", "info");
+      const zip = new JSZip();
+      const sf9FileName = sf9Result?.fileName || `${lastName}_SF9.pdf`;
+      const sf9Blob = sf9Result?.blob;
+      const sf10Blob = sf10Result?.blob || sf10Result?.buffer;
+
+      if (sf9Blob) {
+        zip.file(sf9FileName, sf9Blob);
+      }
+      if (sf10Blob) {
+        zip.file(sf10FileName, sf10Blob);
+      }
+
+      const zipBlob = await zip.generateAsync({ type: "blob" });
+      const zipFileName = `${lastName}_Documents.zip`;
+
+      if (typeof window !== "undefined" && window.document) {
+        const url = window.URL.createObjectURL(zipBlob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = zipFileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      }
+
+      showToast(`Successfully downloaded ${zipFileName}!`, "success", CheckCircle2);
+    } catch (err) {
+      console.error("Failed to export documents ZIP:", err);
+      showToast("Failed to download documents ZIP. Please try again.", "error");
+    } finally {
+      setDownloadingZip(false);
     }
   };
 
@@ -881,7 +956,7 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
                           ) : (
                             <>
                               <FileSpreadsheet size={14} />
-                              <span>Download (.xlsx)</span>
+                              <span>Download</span>
                             </>
                           )}
                         </button>
@@ -899,11 +974,21 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
                     <div className="doc-actions">
                       <button
                         className="btn-doc-action zip-download"
+                        onClick={handleDownloadZip}
+                        disabled={downloadingZip || loading || loadError || !sf9Data}
                         title="Download All Documents (ZIP)"
-                        onClick={handleBulkDownload}
                       >
-                        <Download size={14} />
-                        <span>Download All Documents (ZIP)</span>
+                        {downloadingZip ? (
+                          <>
+                            <Loader2 size={14} className="animate-spin" />
+                            <span>Downloading ZIP...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Download size={14} />
+                            <span>Download All Documents (ZIP)</span>
+                          </>
+                        )}
                       </button>
                     </div>
                   </div>
