@@ -107,14 +107,13 @@
 .performance-table th {
   background: var(--performance-primary);
   color: var(--performance-heading);
-  font-weight: 650;
+  font-weight: 700;
   font-size: 13px;
   border-right: 1px solid #ffffff;
 }
 
 .performance-table td,
-.grade-table td,
-.grade-table th {
+.grade-table td {
   color: #172b49;
   font-size: 14px;
   font-weight: 400;
@@ -129,9 +128,20 @@
   text-align: center;
 }
 
+.grade-table th {
+  color: var(--performance-heading);
+  font-weight: 700;
+  font-size: 13px;
+}
+
 .performance-table th:first-child,
 .performance-table td:first-child {
   text-align: left;
+}
+
+.performance-table td:first-child {
+  font-weight: 600;
+  color: var(--performance-heading);
 }
 
 .grade-table tr.average-row td {
@@ -142,9 +152,10 @@
 }
 
 .no-data-row {
-  text-align: center;
+  text-align: center !important;
   color: var(--performance-subheading);
   padding: 24px 0;
+  font-weight: 400 !important;
 }
 
 @media (max-width: 1024px) {

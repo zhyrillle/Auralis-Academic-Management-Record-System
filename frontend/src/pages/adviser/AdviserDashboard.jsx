@@ -298,40 +298,92 @@ export default function AdviserDashboard() {
               </p>
             </div>
             
-            {/* Decorative Pencil SVG */}
-            <svg 
-              className="adviser-dashboard__banner-pencil"
-              width="120" 
-              height="120" 
-              viewBox="0 0 100 100" 
-              style={{
-                position: 'absolute',
-                left: '55%',
-                top: '50%',
-                transform: 'translate(-50%, -50%) rotate(20deg)',
-                opacity: 0.15,
-                pointerEvents: 'none',
-                zIndex: 1
-              }}
+            {/* Decorative stationery doodles (background layer, middle band) */}
+            <svg
+              className="adviser-dashboard__banner-doodles"
+              viewBox="0 0 600 140"
+              preserveAspectRatio="xMidYMid slice"
+              aria-hidden="true"
+              focusable="false"
             >
+              {/* Faint dotted notebook lines */}
+              <g stroke="#B45309" strokeOpacity="0.14" strokeWidth="1" strokeDasharray="2 6">
+                <line x1="0" y1="34" x2="600" y2="34" />
+                <line x1="0" y1="62" x2="600" y2="62" />
+                <line x1="0" y1="90" x2="600" y2="90" />
+                <line x1="0" y1="118" x2="600" y2="118" />
+              </g>
+
+              {/* Ruler (angled along bottom) */}
+              <g transform="translate(250 112) rotate(-8)" opacity="0.5">
+                <rect x="0" y="0" width="150" height="18" rx="3" fill="#FFFBEB" stroke="#D97706" strokeWidth="1.2" />
+                {Array.from({ length: 15 }).map((_, i) => (
+                  <line
+                    key={i}
+                    x1={8 + i * 9.5}
+                    y1="0"
+                    x2={8 + i * 9.5}
+                    y2={i % 5 === 0 ? 9 : 5}
+                    stroke="#B45309"
+                    strokeWidth="1"
+                  />
+                ))}
+              </g>
+
+              {/* Large pencil */}
+              <g className="adviser-dashboard__doodle-float" opacity="0.55">
+                <g transform="translate(300 18) rotate(32)">
+                  <rect x="0" y="0" width="14" height="10" rx="3" fill="#F472B6" />
+                  <rect x="0" y="10" width="14" height="6" fill="#94A3B8" />
+                  <rect x="0" y="16" width="14" height="52" fill="#F59E0B" />
+                  <line x1="4.5" y1="16" x2="4.5" y2="68" stroke="#D97706" strokeWidth="1" />
+                  <line x1="9.5" y1="16" x2="9.5" y2="68" stroke="#D97706" strokeWidth="1" />
+                  <polygon points="0,68 14,68 7,82" fill="#FDE68A" />
+                  <polygon points="5,78 9,78 7,83" fill="#334155" />
+                </g>
+              </g>
+
+              {/* Small pencil */}
+              <g className="adviser-dashboard__doodle-float adviser-dashboard__doodle-float--delay" opacity="0.45">
+                <g transform="translate(408 30) rotate(-28)">
+                  <rect x="0" y="0" width="10" height="7" rx="2" fill="#FB7185" />
+                  <rect x="0" y="7" width="10" height="4" fill="#94A3B8" />
+                  <rect x="0" y="11" width="10" height="36" fill="#EA580C" />
+                  <line x1="5" y1="11" x2="5" y2="47" stroke="#C2410C" strokeWidth="0.8" />
+                  <polygon points="0,47 10,47 5,57" fill="#FDE68A" />
+                  <polygon points="3.5,54 6.5,54 5,58" fill="#334155" />
+                </g>
+              </g>
+
               {/* Eraser */}
-              <path d="M 40 15 C 40 10, 60 10, 60 15 L 60 25 L 40 25 Z" fill="#F43F5E" />
-              {/* Metal band */}
-              <rect x="40" y="25" width="20" height="8" fill="#94A3B8" />
-              {/* Body */}
-              <rect x="40" y="33" width="20" height="40" fill="#F59E0B" />
-              {/* Inner lines */}
-              <line x1="46" y1="33" x2="46" y2="73" stroke="#D97706" strokeWidth="1" />
-              <line x1="53" y1="33" x2="53" y2="73" stroke="#D97706" strokeWidth="1" />
-              {/* Wood cone */}
-              <polygon points="40,73 60,73 50,90" fill="#FDE68A" />
-              {/* Lead */}
-              <polygon points="48,87 52,87 50,93" fill="#334155" />
-              
-              {/* Sparkles */}
-              <path d="M 20 40 L 25 45 L 20 50 L 15 45 Z" fill="#F59E0B" />
-              <path d="M 80 50 L 85 53 L 80 56 L 75 53 Z" fill="#F59E0B" />
-              <path d="M 25 70 L 28 72 L 25 74 L 22 72 Z" fill="#F59E0B" />
+              <g className="adviser-dashboard__doodle-float" opacity="0.55">
+                <g transform="translate(355 62) rotate(-14)">
+                  <rect x="0" y="0" width="34" height="18" rx="4" fill="#FBCFE8" stroke="#DB2777" strokeWidth="1" />
+                  <rect x="20" y="0" width="14" height="18" rx="0" fill="#FFFFFF" opacity="0.85" />
+                  <rect x="20" y="0" width="14" height="18" rx="4" fill="none" stroke="#DB2777" strokeWidth="1" />
+                </g>
+              </g>
+
+              {/* Paper clip */}
+              <path
+                d="M 256 20 L 256 52 A 7 7 0 0 0 270 52 L 270 26 A 4 4 0 0 0 262 26 L 262 50"
+                fill="none"
+                stroke="#78716C"
+                strokeOpacity="0.5"
+                strokeWidth="2"
+                strokeLinecap="round"
+                transform="rotate(-18 263 36)"
+              />
+
+              {/* Sparkles & stars */}
+              <g fill="#D97706" opacity="0.55">
+                <path d="M 282 86 l 3 6 l 6 3 l -6 3 l -3 6 l -3 -6 l -6 -3 l 6 -3 Z" />
+                <path d="M 440 92 l 2 4 l 4 2 l -4 2 l -2 4 l -2 -4 l -4 -2 l 4 -2 Z" />
+                <path d="M 392 16 l 2 4 l 4 2 l -4 2 l -2 4 l -2 -4 l -4 -2 l 4 -2 Z" />
+                <circle cx="336" cy="22" r="2" />
+                <circle cx="426" cy="70" r="1.6" />
+                <circle cx="240" cy="78" r="1.6" />
+              </g>
             </svg>
 
             <div className="adviser-dashboard__banner-art-wrap">

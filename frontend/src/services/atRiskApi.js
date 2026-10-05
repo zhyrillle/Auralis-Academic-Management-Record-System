@@ -47,6 +47,7 @@ export async function getRiskLevelLearners({ schoolYear, term, riskLevel } = {})
   const data = await res.json();
   return {
     count: data.totalCount,
+    students: data.students || [],
     notes: (data.students || []).map((s) => `${s.name} (${s.section}) — Risk Score: ${s.riskScore}`),
   };
 }

@@ -4,8 +4,8 @@
      Navy sidebar/bg: #0A1229
      Primary accent:  #0033C4
      Warning/at-risk:  #F4B400
-     Pass/green:       #16A34A
-     Fail/red:         #EF4444
+     Pass/green:       #2db783
+     Fail/red:         #ef5350
    ============================================================ */
 
 .dept-dashboard-page { display: flex; flex-direction: column; gap: 24px; padding: 24px 32px 48px; background-color: #F8FAFC; min-height: 100%; color: #1E293B; box-sizing: border-box; }
@@ -49,19 +49,36 @@
 
 .dept-filter-select {
   width: 100%;
-  padding: 12px 16px;
+  padding: 12px 46px 12px 16px;
   border-radius: 10px;
   border: 1px solid #d1d5db;
-  background: #ffffff;
+  background-color: #ffffff;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 18px center;
+  background-size: 16px 16px;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
   color: #111827;
   font-family: "Montserrat", sans-serif;
   font-size: 14px;
   font-weight: 500;
   outline: none;
-  transition: border-color 0.2s;
+  cursor: pointer;
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
 
-.dept-filter-select:focus { border-color: #183256;
+.dept-filter-select:focus {
+  border-color: #183256;
+  box-shadow: 0 0 0 3px rgba(24, 50, 86, 0.1);
+}
+
+.dept-filter-select:disabled {
+  background-color: #f8fafc;
+  color: #94a3b8;
+  cursor: not-allowed;
+  opacity: 0.8;
 }
 
 .dept-error-banner {
@@ -162,14 +179,14 @@
 
 .dept-comparative-bar-above {
   height: 100%;
-  background: #16A34A;
+  background: #2db783;
   border-radius: 999px 0 0 999px;
   transition: width 0.3s ease;
 }
 
 .dept-comparative-bar-fail {
   height: 100%;
-  background: #EF4444;
+  background: #ef5350;
   border-radius: 0 999px 999px 0;
   transition: width 0.3s ease;
 }
@@ -184,13 +201,13 @@
 
 .dept-passed-count {
   font-size: 12px;
-  color: #16A34A;
+  color: #2db783;
   font-weight: 600;
 }
 
 .dept-failed-count {
   font-size: 12px;
-  color: #EF4444;
+  color: #ef5350;
   font-weight: 600;
 }
 
@@ -225,11 +242,11 @@
 }
 
 .dept-legend-green {
-  background: #16A34A;
+  background: #2db783;
 }
 
 .dept-legend-red {
-  background: #EF4444;
+  background: #ef5350;
 }
 
 /* Overall Pass Rate */
@@ -254,15 +271,16 @@
 
 .dept-donut-bg {
   fill: none;
-  stroke: #EF4444;
+  stroke: #ef5350;
   stroke-width: 3.8;
 }
 
 .dept-donut-pass {
   fill: none;
-  stroke: #16A34A;
+  stroke: #2db783;
   stroke-width: 3.8;
   stroke-linecap: round;
+  transition: stroke-dasharray 0.5s ease;
 }
 
 .dept-donut-center {
@@ -379,7 +397,7 @@
 }
 
 .dept-text-green {
-  color: #16A34A;
+  color: #2db783;
   font-weight: 600;
 }
 

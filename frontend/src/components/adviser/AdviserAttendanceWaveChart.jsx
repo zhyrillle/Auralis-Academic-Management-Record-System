@@ -13,14 +13,19 @@ export default function AdviserAttendanceWaveChart({
   const [hoveredIdx, setHoveredIdx] = useState(null);
 
   const yTicks = [200, 150, 100, 50, 0];
-  const chartHeight = 160;
-  const chartWidth = 420;
-  const leftPad = 35;
-  const topPad = 20;
+  const VB_W = 640;
+  const VB_H = 360;
+  const leftPad = 48;
+  const rightPad = 24;
+  const topPad = 28;
+  const bottomPad = 44;
+  const chartWidth = VB_W - rightPad;
+  const chartHeight = VB_H - topPad - bottomPad;
 
   const points = data.map((item, idx) => {
+    const availableWidth = chartWidth - leftPad - 32;
     const x =
-      leftPad + (idx / Math.max(1, data.length - 1)) * (chartWidth - leftPad - 15);
+      leftPad + 16 + (idx / Math.max(1, data.length - 1)) * availableWidth;
     const count = Math.min(200, Math.max(0, item.count || 0));
     const y = topPad + ((200 - count) / 200) * chartHeight;
     return { x, y, count, label: item.week || `Week ${idx + 1}` };
@@ -66,9 +71,9 @@ export default function AdviserAttendanceWaveChart({
           <div className="adviser-dashboard__skeleton-chart" />
         ) : (
           <svg
-            viewBox="0 0 440 230"
+            viewBox="0 0 640 360"
             className="adviser-dashboard__wave-svg"
-            preserveAspectRatio="none"
+            preserveAspectRatio="xMidYMid meet"
           >
             <defs>
               <linearGradient id="adviserWaveGrad" x1="0" y1="0" x2="0" y2="1">
@@ -84,7 +89,7 @@ export default function AdviserAttendanceWaveChart({
               return (
                 <g key={tick}>
                   <text
-                    x={leftPad - 10}
+                    x={leftPad - 12}
                     y={y + 4}
                     textAnchor="end"
                     className="adviser-dashboard__chart-axis-label"
@@ -114,7 +119,7 @@ export default function AdviserAttendanceWaveChart({
                 d={linePath}
                 fill="none"
                 stroke="#122A4E"
-                strokeWidth="2.5"
+                strokeWidth="3"
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
@@ -130,7 +135,7 @@ export default function AdviserAttendanceWaveChart({
               >
                 <text
                   x={pt.x}
-                  y={bottomY + 16}
+                  y={bottomY + 22}
                   textAnchor="middle"
                   className="adviser-dashboard__chart-x-label"
                 >
@@ -140,28 +145,28 @@ export default function AdviserAttendanceWaveChart({
                 <circle
                   cx={pt.x}
                   cy={pt.y}
-                  r={hoveredIdx === idx ? "5.5" : "3.5"}
+                  r={hoveredIdx === idx ? "6.5" : "4.5"}
                   fill="#122A4E"
                   stroke="#FFFFFF"
-                  strokeWidth="1.5"
+                  strokeWidth="2"
                 />
 
                 {hoveredIdx === idx && (
                   <g>
                     <rect
-                      x={pt.x - 24}
-                      y={Math.max(5, pt.y - 28)}
-                      width="48"
-                      height="20"
-                      rx="4"
+                      x={Math.max(leftPad, Math.min(chartWidth - 52, pt.x - 26))}
+                      y={Math.max(6, pt.y - 32)}
+                      width="52"
+                      height="22"
+                      rx="5"
                       fill="#1E293B"
                     />
                     <text
-                      x={pt.x}
-                      y={Math.max(5, pt.y - 28) + 14}
+                      x={Math.max(leftPad + 26, Math.min(chartWidth - 26, pt.x))}
+                      y={Math.max(6, pt.y - 32) + 15}
                       textAnchor="middle"
                       fill="#FFFFFF"
-                      fontSize="11"
+                      fontSize="12"
                       fontWeight="600"
                     >
                       {pt.count}

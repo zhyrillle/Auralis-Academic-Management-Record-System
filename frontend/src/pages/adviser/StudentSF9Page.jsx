@@ -311,6 +311,19 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
     }
   };
 
+  const handleBulkDownload = async () => {
+    showToast("Preparing bulk download for student records...", "info", Download);
+    try {
+      if (sf9Data) {
+        await handleDownloadPDF();
+      }
+      await handleDirectDownloadSF10();
+      showToast("Completed downloading student documents!", "success");
+    } catch {
+      showToast("Triggered download of available forms.", "info");
+    }
+  };
+
   if (loading) return <StudentReportSkeleton student={student} onBack={onBack} />;
 
   return (
@@ -878,19 +891,23 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
                 </div>
 
                 {/* Bulk Actions Card */}
-                {userRole !== "principal" && <div className="doc-card">
+                <div className="doc-card">
                   <div className="doc-details">
                     <h4 className="doc-title">Bulk Actions</h4>
                     <p className="doc-subtitle">Perform actions on multiple documents</p>
                     <span className="doc-status-badge">Available</span>
                     <div className="doc-actions">
-                      <button className="btn-doc-action zip-download" title="Download All Documents (ZIP)">
+                      <button
+                        className="btn-doc-action zip-download"
+                        title="Download All Documents (ZIP)"
+                        onClick={handleBulkDownload}
+                      >
                         <Download size={14} />
                         <span>Download All Documents (ZIP)</span>
                       </button>
                     </div>
                   </div>
-                </div>}
+                </div>
 
                 {/* Form 9 Card */}
                 <div className="doc-card">

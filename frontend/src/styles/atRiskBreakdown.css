@@ -488,8 +488,9 @@
   box-shadow: 0 1px 4px rgba(15, 23, 42, 0.03);
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  justify-content: flex-start;
   min-height: 160px;
+  height: 100%;
   transition: box-shadow 0.2s;
 }
 
@@ -499,8 +500,9 @@
 
 .ar-risk-card-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
+  min-height: 52px;
 }
 
 .ar-risk-pill {
@@ -510,6 +512,7 @@
   border-radius: 16px;
   font-size: 12px;
   font-weight: 700;
+  align-self: flex-start;
 }
 
 .ar-pill-green {
@@ -530,23 +533,33 @@
 .ar-risk-title-wrap {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  align-items: flex-start;
+  gap: 4px;
+  flex: 1;
 }
 
 .ar-risk-criteria-sub {
   font-size: 11px;
   color: #64748b;
   font-weight: 500;
+  line-height: 1.35;
+  min-height: 28px;
 }
 
 .ar-risk-learners-count {
   font-size: 13px;
   font-weight: 700;
   white-space: nowrap;
+  padding-top: 2px;
+  margin-left: 8px;
 }
 
 .ar-risk-card-body {
   margin-top: 14px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
 }
 
 .ar-breakdown-students-list {

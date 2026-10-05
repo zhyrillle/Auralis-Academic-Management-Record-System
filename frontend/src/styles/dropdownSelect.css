@@ -11,7 +11,7 @@
   gap: 12px;
   box-sizing: border-box;
   width: 100%;
-  padding: 0 40px 0 12px;
+  padding: 0 46px 0 14px;
   color: #334155;
   background: #fff;
   border: 1px solid #dbe3ee;
@@ -37,7 +37,7 @@
 .dropdown-select__trigger > svg {
   position: absolute;
   top: 50%;
-  right: 14px;
+  right: 18px;
   color: #64748b;
   transform: translateY(-50%);
   pointer-events: none;

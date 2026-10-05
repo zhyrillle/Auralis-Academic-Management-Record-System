@@ -101,6 +101,39 @@
   z-index: 2;
 }
 
+/* Stationery doodle layer — clipped to the banner's rounded corners only,
+   so the illustration on the right can still overflow the top edge. */
+.adviser-dashboard__banner-doodles {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+  clip-path: inset(0 round 16px);
+}
+
+.adviser-dashboard__doodle-float {
+  animation: adviser-doodle-float 6s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.adviser-dashboard__doodle-float--delay {
+  animation-delay: -3s;
+}
+
+@keyframes adviser-doodle-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .adviser-dashboard__doodle-float {
+    animation: none;
+  }
+}
+
 .adviser-dashboard__greeting {
   font-size: 1.85rem;
   font-weight: 800;
@@ -364,7 +397,7 @@
   display: grid;
   grid-template-columns: 1fr 280px;
   gap: 20px;
-  align-items: start;
+  align-items: stretch;
 }
 
 .adviser-dashboard__class-cards-track {
@@ -500,6 +533,12 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
+  height: 100%;
+}
+
+.adviser-dashboard__assigned-stats-col > .adviser-dashboard__stat-card {
+  flex: 1 1 0;
+  justify-content: center;
 }
 
 /* --------------------------------------------------------------------------
@@ -507,15 +546,21 @@
    -------------------------------------------------------------------------- */
 .adviser-dashboard__mid-grid {
   display: grid;
-  grid-template-columns: 1fr 1.25fr;
+  grid-template-columns: 1fr 1fr;
   gap: 24px;
-  align-items: start;
+  align-items: stretch;
 }
 
 .adviser-dashboard__mid-right-col {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  height: 100%;
+  min-width: 0;
+}
+
+.adviser-dashboard__mid-right-col > .adviser-dashboard__chart-card {
+  flex: 1 1 auto;
 }
 
 .adviser-dashboard__totals-row {
@@ -533,6 +578,9 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  height: 100%;
+  box-sizing: border-box;
+  min-width: 0;
 }
 
 .adviser-dashboard__radar-heading {
@@ -638,11 +686,12 @@
   justify-content: center;
   align-items: center;
   padding: 8px 0;
+  flex: 1 1 auto;
 }
 
 .adviser-dashboard__radar-svg {
   width: 100%;
-  max-width: 320px;
+  max-width: 380px;
   height: auto;
   overflow: visible;
 }
@@ -735,6 +784,26 @@
   height: auto;
   max-height: 240px;
   overflow: visible;
+}
+
+/* Attendance Wave Chart (16:9 ratio) */
+.adviser-dashboard__attendance-chart-body {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.adviser-dashboard__attendance-chart-body .adviser-dashboard__wave-svg {
+  width: 100%;
+  height: 100%;
+  max-height: none;
+}
+
+.adviser-dashboard__attendance-chart-body .adviser-dashboard__skeleton-chart {
+  width: 100%;
+  height: 100%;
 }
 
 .adviser-dashboard__hbar-svg {
@@ -1243,6 +1312,10 @@
 
   .adviser-dashboard__mid-grid {
     grid-template-columns: 1fr;
+  }
+
+  .adviser-dashboard__radar-card {
+    height: auto;
   }
 
   .adviser-dashboard__test-exam-card {

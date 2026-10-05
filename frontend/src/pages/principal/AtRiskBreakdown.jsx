@@ -34,9 +34,9 @@ export default function AtRiskBreakdown() {
   const [summary, setSummary] = useState(EMPTY_SUMMARY);
   const [distribution, setDistribution] = useState(EMPTY_DISTRIBUTION);
   const [breakdown, setBreakdown] = useState(EMPTY_BREAKDOWN);
-  const [lowNotes, setLowNotes] = useState({ count: 0, notes: [] });
-  const [mediumNotes, setMediumNotes] = useState({ count: 0, notes: [] });
-  const [highNotes, setHighNotes] = useState({ count: 0, notes: [] });
+  const [lowNotes, setLowNotes] = useState({ count: 0, notes: [], students: [] });
+  const [mediumNotes, setMediumNotes] = useState({ count: 0, notes: [], students: [] });
+  const [highNotes, setHighNotes] = useState({ count: 0, notes: [], students: [] });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -66,9 +66,9 @@ export default function AtRiskBreakdown() {
             getAtRiskSummary({ schoolYear, term: termParam }).catch(() => EMPTY_SUMMARY),
             getOverallDistribution({ schoolYear, term: termParam }).catch(() => EMPTY_DISTRIBUTION),
             getGradeLevelBreakdown({ schoolYear, term: termParam }).catch(() => EMPTY_BREAKDOWN),
-            getRiskLevelLearners({ schoolYear, term: termParam, riskLevel: "low" }).catch(() => ({ count: 0, notes: [] })),
-            getRiskLevelLearners({ schoolYear, term: termParam, riskLevel: "medium" }).catch(() => ({ count: 0, notes: [] })),
-            getRiskLevelLearners({ schoolYear, term: termParam, riskLevel: "high" }).catch(() => ({ count: 0, notes: [] })),
+            getRiskLevelLearners({ schoolYear, term: termParam, riskLevel: "low" }).catch(() => ({ count: 0, notes: [], students: [] })),
+            getRiskLevelLearners({ schoolYear, term: termParam, riskLevel: "medium" }).catch(() => ({ count: 0, notes: [], students: [] })),
+            getRiskLevelLearners({ schoolYear, term: termParam, riskLevel: "high" }).catch(() => ({ count: 0, notes: [], students: [] })),
           ]);
 
         if (cancelled) return;
