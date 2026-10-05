@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Download, Cloud, CloudOff, RefreshCw } from "lucide-react";
-import { jsPDF } from "jspdf";
-import html2canvas from "html2canvas";
 import backIconUrl from "../../assets/backButton.svg";
 import depedLogoUrl from "../../assets/deped_logo.png";
 import gccnhsLogoUrl from "../../assets/gccnhs_logo.png";
@@ -55,6 +53,23 @@ function formatPercent(num, denom) {
   return Number.isInteger(pct) ? `${pct}%` : `${pct.toFixed(2)}%`;
 }
 
+// Convert image asset to Base64 data URI to eliminate any cross-origin restrictions in canvas export
+async function toBase64(url) {
+  try {
+    const res = await fetch(url);
+    const blob = await res.blob();
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.onerror = () => resolve(url);
+      reader.readAsDataURL(blob);
+    });
+  } catch (err) {
+    console.warn("[PhilIri] Could not convert image to base64:", err);
+    return url;
+  }
+}
+
 export default function PhilIri({ activeClass: propActiveClass, onBack }) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -99,9 +114,24 @@ export default function PhilIri({ activeClass: propActiveClass, onBack }) {
     name: "",
     role: "Master Teacher II - English Department Coordinator",
   });
-  const sheetRef = useRef(null);
+  const [depedLogoBase64, setDepedLogoBase64] = useState("");
+  const [gccnhsLogoBase64, setGccnhsLogoBase64] = useState("");
+  const pdfRef = useRef(null);
   const isLoadedRef = useRef(false);
   const debounceTimerRef = useRef(null);
+
+  // Pre-load logos as Base64 data URIs for 100% CORS-safe canvas rendering
+  useEffect(() => {
+    let isCurrent = true;
+    Promise.all([toBase64(depedLogoUrl), toBase64(gccnhsLogoUrl)]).then(([d, g]) => {
+      if (!isCurrent) return;
+      if (d) setDepedLogoBase64(d);
+      if (g) setGccnhsLogoBase64(g);
+    });
+    return () => {
+      isCurrent = false;
+    };
+  }, []);
 
   // Fetch English Department Coordinator dynamically from database on mount
   useEffect(() => {
@@ -370,81 +400,6 @@ export default function PhilIri({ activeClass: propActiveClass, onBack }) {
     };
   }, [scores, passageWordsCount, totalCompItems]);
 
-  // Download PDF using html2canvas & jsPDF directly from sheetRef.current
-  const handleDownloadPdf = async () => {
-    if (!sheetRef.current || isDownloading) return;
-    setIsDownloading(true);
-
-    const testLabel = testType === "PRE_TEST" ? "PRE-TEST" : "POST-TEST";
-    const secName = activeClass?.section_name || activeClass?.sectionName || classMeta?.section_name || "Section";
-    const filename = `PHIL-IRI_ENGLISH_${testLabel}_${secName}.pdf`.replace(/\s+/g, "_");
-
-    try {
-      const canvas = await html2canvas(sheetRef.current, {
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        backgroundColor: "#ffffff",
-        imageTimeout: 15000,
-        onclone: (clonedDoc) => {
-          // In the cloned DOM that html2canvas renders internally,
-          // replace input fields with clean text spans so typed scores are rendered crisp without outlines
-          const inputs = clonedDoc.querySelectorAll(".phil-iri-table-input");
-          inputs.forEach((input) => {
-            const span = clonedDoc.createElement("span");
-            span.textContent = input.value || "";
-            span.style.display = "inline-block";
-            span.style.width = "100%";
-            span.style.textAlign = "center";
-            span.style.fontFamily = "inherit";
-            span.style.fontSize = "inherit";
-            span.style.fontWeight = "bold";
-            span.style.color = "#000000";
-            if (input.parentNode) {
-              input.parentNode.replaceChild(span, input);
-            }
-          });
-        },
-      });
-
-      const imgData = canvas.toDataURL("image/png");
-      const pdf = new jsPDF({
-        orientation: "portrait",
-        unit: "mm",
-        format: "a4",
-      });
-
-      const pdfWidth = 210;
-      const pdfHeight = 297;
-      const margin = 5;
-      const printWidth = pdfWidth - margin * 2;
-      const printHeight = (canvas.height * printWidth) / canvas.width;
-
-      if (printHeight <= pdfHeight - margin * 2) {
-        pdf.addImage(imgData, "PNG", margin, margin, printWidth, printHeight);
-      } else {
-        let heightLeft = printHeight;
-        let position = margin;
-
-        pdf.addImage(imgData, "PNG", margin, position, printWidth, printHeight);
-        heightLeft -= (pdfHeight - margin * 2);
-
-        while (heightLeft > 0) {
-          position -= (pdfHeight - margin * 2);
-          pdf.addPage();
-          pdf.addImage(imgData, "PNG", margin, position, printWidth, printHeight);
-          heightLeft -= (pdfHeight - margin * 2);
-        }
-      }
-
-      pdf.save(filename);
-    } catch (err) {
-      console.error("Error generating PHIL-IRI PDF:", err);
-    } finally {
-      setIsDownloading(false);
-    }
-  };
-
   // Metadata resolutions
   const rawTeacher =
     classMeta?.teacher_name ||
@@ -468,6 +423,334 @@ export default function PhilIri({ activeClass: propActiveClass, onBack }) {
   const totalBoys = maleStudents.length;
   const totalGirls = femaleStudents.length;
   const totalEnrolment = totalBoys + totalGirls;
+
+  // Print / Save as PDF using an isolated hidden iframe (zero page flicker, native vector output)
+  const handleDownloadPDF = () => {
+    const element = document.getElementById("philiri-pdf-container");
+    if (!element) {
+      alert("Error: PDF element container not found.");
+      return;
+    }
+
+    const rawSec = cleanSectionName || sectionName || "Section";
+    const secClean = String(rawSec).trim().replace(/\s+/g, "_");
+    const testClean = testType === "PRE_TEST" ? "PRE_TEST" : "POST_TEST";
+    const defaultFileName = `${secClean}_PHILIRI_${testClean}`;
+
+    const originalTitle = document.title;
+    document.title = defaultFileName;
+
+    setIsDownloading(true);
+
+    try {
+      // 1. Create a clone and preserve typed score inputs as clean text spans
+      const clone = element.cloneNode(true);
+      const originalInputs = element.querySelectorAll("input");
+      const cloneInputs = clone.querySelectorAll("input");
+      cloneInputs.forEach((cloneInput, index) => {
+        const origInput = originalInputs[index];
+        const val = origInput ? origInput.value : cloneInput.value;
+        const span = document.createElement("span");
+        span.textContent = val !== undefined && val !== null ? String(val) : "";
+        span.style.fontWeight = "bold";
+        span.style.display = "inline-block";
+        span.style.width = "100%";
+        span.style.textAlign = "center";
+        if (cloneInput.parentNode) {
+          cloneInput.parentNode.replaceChild(span, cloneInput);
+        }
+      });
+
+      // 2. Create invisible isolated iframe so the main page never changes or flickers
+      const iframe = document.createElement("iframe");
+      iframe.style.position = "fixed";
+      iframe.style.right = "0";
+      iframe.style.bottom = "0";
+      iframe.style.width = "0";
+      iframe.style.height = "0";
+      iframe.style.border = "0";
+      iframe.style.visibility = "hidden";
+      document.body.appendChild(iframe);
+
+      const doc = iframe.contentWindow.document;
+      doc.open();
+      doc.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>${defaultFileName}</title>
+          <style>
+            @page {
+              size: letter portrait;
+              margin: 0.35in 0.4in;
+            }
+            * {
+              box-sizing: border-box;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
+            html, body {
+              height: 100%;
+              margin: 0;
+              padding: 0;
+            }
+            body {
+              font-family: Calibri, "Segoe UI", Arial, sans-serif;
+              background: #ffffff;
+              color: #000000;
+            }
+            .phil-iri-sheet {
+              background: #ffffff;
+              width: 100%;
+              min-height: 10.1in;
+              margin: 0 auto;
+              color: #000000;
+              display: flex;
+              flex-direction: column;
+              justify-content: space-between;
+            }
+            .phil-iri-sheet-header {
+              text-align: center;
+              margin-bottom: 10px;
+            }
+            .phil-iri-sheet-seal {
+              width: 58px;
+              height: 58px;
+              object-fit: contain;
+              margin: 0 auto 4px auto;
+              display: block;
+            }
+            .phil-iri-sheet-dept {
+              font-family: "Century Gothic", "CenturyGothic", AppleGothic, sans-serif;
+              font-size: 8.5pt;
+              line-height: 1.3;
+              margin: 0;
+              color: #000000;
+            }
+            .phil-iri-sheet-school {
+              font-family: "Century Gothic", "CenturyGothic", AppleGothic, sans-serif;
+              font-size: 9.5pt;
+              font-weight: 700;
+              margin: 2px 0 6px 0;
+            }
+            .phil-iri-sheet-title {
+              font-size: 11pt;
+              font-weight: 800;
+              margin: 0;
+              background-color: #ffe598 !important;
+              display: block;
+              width: 100%;
+              padding: 3px 0;
+              text-align: center;
+            }
+            .phil-iri-sheet-subject {
+              font-size: 10pt;
+              font-weight: 800;
+              margin: 2px 0 0 0;
+              text-align: center;
+            }
+            .phil-iri-sheet-test-label {
+              font-size: 9pt;
+              font-weight: 800;
+              margin: 2px 0 0 0;
+              text-decoration: underline;
+              text-align: center;
+            }
+            .phil-iri-sheet-sy {
+              font-size: 8.5pt;
+              font-weight: 700;
+              margin: 2px 0 8px 0;
+              text-align: center;
+            }
+            .phil-iri-sheet-meta-row, .phil-iri-sheet-meta-subrow {
+              display: flex;
+              justify-content: space-between;
+              font-size: 8.5pt;
+              font-weight: 600;
+              margin-bottom: 3px;
+            }
+            .phil-iri-sheet-table {
+              width: 100%;
+              border-collapse: collapse;
+              font-size: 8pt;
+              border: 1px solid #000000;
+              margin-bottom: 12px;
+            }
+            .phil-iri-sheet-table th, .phil-iri-sheet-table td {
+              border: 1px solid #000000;
+              padding: 3px 2px;
+              vertical-align: middle;
+              text-align: center;
+            }
+            .phil-iri-sheet-table th {
+              background: #ffffff;
+              font-weight: 700;
+              line-height: 1.15;
+              font-size: 7.8pt;
+            }
+            .phil-iri-sheet-table th.col-no, .phil-iri-sheet-table td.col-no {
+              width: 28px;
+            }
+            .phil-iri-sheet-table th.col-learner-name, .phil-iri-sheet-table td.col-learner-name {
+              text-align: left;
+              padding-left: 6px;
+              white-space: nowrap;
+            }
+            .phil-iri-sheet-table tr.gender-divider-row td {
+              height: 8px;
+              background: #f1f5f9 !important;
+              border-top: 1px solid #000000;
+              border-bottom: 1px solid #000000;
+            }
+            .reading-level-text {
+              font-weight: 700;
+              font-size: 7.2pt;
+              text-transform: uppercase;
+            }
+            .phil-iri-sheet-summary-box {
+              display: flex;
+              justify-content: center;
+              margin-bottom: 14px;
+              page-break-inside: avoid;
+            }
+            .phil-iri-sheet-summary-table {
+              width: 85%;
+              border-collapse: collapse;
+              font-size: 8pt;
+              font-weight: 700;
+              border: none !important;
+            }
+            .phil-iri-sheet-summary-table th, .phil-iri-sheet-summary-table td {
+              border: none !important;
+              padding: 3px 6px;
+              text-align: center;
+            }
+            .phil-iri-sheet-summary-table tr.phil-iri-total-row td {
+              background-color: #ffe598 !important;
+              font-weight: 700;
+              border: none !important;
+            }
+            .phil-iri-underline-val {
+              border-bottom: 1.5px solid #000000;
+              display: inline-block;
+              min-width: 60px;
+              text-align: center;
+              padding: 0 4px;
+            }
+            .phil-iri-sheet-bottom-block {
+              margin-top: auto;
+              width: 100%;
+              page-break-inside: avoid;
+              display: flex;
+              flex-direction: column;
+            }
+            .phil-iri-sheet-signatures {
+              display: flex;
+              justify-content: space-between;
+              margin-top: 10px;
+              margin-bottom: 12px;
+              padding: 0 16px;
+              font-size: 8pt;
+              page-break-inside: avoid;
+            }
+            .phil-iri-sig-col {
+              width: 48%;
+            }
+            .phil-iri-sig-col .sig-title {
+              margin-bottom: 18px;
+              font-size: 7.5pt;
+            }
+            .sig-person-block {
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              text-align: center;
+            }
+            .sig-person-block.right-person {
+              margin-left: auto;
+              width: fit-content;
+            }
+            .phil-iri-sig-col .sig-name {
+              font-weight: 800;
+              font-size: 8.5pt;
+              text-transform: uppercase;
+              border-bottom: 1px solid #000000;
+              display: inline-block;
+              padding-bottom: 1px;
+              margin-bottom: 2px;
+              text-align: center;
+              min-width: 180px;
+            }
+            .phil-iri-sig-col .sig-role {
+              font-size: 7.2pt;
+              color: #000000;
+              text-align: center;
+              margin: 0;
+            }
+            .phil-iri-sheet-footer {
+              border-top: 1px solid #000000;
+              padding-top: 5px;
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              font-size: 7pt;
+              line-height: 1.2;
+              page-break-inside: avoid;
+            }
+            .phil-iri-footer-middle {
+              text-align: center;
+              flex: 1;
+            }
+            .phil-iri-footer-logo-l {
+              width: 38px;
+              height: 38px;
+              object-fit: contain;
+            }
+            .phil-iri-gold-seal {
+              font-family: Impact, "Arial Black", sans-serif;
+              font-size: 11pt;
+              color: #ca8a04;
+              letter-spacing: 0.5px;
+              font-style: italic;
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              line-height: 1;
+            }
+            .phil-iri-gold-seal-sub {
+              font-size: 5pt;
+              font-family: Arial, sans-serif;
+              color: #334155;
+              letter-spacing: 0.2px;
+              margin-top: 1px;
+            }
+          </style>
+        </head>
+        <body>
+          ${clone.outerHTML}
+        </body>
+        </html>
+      `);
+      doc.close();
+
+      iframe.contentWindow.focus();
+      setTimeout(() => {
+        iframe.contentWindow.print();
+        setIsDownloading(false);
+        setTimeout(() => {
+          document.title = originalTitle;
+          if (document.body.contains(iframe)) {
+            document.body.removeChild(iframe);
+          }
+        }, 3000);
+      }, 350);
+    } catch (error) {
+      console.error("PDF Print Error:", error);
+      setIsDownloading(false);
+      document.title = originalTitle;
+      alert(`Failed to open print preview: ${error.message || error}`);
+    }
+  };
 
   const renderStudentRow = (student, index) => {
     if (!student) return null;
@@ -586,54 +869,57 @@ export default function PhilIri({ activeClass: propActiveClass, onBack }) {
             </button>
           </div>
 
-          {/* PARAMETERS CONFIGURATION */}
-          <div className="phil-iri-params-bar">
-            <div className="phil-iri-param-field">
-              <label>Passage Words:</label>
-              <input
-                type="number"
-                min="1"
-                value={passageWordsCount}
-                onChange={(e) => setPassageWordsCount(Math.max(1, Number(e.target.value) || 70))}
-                onBlur={handleInputBlur}
-                title="Total words in test passage (e.g. 70 or 103)"
-              />
+          {/* PARAMETERS & DOWNLOAD ACTIONS SUBROW */}
+          <div className="phil-iri-controls-subrow">
+            {/* PARAMETERS CONFIGURATION */}
+            <div className="phil-iri-params-bar">
+              <div className="phil-iri-param-field">
+                <label>Passage Words:</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={passageWordsCount}
+                  onChange={(e) => setPassageWordsCount(Math.max(1, Number(e.target.value) || 70))}
+                  onBlur={handleInputBlur}
+                  title="Total words in test passage (e.g. 70 or 103)"
+                />
+              </div>
+              <div className="phil-iri-param-field">
+                <label>Total Items:</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={totalCompItems}
+                  onChange={(e) => setTotalCompItems(Math.max(1, Number(e.target.value) || 5))}
+                  onBlur={handleInputBlur}
+                  title="Total comprehension items"
+                />
+              </div>
             </div>
-            <div className="phil-iri-param-field">
-              <label>Total Items:</label>
-              <input
-                type="number"
-                min="1"
-                value={totalCompItems}
-                onChange={(e) => setTotalCompItems(Math.max(1, Number(e.target.value) || 5))}
-                onBlur={handleInputBlur}
-                title="Total comprehension items"
-              />
-            </div>
-          </div>
 
-          {/* ACTION BUTTONS */}
-          <div className="phil-iri-actions-cluster">
-            <button
-              type="button"
-              className="phil-iri-action-btn download-btn"
-              onClick={handleDownloadPdf}
-              disabled={isDownloading}
-              title="Download official PDF document"
-            >
-              <Download size={15} />
-              {isDownloading ? "Generating..." : "Download PDF"}
-            </button>
+            {/* ACTION BUTTONS */}
+            <div className="phil-iri-actions-cluster">
+              <button
+                type="button"
+                className="phil-iri-action-btn download-btn"
+                onClick={handleDownloadPDF}
+                disabled={isDownloading}
+                title="Download official PDF document"
+              >
+                <Download size={15} />
+                Download PDF
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
       {/* 3. DOCUMENT DISPLAY VIEWPORT */}
       <div className="phil-iri-document-scroll">
-        <div className="phil-iri-sheet" ref={sheetRef}>
+        <div className="phil-iri-sheet" ref={pdfRef} id="philiri-pdf-container">
           {/* EXACT OFFICIAL DEPED HEADER */}
           <div className="phil-iri-sheet-header">
-            <img src={depedLogoUrl} alt="DepEd Official Seal" className="phil-iri-sheet-seal" />
+            <img src={depedLogoBase64 || depedLogoUrl} alt="DepEd Official Seal" className="phil-iri-sheet-seal" crossOrigin="anonymous" />
             <p className="phil-iri-sheet-dept">Republic of the Philippines</p>
             <p className="phil-iri-sheet-dept">Department of Education</p>
             <p className="phil-iri-sheet-dept">{classMeta?.region || "Region X"}</p>
@@ -744,38 +1030,41 @@ export default function PhilIri({ activeClass: propActiveClass, onBack }) {
             </table>
           </div>
 
-          {/* SIGNATURES BLOCK */}
-          <div className="phil-iri-sheet-signatures">
-            <div className="phil-iri-sig-col">
-              <p className="sig-title">Prepared by:</p>
-              <div className="sig-person-block">
-                <p className="sig-name">{teacherDisplay}</p>
-                <p className="sig-role">Secondary School Teacher (English)</p>
+          {/* BOTTOM BLOCK: SIGNATURES & OFFICIAL FOOTER */}
+          <div className="phil-iri-sheet-bottom-block">
+            {/* SIGNATURES BLOCK */}
+            <div className="phil-iri-sheet-signatures">
+              <div className="phil-iri-sig-col">
+                <p className="sig-title">Prepared by:</p>
+                <div className="sig-person-block">
+                  <p className="sig-name">{teacherDisplay}</p>
+                  <p className="sig-role">Secondary School Teacher (English)</p>
+                </div>
+              </div>
+
+              <div className="phil-iri-sig-col">
+                <p className="sig-title" style={{ textAlign: "right" }}>Noted:</p>
+                <div className="sig-person-block right-person">
+                  <p className="sig-name">{coordinatorInfo.name || ""}</p>
+                  <p className="sig-role">{coordinatorInfo.role || "English Department Coordinator"}</p>
+                </div>
               </div>
             </div>
 
-            <div className="phil-iri-sig-col">
-              <p className="sig-title" style={{ textAlign: "right" }}>Noted:</p>
-              <div className="sig-person-block right-person">
-                <p className="sig-name">{coordinatorInfo.name || ""}</p>
-                <p className="sig-role">{coordinatorInfo.role || "English Department Coordinator"}</p>
+            {/* OFFICIAL FOOTER */}
+            <div className="phil-iri-sheet-footer">
+              <img src={gccnhsLogoBase64 || gccnhsLogoUrl} alt="Seal" className="phil-iri-footer-logo-l" crossOrigin="anonymous" />
+
+              <div className="phil-iri-footer-middle">
+                <p style={{ margin: 0 }}>National Highway, Brgy 23, Gingoog City</p>
+                <p style={{ margin: 0 }}>Tel. No. : 0926-482-5061</p>
+                <p style={{ margin: 0 }}>Email: gingoog.city@deped.gov.ph</p>
               </div>
-            </div>
-          </div>
 
-          {/* OFFICIAL FOOTER */}
-          <div className="phil-iri-sheet-footer">
-            <img src={gccnhsLogoUrl} alt="Seal" className="phil-iri-footer-logo-l" />
-
-            <div className="phil-iri-footer-middle">
-              <p style={{ margin: 0 }}>National Highway, Brgy 23, Gingoog City</p>
-              <p style={{ margin: 0 }}>Tel. No. : 0926-482-5061</p>
-              <p style={{ margin: 0 }}>Email: gingoog.city@deped.gov.ph</p>
-            </div>
-
-            <div className="phil-iri-gold-seal">
-              <span>GINGOOG GOLD</span>
-              <span className="phil-iri-gold-seal-sub">LEARNING • OUTSTANDING LEADERSHIP • DEPED</span>
+              <div className="phil-iri-gold-seal">
+                <span>GINGOOG GOLD</span>
+                <span className="phil-iri-gold-seal-sub">LEARNING • OUTSTANDING LEADERSHIP • DEPED</span>
+              </div>
             </div>
           </div>
         </div>
