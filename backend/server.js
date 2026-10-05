@@ -49,6 +49,7 @@ const studentSf9Routes = require('./routes/studentSf9Routes');
 const reportRoutes = require('./routes/reportRoutes');
 const GradingPeriodService = require('./services/GradingPeriodService');
 const adviserDashboardRoutes = require('./routes/adviserDashboardRoutes');
+const philIriRoutes = require('./routes/philIriRoutes');
 
 app.use('/api', classRecordRoutes);
 app.use('/api/reports', reportRoutes);
@@ -88,6 +89,7 @@ app.use('/api/master-sheets', masterSheetRoutes);
 app.use('/api/section-details', sectionDetailsRoutes);
 app.use('/api/student-sf9', studentSf9Routes);
 app.use('/api/adviser/dashboard', adviserDashboardRoutes);
+app.use('/api/phil-iri', philIriRoutes);
 
 app.get('/', (req, res) => {
   res.json({ status: 'Backend API is running' });
