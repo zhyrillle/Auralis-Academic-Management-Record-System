@@ -87,13 +87,19 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 16px;
   background: #ffffff;
   padding: 16px 20px;
   border-radius: 14px;
   border: 1px solid #e2e8f0;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.phil-iri-subheader-info {
+  flex-shrink: 0;
 }
 
 .phil-iri-subheader-info h2 {
@@ -111,9 +117,16 @@
 
 .phil-iri-controls-group {
   display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  flex-shrink: 0;
+  gap: 10px;
+}
+
+.phil-iri-controls-subrow {
+  display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 14px;
+  gap: 12px;
 }
 
 /* CAPSULE TOGGLE (MATCHING SF9 TAB DESIGN) */
@@ -262,6 +275,7 @@
   color: #000000;
   display: flex;
   flex-direction: column;
+  min-height: 1000px;
 }
 
 /* SHEET HEADER */
@@ -474,22 +488,26 @@
   border-collapse: collapse;
   font-size: 8.5pt;
   font-weight: 700;
+  border: none !important;
 }
 
 .phil-iri-sheet-summary-table th {
   text-align: center;
   padding: 4px 6px;
   font-size: 9pt;
+  border: none !important;
 }
 
 .phil-iri-sheet-summary-table td {
   padding: 4px 8px;
   font-size: 8.5pt;
+  border: none !important;
 }
 
 .phil-iri-sheet-summary-table tr.phil-iri-total-row td {
   background-color: #ffe598 !important;
   font-weight: 700;
+  border: none !important;
 }
 
 .phil-iri-underline-val {
@@ -498,6 +516,14 @@
   min-width: 70px;
   text-align: center;
   padding: 0 4px;
+}
+
+/* LOWER STICKY FOOTER WRAPPER */
+.phil-iri-sheet-bottom-block {
+  margin-top: auto;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 /* SIGNATURES BLOCK */
@@ -624,118 +650,4 @@
   min-width: 26px !important;
 }
 
-.phil-iri-sheet.exporting-pdf .phil-iri-sheet-table th.col-words-read,
-.phil-iri-sheet.exporting-pdf .phil-iri-sheet-table td.col-words-read {
-  width: 68px !important;
-  min-width: 68px !important;
-}
 
-.phil-iri-sheet.exporting-pdf .phil-iri-sheet-table th.col-oral-pct,
-.phil-iri-sheet.exporting-pdf .phil-iri-sheet-table td.col-oral-pct {
-  width: 55px !important;
-  min-width: 55px !important;
-}
-
-.phil-iri-sheet.exporting-pdf .phil-iri-sheet-table th.col-oral-level,
-.phil-iri-sheet.exporting-pdf .phil-iri-sheet-table td.col-oral-level {
-  width: 95px !important;
-  min-width: 95px !important;
-}
-
-.phil-iri-sheet.exporting-pdf .phil-iri-sheet-table th.col-comp-score,
-.phil-iri-sheet.exporting-pdf .phil-iri-sheet-table td.col-comp-score {
-  width: 65px !important;
-  min-width: 65px !important;
-}
-
-.phil-iri-sheet.exporting-pdf .phil-iri-sheet-table th.col-comp-pct,
-.phil-iri-sheet.exporting-pdf .phil-iri-sheet-table td.col-comp-pct {
-  width: 70px !important;
-  min-width: 70px !important;
-}
-
-.phil-iri-sheet.exporting-pdf .phil-iri-sheet-table th.col-comp-level,
-.phil-iri-sheet.exporting-pdf .phil-iri-sheet-table td.col-comp-level {
-  width: 95px !important;
-  min-width: 95px !important;
-}
-
-.phil-iri-sheet.exporting-pdf .phil-iri-sheet-table th.col-overall-level,
-.phil-iri-sheet.exporting-pdf .phil-iri-sheet-table td.col-overall-level {
-  width: 95px !important;
-  min-width: 95px !important;
-}
-
-.phil-iri-sheet.exporting-pdf .phil-iri-table-input {
-  font-size: 7.5pt !important;
-  padding: 1px 0 !important;
-}
-
-.phil-iri-sheet.exporting-pdf .reading-level-text {
-  font-size: 6.8pt !important;
-}
-
-.phil-iri-sheet.exporting-pdf .phil-iri-sheet-summary-box {
-  margin-bottom: 12px !important;
-}
-
-.phil-iri-sheet.exporting-pdf .phil-iri-sheet-summary-table {
-  font-size: 7.5pt !important;
-  width: 82% !important;
-}
-
-.phil-iri-sheet.exporting-pdf .phil-iri-sheet-summary-table th,
-.phil-iri-sheet.exporting-pdf .phil-iri-sheet-summary-table td {
-  padding: 2px 4px !important;
-}
-
-@media print {
-  body {
-    margin: 0 !important;
-    padding: 0 !important;
-    background: #ffffff !important;
-  }
-
-  .phil-iri-page-container {
-    padding: 0 !important;
-    background: #ffffff !important;
-  }
-
-  .phil-iri-page-header,
-  .phil-iri-subheader {
-    display: none !important;
-  }
-
-  .phil-iri-document-scroll {
-    overflow: visible !important;
-    padding: 0 !important;
-  }
-
-  .phil-iri-sheet {
-    box-shadow: none !important;
-    border: none !important;
-    border-radius: 0 !important;
-    width: 210mm !important;
-    min-height: auto !important;
-    padding: 8mm 10mm !important;
-  }
-
-  .phil-iri-sheet-table {
-    font-size: 7.2pt !important;
-  }
-
-  .phil-iri-sheet-table th,
-  .phil-iri-sheet-table td {
-    padding: 2.5px 3px !important;
-  }
-
-  .phil-iri-table-input {
-    border: none !important;
-    background: transparent !important;
-    font-size: 7.5pt !important;
-  }
-
-  .reading-level-text {
-    font-size: 6.8pt !important;
-  }
-}
