@@ -371,6 +371,27 @@
   background: #183e6c;
 }
 
+/* PHIL-IRI (English) */
+.phil-iri-btn {
+  background: #102f55;
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.phil-iri-btn:hover:not(:disabled) {
+  background: #183e6c;
+  border-color: #f59e0b;
+}
+
+.phil-iri-btn.disabled,
+.phil-iri-btn:disabled {
+  background: #cbd5e1 !important;
+  color: #64748b !important;
+  cursor: not-allowed !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
 .attendance-btn.disabled,
 .attendance-btn:disabled {
   background: #cbd5e1 !important;

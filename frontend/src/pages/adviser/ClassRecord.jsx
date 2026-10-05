@@ -8,6 +8,7 @@ import {
   X,
   Layers,
   Lock,
+  BookOpen,
 } from "lucide-react";
 import backIconUrl from "../../assets/backButton.svg";
 import unavailableIconUrl from "../../assets/adviser-assets/unavailableicon.png";
@@ -33,7 +34,7 @@ import { eligibilityMessages, getGradeSheetReopeningEligibility } from "../../se
 
 const EMPTY_SCORES = Object.freeze({});
 
-export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdateQuarterlyGrades }) {
+export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilIri, onUpdateQuarterlyGrades }) {
   const navigate = useNavigate();
   const location = useLocation();
   const params = useParams();
@@ -138,6 +139,14 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdat
 
   const isMapehRef = useRef(isMapeh);
   isMapehRef.current = isMapeh;
+
+  // English Subject Detection for PHIL-IRI (Philippine Informal Reading Inventory)
+  const isEnglish = useMemo(() => {
+    const name = classContextData?.subject_name || effectiveClass?.subject_name || effectiveClass?.subjectName || effectiveClass?.subject || "";
+    const code = classContextData?.subject_code || effectiveClass?.subject_code || effectiveClass?.subjectCode || "";
+    const str = `${name} ${code}`.toLowerCase();
+    return /\b(english|eng)\b/i.test(str) || str.includes("english");
+  }, [classContextData, effectiveClass]);
 
   // Term Lock & Availability state
   const [sheetIsLocked, setIsLocked] = useState(false);
@@ -1638,6 +1647,26 @@ const formatToISODate = (val) => {
 
           {/* Row 2 — Action & Term Buttons */}
           <div className="class-record-actions-row">
+            {/* PHIL-IRI (ENGLISH SUBJECTS ONLY) */}
+            {isEnglish && (
+              <button
+                type="button"
+                className="class-record-action-btn phil-iri-btn"
+                onClick={
+                  onPhilIri
+                    ? () => onPhilIri(effectiveClass)
+                    : () => {
+                        const prefix = location.pathname.startsWith("/teacher") ? "/teacher" : "/adviser";
+                        navigate(`${prefix}/phil-iri`, { state: { activeClass: effectiveClass } });
+                      }
+                }
+                title="Philippine - Informal Reading Inventory (PHIL - IRI)"
+              >
+                <BookOpen size={16} />
+                PHIL-IRI
+              </button>
+            )}
+
             {/* ATTENDANCE WITH CONDITIONAL DISABLING */}
             <button
               type="button"

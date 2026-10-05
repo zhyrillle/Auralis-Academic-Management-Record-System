@@ -36,6 +36,7 @@ import GradeReopeningRequest from "./pages/adviser/GradeReopeningRequest";
 import SectionDetails from "./pages/adviser/SectionDetails";
 import AdviserNotifications from "./pages/adviser/AdviserNotifications";
 import AttendanceSheet from "./pages/adviser/AttendanceSheet";
+import PhilIri from "./pages/adviser/PhilIri";
 import ClassRecord from "./pages/adviser/ClassRecord";
 import { getStoredUser, setStoredUser } from "./utils/auth";
 
@@ -176,6 +177,7 @@ export default function App() {
             element={<SectionDetails />}
           />
           <Route path="/adviser/attendance" element={<AttendanceSheet />} />
+          <Route path="/adviser/phil-iri" element={<PhilIri />} />
           <Route
             path="/adviser/notifications"
             element={<AdviserNotifications />}
@@ -208,6 +210,7 @@ export default function App() {
             path="/teacher/sections/details"
             element={<SectionDetails userRole="teacher" />}
           />
+          <Route path="/teacher/phil-iri" element={<PhilIri />} />
           <Route
             path="/teacher/class-record/:sectionId/:subjectId"
             element={<ClassRecord />}

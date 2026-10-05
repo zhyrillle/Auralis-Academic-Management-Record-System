@@ -9,6 +9,7 @@ import GradingSheet from "./GradingSheet"; // Imported the separated component
 import ClassRecord from "./ClassRecord.jsx";
 import SectionDetails from "./SectionDetails.jsx";
 import AttendanceSheet from "./AttendanceSheet.jsx";
+import PhilIri from "./PhilIri.jsx";
 import Toast from "../../components/common/Toast.jsx";
 
 // Auth & Services
@@ -398,11 +399,21 @@ export default function AdviserSections({ userRole: propUserRole }) {
             setactiveSelectedClass(cls || activeSelectedClass);
             setCurrentView("attendance-sheet");
           }}
+          onPhilIri={(cls) => {
+            setactiveSelectedClass(cls || activeSelectedClass);
+            setCurrentView("phil-iri");
+          }}
           onUpdateQuarterlyGrades={handleUpdateQuarterlyGrades}
         />
       ) : currentView === "attendance-sheet" ? (
         <AttendanceSheet
           key={`att-${activeSelectedClass?.section_id || activeSelectedClass?.id || "default"}`}
+          activeClass={activeSelectedClass}
+          onBack={() => setCurrentView("class-record")}
+        />
+      ) : currentView === "phil-iri" ? (
+        <PhilIri
+          key={`philiri-${activeSelectedClass?.section_id || activeSelectedClass?.id || "default"}`}
           activeClass={activeSelectedClass}
           onBack={() => setCurrentView("class-record")}
         />
