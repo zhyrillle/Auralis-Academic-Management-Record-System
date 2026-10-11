@@ -1,3 +1,6 @@
+import { apiFetch as fetch } from "../../services/navigationCache";
+import useCachedQuery from "../../services/useCachedQuery";
+import { cacheKey } from "../../services/navigationCache";
 import { useEffect, useMemo, useRef, useState } from "react";
 import DropdownSelect from "../../components/common/DropdownSelect";
 import ManageUsersSkeleton from "./manage-users/ManageUsersSkeleton";
@@ -154,15 +157,32 @@ function StatusBadge({ status }) {
   );
 }
 
-export default function UserManagement() {
-  const [users, setUsers] = useState([]);
-  const [loadingUsers, setLoadingUsers] = useState(true);
-  const [userError, setUserError] = useState("");
+async function loadUsers() {
+  const response = await fetch(`${API_URL}/users`);
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || "Failed to load users.");
+  return Array.isArray(data) ? data : [];
+}
 
-  const [gradeLevels, setGradeLevels] = useState([]);
-  const [sections, setSections] = useState([]);
-  const [departments, setDepartments] = useState([]);
-  const [subjectOfferings, setSubjectOfferings] = useState([]);
+async function loadManagementOptions() {
+  const response = await fetch(`${API_URL}/users/management-options`);
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || "Failed to load form options.");
+  return data;
+}
+
+const EMPTY_LIST = [];
+
+export default function UserManagement() {
+  const userQuery = useCachedQuery(cacheKey('admin:users'), loadUsers);
+  const optionsQuery = useCachedQuery(cacheKey('admin:user-options'), loadManagementOptions);
+  const users = userQuery.data || EMPTY_LIST;
+  const loadingUsers = userQuery.loading;
+  const userError = userQuery.error;
+  const gradeLevels = optionsQuery.data?.gradeLevels || [];
+  const sections = optionsQuery.data?.sections || [];
+  const departments = optionsQuery.data?.departments || [];
+  const subjectOfferings = optionsQuery.data?.subjectOfferings || [];
 
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("All Roles");
@@ -176,8 +196,8 @@ export default function UserManagement() {
   const [savingUser, setSavingUser] = useState(false);
   const [deletingUser, setDeletingUser] = useState(false);
   const [formError, setFormError] = useState("");
-  const [loadingOptions, setLoadingOptions] = useState(true);
-  const [optionsError, setOptionsError] = useState("");
+  const loadingOptions = optionsQuery.loading;
+  const optionsError = optionsQuery.error;
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [detailsError, setDetailsError] = useState("");
   const [editTarget, setEditTarget] = useState(null);
@@ -199,48 +219,10 @@ export default function UserManagement() {
 
   const [formData, setFormData] = useState(emptyForm);
 
-  const fetchUsers = async () => {
-    try {
-      setLoadingUsers(true);
-      setUserError("");
-      const response = await fetch(`${API_URL}/users`);
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Failed to load users.");
-      setUsers(Array.isArray(data) ? data : []);
-    } catch (error) {
-      setUserError(error.message || "Failed to load users.");
-    } finally {
-      setLoadingUsers(false);
-    }
-  };
+  const fetchUsers = userQuery.refresh;
+  const fetchFormOptions = optionsQuery.refresh;
 
-  const fetchFormOptions = async () => {
-    setLoadingOptions(true);
-    setOptionsError("");
-    try {
-      const response = await fetch(`${API_URL}/users/management-options`);
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Failed to load form options.");
-
-      setGradeLevels(data.gradeLevels || []);
-      setSections(data.sections || []);
-      setDepartments(data.departments || []);
-      setSubjectOfferings(data.subjectOfferings || []);
-      return data;
-    } catch (error) {
-      setOptionsError(error.message || "Failed to load options.");
-      return null;
-    } finally {
-      setLoadingOptions(false);
-    }
-  };
-
-  useEffect(() => {
-    // The initial API synchronization intentionally populates page state.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    Promise.all([fetchFormOptions(), fetchUsers()]);
-    return () => { formRequestId.current += 1; };
-  }, []);
+  useEffect(() => () => { formRequestId.current += 1; }, []);
 
   const getUserDepartment = (user) => {
     if (!user) return "-";

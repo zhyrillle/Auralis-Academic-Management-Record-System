@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import useCachedQuery from "../../services/useCachedQuery";
+import { cacheKey } from "../../services/navigationCache";
+import { useEffect, useMemo, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import AccountSummary from "./dashboard/AccountSummary";
 import AuditEventDrawer from "./dashboard/AuditEventDrawer";
@@ -24,16 +26,23 @@ const emptySummary = {
   },
 };
 
+const EMPTY_LIST = [];
+
 export default function AdminDashboard() {
   const [adminUser, setAdminUser] = useState(() => getStoredUser());
-  const [summary, setSummary] = useState(emptySummary);
-  const [auditEvents, setAuditEvents] = useState([]);
-  const [isSummaryLoading, setIsSummaryLoading] = useState(true);
-  const [hasLoadedSummary, setHasLoadedSummary] = useState(false);
-  const [isAuditLoading, setIsAuditLoading] = useState(true);
-  const [summaryError, setSummaryError] = useState("");
-  const [auditError, setAuditError] = useState("");
-  const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
+  const summaryQuery = useCachedQuery(cacheKey('admin:account-summary'), getAccountSummary);
+  const auditQuery = useCachedQuery(cacheKey('admin:audit-events'), getAuditEvents);
+  const summary = summaryQuery.data || emptySummary;
+  const auditEvents = auditQuery.data || EMPTY_LIST;
+  const isSummaryLoading = summaryQuery.loading;
+  const hasLoadedSummary = summaryQuery.data !== undefined;
+  const isAuditLoading = auditQuery.loading;
+  const summaryError = summaryQuery.error;
+  const auditError = auditQuery.error;
+  const lastUpdatedAt = summaryQuery.updatedAt || auditQuery.updatedAt
+    ? new Date(Math.max(summaryQuery.updatedAt || 0, auditQuery.updatedAt || 0)) : null;
+  const loadSummary = summaryQuery.refresh;
+  const loadAuditEvents = auditQuery.refresh;
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
   const [schoolYearFilter, setSchoolYearFilter] = useState("");
@@ -44,48 +53,6 @@ export default function AdminDashboard() {
   const [dateToFilter, setDateToFilter] = useState("");
   const [showMoreFilters, setShowMoreFilters] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState(null);
-
-  const loadSummary = useCallback(async () => {
-    setIsSummaryLoading(true);
-    setSummaryError("");
-
-    try {
-      if (adminUser?.user_id) {
-        getUserProfile(adminUser.user_id)
-          .then((profile) => {
-            if (profile) {
-              setAdminUser((prev) => {
-                const merged = { ...prev, ...profile };
-                setStoredUser(merged);
-                return merged;
-              });
-            }
-          })
-          .catch(() => {});
-      }
-      setSummary(await getAccountSummary());
-      setHasLoadedSummary(true);
-      setLastUpdatedAt(new Date());
-    } catch (error) {
-      setSummaryError(error.message || "Account summary could not be loaded.");
-    } finally {
-      setIsSummaryLoading(false);
-    }
-  }, [adminUser?.user_id]);
-
-  const loadAuditEvents = useCallback(async () => {
-    setIsAuditLoading(true);
-    setAuditError("");
-
-    try {
-      setAuditEvents(await getAuditEvents());
-      setLastUpdatedAt(new Date());
-    } catch (error) {
-      setAuditError(error.message || "Audit activity could not be loaded.");
-    } finally {
-      setIsAuditLoading(false);
-    }
-  }, []);
 
   useEffect(() => {
     let isCurrent = true;
@@ -102,37 +69,6 @@ export default function AdminDashboard() {
         })
         .catch(() => {});
     }
-
-    getAccountSummary()
-      .then((nextSummary) => {
-        if (!isCurrent) return;
-        setSummary(nextSummary);
-        setHasLoadedSummary(true);
-        setLastUpdatedAt(new Date());
-      })
-      .catch((error) => {
-        if (isCurrent) {
-          setSummaryError(error.message || "Account summary could not be loaded.");
-        }
-      })
-      .finally(() => {
-        if (isCurrent) setIsSummaryLoading(false);
-      });
-
-    getAuditEvents()
-      .then((events) => {
-        if (!isCurrent) return;
-        setAuditEvents(events);
-        setLastUpdatedAt(new Date());
-      })
-      .catch((error) => {
-        if (isCurrent) {
-          setAuditError(error.message || "Audit activity could not be loaded.");
-        }
-      })
-      .finally(() => {
-        if (isCurrent) setIsAuditLoading(false);
-      });
 
     return () => {
       isCurrent = false;
@@ -309,7 +245,7 @@ export default function AdminDashboard() {
     [adminUser?.first_name, adminUser?.last_name].filter(Boolean).join(" ") ||
     adminUser?.first_name ||
     "Admin";
-  const isRefreshing = isSummaryLoading || isAuditLoading;
+  const isRefreshing = isSummaryLoading || isAuditLoading || summaryQuery.refreshing || auditQuery.refreshing;
   const lastUpdatedLabel = lastUpdatedAt
     ? `Updated ${new Intl.DateTimeFormat("en-PH", {
         timeZone: "Asia/Manila",
