@@ -2,7 +2,8 @@
  * Principal Analytics Service
  *
  * REST API client connecting to backend /api/principal/analytics routes.
- * Guaranteed to return structured zero-data fallbacks if backend is offline.
+ * Historical comparison rejects failed/incomplete responses for the page's Retry state.
+ * Other legacy endpoints retain their existing fallback behavior.
  */
 
 const API_BASE_URL = (
@@ -84,53 +85,25 @@ export async function getHistoricalComparison({
   comparisonSchoolYear = "2025-2026",
   term = "overall",
 }) {
-  try {
-    const params = new URLSearchParams({
-      primarySchoolYear: String(primarySchoolYear),
-      comparisonSchoolYear: String(comparisonSchoolYear),
-      term: String(term),
-    });
-
-    const res = await fetch(`${API_BASE_URL}/principal/analytics/historical-comparison?${params.toString()}`);
-    if (res.ok) {
-      const data = await res.json();
-      if (data && Array.isArray(data.subjects) && data.subjects.length > 0) {
-        return data;
-      }
-    }
-  } catch (error) {
-    console.warn("Using zero-data fallback for Historical Comparison:", error.message);
-  }
-
-  // Graceful Zero Data Response
-  return {
-    primarySchoolYear: { id: `sy-${primarySchoolYear}`, label: `SY ${primarySchoolYear.replace("-", "–")}`, value: primarySchoolYear },
-    comparisonSchoolYear: { id: `sy-${comparisonSchoolYear}`, label: `SY ${comparisonSchoolYear.replace("-", "–")}`, value: comparisonSchoolYear },
-    term,
-    totalStudents: 0,
-    subjects: DEFAULT_SUBJECTS.map((s) => ({
-      ...s,
-      primaryAverage: 0,
-      comparisonAverage: 0,
-      difference: 0,
-      passRate: 0,
-      improved: true,
-      primaryTermAverages: [0, 0, 0],
-      comparisonTermAverages: [0, 0, 0],
-      primaryTermPassRates: [0, 0, 0],
-      comparisonTermPassRates: [0, 0, 0],
-    })),
-    primaryTrend: [0, 0, 0],
-    comparisonTrend: [0, 0, 0],
-    primaryOverallAverage: 0,
-    comparisonOverallAverage: 0,
-    overallDifference: 0,
-    availableSchoolYears: [
-      { id: "sy-2026-2027", label: "SY 2026–2027", value: "2026-2027" },
-      { id: "sy-2025-2026", label: "SY 2025–2026", value: "2025-2026" },
-      { id: "sy-2024-2025", label: "SY 2024–2025", value: "2024-2025" },
-    ],
-  };
+  const params = new URLSearchParams({ primarySchoolYear: String(primarySchoolYear),
+    comparisonSchoolYear: String(comparisonSchoolYear), term: String(term) });
+  const res = await fetch(`${API_BASE_URL}/principal/analytics/historical-comparison?${params.toString()}`);
+  if (!res.ok) throw new Error(`Unable to load historical comparison (HTTP ${res.status}).`);
+  const data = await res.json();
+  const numeric = (value) => value != null && value !== "" && Number.isFinite(Number(value));
+  const valid = data && Array.isArray(data.subjects) && Array.isArray(data.availableSchoolYears)
+    && typeof data.primarySchoolYear?.label === "string" && typeof data.comparisonSchoolYear?.label === "string"
+    && ["overall", "term-1", "term-2", "term-3"].includes(data.term)
+    && data.availableSchoolYears.every((year) => year && typeof year.value === "string" && typeof year.label === "string")
+    && (data.totalStudents == null || (numeric(data.totalStudents) && Number(data.totalStudents) >= 0))
+    && data.subjects.every((subject) => subject && typeof subject.label === "string"
+      && numeric(subject.primaryAverage) && numeric(subject.comparisonAverage)
+      && (subject.passRate == null || numeric(subject.passRate))
+      && [subject.primaryTermAverages, subject.comparisonTermAverages, subject.primaryTermPassRates]
+        .every((values) => values == null || (Array.isArray(values) && values.length === 3 && values.every(numeric))));
+  if (!valid) throw new Error("The historical comparison response is incomplete. Please retry or contact the administrator.");
+  // Counts, pass rates and per-term trends are optional in the current API.
+  return data;
 }
 
 /**

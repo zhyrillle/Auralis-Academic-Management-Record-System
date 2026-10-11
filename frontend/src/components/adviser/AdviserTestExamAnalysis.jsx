@@ -35,7 +35,7 @@ export default function AdviserTestExamAnalysis({
     const startRad = toRad(startAngleDeg);
     const endRad = toRad(endAngleDeg);
 
-    const effOuterR = isHovered ? outerR + 4 : outerR;
+    const effOuterR = isHovered ? outerR + 6 : outerR;
 
     const x1 = cx + effOuterR * Math.cos(startRad);
     const y1 = cy + effOuterR * Math.sin(startRad);
@@ -62,13 +62,16 @@ export default function AdviserTestExamAnalysis({
         key={startAngleDeg}
         d={pathData}
         fill={color}
+        stroke={color}
+        strokeWidth="6"
+        strokeLinejoin="round"
         opacity={isHovered ? 1 : 0.95}
         onMouseEnter={onEnter}
         onMouseLeave={onLeave}
         style={{
           cursor: "pointer",
           transition: "all 0.2s ease",
-          filter: isHovered ? "drop-shadow(0 2px 6px rgba(0,0,0,0.25))" : "none",
+          filter: isHovered ? "drop-shadow(0 2px 6px rgba(0,0,0,0.3))" : "none",
         }}
       />
     );
@@ -79,10 +82,12 @@ export default function AdviserTestExamAnalysis({
     const cy = 95;
     const innerR = 26;
 
+    // Angles: 3 o'clock is 90 degrees (in SVG where top is 0).
+    // ST1: 90 to 210, ST2: 210 to 330, TE: 330 to 90(450)
     const arcAngles = [
-      { start: 10, end: 110 },
-      { start: 130, end: 230 },
-      { start: 250, end: 350 },
+      { start: 90, end: 210 },
+      { start: 210, end: 330 },
+      { start: 330, end: 450 },
     ];
 
     const hasSlices = slices && slices.length > 0;
@@ -90,15 +95,14 @@ export default function AdviserTestExamAnalysis({
 
     return (
       <div className="adviser-dashboard__test-chart-item">
-        <svg
-          viewBox="0 0 190 190"
-          className="adviser-dashboard__polar-svg"
-        >
+        <svg viewBox="0 0 190 190" className="adviser-dashboard__polar-svg">
           {hasSlices ? (
             slices.map((slice, idx) => {
-              const angle = arcAngles[idx] || { start: 0, end: 100 };
-              const outerR = 38 + ((slice.percent ?? 50) / 100) * 44;
-              const isHovered = activeHover?.label === (slice.label || legendItems[idx].key);
+              const angle = arcAngles[idx] || { start: 0, end: 120 };
+              // Determine radius based on value/percent
+              const val = slice.value || slice.percent || 50;
+              const outerR = 30 + (val / 100) * 50;
+              const isHovered = activeHover?.label === (slice.label || slice.name || legendItems[idx].key);
               return renderPolarSlice(
                 cx,
                 cy,
@@ -106,45 +110,24 @@ export default function AdviserTestExamAnalysis({
                 outerR,
                 angle.start,
                 angle.end,
-                slice.color || legendItems[idx].color,
+                slice.color || slice.fill || legendItems[idx].color,
                 isHovered,
-                () => setHoveredSlice({ chart: title, label: slice.label || legendItems[idx].key, percent: slice.percent ?? 0, count: slice.count ?? 0, total: slice.total ?? 0 }),
+                () => setHoveredSlice({ chart: title, label: slice.label || slice.name || legendItems[idx].key, percent: val, count: slice.count || val, color: slice.color || slice.fill || legendItems[idx].color }),
                 () => setHoveredSlice(null)
               );
             })
           ) : (
-            <circle
-              cx={cx}
-              cy={cy}
-              r="60"
-              fill="none"
-              stroke="#E2E8F0"
-              strokeWidth="24"
-            />
+            <circle cx={cx} cy={cy} r="60" fill="none" stroke="#E2E8F0" strokeWidth="24" />
           )}
 
-          {/* Central hole & interactive hover state */}
           <circle cx={cx} cy={cy} r={innerR - 1} fill="#FFFFFF" />
+          
           {activeHover && (
             <g pointerEvents="none">
-              <text
-                x={cx}
-                y={cy - 2}
-                textAnchor="middle"
-                fill="#183256"
-                fontSize="11"
-                fontWeight="700"
-              >
+              <text x={cx} y={cy - 2} textAnchor="middle" fill="#183256" fontSize="11" fontWeight="700">
                 {activeHover.label}
               </text>
-              <text
-                x={cx}
-                y={cy + 10}
-                textAnchor="middle"
-                fill="#2563EB"
-                fontSize="10"
-                fontWeight="700"
-              >
+              <text x={cx} y={cy + 10} textAnchor="middle" fill={activeHover.color} fontSize="10" fontWeight="700">
                 {activeHover.percent}%
               </text>
             </g>

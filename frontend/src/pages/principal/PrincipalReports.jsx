@@ -1,519 +1,457 @@
-import React, { useState, useMemo } from "react";
-import {
-  ChevronLeft,
-  ChevronDown,
-  Eye,
-  Printer,
-  Download,
-  Moon,
-  Bell,
-  User,
-} from "lucide-react";
-
+import { useEffect, useMemo, useState } from "react";
+import { ArrowLeft, Eye, Users, FileText, Download, AlertCircle } from "lucide-react";
+import DropdownSelect from "../../components/common/DropdownSelect";
+import EmptyState from "../../components/common/EmptyState";
+import SearchBar from "../../components/common/SearchBar";
+import Badge from "../../components/common/Badge";
+import Toast from "../../components/common/Toast";
+import AnalyticsTermTabs from "./analytics/AnalyticsTermTabs";
 import StudentSF9Page from "../adviser/StudentSF9Page";
+import {
+  fetchStudents, fetchSections, fetchStudentSections, fetchGradeLevels, fetchSchoolYears,
+} from "../../services/studentSectionService";
 import "./PrincipalReports.css";
 
-// Sample Pre-labeled Report Records matching reference design
-const INITIAL_REPORTS = [
-  {
-    id: "r1",
-    name: "Luis B. Torres",
-    lrn: "101234567893",
-    gradeLevel: "Grade 10",
-    grade: "10",
-    section: "A",
-    gradeSection: "G10-A",
-    address: "Cagayan de Oro City",
-    form: "SF9",
-    status: "Pending",
-    schoolYear: "2024–2025",
-  },
-  {
-    id: "r2",
-    name: "Andrea C. Mendoza",
-    lrn: "101234567893",
-    gradeLevel: "Grade 10",
-    grade: "10",
-    section: "A",
-    gradeSection: "G10-A",
-    address: "Cagayan de Oro City",
-    form: "SF10",
-    status: "Pending",
-    schoolYear: "2024–2025",
-  },
-  {
-    id: "r3",
-    name: "Kristen A. Reyes",
-    lrn: "101234567893",
-    gradeLevel: "Grade 10",
-    grade: "10",
-    section: "A",
-    gradeSection: "G10-A",
-    address: "Cagayan de Oro City",
-    form: "SF9",
-    status: "Pending",
-    schoolYear: "2024–2025",
-  },
-  {
-    id: "r4",
-    name: "Jose M. Dela Cruz",
-    lrn: "101234567893",
-    gradeLevel: "Grade 10",
-    grade: "10",
-    section: "A",
-    gradeSection: "G10-A",
-    address: "Cagayan de Oro City",
-    form: "SF10",
-    status: "Delayed",
-    schoolYear: "2024–2025",
-  },
-  {
-    id: "r5",
-    name: "Sofia Cruz",
-    lrn: "101234567893",
-    gradeLevel: "Grade 10",
-    grade: "10",
-    section: "A",
-    gradeSection: "G10-A",
-    address: "Cagayan de Oro City",
-    form: "SF10",
-    status: "Delayed",
-    schoolYear: "2024–2025",
-  },
-  {
-    id: "r6",
-    name: "TLE",
-    lrn: "101234567893",
-    gradeLevel: "Grade 10",
-    grade: "10",
-    section: "A",
-    gradeSection: "G10-A",
-    address: "Cagayan de Oro City",
-    form: "SF9",
-    status: "Submitted",
-    schoolYear: "2024–2025",
-  },
-  {
-    id: "r7",
-    name: "MAPEH",
-    lrn: "101234567893",
-    gradeLevel: "Grade 10",
-    grade: "10",
-    section: "A",
-    gradeSection: "G10-A",
-    address: "Cagayan de Oro City",
-    form: "SF9",
-    status: "Submitted",
-    schoolYear: "2024–2025",
-  },
-  {
-    id: "r8",
-    name: "ESP",
-    lrn: "101234567893",
-    gradeLevel: "Grade 10",
-    grade: "10",
-    section: "A",
-    gradeSection: "G10-A",
-    address: "Cagayan de Oro City",
-    form: "SF10",
-    status: "Submitted",
-    schoolYear: "2024–2025",
-  },
+const REPORT_TERMS = [
+  { id: "overall", label: "Overall" },
+  { id: "1", label: "Term 1" },
+  { id: "2", label: "Term 2" },
+  { id: "3", label: "Term 3" },
 ];
 
 export default function PrincipalReports() {
-  // Navigation Mode: "list" | "student" | "sf9"
-  const [mode, setMode] = useState("list");
-  const [selectedStudent, setSelectedStudent] = useState(INITIAL_REPORTS[0]);
+  const [data, setData] = useState({ students: [], sections: [], enrollments: [], grades: [], years: [] });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [reload, setReload] = useState(0);
+  const [selectedStudent, setSelectedStudent] = useState(null);
+  const [selectedSection, setSelectedSection] = useState(null);
+  const [schoolYearId, setSchoolYearId] = useState("");
+  const [gradeId, setGradeId] = useState("all");
+  const [search, setSearch] = useState("");
+  const [sectionSearch, setSectionSearch] = useState("");
+  const [selectedTerm, setSelectedTerm] = useState("overall");
+  const [toast, setToast] = useState({ message: "", variant: "info", icon: null });
 
-  // Controls State
-  const [selectedTerm, setSelectedTerm] = useState("Overall");
-  const [selectedForm, setSelectedForm] = useState("All Forms");
-  const [selectedGradeLevel, setSelectedGradeLevel] = useState("Grade Level");
-  const [selectedSchoolYear, setSelectedSchoolYear] = useState("School Year");
+  const termLabel = selectedTerm === "overall" ? "Overall" : `Term ${selectedTerm}`;
 
-  // Dropdown open states
-  const [openDropdown, setOpenDropdown] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      setLoading(true);
+      setError("");
+      try {
+        const [students, sections, enrollments, grades, years] = await Promise.all([
+          fetchStudents(), fetchSections(), fetchStudentSections(), fetchGradeLevels(), fetchSchoolYears(),
+        ]);
+        if (cancelled) return;
+        const sortedYears = [...years].sort((a, b) => String(b.starts_on).localeCompare(String(a.starts_on)));
+        const current = sortedYears.find((year) => ["ACTIVE", "ONGOING"].includes(String(year.status).toUpperCase()))
+          || sortedYears.find((year) => String(year.status).toUpperCase() !== "UPCOMING") || sortedYears[0];
+        setData({ students, sections, enrollments, grades, years: sortedYears });
+        setSchoolYearId((previous) => sortedYears.some((year) => String(year.school_year_id) === previous)
+          ? previous : String(current?.school_year_id ?? ""));
+      } catch {
+        if (!cancelled) setError("Unable to load student records. Check the backend connection and try again.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, [reload]);
 
-  const terms = ["Overall", "Term 1", "Term 2", "Term 3"];
-  const forms = ["All Forms", "SF9", "SF10"];
-  const gradeLevels = ["All Grades", "Grade 7", "Grade 8", "Grade 9", "Grade 10"];
-  const schoolYears = ["S.Y. 2024–2025", "S.Y. 2025–2026", "S.Y. 2026–2027"];
+  const yearOptions = data.years.map((year) => ({
+    value: String(year.school_year_id),
+    label: `S.Y. ${String(year.starts_on).slice(0, 4)}–${String(year.ends_on).slice(0, 4)}`,
+  }));
+  const yearLabel = yearOptions.find((year) => year.value === schoolYearId)?.label || "No school year";
+  const gradeOptions = [{ value: "all", label: "All Grades" }, ...data.grades.map((grade) => ({
+    value: String(grade.grade_level_id), label: grade.grade_level_name,
+  }))];
 
-  const [docTab, setDocTab] = useState("sf9");
+  const learners = useMemo(() => {
+    const students = new Map(data.students.map((student) => [String(student.student_id), student]));
+    const sections = new Map(data.sections.map((section) => [String(section.section_id), section]));
+    // Use this year's enrollment, not the latest section returned on the student profile.
+    const enrollments = new Map();
+    for (const enrollment of data.enrollments) {
+      if (String(enrollment.school_year_id) !== schoolYearId) continue;
+      const key = String(enrollment.student_id);
+      const previous = enrollments.get(key);
+      if (!previous || Number(enrollment.student_section_id) > Number(previous.student_section_id)) {
+        enrollments.set(key, enrollment);
+      }
+    }
+    return [...enrollments.values()].flatMap((enrollment) => {
+      const student = students.get(String(enrollment.student_id));
+      const section = sections.get(String(enrollment.section_id));
+      if (!student || !section) return [];
+      return [{
+        ...student,
+        id: String(student.student_id), name: student.name.replace(/\s+/g, " ").trim(),
+        lrn: String(student.lrn ?? student.LRN ?? ""),
+        gradeId: String(section.grade_level_id), sectionId: String(section.section_id),
+        gradeSection: `${section.grade_level_name} · ${section.section_name}`,
+        gradeLevel: section.grade_level_name, section: section.section_name,
+        schoolYearId, studentSectionId: enrollment.student_section_id,
+      }];
+    }).sort((a, b) => a.name.localeCompare(b.name));
+  }, [data, schoolYearId]);
 
-  // Filtered reports
-  const filteredReports = useMemo(() => {
-    return INITIAL_REPORTS.filter((r) => {
-      if (selectedForm !== "All Forms" && r.form !== selectedForm) return false;
-      if (
-        selectedGradeLevel !== "Grade Level" &&
-        selectedGradeLevel !== "All Grades" &&
-        !r.gradeLevel.toLowerCase().includes(selectedGradeLevel.toLowerCase().replace("grade ", ""))
-      )
-        return false;
-      return true;
+  // Section cards for Landing Page (Assigned Classes view)
+  const displaySections = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return data.sections
+      .filter((section) => {
+        if (gradeId !== "all" && String(section.grade_level_id) !== gradeId) return false;
+        if (!query) return true;
+        const name = (section.section_name || section.name || "").toLowerCase();
+        const grade = (section.grade_level_name || section.level || "").toLowerCase();
+        const prog = (section.program_name || section.program_code || "").toLowerCase();
+        return name.includes(query) || grade.includes(query) || prog.includes(query);
+      })
+      .map((section) => {
+        const secId = String(section.section_id || section.id);
+        const count = learners.filter((l) => l.sectionId === secId).length;
+        return {
+          ...section,
+          studentCount: count,
+          entryProgress: count > 0 ? 100 : 0,
+        };
+      });
+  }, [data.sections, gradeId, search, learners]);
+
+  // Learners within the selected section
+  const sectionLearners = useMemo(() => {
+    if (!selectedSection) return [];
+    const secId = String(selectedSection.section_id || selectedSection.id);
+    const query = sectionSearch.trim().toLowerCase();
+    return learners.filter((learner) => {
+      if (learner.sectionId !== secId) return false;
+      if (!query) return true;
+      return learner.name.toLowerCase().includes(query) || learner.lrn.includes(query);
     });
-  }, [selectedForm, selectedGradeLevel]);
+  }, [selectedSection, learners, sectionSearch]);
 
-  const handleSelectStudent = (student, tab = "sf9") => {
-    setSelectedStudent(student);
-    setDocTab(tab);
-    setMode("student");
+  const handleQuickAction = (docType) => {
+    setToast({
+      message: `Initiating ${docType} download for all enrolled learners...`,
+      variant: "info",
+      icon: Download,
+    });
   };
 
-  const handleTriggerPrint = (formName) => {
-    window.print();
-  };
-
-  const handleDownload = (formName) => {
-    alert(`Downloading ${formName} for ${selectedStudent?.name || "student"}...`);
-  };
-
-  // If in SF9 view mode, render official DepEd SF9 document spread with adviser tabs
-  if (mode === "sf9") {
+  if (selectedStudent) {
     return (
-      <StudentSF9Page
-        student={selectedStudent}
-        initialTab={docTab}
-        onBack={() => setMode("student")}
-        userRole="principal"
-      />
+      <div className="pr-page-container pr-page-container--report">
+        <StudentSF9Page
+          student={selectedStudent}
+          userRole="principal"
+          isAdviser
+          onBack={() => setSelectedStudent(null)}
+        />
+      </div>
     );
   }
 
-  return (
-    <div className="pr-page-container">
-      {/* 1. Header Area */}
-      <header className="pr-header">
-        <div className="pr-header-left">
-          {mode === "student" && (
-            <button
-              type="button"
-              className="pr-back-btn"
-              title="Back to Reports"
-              onClick={() => setMode("list")}
-            >
-              <ChevronLeft size={20} />
-            </button>
-          )}
-          <div>
-            <h1 className="pr-title">Student Reports</h1>
-            <p className="pr-subtitle">
-              Term based pass / fail overview across all grades · S.Y. 2024–2025
-            </p>
+  // Selected Section Detail View
+  if (selectedSection) {
+    const secName = selectedSection.section_name || selectedSection.name || "Section";
+    const secGrade = selectedSection.grade_level_name || selectedSection.level || "";
+    const secProgram = selectedSection.program_name || selectedSection.program_code || "General Curriculum";
+
+    return (
+      <div className="pr-page-container pr-page-container--list">
+        <header className="pr-header">
+          <div className="pr-header-left">
+            <div>
+              <div className="pr-title-row">
+                <button
+                  type="button"
+                  className="pr-section-back-btn"
+                  onClick={() => { setSelectedSection(null); setSectionSearch(""); }}
+                  title="Back"
+                >
+                  <ArrowLeft size={16} />
+                  <span>Back</span>
+                </button>
+                <h1 className="pr-title">{secGrade ? `${secGrade} - ${secName}` : secName}</h1>
+              </div>
+              <p className="pr-subtitle">
+                {secProgram} · {yearLabel} · {termLabel} · {sectionLearners.length} enrolled learner{sectionLearners.length === 1 ? "" : "s"}
+              </p>
+            </div>
           </div>
-        </div>
+        </header>
 
-        <div className="pr-header-actions">
-          <button type="button" className="pr-icon-btn" title="Notifications">
-            <Bell size={18} />
-            <span className="pr-badge">7</span>
-          </button>
-        </div>
-      </header>
+        <section className="pr-controls-bar" aria-label="Student filters">
+          <div className="pr-term-control">
+            <AnalyticsTermTabs options={REPORT_TERMS} value={selectedTerm} onChange={setSelectedTerm} ariaLabel="Report term" />
+          </div>
+        </section>
 
-      {/* 2. MODE: LIST (Reports 1 Landing Page) */}
-      {mode === "list" && (
-        <>
-          {/* Controls Bar */}
-          <section className="pr-controls-bar">
-            {/* Term Tabs */}
-            <div className="pr-term-group">
-              {terms.map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  className={`pr-term-btn ${selectedTerm === t ? "active" : ""}`}
-                  onClick={() => setSelectedTerm(t)}
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
-
-            {/* Dropdown Filters Group */}
-            <div className="pr-dropdowns-group">
-              {/* Form Filter */}
-              <div className="pr-dropdown-wrap">
-                <button
-                  type="button"
-                  className="pr-dropdown-btn"
-                  onClick={() =>
-                    setOpenDropdown(openDropdown === "form" ? null : "form")
-                  }
-                >
-                  <span>{selectedForm}</span>
-                  <ChevronDown size={14} />
-                </button>
-                {openDropdown === "form" && (
-                  <div className="pr-dropdown-menu">
-                    {forms.map((f) => (
-                      <button
-                        key={f}
-                        type="button"
-                        className={`pr-dropdown-item ${selectedForm === f ? "active" : ""}`}
-                        onClick={() => {
-                          setSelectedForm(f);
-                          setOpenDropdown(null);
-                        }}
-                      >
-                        {f}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Grade Level Filter */}
-              <div className="pr-dropdown-wrap">
-                <button
-                  type="button"
-                  className="pr-dropdown-btn"
-                  onClick={() =>
-                    setOpenDropdown(openDropdown === "gl" ? null : "gl")
-                  }
-                >
-                  <span>{selectedGradeLevel}</span>
-                  <ChevronDown size={14} />
-                </button>
-                {openDropdown === "gl" && (
-                  <div className="pr-dropdown-menu">
-                    {gradeLevels.map((gl) => (
-                      <button
-                        key={gl}
-                        type="button"
-                        className={`pr-dropdown-item ${selectedGradeLevel === gl ? "active" : ""}`}
-                        onClick={() => {
-                          setSelectedGradeLevel(gl);
-                          setOpenDropdown(null);
-                        }}
-                      >
-                        {gl}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* School Year Filter */}
-              <div className="pr-dropdown-wrap">
-                <button
-                  type="button"
-                  className="pr-dropdown-btn"
-                  onClick={() =>
-                    setOpenDropdown(openDropdown === "sy" ? null : "sy")
-                  }
-                >
-                  <span>{selectedSchoolYear}</span>
-                  <ChevronDown size={14} />
-                </button>
-                {openDropdown === "sy" && (
-                  <div className="pr-dropdown-menu">
-                    {schoolYears.map((sy) => (
-                      <button
-                        key={sy}
-                        type="button"
-                        className={`pr-dropdown-item ${selectedSchoolYear === sy ? "active" : ""}`}
-                        onClick={() => {
-                          setSelectedSchoolYear(sy);
-                          setOpenDropdown(null);
-                        }}
-                      >
-                        {sy}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </section>
-
-          {/* Subject-Level Breakdown Table Card */}
-          <section className="pr-table-card">
-            <div className="pr-card-header">
+        <section className="pr-table-card" aria-busy={loading}>
+          <div className="pr-card-header">
+            <div>
               <h2 className="pr-card-title">Subject-Level Breakdown</h2>
-              <span className="pr-card-subtitle">Current vs Previous term</span>
+              <p className="pr-card-subtitle" aria-live="polite">
+                {loading ? "Loading learners…" : error ? "Student records unavailable" : `${sectionLearners.length} learners · ${secName} · ${termLabel}`}
+              </p>
             </div>
-
-            <div className="pr-table-wrap">
-              <table className="pr-table">
-                <thead>
+            <div className="pr-search" role="search" aria-label="Search learners">
+              <SearchBar query={sectionSearch} setQuery={setSectionSearch} placeholder="Search student name or LRN…" />
+            </div>
+          </div>
+          <div className="pr-table-wrap" tabIndex={0} role="region" aria-label="Student records">
+            <table className="pr-table">
+              <thead>
+                <tr>
+                  <th scope="col">STUDENT</th>
+                  <th scope="col">LRN</th>
+                  <th scope="col">GRADE / SECTION</th>
+                  <th scope="col">FORMS</th>
+                  <th scope="col">STATUS</th>
+                  <th scope="col" className="pr-th-actions">ACTIONS</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  Array.from({ length: 6 }, (_, row) => (
+                    <tr key={row} aria-hidden="true">
+                      {Array.from({ length: 6 }, (_, col) => (
+                        <td key={col}><span className="pr-skeleton" /></td>
+                      ))}
+                    </tr>
+                  ))
+                ) : error ? (
                   <tr>
-                    <th className="pr-th">STUDENT</th>
-                    <th className="pr-th">LRN</th>
-                    <th className="pr-th">GRADE / SECTION</th>
-                    <th className="pr-th">FORM</th>
-                    <th className="pr-th">STATUS</th>
-                    <th className="pr-th pr-th-actions">ACTIONS</th>
+                    <td colSpan={6}>
+                      <div className="pr-empty" role="alert">
+                        <EmptyState title="Student records could not be loaded" description={error} />
+                        <button type="button" className="pr-action-view-btn" onClick={() => setReload((v) => v + 1)}>
+                          Try again
+                        </button>
+                      </div>
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {filteredReports.map((item) => (
-                    <tr
-                      key={item.id}
-                      className="pr-tr"
-                      onClick={() => handleSelectStudent(item)}
-                    >
-                      <td className="pr-td pr-td-student">{item.name}</td>
-                      <td className="pr-td pr-td-lrn">{item.lrn}</td>
-                      <td className="pr-td pr-td-section">{item.gradeSection}</td>
-                      <td className="pr-td">
-                        <span
-                          className={`pr-form-badge ${
-                            item.form === "SF10"
-                              ? "pr-form-badge--sf10"
-                              : "pr-form-badge--sf9"
-                          }`}
-                        >
-                          {item.form}
+                ) : sectionLearners.length ? (
+                  sectionLearners.map((learner) => (
+                    <tr key={learner.id} className="pr-tr">
+                      <td className="pr-td-student">{learner.name}</td>
+                      <td className="pr-td-lrn">{learner.lrn || "—"}</td>
+                      <td>{learner.gradeSection}</td>
+                      <td>
+                        <span className="pr-forms">
+                          <Badge className="pr-form-badge pr-form-badge--sf9">SF9</Badge>
+                          <Badge className="pr-form-badge pr-form-badge--sf10">SF10</Badge>
                         </span>
                       </td>
-                      <td className="pr-td">
-                        <span
-                          className={`pr-status-pill ${
-                            item.status === "Submitted"
-                              ? "pr-status-pill--submitted"
-                              : item.status === "Delayed"
-                              ? "pr-status-pill--delayed"
-                              : "pr-status-pill--pending"
-                          }`}
-                        >
-                          {item.status}
-                        </span>
+                      <td title="Report issuance status is not tracked. Use View to preview or download school forms.">
+                        <Badge className="pr-status-pill pr-status-pill--unavailable">Not tracked</Badge>
                       </td>
-                      <td className="pr-td" style={{ textAlign: "right" }}>
+                      <td className="pr-th-actions">
                         <button
                           type="button"
-                          className="pr-action-view-btn"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleSelectStudent(item);
-                          }}
+                          className="pr-action-eye-btn"
+                          title={`View ${learner.name}`}
+                          aria-label={`View ${learner.name}`}
+                          onClick={() => setSelectedStudent(learner)}
                         >
-                          VIEW
+                          <Eye size={20} aria-hidden="true" />
                         </button>
                       </td>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={6}>
+                      <EmptyState
+                        className="pr-empty"
+                        icon={Users}
+                        title="No learners found"
+                        description={sectionSearch.trim() ? "Try a different student name or LRN." : "No enrolled learners in this section for the active school year."}
+                      />
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    );
+  }
+
+  // Landing Page View (Imitating Adviser Assigned Classes)
+  return (
+    <div className="pr-page-container pr-page-container--list">
+      <header className="pr-header">
+        <div className="pr-header-left">
+          <div>
+            <div className="pr-title-row">
+              <h1 className="pr-title">Student Reports</h1>
             </div>
-          </section>
-        </>
-      )}
+            <p className="pr-subtitle">Browse learner records by class section and subject.</p>
+          </div>
+        </div>
+      </header>
 
-      {/* 3. MODE: STUDENT (Reports 2 Student Overview) */}
-      {mode === "student" && (
-        <>
-          {/* Student Profile Card */}
-          <section className="pr-student-profile-card">
-            <div className="pr-student-info-left">
-              <div className="pr-student-avatar">
-                <User size={40} />
+      <section className="pr-controls-bar" aria-label="Student filters">
+        <div className="pr-term-control">
+          <AnalyticsTermTabs options={REPORT_TERMS} value={selectedTerm} onChange={setSelectedTerm} ariaLabel="Report term" />
+        </div>
+      </section>
+
+      <section className="pr-assigned-section">
+        <div className="pr-assigned-header">
+          <div className="pr-filter-controls-left">
+            <div className="pr-search" role="search" aria-label="Search sections">
+              <SearchBar query={search} setQuery={setSearch} placeholder="Search section, subject, or program…" />
+            </div>
+            <div className="pr-dropdowns-group">
+              <DropdownSelect
+                label="School year"
+                value={schoolYearId}
+                options={yearOptions}
+                placeholder="No school years available"
+                disabled={loading || !data.years.length}
+                onChange={(value) => { setSchoolYearId(value); setGradeId("all"); }}
+              />
+              <DropdownSelect
+                label="Grade level"
+                value={gradeId}
+                options={gradeOptions}
+                disabled={loading}
+                onChange={setGradeId}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="pr-assigned-layout">
+          {/* Class Cards List */}
+          <div className="pr-class-cards-container">
+            {loading ? (
+              <div className="pr-class-cards-grid">
+                {Array.from({ length: 4 }, (_, idx) => (
+                  <div key={idx} className="pr-class-card" style={{ minHeight: 200 }}>
+                    <span className="pr-skeleton" style={{ width: "60%", height: 20 }} />
+                    <span className="pr-skeleton" style={{ width: "40%", height: 14 }} />
+                    <span className="pr-skeleton" style={{ width: "50%", height: 16 }} />
+                    <span className="pr-skeleton" style={{ width: "100%", height: 8, marginTop: 12 }} />
+                    <span className="pr-skeleton" style={{ width: "100%", height: 38, marginTop: 12, borderRadius: 8 }} />
+                  </div>
+                ))}
               </div>
-              <div className="pr-student-details">
-                <h2 className="pr-student-name">{selectedStudent.name}</h2>
-                <p className="pr-student-meta">{selectedStudent.lrn}</p>
-                <p className="pr-student-meta">
-                  Grade {selectedStudent.grade} – {selectedStudent.section}
-                </p>
-                <p className="pr-student-meta">{selectedStudent.address}</p>
+            ) : displaySections && displaySections.length > 0 ? (
+              <div className="pr-class-cards-grid">
+                {displaySections.map((sec) => {
+                  const secName = sec.section_name || sec.name || "Section";
+                  const secGrade = sec.grade_level_name || sec.level || "";
+                  const displayTitle = secGrade ? `${secGrade} - ${secName}` : secName;
+                  const displaySubject = sec.program_name
+                    ? `${sec.program_code ? `${sec.program_code} · ` : ""}${sec.program_name}`
+                    : "General Curriculum";
+
+                  return (
+                    <div key={sec.section_id || sec.id} className="pr-class-card">
+                      <div className="pr-class-card-header">
+                        <h4 className="pr-class-card-title">{displayTitle}</h4>
+                        <span className="pr-class-status-badge">{sec.status || "Active"}</span>
+                      </div>
+
+                      <div className="pr-class-subject">{displaySubject}</div>
+
+                      <div className="pr-class-students">
+                        <Users size={16} className="pr-class-icon" />
+                        <span>{sec.studentCount} students</span>
+                      </div>
+
+                      <div className="pr-class-progress-wrap">
+                        <div className="pr-class-progress-label">Entry Progress</div>
+                        <div className="pr-class-progress-bar-bg">
+                          <div
+                            className="pr-class-progress-bar-fill"
+                            style={{ width: `${sec.entryProgress}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="pr-class-cta-btn"
+                        onClick={() => setSelectedSection(sec)}
+                      >
+                        VIEW
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="pr-no-classes-card">
+                <AlertCircle size={20} className="pr-no-classes-icon" />
+                <span>No matching class sections found for this grade or school year.</span>
+              </div>
+            )}
+          </div>
+
+          {/* Side Quick Actions Card (Adviser-style) */}
+          <div className="pr-quick-actions-card">
+            <h3 className="pr-quick-actions-title">Quick actions</h3>
+            <p className="pr-quick-actions-desc">Generate official government documents</p>
+
+            <div className="pr-quick-action-items">
+              <div className="pr-doc-item">
+                <div className="pr-doc-left">
+                  <FileText size={18} className="pr-doc-icon" />
+                  <span className="pr-doc-name">SF9 Report Card</span>
+                </div>
+                <button
+                  type="button"
+                  className="pr-doc-download-btn"
+                  title="Download SF9 Report Card"
+                  onClick={() => handleQuickAction("SF9 Report Card")}
+                >
+                  <Download size={15} />
+                </button>
+              </div>
+
+              <div className="pr-doc-item">
+                <div className="pr-doc-left">
+                  <FileText size={18} className="pr-doc-icon" />
+                  <span className="pr-doc-name">SF10 Permanent Record</span>
+                </div>
+                <button
+                  type="button"
+                  className="pr-doc-download-btn"
+                  title="Download SF10 Permanent Record"
+                  onClick={() => handleQuickAction("SF10 Permanent Record")}
+                >
+                  <Download size={15} />
+                </button>
               </div>
             </div>
 
-            <span className="pr-student-tag-badge">Student</span>
-          </section>
+            <button
+              type="button"
+              className="pr-bulk-download-btn"
+              onClick={() => handleQuickAction("Bulk Documents")}
+            >
+              Bulk Download
+            </button>
+          </div>
+        </div>
+      </section>
 
-          {/* 2 Cards: Report Card (SF9) & Learner's Card (SF10) */}
-          <section className="pr-cards-grid">
-            {/* Card 1: Report Card (SF9) */}
-            <div className="pr-doc-card">
-              <div className="pr-doc-card-header">
-                <h3 className="pr-doc-card-title">Report Card</h3>
-                <span className="pr-doc-form-tag">SF9</span>
-              </div>
-
-              <p className="pr-doc-card-desc">
-                The official learner's progress report issued every quarter.
-                Contains grades per subject, conduct ratings, and attendance summary.
-              </p>
-
-              <div className="pr-doc-card-actions">
-                <button
-                  type="button"
-                  className="pr-btn-view-doc"
-                  onClick={() => {
-                    setDocTab("sf9");
-                    setMode("sf9");
-                  }}
-                >
-                  <Eye size={16} />
-                  <span>VIEW SF9</span>
-                </button>
-                <button
-                  type="button"
-                  className="pr-btn-print-doc"
-                  onClick={() => handleTriggerPrint("SF9")}
-                >
-                  <Printer size={16} />
-                  <span>Print</span>
-                </button>
-                <button
-                  type="button"
-                  className="pr-btn-download-icon"
-                  title="Download SF9"
-                  onClick={() => handleDownload("SF9")}
-                >
-                  <Download size={18} />
-                </button>
-              </div>
-            </div>
-
-            {/* Card 2: Learner's Card (SF10) */}
-            <div className="pr-doc-card">
-              <div className="pr-doc-card-header">
-                <h3 className="pr-doc-card-title">Learner's Card</h3>
-                <span className="pr-doc-form-tag">SF10</span>
-              </div>
-
-              <p className="pr-doc-card-desc">
-                The official learner's progress report issued every quarter.
-                Contains grades per subject, conduct ratings, and attendance summary.
-              </p>
-
-              <div className="pr-doc-card-actions">
-                <button
-                  type="button"
-                  className="pr-btn-view-doc"
-                  onClick={() => {
-                    setDocTab("personal");
-                    setMode("sf9");
-                  }}
-                >
-                  <Eye size={16} />
-                  <span>VIEW SF10</span>
-                </button>
-                <button
-                  type="button"
-                  className="pr-btn-print-doc"
-                  onClick={() => handleTriggerPrint("SF10")}
-                >
-                  <Printer size={16} />
-                  <span>Print</span>
-                </button>
-                <button
-                  type="button"
-                  className="pr-btn-download-icon"
-                  title="Download SF10"
-                  onClick={() => handleDownload("SF10")}
-                >
-                  <Download size={18} />
-                </button>
-              </div>
-            </div>
-          </section>
-        </>
+      {toast.message && (
+        <Toast
+          message={toast.message}
+          variant={toast.variant}
+          icon={toast.icon}
+          onDismiss={() => setToast({ message: "", variant: "info", icon: null })}
+        />
       )}
     </div>
   );

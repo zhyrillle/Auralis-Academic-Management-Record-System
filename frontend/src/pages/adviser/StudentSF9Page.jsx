@@ -689,24 +689,25 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
              ============================================================ */}
           <div className={`sf9-official-sheet sf9-front-sheet ${viewMode === "back" ? "hide-on-screen" : ""}`}>
 
-            {/* Official Header */}
-            <div className="sf9-sheet-header">
-              <div className="sf9-header-grid">
-                <div className="sf9-header-logo-left">
-                  <img src={depedLogo} alt="DepEd Seal" className="sf9-logo-img" />
-                </div>
-                <div className="sf9-header-text-center">
-                  <p className="sf9-hdr-line">Republic of the Philippines</p>
-                  <p className="sf9-hdr-line">Department of Education</p>
-                  <p className="sf9-hdr-line">Region X – Northern Mindanao</p>
-                  <p className="sf9-hdr-line font-bold">SCHOOLS DIVISION OFFICE OF GINGOOG CITY</p>
-                  <p className="sf9-hdr-line">West 1 District</p><p className="sf9-hdr-line">Gingoog City, Misamis Oriental</p>
-                  <h3 className="sf9-school-name-title">GINGOOG CITY COMPREHENSIVE NATIONAL HIGH SCHOOL</h3>
-                  <h2 className="sf9-report-doc-title">LEARNER'S PERFORMANCE REPORT</h2>
-                  <p className="sf9-school-year-title">School Year {studentProfile.schoolYear}</p>
-                </div>
-                <div className="sf9-header-logo-right">
-                  <img src={gccnhsLogo} alt="GCCNS Seal" className="sf9-logo-img" />
+              {/* Official Header */}
+              <div className="sf9-sheet-header">
+                <div className="sf9-header-grid">
+                  <div className="sf9-header-logo-left">
+                    <img src={depedLogo} alt="DepEd Seal" className="sf9-logo-img" />
+                  </div>
+                  <div className="sf9-header-text-center">
+                    <p className="sf9-hdr-line">Republic of the Philippines</p>
+                    <p className="sf9-hdr-line">Department of Education</p>
+                    <p className="sf9-hdr-line">Region X – Northern Mindanao</p>
+                    <p className="sf9-hdr-line font-bold">SCHOOLS DIVISION OFFICE OF GINGOOG CITY</p>
+                    <p className="sf9-hdr-line">West 1 District</p><p className="sf9-hdr-line">Gingoog City, Misamis Oriental</p>
+                    <h3 className="sf9-school-name-title">GINGOOG CITY COMPREHENSIVE NATIONAL HIGH SCHOOL</h3>
+                    <h2 className="sf9-report-doc-title">LEARNER'S PERFORMANCE REPORT</h2>
+                    <p className="sf9-school-year-title">School Year {studentProfile.schoolYear}</p>
+                  </div>
+                  <div className="sf9-header-logo-right">
+                    <img src={gccnhsLogo} alt="GCCNS Seal" className="sf9-logo-img" />
+                  </div>
                 </div>
               </div>
             </div>
@@ -841,100 +842,129 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
              ============================================================ */}
           <div className={`sf9-official-sheet sf9-back-sheet ${viewMode === "front" ? "hide-on-screen" : ""}`}>
 
-            {/* Section 1: ATTENDANCE RECORD (Top) */}
-            <div className="sf9-section-block">
-              <div className="sf9-table-heading">ATTENDANCE RECORD</div>
-              <table className="sf9-official-table sf9-attendance-table-clean">
-                <thead>
-                  <tr>
-                    <th className="col-month-head">Month</th>
-                    {attendanceData.months.map((m, idx) => (
-                      <th key={idx} className="col-month-col">{m}</th>
-                    ))}
-                    <th className="col-total-col">Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td className="row-att-label">No. of Class Days</td>
-                    {attendanceData.classDays.map((d, idx) => (
-                      <td key={idx} className="att-num">{d}</td>
-                    ))}
-                    <td className="att-num font-bold">{getAttendanceTotal(attendanceData.classDays)}</td>
-                  </tr>
-                  <tr>
-                    <td className="row-att-label">No. of Days Present</td>
-                    {attendanceData.daysPresent.map((d, idx) => (
-                      <td key={idx} className="att-num">{d}</td>
-                    ))}
-                    <td className="att-num font-bold">{getAttendanceTotal(attendanceData.daysPresent)}</td>
-                  </tr>
-                  <tr>
-                    <td className="row-att-label">No. of Days Absent</td>
-                    {attendanceData.daysAbsent.map((d, idx) => (
-                      <td key={idx} className="att-num">{d}</td>
-                    ))}
-                    <td className="att-num font-bold">{getAttendanceTotal(attendanceData.daysAbsent)}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+              {/* Section 1: ATTENDANCE RECORD (Top) */}
+              <div className="sf9-section-block">
+                <div className="sf9-table-heading">ATTENDANCE RECORD</div>
+                <table className="sf9-official-table sf9-attendance-table-clean">
+                  <thead>
+                    <tr>
+                      <th className="col-month-head">Month</th>
+                      {attendanceData.months.map((m, idx) => (
+                        <th key={idx} className="col-month-col">{m}</th>
+                      ))}
+                      <th className="col-total-col">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td className="row-att-label">No. of Class Days</td>
+                      {attendanceData.classDays.map((d, idx) => (
+                        <td key={idx} className="att-num">{d}</td>
+                      ))}
+                      <td className="att-num font-bold">{getAttendanceTotal(attendanceData.classDays)}</td>
+                    </tr>
+                    <tr>
+                      <td className="row-att-label">No. of Days Present</td>
+                      {attendanceData.daysPresent.map((d, idx) => (
+                        <td key={idx} className="att-num">{d}</td>
+                      ))}
+                      <td className="att-num font-bold">{getAttendanceTotal(attendanceData.daysPresent)}</td>
+                    </tr>
+                    <tr>
+                      <td className="row-att-label">No. of Days Absent</td>
+                      {attendanceData.daysAbsent.map((d, idx) => (
+                        <td key={idx} className="att-num">{d}</td>
+                      ))}
+                      <td className="att-num font-bold">{getAttendanceTotal(attendanceData.daysAbsent)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
 
-            {/* Section 2: TEACHER'S COMMENTS/REMARKS (Full-Width Bordered Box) */}
-            <div className="sf9-section-block">
-              <div className="sf9-table-heading">TEACHER'S COMMENTS/REMARKS</div>
-              <div className="sf9-term-comments-box">
-                <div className="sf9-comment-term-row">
-                  <span className="sf9-term-label font-bold">Term 1</span>
-                  <div className="sf9-comment-textarea-wrap">
-                    <textarea
-                      className="sf9-comment-input"
-                      rows="2"
-                      value={comments.term1}
-                      readOnly={userRole === "principal"}
-                      onChange={(e) => handleCommentChange("term1", e.target.value)}
-                      placeholder="Enter comments for Term 1..."
-                    />
+              {/* Section 2: TEACHER'S COMMENTS/REMARKS (Full-Width Bordered Box) */}
+              <div className="sf9-section-block">
+                <div className="sf9-table-heading">TEACHER'S COMMENTS/REMARKS</div>
+                <div className="sf9-term-comments-box">
+                  <div className="sf9-comment-term-row">
+                    <span className="sf9-term-label font-bold">Term 1</span>
+                    <div className="sf9-comment-textarea-wrap">
+                      <textarea
+                        className="sf9-comment-input"
+                        rows="2"
+                        value={comments.term1}
+                        readOnly={userRole === "principal"}
+                        onChange={(e) => handleCommentChange("term1", e.target.value)}
+                        placeholder="Enter comments for Term 1..."
+                      />
+                    </div>
+                  </div>
+
+                  <div className="sf9-comment-term-row">
+                    <span className="sf9-term-label font-bold">Term 2</span>
+                    <div className="sf9-comment-textarea-wrap">
+                      <textarea
+                        className="sf9-comment-input"
+                        rows="2"
+                        value={comments.term2}
+                        readOnly={userRole === "principal"}
+                        onChange={(e) => handleCommentChange("term2", e.target.value)}
+                        placeholder="Enter comments for Term 2..."
+                      />
+                    </div>
                   </div>
                 </div>
 
-                <div className="sf9-comment-term-row">
-                  <span className="sf9-term-label font-bold">Term 2</span>
-                  <div className="sf9-comment-textarea-wrap">
-                    <textarea
-                      className="sf9-comment-input"
-                      rows="2"
-                      value={comments.term2}
-                      readOnly={userRole === "principal"}
-                      onChange={(e) => handleCommentChange("term2", e.target.value)}
-                      placeholder="Enter comments for Term 2..."
-                    />
+                  <div className="sf9-comment-term-row">
+                    <span className="sf9-term-label font-bold">Term 3</span>
+                    <div className="sf9-comment-textarea-wrap">
+                      <textarea
+                        className="sf9-comment-input"
+                        rows="2"
+                        value={comments.term3}
+                        readOnly={userRole === "principal"}
+                        onChange={(e) => handleCommentChange("term3", e.target.value)}
+                        placeholder="Enter comments for Term 3..."
+                      />
+                    </div>
                   </div>
                 </div>
 
-                <div className="sf9-comment-term-row">
-                  <span className="sf9-term-label font-bold">Term 3</span>
-                  <div className="sf9-comment-textarea-wrap">
-                    <textarea
-                      className="sf9-comment-input"
-                      rows="2"
-                      value={comments.term3}
-                      readOnly={userRole === "principal"}
-                      onChange={(e) => handleCommentChange("term3", e.target.value)}
-                      placeholder="Enter comments for Term 3..."
-                    />
+              {/* Section 3: PARENTS/GUARDIAN'S SIGNATURE (Full-Width Lined Block) */}
+              <div className="sf9-section-block sf9-parent-signatures-full">
+                <div className="sf9-table-heading">PARENTS/GUARDIAN'S SIGNATURE</div>
+                <div className="sf9-parent-sig-stack">
+                  <div className="sf9-parent-sig-row">
+                    <span className="sf9-parent-sig-label font-bold">Term 1</span>
+                    <div className="sf9-parent-sig-line"></div>
+                  </div>
+                  <div className="sf9-parent-sig-row">
+                    <span className="sf9-parent-sig-label font-bold">Term 2</span>
+                    <div className="sf9-parent-sig-line"></div>
+                  </div>
+                  <div className="sf9-parent-sig-row">
+                    <span className="sf9-parent-sig-label font-bold">Term 3</span>
+                    <div className="sf9-parent-sig-line"></div>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Section 3: PARENTS/GUARDIAN'S SIGNATURE (Full-Width Lined Block) */}
-            <div className="sf9-section-block sf9-parent-signatures-full">
-              <div className="sf9-table-heading">PARENTS/GUARDIAN'S SIGNATURE</div>
-              <div className="sf9-parent-sig-stack">
-                <div className="sf9-parent-sig-row">
-                  <span className="sf9-parent-sig-label font-bold">Term 1</span>
-                  <div className="sf9-parent-sig-line"></div>
+              {/* Section 4: CERTIFICATE OF TRANSFER */}
+              <div className="sf9-section-block sf9-certificate-section">
+                <div className="sf9-table-heading">CERTIFICATE OF TRANSFER</div>
+                <p className="sf9-cert-statement">
+                  This is to certify that the above-named learner has satisfactorily completed the requirements for the grade level indicated.
+                </p>
+
+                <div className="sf9-cert-form-lines">
+                  <div className="sf9-cert-line">
+                    <span className="sf9-cert-label">Admitted to Grade:</span>
+                    <span className="sf9-cert-underline">{studentProfile.admittedToGrade || ""}</span>
+                  </div>
+                  <div className="sf9-cert-line">
+                    <span className="sf9-cert-label">Eligible for Admission to Grade:</span>
+                    <span className="sf9-cert-underline">{studentProfile.eligibleForAdmission || ""}</span>
+                  </div>
                 </div>
                 <div className="sf9-parent-sig-row">
                   <span className="sf9-parent-sig-label font-bold">Term 2</span>
@@ -947,21 +977,18 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
               </div>
             </div>
 
-            {/* Section 4: CERTIFICATE OF TRANSFER */}
-            <div className="sf9-section-block sf9-certificate-section">
-              <div className="sf9-table-heading">CERTIFICATE OF TRANSFER</div>
-              <p className="sf9-cert-statement">
-                This is to certify that the above-named learner has satisfactorily completed the requirements for the grade level indicated.
-              </p>
-
-              <div className="sf9-cert-form-lines">
-                <div className="sf9-cert-line">
-                  <span className="sf9-cert-label">Admitted to Grade:</span>
-                  <span className="sf9-cert-underline">{studentProfile.admittedToGrade || ""}</span>
-                </div>
-                <div className="sf9-cert-line">
-                  <span className="sf9-cert-label">Eligible for Admission to Grade:</span>
-                  <span className="sf9-cert-underline">{studentProfile.eligibleForAdmission || ""}</span>
+              {/* Section 5: CANCELLATION OF ELIGIBILITY TO TRANSFER */}
+              <div className="sf9-section-block sf9-cancellation-section">
+                <div className="sf9-table-heading">CANCELLATION OF ELIGIBILITY TO TRANSFER</div>
+                <div className="sf9-cancel-row">
+                  <div className="sf9-cancel-field cancel-admitted">
+                    <span className="sf9-cert-label">Admitted in:</span>
+                    <span className="sf9-cert-underline"></span>
+                  </div>
+                  <div className="sf9-cancel-field cancel-date">
+                    <span className="sf9-cert-label">Date:</span>
+                    <span className="sf9-cert-underline"></span>
+                  </div>
                 </div>
               </div>
 

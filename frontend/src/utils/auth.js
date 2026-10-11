@@ -62,7 +62,7 @@ export const getRoleDefaultPath = (role) => {
     case "system-admin":
       return "/system-admin/dashboard";
     case "principal":
-      return "/principal/dashboard";
+      return "/principal/at-risk-students/prediction";
     case "department-head":
       return "/department-head/dashboard";
     case "adviser":

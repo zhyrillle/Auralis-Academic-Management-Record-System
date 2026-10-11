@@ -220,7 +220,9 @@ export default function UpcomingSchoolYear({
               ))}
               <li>
                 <strong>Seven-day reopening policy:</strong> Reopening requests
-                open at the submission deadline and close seven days later.
+                open when the term ends and close seven days later. Requests
+                submitted in that window may be approved later, with a separate
+                administrator-set editing deadline.
               </li>
             </ul>
           </div>

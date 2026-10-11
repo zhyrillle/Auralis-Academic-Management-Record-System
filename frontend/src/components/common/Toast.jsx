@@ -7,12 +7,18 @@ export default function Toast({
   className = "",
   icon: Icon = CheckCircle2,
   variant = "success",
+  persistent = false,
 }) {
   if (!message) {
     return null;
   }
 
-  const classes = ["app-toast", `app-toast--${variant}`, className]
+  const classes = [
+    "app-toast",
+    `app-toast--${variant}`,
+    persistent ? "app-toast--persistent" : "",
+    className,
+  ]
     .filter(Boolean)
     .join(" ");
 

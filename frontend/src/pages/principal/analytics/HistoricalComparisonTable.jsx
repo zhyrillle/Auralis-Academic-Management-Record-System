@@ -31,7 +31,7 @@ export default function HistoricalComparisonTable({ rows, primaryLabel, comparis
                     {row.difference > 0 ? "+" : ""}{row.difference}
                   </span>
                 </td>
-                <td>{row.passRate}%</td>
+                <td>{row.passRate == null ? "—" : `${row.passRate}%`}</td>
                 <td><span className={`pa-status pa-status--${statusClass(row.status)}`}>{row.status}</span></td>
               </tr>
             );

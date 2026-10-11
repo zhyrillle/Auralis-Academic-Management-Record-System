@@ -45,10 +45,14 @@ export default function AdviserRadarChart({
 
   const safeData = Array.isArray(data) && data.length === 5 ? data : [0, 0, 0, 0, 0];
   const hasNonZero = safeData.some((v) => Number(v) > 0);
+  
+  // Find the maximum value to scale the chart dynamically
+  const maxVal = Math.max(...safeData.map(v => Number(v) || 0));
+  const chartMax = maxVal > 0 ? maxVal : 100;
 
   const dataPoints = safeData.map((val, idx) => {
     const num = Number(val) || 0;
-    const scale = num > 0 ? Math.min(1, Math.max(0.1, num / 100)) : 0;
+    const scale = num > 0 ? Math.min(1, Math.max(0.05, num / chartMax)) : 0;
     return getCoordinates(angles[idx], maxRadius * scale);
   });
   const dataPointsString = dataPoints.map((pt) => `${pt.x},${pt.y}`).join(" ");
@@ -156,7 +160,7 @@ export default function AdviserRadarChart({
               <>
                 <polygon
                   points={dataPointsString}
-                  fill="rgba(24, 50, 86, 0.08)"
+                  fill="rgba(24, 50, 86, 0.45)"
                   stroke="#183256"
                   strokeWidth="2.5"
                   strokeLinejoin="round"

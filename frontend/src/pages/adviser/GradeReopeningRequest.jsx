@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
+import { useLocation } from "react-router-dom";
 import {
   MessageSquarePlus,
   Clock,
@@ -13,33 +14,38 @@ import {
   FileText,
   X,
   AlertCircle,
-  ChevronRight,
 } from "lucide-react";
 import "../../styles/gradeReopeningRequest.css";
 import { getStoredUser } from "../../utils/auth";
+import DropdownSelect from "../../components/common/DropdownSelect";
+import { eligibilityMessages } from "../../services/gradingPeriodService";
 
 const INITIAL_REQUESTS = [];
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api").replace(/\/$/, "");
+function requestDateLabel(value) {
+  const date = new Date(value ?? NaN);
+  return Number.isNaN(date.getTime()) ? "Unavailable" : date.toLocaleString("en-PH", { timeZone: "Asia/Manila" });
+}
 
 export default function GradeReopeningRequest() {
   const currentUser = getStoredUser();
+  const location = useLocation();
+  const prefillId = new URLSearchParams(location.search).get("gradeSheetId");
 
-  // Handled Subjects / Sections State
-  const [handledSections, setHandledSections] = useState([]);
-  const [alreadyRequestedSections, setAlreadyRequestedSections] = useState(new Set());
-
-  // Form State
-  const [subject, setSubject] = useState("");
-  const [currentTeacherAssignmentId, setCurrentTeacherAssignmentId] = useState(null);
-  const [currentGradeSheetId, setCurrentGradeSheetId] = useState(null);
-  const [term, setTerm] = useState("1st Term");
-  const [termId, setTermId] = useState(1);
-  const [requestType, setRequestType] = useState("Grade Reopening");
-  const [requestDate, setRequestDate] = useState("2026-05-20T09:30");
-  const [requestAccessUntil, setRequestAccessUntil] = useState("2026-05-25T17:00");
+  // Sheet IDs distinguish terms and subjects even when section names repeat.
+  const [gradeSheets, setGradeSheets] = useState([]);
+  const [optionsLoading, setOptionsLoading] = useState(true);
+  const [optionsError, setOptionsError] = useState("");
+  const [refreshAttempt, setRefreshAttempt] = useState(0);
+  const [selection, setSelection] = useState({ yearId: "", sectionId: "", subjectId: "", termId: "" });
+  const [prefillError, setPrefillError] = useState("");
   const [reason, setReason] = useState("");
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [formError, setFormError] = useState("");
+  const [subjectError, setSubjectError] = useState("");
+  const [reasonError, setReasonError] = useState("");
   const [isDragOver, setIsDragOver] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Requests Data & Modals State
   const [requests, setRequests] = useState(INITIAL_REQUESTS);
@@ -48,72 +54,66 @@ export default function GradeReopeningRequest() {
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
   const [lastSubmittedRequest, setLastSubmittedRequest] = useState(null);
 
-  // Fetch handled subjects and past requests
   useEffect(() => {
     if (!currentUser?.user_id) return;
-
-    // 1. Fetch user's handled subjects/sections
-    fetch(`http://localhost:5000/api/teacher-assignments/user/${currentUser.user_id}`)
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (Array.isArray(data) && data.length > 0) {
-          const list = data.map((item) => ({
-            id: item.section_id || item.subject_offering_id || item.subject_name,
-            teacherAssignmentId: item.teacher_assignment_id || item.id,
-            gradeSheetId: item.grade_sheet_id || item.gradesheet_id || null,
-            sectionName: item.section_name || item.subject_name,
-            subjectName: item.subject_name || item.section_name,
-            label: `${item.section_name} (${item.subject_name || 'Subject'})`
-          }));
-          setHandledSections(list);
-        } else if (currentUser.adviser_assignment?.section_name) {
-          setHandledSections([{
-            id: currentUser.adviser_assignment.section_id || currentUser.adviser_assignment.section_name,
-            teacherAssignmentId: currentUser.adviser_assignment.teacher_assignment_id || null,
-            gradeSheetId: currentUser.adviser_assignment.grade_sheet_id || null,
-            sectionName: currentUser.adviser_assignment.section_name,
-            subjectName: "Advisory Class",
-            label: currentUser.adviser_assignment.section_name
-          }]);
+    let isCurrent = true;
+    const headers = { "X-Auralis-User-Id": String(currentUser.user_id) };
+    async function load() {
+      setOptionsLoading(true);
+      setOptionsError("");
+      try {
+        const responses = await Promise.all([
+          fetch(`${API_BASE_URL}/grading-periods/grade-sheets/reopening-options`, { headers }),
+          fetch(`${API_BASE_URL}/reopen-requests/user/${currentUser.user_id}`, { headers }),
+        ]);
+        const payloads = await Promise.all(responses.map(response => response.json()));
+        if (responses.some(response => !response.ok)) throw new Error(payloads.find(payload => payload.error || payload.message)?.error || "Reopening data could not be loaded.");
+        const [options, history] = payloads;
+        if (!Array.isArray(options.gradeSheets) || !Array.isArray(history)) throw new Error("Reopening response is incomplete.");
+        if (options.gradeSheets.some(sheet => !sheet.section_id || !sheet.subject_id || !sheet.term_id || !sheet.school_year_id)) {
+          throw new Error("Grade-sheet identifiers are unavailable. Restart the updated backend and try again.");
         }
-      })
-      .catch((err) => console.error("Error fetching handled sections:", err));
-
-    // 2. Fetch existing grade reopening requests for logged in user
-    fetch(`http://localhost:5000/api/reopen-requests/user/${currentUser.user_id}`)
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (Array.isArray(data) && data.length > 0) {
-          const requestedSet = new Set();
-          const mapped = data.map((item) => {
-            const secName = item.section_name || item.subject_name || "Section";
-            if (secName) requestedSet.add(secName);
-            return {
-              id: item.request_id ? `#REQ-${String(item.request_id).padStart(3, "0")}` : `#REQ-${item.id}`,
-              status: item.status ? (item.status.charAt(0).toUpperCase() + item.status.slice(1).toLowerCase()) : "Pending",
-              subject: secName,
-              term: item.term || "1st",
-              requestType: item.request_type || "Grade Reopening",
-              requestedDate: item.requested_at ? new Date(item.requested_at).toLocaleString("en-US") : "May 20, 2026",
-              accessUntil: item.access_until || item.reopen_until || "May 25, 2026",
-              reason: item.reason || "",
-              file: item.file_name ? `${item.file_name} (${(item.file_size ? item.file_size / 1024 : 100).toFixed(0)} KB)` : null,
-              adminNote: item.admin_note,
-              adminRemarks: item.admin_remarks
-            };
-          });
-          setRequests(mapped);
-          setAlreadyRequestedSections(requestedSet);
+        if (options.gradeSheets.length && !options.defaultSchoolYearId) {
+          throw new Error("The default school year is unavailable. Restart the updated backend and try again.");
         }
-      })
-      .catch((err) => console.error("Error fetching user requests:", err));
-  }, [currentUser?.user_id]);
+        if (!isCurrent) return;
+        setGradeSheets(options.gradeSheets);
+        const prefilled = prefillId && options.gradeSheets.find(sheet => String(sheet.grade_sheet_id) === prefillId);
+        setPrefillError(prefillId && !prefilled ? "The linked grade sheet is not available among your assigned sheets." : "");
+        setSelection(previous => prefilled ? {
+          yearId: String(prefilled.school_year_id), sectionId: String(prefilled.section_id),
+          subjectId: String(prefilled.subject_id), termId: String(prefilled.term_id),
+        } : {
+          ...previous,
+          yearId: options.gradeSheets.some(sheet => String(sheet.school_year_id) === previous.yearId)
+            ? previous.yearId : String(options.defaultSchoolYearId ?? ""),
+        });
+        setRequests(history.map(item => ({
+          id: `#REQ-${String(item.request_id).padStart(3, "0")}`,
+          gradeSheetId: String(item.grade_sheet_id),
+          status: String(item.status || "").charAt(0).toUpperCase() + String(item.status || "").slice(1).toLowerCase(),
+          subject: `${item.subject_name || "Subject"} — ${item.section_name || "Section"}`,
+          term: item.term_name || "Term unavailable",
+          requestType: item.request_type || "Grade Reopening",
+          requestedDate: requestDateLabel(item.requested_at),
+          approvedDate: item.reviewed_at ? requestDateLabel(item.reviewed_at) : null,
+          accessUntil: item.access_until ? requestDateLabel(item.access_until) : "Not assigned",
+          reason: item.reason || "", file: item.file_name || null,
+          adminNote: item.admin_note, adminRemarks: item.admin_remarks,
+        })));
+      } catch (error) {
+        if (isCurrent) setOptionsError(error.message || "Reopening data could not be loaded.");
+      } finally { if (isCurrent) setOptionsLoading(false); }
+    }
+    load();
+    return () => { isCurrent = false; };
+  }, [currentUser?.user_id, refreshAttempt, prefillId]);
 
   // Compute Stats
   const totalCount = requests.length;
   const pendingCount = requests.filter((r) => r.status === "Pending").length;
   const approvedCount = requests.filter((r) => r.status === "Approved").length;
-  const rejectedCount = requests.filter((r) => r.status === "Rejected" || r.status === "Declined").length;
+  const rejectedCount = requests.filter((r) => r.status === "Rejected" || r.status === "Declined" || r.status === "Denied").length;
 
   // File Upload Handlers (10MB per-file limit)
   const validateAndAddFiles = (newFiles) => {
@@ -166,93 +166,92 @@ export default function GradeReopeningRequest() {
   };
 
   const handleClear = () => {
-    setSubject("");
-    setCurrentTeacherAssignmentId(null);
-    setCurrentGradeSheetId(null);
-    setTerm("1st");
-    setTermId(1);
-    setRequestType("Grade Reopening");
-    setRequestDate("2026-05-20T09:30");
-    setRequestAccessUntil("2026-05-25T17:00");
+    setSelection(previous => ({ ...previous, sectionId: "", subjectId: "", termId: "" }));
+    setPrefillError("");
     setReason("");
     setSelectedFiles([]);
     setFormError("");
+    setSubjectError("");
+    setReasonError("");
   };
-
-  // Handle Dropdown Change for Subject/Section
-  const handleSubjectSelect = (e) => {
-    const selectedVal = e.target.value;
-    setSubject(selectedVal);
-
-    if (!selectedVal) {
-      setCurrentTeacherAssignmentId(null);
-      setCurrentGradeSheetId(null);
-      return;
-    }
-
-    const matchingSection = handledSections.find(
-      (sec) => sec.sectionName === selectedVal || sec.label === selectedVal
-    );
-
-    if (matchingSection) {
-      setCurrentTeacherAssignmentId(matchingSection.teacherAssignmentId);
-      setCurrentGradeSheetId(matchingSection.gradeSheetId);
-    } else {
-      // Fallback for hardcoded/default options (Honesty, Mahogany, Molave, etc.)
-      setCurrentTeacherAssignmentId(null);
-      setCurrentGradeSheetId(null);
-    }
+  const yearSheets = gradeSheets.filter(sheet => String(sheet.school_year_id) === selection.yearId);
+  const sectionSheets = yearSheets.filter(sheet => String(sheet.section_id) === selection.sectionId);
+  const subjectSheets = sectionSheets.filter(sheet => String(sheet.subject_id) === selection.subjectId);
+  const selectedSheets = subjectSheets.filter(sheet => String(sheet.term_id) === selection.termId);
+  const selectedSheet = selectedSheets.length === 1 ? selectedSheets[0] : null;
+  const yearOptions = [...new Map(gradeSheets.map(sheet => [String(sheet.school_year_id), {
+    value: String(sheet.school_year_id),
+    label: `SY ${sheet.school_year_starts_on}–${sheet.school_year_ends_on}`,
+  }])).values()];
+  const sectionOptions = [...new Map(yearSheets.map(sheet => [String(sheet.section_id), {
+    value: String(sheet.section_id), label: `${sheet.grade_level_name} ${sheet.section_name}`,
+  }])).values()];
+  const subjectOptions = [...new Map(sectionSheets.map(sheet => [String(sheet.subject_id), {
+    value: String(sheet.subject_id), label: sheet.subject_name,
+  }])).values()];
+  const termOptions = [...new Map(subjectSheets.map(sheet => {
+    const duplicate = subjectSheets.filter(other => String(other.term_id) === String(sheet.term_id)).length !== 1;
+    return [String(sheet.term_id), {
+      value: String(sheet.term_id), label: `${sheet.term_name} Term`,
+      disabled: duplicate || !sheet.eligible,
+      title: duplicate ? "Multiple grade sheets match this term. Administrator review is required."
+        : sheet.eligible ? "Accepting reopening requests." : eligibilityMessages[sheet.reason] || "Sheet unavailable.",
+    }];
+  })).values()];
+  const handleSelectionChange = (field, value) => {
+    setSelection(previous => ({
+      ...previous, [field]: value,
+      ...(field === "yearId" ? { sectionId: "", subjectId: "", termId: "" } : {}),
+      ...(field === "sectionId" ? { subjectId: "", termId: "" } : {}),
+      ...(field === "subjectId" ? { termId: "" } : {}),
+    }));
+    setPrefillError("");
+    setSubjectError("");
+    setFormError("");
   };
-
-  const getTermId = (termVal) => {
-    if (!termVal) return 1;
-    if (typeof termVal === "number") return termVal;
-    const str = String(termVal).trim().toLowerCase();
-    if (str.includes("1")) return 1;
-    if (str.includes("2")) return 2;
-    if (str.includes("3")) return 3;
-    if (str.includes("4")) return 4;
-    const parsed = parseInt(str, 10);
-    return isNaN(parsed) ? 1 : parsed;
+  const disableInfo = {
+    isDisabled: !currentUser?.user_id || optionsLoading || Boolean(optionsError) || Boolean(prefillError) || !selectedSheet || !selectedSheet.eligible,
+    reason: optionsLoading ? "Loading grade sheets…" : optionsError || prefillError
+      || (!selectedSheet ? "Select a grade sheet." : eligibilityMessages[selectedSheet.reason] || "This grade sheet is not eligible."),
   };
 
   // Submit Handler
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setFormError("");
+    if (isSubmitting) return;
 
-    // Validation
-    if (!subject || !requestType || !reason.trim()) {
+    setFormError("");
+    setSubjectError("");
+    setReasonError("");
+
+    let hasFieldErrors = false;
+    if (!selectedSheet) {
+      setSubjectError("Please select a section, subject and eligible term.");
+      hasFieldErrors = true;
+    }
+    if (!reason.trim()) {
+      setReasonError("Please provide a reason / explanation for requesting grade reopening.");
+      hasFieldErrors = true;
+    }
+
+    if (hasFieldErrors) {
       setFormError("Please fill in all required fields marked with *");
       return;
     }
 
-    if (!currentTeacherAssignmentId) {
-      setFormError(
-        "Unable to locate teacher assignment details for the selected section."
-      );
+    if (disableInfo.isDisabled) {
+      setFormError(disableInfo.reason);
       return;
     }
 
-    if (alreadyRequestedSections.has(subject)) {
-      setFormError(
-        "You have already submitted a reopening request for this section."
-      );
-      return;
-    }
+    setIsSubmitting(true);
 
     try {
       // Create FormData
       const formData = new FormData();
 
-      formData.append("user_id", currentUser.user_id);
-      formData.append("section_name", subject);
-      formData.append(
-        "teacher_assignment_id",
-        currentTeacherAssignmentId
-      );
+      formData.append("grade_sheet_id", selectedSheet.grade_sheet_id);
       formData.append("reason", reason);
-      formData.append("status", "PENDING");
 
       // Append each selected file under the same field name
       selectedFiles.forEach((file) => {
@@ -263,9 +262,10 @@ export default function GradeReopeningRequest() {
       // Do NOT manually set Content-Type.
       // Browser automatically sets multipart/form-data boundary.
       const res = await fetch(
-        "http://localhost:5000/api/reopen-requests",
+        `${API_BASE_URL}/reopen-requests`,
         {
           method: "POST",
+          headers: { "X-Auralis-User-Id": String(currentUser.user_id) },
           body: formData,
         }
       );
@@ -288,13 +288,14 @@ export default function GradeReopeningRequest() {
         ).padStart(3, "0")}`,
 
         status: "Pending",
-        subject,
-        term,
-        requestType,
+        gradeSheetId: String(selectedSheet.grade_sheet_id),
+        subject: `${selectedSheet.subject_name} — ${selectedSheet.section_name}`,
+        term: selectedSheet.term_name,
+        requestType: selectedSheet.request_type === "LATE_SUBMISSION" ? "Late Submission" : "Grade Correction",
 
         requestedDate: new Date().toLocaleString("en-US"),
 
-        accessUntil: requestAccessUntil,
+        accessUntil: "Not assigned",
 
         reason,
 
@@ -305,9 +306,7 @@ export default function GradeReopeningRequest() {
 
       setRequests((prev) => [newReq, ...prev]);
 
-      setAlreadyRequestedSections(
-        (prev) => new Set([...prev, subject])
-      );
+      setRefreshAttempt(value => value + 1);
 
       setLastSubmittedRequest(newReq);
       setIsSuccessModalOpen(true);
@@ -320,6 +319,8 @@ export default function GradeReopeningRequest() {
       setFormError(
         "An error occurred while connecting to the server."
       );
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -327,6 +328,23 @@ export default function GradeReopeningRequest() {
   const handleOpenDetails = (req) => {
     setActiveModalRequest(req);
     setIsViewDetailsOpen(true);
+  };
+
+  // Never show a successful cancellation until the server confirms it.
+  const handleCancelRequest = async (targetReq) => {
+    if (!targetReq) return;
+    const requestId = parseInt(String(targetReq.id).replace(/\D/g, ""), 10);
+    try {
+      const response = await fetch(`${API_BASE_URL}/reopen-requests/${requestId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", "X-Auralis-User-Id": String(currentUser.user_id) },
+        body: JSON.stringify({ status: "CANCELLED" }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "Cancellation failed.");
+      setRefreshAttempt(value => value + 1);
+      setIsViewDetailsOpen(false);
+    } catch (error) { setFormError(error.message || "Cancellation failed."); }
   };
 
   return (
@@ -390,36 +408,75 @@ export default function GradeReopeningRequest() {
           )}
 
           <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-            {/* Row 1: Dropdowns */}
+            <div className="grr-field-group">
+              <label className="grr-label" htmlFor="reopening-school-year">School Year</label>
+              {yearOptions.length > 1 ? (
+                <DropdownSelect id="reopening-school-year" label="School Year" value={selection.yearId}
+                  options={yearOptions} placeholder="Select school year"
+                  onChange={value => handleSelectionChange("yearId", value)}
+                  disabled={optionsLoading || Boolean(optionsError) || isSubmitting} />
+              ) : (
+                <span className="grr-sublabel">{yearOptions[0]?.label || (optionsLoading ? "Loading school year…" : "No school year available")}</span>
+              )}
+            </div>
+
+            {/* Cascading selectors resolve one sheet without parsing display names. */}
             <div className="grr-form-row three-col">
               <div className="grr-field-group">
-                <label className="grr-label">
-                  Section / Handled Subject <span className="required">*</span>
+                <label className="grr-label" htmlFor="reopening-section">
+                  Section <span className="required">*</span>
                 </label>
-                <select
-                  className="grr-select"
-                  value={subject}
-                  onChange={handleSubjectSelect}
-                >
-                  <option value="">Select Section / Handled Subject</option>
-                  {handledSections.length > 0 ? (
-                    handledSections
-                      .filter((sec) => !alreadyRequestedSections.has(sec.sectionName))
-                      .map((sec) => (
-                        <option key={sec.id} value={sec.sectionName}>
-                          {sec.label}
-                        </option>
-                      ))
-                  ) : (
-                    <>
-                      <option value="Honesty">Honesty</option>
-                      <option value="Mahogany">Mahogany</option>
-                      <option value="Molave">Molave</option>
-                    </>
-                  )}
-                </select>
+                <DropdownSelect id="reopening-section" label="Section"
+                  value={selection.sectionId} options={sectionOptions}
+                  placeholder={optionsLoading ? "Loading sections…" : "Select section"}
+                  onChange={value => handleSelectionChange("sectionId", value)}
+                  disabled={optionsLoading || Boolean(optionsError) || isSubmitting}
+                  error={Boolean(subjectError) && !selection.sectionId} />
+              </div>
+              <div className="grr-field-group">
+                <label className="grr-label" htmlFor="reopening-subject">Subject <span className="required">*</span></label>
+                <DropdownSelect id="reopening-subject" label="Subject"
+                  value={selection.subjectId} options={subjectOptions} placeholder="Select subject"
+                  onChange={value => handleSelectionChange("subjectId", value)}
+                  disabled={!selection.sectionId || optionsLoading || Boolean(optionsError) || isSubmitting}
+                  error={Boolean(subjectError) && !selection.subjectId} />
+              </div>
+              <div className="grr-field-group">
+                <label className="grr-label" htmlFor="reopening-term">Term <span className="required">*</span></label>
+                <DropdownSelect id="reopening-term" label="Term"
+                  value={selection.termId} options={termOptions} placeholder="Select term"
+                  onChange={value => handleSelectionChange("termId", value)}
+                  disabled={!selection.subjectId || optionsLoading || Boolean(optionsError) || isSubmitting}
+                  error={Boolean(subjectError) && !selectedSheet} />
               </div>
             </div>
+            {subjectError && <span className="grr-field-error-msg" role="alert"><AlertCircle size={13} />{subjectError}</span>}
+            {prefillError && (
+              <div className="grr-window-notice closed" role="alert">
+                <Info size={16} /><div><strong>Linked grade sheet unavailable</strong><p>{prefillError} Select an available sheet instead.</p></div>
+              </div>
+            )}
+
+            {optionsError && (
+              <div className="grr-window-notice closed" role="alert">
+                <AlertCircle size={16} />
+                <div><strong>Unable to load grade sheets</strong><p>{optionsError}</p>
+                  <button type="button" onClick={() => setRefreshAttempt(value => value + 1)}>Retry</button>
+                </div>
+              </div>
+            )}
+            {!optionsLoading && !optionsError && gradeSheets.length === 0 && (
+              <p role="status">No assigned grade sheets are available.</p>
+            )}
+            {selectedSheet && (
+              <div className={`grr-window-notice ${selectedSheet.eligible ? "info" : "closed"}`} role="status">
+                <Info size={16} className="grr-window-notice-icon" />
+                <div>
+                  <strong>{selectedSheet.eligible ? "Request window open" : eligibilityMessages[selectedSheet.reason] || "Sheet unavailable"}</strong>
+                  <p>Requests: {requestDateLabel(selectedSheet.reopening_requests_open_at)} to {requestDateLabel(selectedSheet.reopening_requests_close_at)} (Philippine time). Review may happen later; the administrator sets the editing deadline.</p>
+                </div>
+              </div>
+            )}
 
             {/* Row 3: Reason / Explanation */}
             <div className="grr-field-group">
@@ -429,16 +486,25 @@ export default function GradeReopeningRequest() {
               <span className="grr-sublabel">
                 Please provide a clear and detailed explanation why you are requesting to reopen grade access.
               </span>
-              <div className="grr-textarea-wrapper">
+              <div className={`grr-textarea-wrapper${reasonError ? " grr-field-error-input" : ""}`}>
                 <textarea
                   className="grr-textarea"
                   placeholder="Type your explanation here..."
                   maxLength={1000}
                   value={reason}
-                  onChange={(e) => setReason(e.target.value)}
+                  onChange={(e) => {
+                    setReason(e.target.value);
+                    if (e.target.value.trim()) setReasonError("");
+                  }}
                 />
                 <span className="grr-char-counter">{reason.length}/1000</span>
               </div>
+              {reasonError && (
+                <span className="grr-field-error-msg">
+                  <AlertCircle size={13} />
+                  {reasonError}
+                </span>
+              )}
             </div>
 
             {/* Row 4: Supporting Documents */}
@@ -495,13 +561,37 @@ export default function GradeReopeningRequest() {
 
             {/* Row 5: Action Buttons */}
             <div className="grr-actions-row">
-              <button type="button" className="grr-clear-btn" onClick={handleClear}>
+              <button type="button" className="grr-clear-btn" onClick={handleClear} disabled={isSubmitting}>
                 Clear
               </button>
-              <button type="submit" className="grr-submit-btn">
-                <Send size={16} />
-                <span>Submit Request</span>
-              </button>
+              <div
+                className={`grr-submit-wrapper${disableInfo.isDisabled || isSubmitting ? " grr-submit-wrapper--disabled" : ""}`}
+                title={disableInfo.isDisabled ? disableInfo.reason : ""}
+              >
+                <button
+                  type="submit"
+                  className="grr-submit-btn"
+                  disabled={disableInfo.isDisabled || isSubmitting}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <span className="grr-spinner" />
+                      <span>Submitting...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Send size={16} />
+                      <span>Submit Request</span>
+                    </>
+                  )}
+                </button>
+                {disableInfo.isDisabled && !isSubmitting && (
+                  <div className="grr-submit-tooltip" role="tooltip">
+                    <Info size={14} style={{ flexShrink: 0, marginTop: "2px" }} />
+                    <span>{disableInfo.reason}</span>
+                  </div>
+                )}
+              </div>
             </div>
           </form>
 
@@ -526,7 +616,8 @@ export default function GradeReopeningRequest() {
                 const statusUpper = String(item.status || "").toUpperCase();
                 const isPending = statusUpper === "PENDING";
                 const isApproved = statusUpper === "APPROVED";
-                const isRejected = !isPending && !isApproved;
+                const isCancelled = statusUpper === "CANCELLED";
+                const isRejected = !isPending && !isApproved && !isCancelled;
 
                 return (
                   <div key={item.id} className="grr-timeline-item">
@@ -534,7 +625,7 @@ export default function GradeReopeningRequest() {
 
                     {/* Icon Circle */}
                     <div
-                      className={`grr-timeline-icon-circle ${isPending ? "pending" : isApproved ? "approved" : "rejected"
+                      className={`grr-timeline-icon-circle ${isPending ? "pending" : isApproved ? "approved" : isCancelled ? "cancelled" : "rejected"
                         }`}
                     >
                       {isPending && (
@@ -547,6 +638,9 @@ export default function GradeReopeningRequest() {
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                           <polyline points="20 6 9 17 4 12" />
                         </svg>
+                      )}
+                      {isCancelled && (
+                        <X size={18} />
                       )}
                       {isRejected && (
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -561,7 +655,7 @@ export default function GradeReopeningRequest() {
                     <div className="grr-timeline-content">
                       <div className="grr-timeline-top">
                         <span
-                          className={`grr-badge ${isPending ? "pending" : isApproved ? "approved" : "rejected"
+                          className={`grr-badge ${isPending ? "pending" : isApproved ? "approved" : isCancelled ? "cancelled" : "rejected"
                             }`}
                         >
                           {item.status}
@@ -587,6 +681,12 @@ export default function GradeReopeningRequest() {
                           <Clock className="grr-detail-icon" />
                           <span>Requested: {item.requestedDate}</span>
                         </div>
+                        {isApproved && (
+                          <div className="grr-detail-line">
+                            <CheckCircle2 className="grr-detail-icon" style={{ color: "#16a34a" }} />
+                            <span>Approved: {item.approvedDate || item.accessUntil || "May 22, 2026"}</span>
+                          </div>
+                        )}
 
                         {item.adminNote && (
                           <span
@@ -621,7 +721,9 @@ export default function GradeReopeningRequest() {
                     ? "pending"
                     : activeModalRequest.status === "Approved"
                       ? "approved"
-                      : "rejected"
+                      : activeModalRequest.status === "Cancelled"
+                        ? "cancelled"
+                        : "rejected"
                     }`}
                 >
                   {activeModalRequest.status}
@@ -654,6 +756,18 @@ export default function GradeReopeningRequest() {
                   <span className="grr-info-item-label">Request Type</span>
                   <span className="grr-info-item-value">{activeModalRequest.requestType}</span>
                 </div>
+                <div className="grr-info-item">
+                  <span className="grr-info-item-label">Requested Date</span>
+                  <span className="grr-info-item-value">{activeModalRequest.requestedDate}</span>
+                </div>
+                {activeModalRequest.status === "Approved" && (
+                  <div className="grr-info-item">
+                    <span className="grr-info-item-label">Approved Date</span>
+                    <span className="grr-info-item-value" style={{ color: "#16a34a", fontWeight: 700 }}>
+                      {activeModalRequest.approvedDate || activeModalRequest.accessUntil || "May 22, 2026"}
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Reason Box */}
@@ -683,7 +797,7 @@ export default function GradeReopeningRequest() {
                     <span>{activeModalRequest.file}</span>
                   </div>
                 ) : (
-                  <div style={{ fontSize: "13px", color: "#94a3b8", italic: "true" }}>
+                  <div style={{ fontSize: "13px", color: "#94a3b8", fontStyle: "italic" }}>
                     No supporting document attached.
                   </div>
                 )}
@@ -714,7 +828,21 @@ export default function GradeReopeningRequest() {
             </div>
 
             <div className="grr-modal-footer">
+              {activeModalRequest.status === "Pending" ? (
+                <button
+                  type="button"
+                  className="grr-cancel-request-btn"
+                  onClick={() => handleCancelRequest(activeModalRequest)}
+                  title="Cancel this pending request"
+                >
+                  <XCircle size={16} />
+                  <span>Cancel Request</span>
+                </button>
+              ) : (
+                <div />
+              )}
               <button
+                type="button"
                 className="grr-clear-btn"
                 onClick={() => setIsViewDetailsOpen(false)}
               >

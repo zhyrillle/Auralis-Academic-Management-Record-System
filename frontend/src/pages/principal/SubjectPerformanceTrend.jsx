@@ -192,16 +192,36 @@ export default function SubjectPerformanceTrend() {
   const selectedSubjects = data.subjects.filter((subject) =>
     selectedSubjectIds?.includes(subject.id),
   );
-  const schoolYearOptions = data.availableSchoolYears.map((year) => ({
-    value: year.value,
-    label: year.label,
-  }));
+  const schoolYearOptions = Array.isArray(data.availableSchoolYears)
+    ? data.availableSchoolYears.map((year) => ({
+        value: typeof year === "object" && year !== null ? year.value : String(year),
+        label: typeof year === "object" && year !== null ? year.label : `SY ${year}`,
+      }))
+    : [];
+
+  const rawGradeLevels = Array.isArray(data.availableGradeLevels)
+    ? data.availableGradeLevels
+    : [];
   const gradeLevelOptions = [
     { value: "all", label: "All grade levels" },
-    ...data.availableGradeLevels.map((level) => ({
-      value: String(level),
-      label: `Grade ${level}`,
-    })),
+    ...rawGradeLevels
+      .filter((lvl) =>
+        typeof lvl === "object" && lvl !== null
+          ? lvl.value !== "all"
+          : String(lvl) !== "all"
+      )
+      .map((lvl) => {
+        if (typeof lvl === "object" && lvl !== null) {
+          return {
+            value: String(lvl.value),
+            label: lvl.label || `Grade ${lvl.value}`,
+          };
+        }
+        return {
+          value: String(lvl),
+          label: `Grade ${lvl}`,
+        };
+      }),
   ];
   const isFiltering = requestMode === "filtering";
   const displayedTerm = data.term;
@@ -212,9 +232,6 @@ export default function SubjectPerformanceTrend() {
         <div>
           <div className="pa-title-row">
             <h1>Subject Performance Trend</h1>
-            {import.meta.env.DEV && (
-              <span className="pa-preview-badge">Preview data</span>
-            )}
           </div>
           <p>
             Review average-grade movement by subject, term, grade level, and

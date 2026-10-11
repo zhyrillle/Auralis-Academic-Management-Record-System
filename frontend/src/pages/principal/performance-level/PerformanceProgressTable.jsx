@@ -2,11 +2,13 @@ import ProgressBar from "../../../components/charts/ProgressBar";
 
 export function PerformanceStatusBadge({ value }) {
   const tone =
-    value === "On track" || value === "Submitted"
-      ? "on-track"
-      : value === "Needs attention" || value === "Delayed"
-        ? "needs-attention"
-        : "monitor";
+    value === "No data"
+      ? "no-data"
+      : value === "On track" || value === "Submitted"
+        ? "on-track"
+        : value === "Needs attention" || value === "Delayed"
+          ? "needs-attention"
+          : "monitor";
   return <span className={`pp-status pp-status--${tone}`}>{value}</span>;
 }
 

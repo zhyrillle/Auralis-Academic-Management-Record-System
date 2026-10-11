@@ -804,12 +804,30 @@
 .user-management-page .table-container {
   width: 100%;
   min-width: 0;
-  overflow-x: auto;
+  max-height: calc(100vh - 280px);
+  overflow: auto;
   background: #fff;
   border: 0;
   border-radius: 0;
   outline: none;
   scrollbar-gutter: stable;
+  scrollbar-color: #9aa6b6 transparent;
+  scrollbar-width: thin;
+}
+
+.user-management-page .table-container::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+.user-management-page .table-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.user-management-page .table-container::-webkit-scrollbar-thumb {
+  background: #9aa6b6;
+  border: 2px solid #fff;
+  border-radius: 999px;
 }
 
 .user-management-page .users-table {
@@ -832,6 +850,9 @@
 }
 
 .user-management-page .users-table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   color: #405873;
   background: #f3f6fa;
   font-size: 11px;
@@ -841,12 +862,11 @@
   white-space: nowrap;
 }
 
-.user-management-page .users-table th:nth-child(1) { width: 19%; }
-.user-management-page .users-table th:nth-child(2) { width: 24%; }
-.user-management-page .users-table th:nth-child(3) { width: 16%; }
-.user-management-page .users-table th:nth-child(4) { width: 18%; }
-.user-management-page .users-table th:nth-child(5) { width: 12%; }
-.user-management-page .users-table th:nth-child(6) { width: 140px; }
+.user-management-page .users-table th:nth-child(1) { width: 22%; }
+.user-management-page .users-table th:nth-child(2) { width: 28%; }
+.user-management-page .users-table th:nth-child(3) { width: 18%; }
+.user-management-page .users-table th:nth-child(4) { width: 22%; }
+.user-management-page .users-table th:nth-child(5) { width: 140px; }
 
 .user-management-page .users-table td {
   color: #415876;
@@ -1099,8 +1119,7 @@
 .user-management-page .user-form-help { margin: 0; font-size: 11px; line-height: 1.5; color: #64748b; }
 .user-management-page .user-form-advisory { padding: 16px; background: #f8fafc; border: 1px solid var(--mu-border); border-radius: 10px; margin-bottom: 20px; }
 .user-management-page .user-form-advisory h4 { margin-bottom: 12px; }
-.user-management-page .user-form-assignment-heading,
-.user-management-page .user-form-assignment-label { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.user-management-page .user-form-assignment-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .user-management-page .user-form-add,
 .user-management-page .user-form-remove {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
@@ -1113,7 +1132,7 @@
 .user-management-page .user-form-assignment {
   padding: 14px; margin-top: 12px; border: 1px solid var(--mu-border); border-radius: 10px; background: #f8fafc;
 }
-.user-management-page .user-form-assignment-label { margin-bottom: 12px; font-size: 12px; color: #39516e; }
+.user-management-page .user-form-assignment-label { display: flex; justify-content: flex-end; align-items: center; gap: 12px; margin-bottom: 12px; font-size: 12px; color: #39516e; }
 .user-management-page .user-form-assignment-grid { display: grid; grid-template-columns: 1fr 1fr 1.35fr; gap: 12px; align-items: start; }
 .user-management-page .user-form-empty { padding: 20px; border: 1px dashed #cbd5e1; border-radius: 10px; font-size: 12px; line-height: 1.6; text-align: center; color: #64748b; }
 .user-management-page .user-form-footer {
@@ -1280,6 +1299,10 @@
   .user-management-page .users-table td {
     padding-top: 9px;
     padding-bottom: 9px;
+  }
+
+  .user-management-page .table-container {
+    max-height: calc(100vh - 260px);
   }
 }
 

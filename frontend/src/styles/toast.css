@@ -33,6 +33,14 @@
   color: #dc2626;
 }
 
+.app-toast--info > svg {
+  color: #2563eb;
+}
+
+.app-toast.app-toast--persistent {
+  animation: app-toast-slide-in 0.3s ease-out forwards;
+}
+
 .app-toast__message {
   min-width: 0;
   flex: 1;
@@ -79,6 +87,17 @@
   100% {
     opacity: 0;
     transform: translateX(calc(100% + 32px));
+  }
+}
+
+@keyframes app-toast-slide-in {
+  0% {
+    opacity: 0;
+    transform: translateX(calc(100% + 32px));
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
   }
 }
 

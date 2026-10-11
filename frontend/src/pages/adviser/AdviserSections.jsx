@@ -9,6 +9,8 @@ import GradingSheet from "./GradingSheet"; // Imported the separated component
 import ClassRecord from "./ClassRecord.jsx";
 import SectionDetails from "./SectionDetails.jsx";
 import AttendanceSheet from "./AttendanceSheet.jsx";
+import PhilIri from "./PhilIri.jsx";
+import Toast from "../../components/common/Toast.jsx";
 
 // Auth & Services
 import { getStoredUser } from "../../utils/auth";
@@ -219,14 +221,21 @@ export default function AdviserSections({ userRole: propUserRole }) {
       const rawSecId = classObj?.section_id || classObj?.sectionId || (typeof classId === 'string' && classId.startsWith('sec-') ? Number(classId.replace('sec-', '')) : null);
       const rawOffId = classObj?.subject_offering_id || classObj?.offering_id;
 
+      const user = getStoredUser();
+      const currentUserId = user?.user_id || user?.id || null;
+
       await fetch("http://localhost:5000/api/class-record/submit", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(currentUserId ? { "x-auralis-user-id": String(currentUserId) } : {}),
+        },
         body: JSON.stringify({
           subject_offering_id: rawOffId,
           section_id: rawSecId,
           term: "T1",
           students: studentsForClass,
+          user_id: currentUserId,
         }),
       });
     } catch (e) {
@@ -263,15 +272,15 @@ export default function AdviserSections({ userRole: propUserRole }) {
 
   return (
     <div className="sections-page-container">
-      {/* Toast Notifications */}
-      <div style={{ zIndex: 9999 }}>
-        {toasts.map((t) => (
-          <div key={t.id} className={`toast-notification ${t.type === "success" ? "toast-success" : "toast-info"}`}>
-            {t.type === "success" ? <Check size={18} style={{ color: "#10b981" }} /> : <FileSpreadsheet size={18} style={{ color: "#3b82f6" }} />}
-            <span>{t.message}</span>
-          </div>
-        ))}
-      </div>
+      {/* Bottom-Right Toast Notifications */}
+      {toasts.map((t) => (
+        <Toast
+          key={t.id}
+          message={t.message}
+          variant={t.type === "error" ? "error" : "success"}
+          onDismiss={() => setToasts((prev) => prev.filter((item) => item.id !== t.id))}
+        />
+      ))}
 
       {currentView === "dashboard" ? (
         <>
@@ -390,11 +399,21 @@ export default function AdviserSections({ userRole: propUserRole }) {
             setactiveSelectedClass(cls || activeSelectedClass);
             setCurrentView("attendance-sheet");
           }}
+          onPhilIri={(cls) => {
+            setactiveSelectedClass(cls || activeSelectedClass);
+            setCurrentView("phil-iri");
+          }}
           onUpdateQuarterlyGrades={handleUpdateQuarterlyGrades}
         />
       ) : currentView === "attendance-sheet" ? (
         <AttendanceSheet
           key={`att-${activeSelectedClass?.section_id || activeSelectedClass?.id || "default"}`}
+          activeClass={activeSelectedClass}
+          onBack={() => setCurrentView("class-record")}
+        />
+      ) : currentView === "phil-iri" ? (
+        <PhilIri
+          key={`philiri-${activeSelectedClass?.section_id || activeSelectedClass?.id || "default"}`}
           activeClass={activeSelectedClass}
           onBack={() => setCurrentView("class-record")}
         />

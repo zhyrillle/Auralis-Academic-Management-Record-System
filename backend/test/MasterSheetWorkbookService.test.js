@@ -48,6 +48,7 @@ test("generates the three-term DepEd-aligned workbook in memory", async () => {
   assert.equal(workbook.worksheets.length, 1);
   const worksheet = workbook.getWorksheet("SUMMARY - FINAL GRADES");
   assert.ok(worksheet);
+  assert.equal(worksheet.getImages().length, 2, "Both logos load from the existing frontend assets");
   assert.equal(worksheet.pageSetup.orientation, "landscape");
   assert.equal(worksheet.getCell("A1").value, "FINAL GRADES AND GENERAL AVERAGE");
   assert.equal(worksheet.getCell("I3").value, "X");

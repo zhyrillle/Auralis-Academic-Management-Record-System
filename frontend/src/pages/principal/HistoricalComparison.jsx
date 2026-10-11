@@ -64,6 +64,7 @@ export default function HistoricalComparison() {
       .finally(() => {
         if (currentRequest === requestId.current) setRequestMode("idle");
       });
+    return () => { requestId.current += 1; };
   }, [primarySchoolYear, comparisonSchoolYear, term, retryKey]);
 
   const changeFilter = (setter) => (nextValue) => {
@@ -83,25 +84,25 @@ export default function HistoricalComparison() {
     const selectedTermIndex =
       data.term === "overall" ? null : termIndex(data.term);
     return data.subjects.map((subject) => {
-      const primaryAverages = subject.primaryTermAverages || [0, 0, 0];
-      const comparisonAverages = subject.comparisonTermAverages || [0, 0, 0];
-      const primaryPassRates = subject.primaryTermPassRates || [0, 0, 0];
+      const primaryAverages = subject.primaryTermAverages;
+      const comparisonAverages = subject.comparisonTermAverages;
+      const primaryPassRates = subject.primaryTermPassRates;
 
       const primaryAverage = round(
-        selectedTermIndex === null
+        !Array.isArray(primaryAverages) ? subject.primaryAverage : selectedTermIndex === null
           ? average(primaryAverages)
           : primaryAverages[selectedTermIndex] || 0,
       );
       const comparisonAverage = round(
-        selectedTermIndex === null
+        !Array.isArray(comparisonAverages) ? subject.comparisonAverage : selectedTermIndex === null
           ? average(comparisonAverages)
           : comparisonAverages[selectedTermIndex] || 0,
       );
-      const passRate = round(
+      const passRate = Array.isArray(primaryPassRates) ? round(
         selectedTermIndex === null
           ? average(primaryPassRates)
           : primaryPassRates[selectedTermIndex] || 0,
-      );
+      ) : subject.passRate == null ? null : round(subject.passRate);
       const difference = round(primaryAverage - comparisonAverage);
       return {
         ...subject,
@@ -116,16 +117,18 @@ export default function HistoricalComparison() {
 
   const statistics = useMemo(() => {
     if (!rows.length || !data) return [];
-    const passRate = round(average(rows.map((row) => row.passRate)));
+    const passRates = rows.map((row) => row.passRate).filter((value) => value !== null);
+    const passRate = passRates.length ? round(average(passRates)) : null;
     const currentAverage = round(
       average(rows.map((row) => row.primaryAverage)),
     );
     return [
       {
         label: "Total Students",
-        value: data.totalStudents.toLocaleString(),
+        value: data.totalStudents == null ? "—" : Number(data.totalStudents).toLocaleString(),
         description:
-          data.term === "overall"
+          data.totalStudents == null ? "Student count is unavailable"
+          : data.term === "overall"
             ? "Across all three terms"
             : `Included in Term ${termIndex(data.term) + 1}`,
         icon: Users,
@@ -133,22 +136,22 @@ export default function HistoricalComparison() {
       },
       {
         label: "Pass Rate",
-        value: `${passRate}%`,
-        description: "Grade 75 or higher",
+        value: passRate === null ? "—" : `${passRate}%`,
+        description: passRate === null ? "Pass-rate data is unavailable" : "Grade 75 or higher",
         icon: TrendingUp,
         tone: "green",
       },
       {
         label: "Fail Rate",
-        value: `${round(100 - passRate)}%`,
-        description: "Below the passing grade",
+        value: passRate === null ? "—" : `${round(100 - passRate)}%`,
+        description: passRate === null ? "Fail-rate data is unavailable" : "Below the passing grade",
         icon: TrendingDown,
         tone: "red",
       },
       {
         label: "Average Grade",
         value: currentAverage,
-        description: data.primarySchoolYear.label,
+        description: data.primarySchoolYear?.label || "Primary SY",
         icon: ChartNoAxesCombined,
         tone: "gold",
       },
@@ -157,7 +160,7 @@ export default function HistoricalComparison() {
 
   if (requestMode === "initial" && !data) return <AnalyticsSkeleton table />;
 
-  if (!data && error) {
+  if (!data) {
     return (
       <main className="pa-page">
         <section className="pa-state-panel">
@@ -165,7 +168,7 @@ export default function HistoricalComparison() {
             className="pa-empty-state"
             icon={AlertTriangle}
             title="Historical analytics are unavailable"
-            description={error}
+            description={error || "No historical comparison response is available."}
           />
           <button
             className="pa-retry-button"
@@ -180,7 +183,9 @@ export default function HistoricalComparison() {
     );
   }
 
-  const allYears = data.availableSchoolYears;
+  const allYears = Array.isArray(data.availableSchoolYears)
+    ? data.availableSchoolYears
+    : [];
   const primaryOptions = allYears
     .filter((year) => year.value !== comparisonSchoolYear)
     .map((year) => ({ value: year.value, label: year.label }));
@@ -191,6 +196,13 @@ export default function HistoricalComparison() {
   const displayedTerm = data.term;
   const selectedTermIndex =
     displayedTerm === "overall" ? null : termIndex(displayedTerm);
+  const primaryLabel = data.primarySchoolYear?.label || primarySchoolYear;
+  const comparisonLabel = data.comparisonSchoolYear?.label || comparisonSchoolYear;
+  const primaryTrend = data.primaryTrend;
+  const comparisonTrend = data.comparisonTrend;
+  const hasTrends = [data.primaryTrend, data.comparisonTrend].every((values) =>
+    Array.isArray(values) && values.length === 3 && values.every((value) => value != null && Number.isFinite(Number(value))),
+  );
 
   return (
     <main className="pa-page">
@@ -198,9 +210,6 @@ export default function HistoricalComparison() {
         <div>
           <div className="pa-title-row">
             <h1>Historical Comparison</h1>
-            {import.meta.env.DEV && (
-              <span className="pa-preview-badge">Preview data</span>
-            )}
           </div>
           <p>Compare average grades and pass rates across two school years.</p>
         </div>
@@ -287,14 +296,15 @@ export default function HistoricalComparison() {
               <div className="pa-panel__header">
                 <div>
                   <h2>
-                    {displayedTerm === "overall"
+                    {displayedTerm === "overall" && hasTrends
                       ? "School-wide Average Grade Trend"
+                      : displayedTerm === "overall" ? "Subject Comparison"
                       : `Term ${selectedTermIndex + 1} Subject Comparison`}
                   </h2>
                   <p>
-                    {displayedTerm === "overall"
+                    {displayedTerm === "overall" && hasTrends
                       ? "Compare average-grade movement across all three terms."
-                      : "Compare subject results for the selected term."}
+                      : "Compare subject results for the selected school years and period."}
                   </p>
                 </div>
                 <div
@@ -303,42 +313,42 @@ export default function HistoricalComparison() {
                 >
                   <span>
                     <i style={{ "--series-color": "#17376d" }} />
-                    {data.primarySchoolYear.label}
+                    {primaryLabel}
                   </span>
                   <span>
                     <i style={{ "--series-color": "#d4a017" }} />
-                    {data.comparisonSchoolYear.label}
+                    {comparisonLabel}
                   </span>
                 </div>
               </div>
-              {displayedTerm === "overall" ? (
+              {displayedTerm === "overall" && hasTrends ? (
                 <LineChart
-                  ariaLabel={`Average grade comparison for ${data.primarySchoolYear.label} and ${data.comparisonSchoolYear.label}`}
+                  ariaLabel={`Average grade comparison for ${primaryLabel} and ${comparisonLabel}`}
                   labels={["Term 1", "Term 2", "Term 3"]}
                   series={[
                     {
                       id: "primary",
-                      label: data.primarySchoolYear.label,
+                      label: primaryLabel,
                       color: "#17376d",
-                      values: data.primaryTrend.map((value) => ({
+                      values: primaryTrend.map((value) => ({
                         value,
-                        detail: `${data.totalStudents} learners`,
+                        detail: data.totalStudents == null ? undefined : `${data.totalStudents} learners`,
                       })),
                     },
                     {
                       id: "comparison",
-                      label: data.comparisonSchoolYear.label,
+                      label: comparisonLabel,
                       color: "#d4a017",
-                      values: data.comparisonTrend.map((value) => ({
+                      values: comparisonTrend.map((value) => ({
                         value,
-                        detail: `${data.totalStudents} learners`,
+                        detail: data.totalStudents == null ? undefined : `${data.totalStudents} learners`,
                       })),
                     },
                   ]}
                 />
               ) : (
                 <GroupedBarChart
-                  ariaLabel={`Term ${selectedTermIndex + 1} subject comparison between selected school years`}
+                  ariaLabel={`Subject comparison between selected school years (${displayedTerm === "overall" ? "overall" : `Term ${selectedTermIndex + 1}`})`}
                   groups={rows.map((row) => ({
                     id: row.id,
                     label: row.label,
@@ -346,16 +356,16 @@ export default function HistoricalComparison() {
                     values: [
                       {
                         id: `${row.id}-primary`,
-                        label: data.primarySchoolYear.label,
+                        label: primaryLabel,
                         value: row.primaryAverage,
-                        detail: `${row.learnerCount} learners`,
+                        detail: row.learnerCount == null ? undefined : `${row.learnerCount} learners`,
                         color: "#17376d",
                       },
                       {
                         id: `${row.id}-comparison`,
-                        label: data.comparisonSchoolYear.label,
+                        label: comparisonLabel,
                         value: row.comparisonAverage,
-                        detail: `${row.learnerCount} learners`,
+                        detail: row.learnerCount == null ? undefined : `${row.learnerCount} learners`,
                         color: "#d4a017",
                       },
                     ],
@@ -378,8 +388,8 @@ export default function HistoricalComparison() {
               </div>
               <HistoricalComparisonTable
                 rows={rows}
-                primaryLabel={data.primarySchoolYear.label}
-                comparisonLabel={data.comparisonSchoolYear.label}
+                primaryLabel={primaryLabel}
+                comparisonLabel={comparisonLabel}
               />
             </section>
           </>

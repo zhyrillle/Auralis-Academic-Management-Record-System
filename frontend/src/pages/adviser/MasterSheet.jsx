@@ -73,6 +73,19 @@ export default function MasterSheet() {
   const masterSheetRef = useRef(null);
   const lastLoadedAssignmentIdRef = useRef("");
   const skipNextAssignmentLoadRef = useRef(false);
+  const [isTableScrolling, setIsTableScrolling] = useState(false);
+  const scrollIdleTimerRef = useRef(null);
+
+  useEffect(() => () => window.clearTimeout(scrollIdleTimerRef.current), []);
+
+  const handleTableScroll = () => {
+    setIsTableScrolling(true);
+    window.clearTimeout(scrollIdleTimerRef.current);
+    scrollIdleTimerRef.current = window.setTimeout(
+      () => setIsTableScrolling(false),
+      750,
+    );
+  };
 
   const selectedAssignment = assignments.find(
     (assignment) =>
@@ -187,7 +200,7 @@ export default function MasterSheet() {
       setMasterSheet(response);
       if (response.warnings?.length) {
         showToast(
-          `Master Sheet loaded with ${response.warnings.length} data warning${response.warnings.length === 1 ? "" : "s"}. Incomplete grades remain blank.`,
+          "Master Sheet needs data review. See the details on this page.",
           "warning",
           AlertTriangle,
         );
@@ -225,7 +238,7 @@ export default function MasterSheet() {
         setRequestError("");
         if (response.warnings?.length) {
           setToast({
-            message: `Master Sheet loaded with ${response.warnings.length} data warning${response.warnings.length === 1 ? "" : "s"}. Incomplete grades remain blank.`,
+            message: "Master Sheet needs data review. See the details on this page.",
             variant: "warning",
             icon: AlertTriangle,
           });
@@ -307,6 +320,8 @@ export default function MasterSheet() {
     ),
   };
   const subjects = masterSheet?.subjects || [];
+  const notOfferedSubjects = masterSheet?.subjectSetup?.notOfferedSubjects || [];
+  const dataWarnings = masterSheet?.warnings || [];
   const submissionDeadline = formatSubmissionDeadline(masterSheet?.terms);
   const totalColumns = 2 + subjects.length * 4;
 
@@ -328,7 +343,9 @@ export default function MasterSheet() {
       return (
         <tr>
           <td colSpan={totalColumns} className="ms-empty-row">
-            No {fallbackLabel} learners match the current search.
+            <span className="ms-empty-message">
+              No {fallbackLabel} learners match the current search.
+            </span>
           </td>
         </tr>
       );
@@ -364,8 +381,7 @@ export default function MasterSheet() {
     ));
   };
 
-  const isInitialLoading =
-    isLoadingOptions || (isLoadingSheet && !masterSheet);
+  const isInitialLoading = isLoadingOptions || (isLoadingSheet && !masterSheet);
   const isRefreshingSheet = isLoadingSheet && Boolean(masterSheet);
 
   if (isInitialLoading) {
@@ -380,12 +396,11 @@ export default function MasterSheet() {
     <div className="ms-container" aria-busy={isRefreshingSheet}>
       <div className="ms-page-header">
         <div>
-          <p className="ms-page-eyebrow">Adviser report</p>
           <h1>{masterSheet?.section?.name || "Master Sheet"}</h1>
           <p>
             {masterSheet
               ? `${masterSheet.section.gradeLevel} · SY ${masterSheet.schoolYear.label}`
-              : "Review official term grades and download the DepEd-aligned workbook."}
+              : "Review official term grades and download the Master Sheet PDF."}
           </p>
         </div>
 
@@ -450,25 +465,27 @@ export default function MasterSheet() {
         </div>
       )}
 
-      {!requestError &&
-        masterSheet &&
-        masterSheet.students.length === 0 && (
-          <div className="ms-feedback-card">
-            <EmptyState
-              icon={FileSpreadsheet}
-              title="No learners in this section"
-              description="The section roster is empty for the selected school year."
-              className="ms-empty-state"
-            />
-          </div>
-        )}
+      {!requestError && masterSheet && masterSheet.students.length === 0 && (
+        <div className="ms-feedback-card">
+          <EmptyState
+            icon={FileSpreadsheet}
+            title="No learners in this section"
+            description="The section roster is empty for the selected school year."
+            className="ms-empty-state"
+          />
+        </div>
+      )}
 
       {!requestError && masterSheet?.students.length > 0 && (
         <div
           className={`ms-sheet-content ${isRefreshingSheet ? "ms-sheet-content--busy" : ""}`}
         >
           {isRefreshingSheet && (
-            <div className="ms-refresh-overlay" role="status" aria-live="polite">
+            <div
+              className="ms-refresh-overlay"
+              role="status"
+              aria-live="polite"
+            >
               <LoaderCircle size={20} className="ms-spin" aria-hidden="true" />
               <span>Loading selected Master Sheet…</span>
             </div>
@@ -511,12 +528,41 @@ export default function MasterSheet() {
                 ) : (
                   <Download size={17} aria-hidden="true" />
                 )}
-                <span>{isDownloading ? "Preparing…" : "Download XLSX"}</span>
+                <span>{isDownloading ? "Preparing…" : "Download PDF"}</span>
               </button>
             </div>
           </div>
 
-          <div className="ms-table-wrapper">
+          {(notOfferedSubjects.length > 0 || dataWarnings.length > 0) && (
+            <details className="ms-data-notice" open={dataWarnings.length > 0}>
+              <summary>
+                {dataWarnings.length > 0
+                  ? `Data review: ${dataWarnings.length} issue${dataWarnings.length === 1 ? "" : "s"} to check`
+                  : `Subject setup: ${masterSheet.subjectSetup.configuredSubjectCount} of ${masterSheet.subjectSetup.templateSubjectCount} template subjects configured`}
+              </summary>
+              <div className="ms-data-notice__details">
+                {notOfferedSubjects.length > 0 && (
+                  <p>
+                    No subject offering is configured for {masterSheet.section.name} in SY {masterSheet.schoolYear.label} for: {notOfferedSubjects.join(", ")}.
+                    {" "}Their template columns remain blank. Review the section&apos;s subject assignments if these subjects should be included.
+                  </p>
+                )}
+                {dataWarnings.length > 0 && (
+                  <ul>
+                    {dataWarnings.map((warning) => <li key={warning}>{warning}</li>)}
+                  </ul>
+                )}
+              </div>
+            </details>
+          )}
+
+          <div
+            className={`ms-table-wrapper ${isTableScrolling ? "ms-table-wrapper--scrolling" : ""}`}
+            onScroll={handleTableScroll}
+            tabIndex={0}
+            role="region"
+            aria-label="Master Sheet grades"
+          >
             <table className="ms-table">
               <thead>
                 <tr className="ms-header-row-1">

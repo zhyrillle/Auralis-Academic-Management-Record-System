@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
+const db = require('../config/db');
 const Attendance = require('../models/Attendance');
+const AuditEvent = require('../models/AuditEvent');
 
 router.get('/', async (req, res) => {
   try {
@@ -31,6 +33,21 @@ router.get('/section/:sectionId', async (req, res) => {
   }
 });
 
+// POST save-remarks for a student's attendance record
+router.post('/save-remarks', async (req, res) => {
+  try {
+    const { attendance_sheet_id, student_section_id, student_id, status, remarks } = req.body;
+    const rawId = student_section_id || student_id;
+    if (!attendance_sheet_id || !rawId) {
+      return res.status(400).json({ error: 'attendance_sheet_id and student_section_id are required' });
+    }
+    const id = await Attendance.saveRemarks(attendance_sheet_id, rawId, remarks, status);
+    res.json({ message: 'Remarks saved successfully', attendance_id: id });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST bulk-save multiple attendance records at once
 router.post('/bulk-save', async (req, res) => {
   try {
@@ -39,6 +56,44 @@ router.post('/bulk-save', async (req, res) => {
       return res.status(400).json({ error: 'records array is required' });
     }
     const ids = await Attendance.bulkUpsert(records);
+
+    // Audit log attendance record
+    try {
+      const sheetId = records[0]?.attendance_sheet_id;
+      if (sheetId) {
+        const [sheetRows] = await db.execute(
+          `SELECT ash.attendance_date, sec.section_name, saa.user_id, sy.starts_on, sy.ends_on
+           FROM ATTENDANCE_SHEET ash
+           LEFT JOIN SECTION_ADVISER_ASSIGNMENT saa ON ash.adviser_assignment_id = saa.adviser_assignment_id
+           LEFT JOIN SECTION sec ON saa.section_id = sec.section_id
+           LEFT JOIN SCHOOL_YEAR sy ON saa.school_year_id = sy.school_year_id
+           WHERE ash.attendance_sheet_id = ?`,
+          [sheetId]
+        );
+        const secName = sheetRows[0]?.section_name || 'Section';
+        const syLabel = sheetRows[0]?.starts_on && sheetRows[0]?.ends_on ? `${sheetRows[0].starts_on}–${sheetRows[0].ends_on}` : null;
+        const actorUserId = req.headers['x-auralis-user-id'] || sheetRows[0]?.user_id || null;
+
+        await AuditEvent.create({
+          user_id: actorUserId ? Number(actorUserId) : null,
+          actor_context: { source: 'user', acting_as: `Adviser — ${secName}`, role: 'adviser' },
+          event_type: 'ATTENDANCE_RECORDED',
+          module_name: 'ATTENDANCE',
+          entity_type: 'ATTENDANCE_SHEET',
+          entity_id: sheetId,
+          metadata: {
+            target: secName,
+            section: secName,
+            school_year: syLabel,
+            summary: `Recorded daily attendance for Section ${secName}.`,
+            impact: 'Low',
+          },
+        });
+      }
+    } catch (auditErr) {
+      console.error('Failed to log attendance audit:', auditErr.message);
+    }
+
     res.json({ message: 'Attendance saved successfully', ids });
   } catch (err) {
     res.status(500).json({ error: err.message });

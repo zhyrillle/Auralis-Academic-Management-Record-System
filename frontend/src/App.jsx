@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Login from "./pages/Login";
 import ForgotPassword from "./pages/ForgotPassword";
 import OtpVerify from "./pages/OtpVerify";
@@ -8,11 +8,12 @@ import AdminDashboard from "./pages/system-admin/AdminDashboard";
 import WSConfig from "./pages/system-admin/WSConfig";
 import ManageUsers from "./pages/system-admin/ManageUsers";
 import StudentSectionManagement from "./pages/system-admin/StudentSectionManagement";
+import ManageStudents from "./pages/system-admin/ManageStudents";
 import AcademicPeriod from "./pages/system-admin/AcademicPeriod";
 import AdviserDashboard from "./pages/adviser/AdviserDashboard";
 import DeptDashboard from "./pages/department-head/DeptDashboard";
 import DeptClassRecord from "./pages/department-head/DeptClassRecord";
-import PrincipalDashboard from "./pages/principal/PrincipalDashboard";
+import DeptHeadNotifications from "./pages/department-head/DeptHeadNotifications";
 import TeacherDashboard from "./pages/teacher/TeacherDashboard";
 import PerformanceReport from "./pages/adviser/PerformanceReport";
 import DashboardLayout from "./components/layout/DashboardLayout";
@@ -35,6 +36,7 @@ import GradeReopeningRequest from "./pages/adviser/GradeReopeningRequest";
 import SectionDetails from "./pages/adviser/SectionDetails";
 import AdviserNotifications from "./pages/adviser/AdviserNotifications";
 import AttendanceSheet from "./pages/adviser/AttendanceSheet";
+import PhilIri from "./pages/adviser/PhilIri";
 import ClassRecord from "./pages/adviser/ClassRecord";
 import { getStoredUser, setStoredUser } from "./utils/auth";
 
@@ -80,15 +82,40 @@ export default function App() {
           {/* 1. System Administrator */}
           <Route path="/system-admin/dashboard" element={<AdminDashboard />} />
           <Route path="/system-admin/manage-users" element={<ManageUsers />} />
-          <Route path="/system-admin/student-section-management" element={<StudentSectionManagement />} />
+          <Route
+            path="/system-admin/student-sections"
+            element={<Navigate to="/system-admin/student-section-management" replace />}
+          />
+          <Route
+            path="/system-admin/student-section-management"
+            element={<StudentSectionManagement />}
+          />
+          <Route path="/system-admin/manage-students" element={<ManageStudents />} />
           <Route
             path="/system-admin/grading-periods"
             element={<AcademicPeriod user={user} />}
           />
           <Route path="/system-admin/ws-config" element={<WSConfig />} />
 
-          {/* 2. Principal */}
-          <Route path="/principal/dashboard" element={<PrincipalDashboard />} />
+          {/* 2. Principal (Landing page is At-Risk Students) */}
+          <Route
+            path="/principal"
+            element={
+              <Navigate to="/principal/at-risk-students/prediction" replace />
+            }
+          />
+          <Route
+            path="/principal/dashboard"
+            element={
+              <Navigate to="/principal/at-risk-students/prediction" replace />
+            }
+          />
+          <Route
+            path="/principal/at-risk-students"
+            element={
+              <Navigate to="/principal/at-risk-students/prediction" replace />
+            }
+          />
           <Route
             path="/principal/at-risk-students/prediction"
             element={<AtRiskPrediction />}
@@ -137,6 +164,10 @@ export default function App() {
             path="/department-head/class-records"
             element={<DeptClassRecord />}
           />
+          <Route
+            path="/department-head/notifications"
+            element={<DeptHeadNotifications />}
+          />
 
           {/* 4. Adviser */}
           <Route path="/adviser/dashboard" element={<AdviserDashboard />} />
@@ -146,6 +177,7 @@ export default function App() {
             element={<SectionDetails />}
           />
           <Route path="/adviser/attendance" element={<AttendanceSheet />} />
+          <Route path="/adviser/phil-iri" element={<PhilIri />} />
           <Route
             path="/adviser/notifications"
             element={<AdviserNotifications />}
@@ -158,10 +190,7 @@ export default function App() {
             path="/class-record/:sectionId/:subjectId"
             element={<ClassRecord />}
           />
-          <Route
-            path="/class-record/:sectionId"
-            element={<ClassRecord />}
-          />
+          <Route path="/class-record/:sectionId" element={<ClassRecord />} />
           <Route
             path="/adviser/class-record/:sectionId/:subjectId"
             element={<ClassRecord />}
@@ -181,6 +210,7 @@ export default function App() {
             path="/teacher/sections/details"
             element={<SectionDetails userRole="teacher" />}
           />
+          <Route path="/teacher/phil-iri" element={<PhilIri />} />
           <Route
             path="/teacher/class-record/:sectionId/:subjectId"
             element={<ClassRecord />}

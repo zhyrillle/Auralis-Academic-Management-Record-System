@@ -4,12 +4,15 @@ const ROLE_DISPLAY_MAP = {
   admin: 'System Administrator',
   system_admin: 'System Administrator',
   'system administrator': 'System Administrator',
+  administrator: 'System Administrator',
   principal: 'Principal',
   department_head: 'Department Head',
   'department head': 'Department Head',
   subject_teacher: 'Subject Teacher',
   'subject teacher': 'Subject Teacher',
+  teacher: 'Subject Teacher',
   adviser: 'Adviser',
+  system: 'System',
 };
 
 const MODULE_DISPLAY_MAP = {
@@ -25,6 +28,18 @@ const MODULE_DISPLAY_MAP = {
   grading: 'Grading',
   ATTENDANCE: 'Attendance',
   attendance: 'Attendance',
+  SF9: 'SF9 Records',
+  sf9: 'SF9 Records',
+  SF9_RECORDS: 'SF9 Records',
+  sf9_records: 'SF9 Records',
+  DEPARTMENT_OVERSIGHT: 'Department Oversight',
+  department_oversight: 'Department Oversight',
+  SCHOOL_OVERSIGHT: 'School Oversight',
+  school_oversight: 'School Oversight',
+  ANALYTICS: 'Analytics & Reports',
+  analytics: 'Analytics & Reports',
+  FEEDBACK: 'Feedback',
+  feedback: 'Feedback',
 };
 
 const EVENT_TYPE_MAP = {
@@ -47,6 +62,24 @@ const EVENT_TYPE_MAP = {
   GRADE_SHEET_RECALLED: 'Grade Sheet Recalled',
   GRADE_SHEET_CORRECTION_RESUBMITTED: 'Grade Sheet Correction Resubmitted',
   GRADE_SHEET_UPDATED: 'Grade Sheet Updated',
+  // Adviser
+  ATTENDANCE_RECORDED: 'Attendance Recorded',
+  ATTENDANCE_FINALIZED: 'Attendance Finalized',
+  SF9_GENERATED: 'SF9 Progress Cards Generated',
+  SF9_RECORD_UPDATED: 'SF9 Record Updated',
+  LEARNER_OBSERVED_VALUES_UPDATED: 'Learner Observed Values Updated',
+  SECTION_RECORDS_FINALIZED: 'Section Records Finalized',
+  // Department Head
+  DEPARTMENT_SUBMISSIONS_REVIEWED: 'Department Submissions Reviewed',
+  DEPARTMENT_PERFORMANCE_ANALYTIC_VIEWED: 'Department Performance Analyzed',
+  SUBJECT_CURRICULUM_REVIEWED: 'Subject Curriculum Reviewed',
+  GRADE_VERIFICATION_COMPLETED: 'Grade Verification Completed',
+  // Principal
+  SCHOOL_ANALYTICS_REVIEWED: 'School Analytics Reviewed',
+  GRADE_REOPEN_REQUEST_ENDORSED: 'Grade Reopen Request Endorsed',
+  ACADEMIC_EXCELLENCE_CONFIRMED: 'Academic Excellence Confirmed',
+  PRINCIPAL_FEEDBACK_SUBMITTED: 'Principal Feedback Submitted',
+  SCHOOL_PERFORMANCE_EVALUATED: 'School Performance Evaluated',
 };
 
 const ENTITY_TYPE_MAP = {
@@ -64,6 +97,18 @@ const ENTITY_TYPE_MAP = {
   subject_component_weight: 'Subject Component Weight',
   GRADE_SHEET: 'Grade Sheet',
   grade_sheet: 'Grade Sheet',
+  ATTENDANCE_SHEET: 'Attendance Sheet',
+  attendance_sheet: 'Attendance Sheet',
+  SECTION: 'Section',
+  section: 'Section',
+  DEPARTMENT: 'Department',
+  department: 'Department',
+  STUDENT_SF9: 'SF9 Progress Card',
+  student_sf9: 'SF9 Progress Card',
+  FEEDBACK: 'Feedback',
+  feedback: 'Feedback',
+  ANALYTICS: 'Analytics',
+  analytics: 'Analytics',
 };
 
 function formatRole(role) {
@@ -122,8 +167,16 @@ function computeImpact(eventType, metadata = {}) {
     'TERM_AUTOMATICALLY_LOCKED',
     'USER_PASSWORD_RESET',
     'UPCOMING_SCHOOL_YEAR_CREATED',
+    'ACADEMIC_EXCELLENCE_CONFIRMED',
+    'GRADE_REOPEN_REQUEST_ENDORSED',
+    'SECTION_RECORDS_FINALIZED',
   ];
-  const lowEvents = ['GRADE_SHEET_RECALLED', 'USER_PROFILE_UPDATED'];
+  const lowEvents = [
+    'GRADE_SHEET_RECALLED',
+    'USER_PROFILE_UPDATED',
+    'DEPARTMENT_PERFORMANCE_ANALYTIC_VIEWED',
+    'SCHOOL_ANALYTICS_REVIEWED',
+  ];
   if (highEvents.includes(eventType)) return 'High';
   if (lowEvents.includes(eventType)) return 'Low';
   return 'Medium';
@@ -197,6 +250,40 @@ function computeSummary(row, beforeData, afterData, metadata, target) {
       return `Recalled submitted grade sheet${target ? ` for ${target}` : ''} before deadline.`;
     case 'GRADE_SHEET_CORRECTION_RESUBMITTED':
       return `Resubmitted corrected grade sheet${target ? ` for ${target}` : ''}.`;
+    case 'GRADE_SHEET_UPDATED':
+      return `Updated grading scores and class record${target ? ` for ${target}` : ''}.`;
+    case 'GRADE_REOPEN_REQUEST_SUBMITTED':
+      return `Submitted grade reopening request${target ? ` for ${target}` : ''}${metadata.reason ? ` (${metadata.reason})` : ''}.`;
+    case 'ATTENDANCE_RECORDED':
+      return `Recorded monthly attendance${target ? ` for ${target}` : ''}.`;
+    case 'ATTENDANCE_FINALIZED':
+      return `Finalized advisory section attendance${target ? ` for ${target}` : ''}.`;
+    case 'SF9_GENERATED':
+      return `Generated DepEd Form 138 (SF9) progress report cards${target ? ` for ${target}` : ''}.`;
+    case 'SF9_RECORD_UPDATED':
+      return `Updated learner SF9 record information${target ? ` for ${target}` : ''}.`;
+    case 'LEARNER_OBSERVED_VALUES_UPDATED':
+      return `Updated DepEd core values and observed learner traits${target ? ` for ${target}` : ''}.`;
+    case 'SECTION_RECORDS_FINALIZED':
+      return `Finalized section advisory records${target ? ` for ${target}` : ''}.`;
+    case 'DEPARTMENT_SUBMISSIONS_REVIEWED':
+      return `Reviewed and endorsed quarterly grade sheet submissions${target ? ` for ${target}` : ''}.`;
+    case 'DEPARTMENT_PERFORMANCE_ANALYTIC_VIEWED':
+      return `Analyzed departmental passing rates and competency indicators${target ? ` for ${target}` : ''}.`;
+    case 'SUBJECT_CURRICULUM_REVIEWED':
+      return `Reviewed subject syllabus and learning competencies${target ? ` for ${target}` : ''}.`;
+    case 'GRADE_VERIFICATION_COMPLETED':
+      return `Completed grade verification and distribution checks${target ? ` for ${target}` : ''}.`;
+    case 'SCHOOL_ANALYTICS_REVIEWED':
+      return `Reviewed school-wide academic indicators and learner at-risk analytics.`;
+    case 'GRADE_REOPEN_REQUEST_ENDORSED':
+      return `Endorsed grade reopening request${target ? ` for ${target}` : ''} for administrative approval.`;
+    case 'ACADEMIC_EXCELLENCE_CONFIRMED':
+      return `Confirmed official Term Honor Roll and Academic Excellence awards${target ? ` for ${target}` : ''}.`;
+    case 'PRINCIPAL_FEEDBACK_SUBMITTED':
+      return `Submitted academic evaluation and instructional guidance feedback${target ? ` for ${target}` : ''}.`;
+    case 'SCHOOL_PERFORMANCE_EVALUATED':
+      return `Evaluated school-wide performance metrics and instructional goals.`;
     default:
       return `${formatEventType(row.event_type)}${target ? ` on ${target}` : ''}.`;
   }
@@ -210,11 +297,24 @@ function normalizeAuditEvent(row) {
 
   const actorFullName = [row.first_name, row.last_name].filter(Boolean).join(' ');
   const actorName = actorFullName || actorContext.actor_name || metadata.actor_name || 'Auralis System';
-  const actorRole = row.user_id ? formatRole(row.role) : 'System';
+
+  // Explicit role attribution (e.g. subject teacher acting as Section Adviser)
+  const explicitRole =
+    actorContext.role ||
+    metadata.role ||
+    (actorContext.acting_as && actorContext.acting_as.toLowerCase().includes('adviser') ? 'adviser' : null) ||
+    (actorContext.actingAs && actorContext.actingAs.toLowerCase().includes('adviser') ? 'adviser' : null);
+
+  const actorRole = explicitRole
+    ? formatRole(explicitRole)
+    : row.user_id
+      ? formatRole(row.role)
+      : 'System';
+
   const actingAs =
     actorContext.acting_as ||
     actorContext.actingAs ||
-    (row.user_id ? actorRole : actorContext.source === 'system' ? 'Automated System' : 'System');
+    (row.user_id ? (explicitRole ? formatRole(explicitRole) : actorRole) : actorContext.source === 'system' ? 'Automated System' : 'System');
 
   const target = computeTarget(row, beforeData, afterData, metadata);
   const summary = computeSummary(row, beforeData, afterData, metadata, target);

@@ -21,21 +21,20 @@ export default function FilterBar({ filters, onChange, disabled }) {
   const gradeLevelOptions = useMemo(
     () => [
       { value: "", label: "Grade Level" },
-      { value: "7", label: "Grade 7" },
-      { value: "8", label: "Grade 8" },
-      { value: "9", label: "Grade 9" },
-      { value: "10", label: "Grade 10" },
+      { value: "G7", label: "Grade 7" },
+      { value: "G8", label: "Grade 8" },
+      { value: "G9", label: "Grade 9" },
+      { value: "G10", label: "Grade 10" },
     ],
     []
   );
 
   const quarterOptions = useMemo(
     () => [
-      { value: "", label: "Quarter" },
-      { value: "1", label: "Q1" },
-      { value: "2", label: "Q2" },
-      { value: "3", label: "Q3" },
-      { value: "4", label: "Q4" },
+      { value: "", label: "Term" },
+      { value: "1", label: "T1" },
+      { value: "2", label: "T2" },
+      { value: "3", label: "T3" },
     ],
     []
   );
@@ -75,7 +74,7 @@ export default function FilterBar({ filters, onChange, disabled }) {
       </div>
 
       <div className="dept-filter-control">
-        <label className="dept-filter-label">Quarter</label>
+        <label className="dept-filter-label">Term</label>
         <select
           className="dept-filter-select"
           value={filters.quarter}

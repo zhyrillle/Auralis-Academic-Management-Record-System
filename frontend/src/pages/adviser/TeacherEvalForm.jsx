@@ -175,7 +175,7 @@ export default function TeacherEvalForm({ teacher, onBack, onCancel }) {
         {/* ── Part 1: Likert Scale ── */}
         <div className="tef-part">
           <h3 className="tef-part-title">
-            Part 1 — Likert Scale{" "}
+            Part 1 — Performance Assessment{" "}
             <span className="tef-part-hint">(1 = Strongly Disagree · 5 = Strongly Agree)</span>
           </h3>
 
@@ -214,7 +214,7 @@ export default function TeacherEvalForm({ teacher, onBack, onCancel }) {
 
         {/* ── Part 2: Open-Ended ── */}
         <div className="tef-part">
-          <h3 className="tef-part-title">Part 2 — Open-Ended Questions</h3>
+          <h3 className="tef-part-title">Part 2 — Comments & Suggestions</h3>
 
           {/* Q1 */}
           <div className={`tef-open-group${errors.strengths ? " tef-error" : ""}`}>

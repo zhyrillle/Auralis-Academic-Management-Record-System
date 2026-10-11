@@ -64,6 +64,8 @@ export default function AcademicPeriod({ user }) {
   const [selectedTermId, setSelectedTermId] = useState(null);
   const [terms, setTerms] = useState([]);
   const [departmentsByTerm, setDepartmentsByTerm] = useState({});
+  const [subjectsByTerm, setSubjectsByTerm] = useState({});
+  const [gradeSheetRecordsByTerm, setGradeSheetRecordsByTerm] = useState({});
   const [reopeningRequests, setReopeningRequests] = useState([]);
   const [activeReopenings, setActiveReopenings] = useState([]);
   const [upcomingSchoolYear, setUpcomingSchoolYear] = useState(null);
@@ -75,6 +77,7 @@ export default function AcademicPeriod({ user }) {
   const [pendingSchoolYearLabel, setPendingSchoolYearLabel] = useState("");
   const [pageError, setPageError] = useState("");
   const [reviewRequestId, setReviewRequestId] = useState(null);
+  const [isReviewSaving, setIsReviewSaving] = useState(false);
   const [activityReopeningId, setActivityReopeningId] = useState(null);
   const [toastMessage, setToastMessage] = useState("");
   const [toastVariant, setToastVariant] = useState("success");
@@ -109,6 +112,8 @@ export default function AcademicPeriod({ user }) {
         setSelectedSchoolYearId(context.selectedSchoolYearId);
         setTerms(context.terms);
         setDepartmentsByTerm(context.departmentsByTerm);
+        setSubjectsByTerm(context.subjectsByTerm);
+        setGradeSheetRecordsByTerm(context.gradeSheetRecordsByTerm);
         setReopeningRequests(context.reopeningRequests);
         setActiveReopenings(context.activeReopenings);
         setUpcomingSchoolYear(context.upcomingSchoolYear);
@@ -227,6 +232,8 @@ export default function AcademicPeriod({ user }) {
   };
 
   const handleApproveReopening = async (requestId, payload) => {
+    if (isReviewSaving) return;
+    setIsReviewSaving(true);
     try {
       await approveReopeningRequest(userId, requestId, payload);
       setReviewRequestId(null);
@@ -234,10 +241,14 @@ export default function AcademicPeriod({ user }) {
       await loadContext(selectedSchoolYearId);
     } catch (error) {
       showToast(error.message, "error");
+    } finally {
+      setIsReviewSaving(false);
     }
   };
 
   const handleDenyRequest = async (requestId, payload) => {
+    if (isReviewSaving) return;
+    setIsReviewSaving(true);
     try {
       await denyReopeningRequest(userId, requestId, payload);
       setReviewRequestId(null);
@@ -245,6 +256,8 @@ export default function AcademicPeriod({ user }) {
       await loadContext(selectedSchoolYearId);
     } catch (error) {
       showToast(error.message, "error");
+    } finally {
+      setIsReviewSaving(false);
     }
   };
 
@@ -406,6 +419,8 @@ export default function AcademicPeriod({ user }) {
               reopeningRequests={reopeningRequests}
               activeReopenings={activeReopenings}
               departmentsByTerm={departmentsByTerm}
+              subjectsByTerm={subjectsByTerm}
+              gradeSheetRecordsByTerm={gradeSheetRecordsByTerm}
               onSelectTerm={handleSelectTerm}
               onViewTermTimeline={handleViewTermTimeline}
               onReviewRequest={setReviewRequestId}
@@ -440,7 +455,8 @@ export default function AcademicPeriod({ user }) {
       <ReviewRequestDrawer
         key={reviewedRequest?.id || "closed-review-request"}
         request={reviewedRequest}
-        onClose={() => setReviewRequestId(null)}
+        onClose={() => { if (!isReviewSaving) setReviewRequestId(null); }}
+        isSaving={isReviewSaving}
         onDeny={handleDenyRequest}
         onApprove={handleApproveReopening}
       />

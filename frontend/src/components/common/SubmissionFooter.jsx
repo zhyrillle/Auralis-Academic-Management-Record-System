@@ -1,10 +1,12 @@
 import { useState } from "react";
-import { Calendar, Check } from "lucide-react";
+import { Calendar, Check, Send, Loader2 } from "lucide-react";
 
 export default function SubmissionFooter({
     deadline,
     isSubmitted,
     onSubmit,
+    disabled = false,
+    disabledReason = "",
 
     userRole = "teacher",
     customDeadlineLabel,
@@ -61,6 +63,7 @@ export default function SubmissionFooter({
 
     const [showModal, setShowModal] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
+    const [isSubmittingState, setIsSubmittingState] = useState(false);
 
     const getDeadlineLabel = () => {
         if (customDeadlineLabel) return customDeadlineLabel;
@@ -76,16 +79,24 @@ export default function SubmissionFooter({
     };
 
     const handleConfirm = async () => {
-        if (onSubmit) {
-            await onSubmit();
+        if (isSubmittingState) return;
+        setIsSubmittingState(true);
+        try {
+            if (onSubmit) {
+                await onSubmit();
+            }
+
+            setShowSuccess(true);
+
+            setTimeout(() => {
+                setShowSuccess(false);
+                setShowModal(false);
+                setIsSubmittingState(false);
+            }, 1500);
+        } catch (err) {
+            console.error("Submission error:", err);
+            setIsSubmittingState(false);
         }
-
-        setShowSuccess(true);
-
-        setTimeout(() => {
-            setShowSuccess(false);
-            setShowModal(false);
-        }, 1500);
     };
 
     return (
@@ -137,26 +148,54 @@ export default function SubmissionFooter({
                 </div>
 
                 <button
-                    disabled={isSubmitted}
-                    onClick={() => setShowModal(true)}
+                    disabled={isSubmitted || disabled || isSubmittingState}
+                    onClick={() => {
+                        if (!isSubmitted && !disabled && !isSubmittingState) {
+                            setShowModal(true);
+                        }
+                    }}
+                    title={isSubmitted ? "Grades already submitted" : (disabled ? disabledReason : "")}
                     style={{
-                        fontFamily: "var(--font-montserrat)",
-                        backgroundColor: isSubmitted
-                            ? "var(--unavailable-bg)"
-                            : "var(--success-text-color)",
-                        color: isSubmitted ? "var(--unavailable-text-color)" : "var(--white-text-color)",
-                        border: "none",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "8px",
+                        minHeight: "40px",
+                        minWidth: "118px",
+                        padding: "8px 20px",
                         borderRadius: "10px",
-                        padding: "10px 45px",
-                        fontWeight: "var(--fw-bold)",
-                        cursor: isSubmitted ? "not-allowed" : "pointer",
-                        pointerEvents: isSubmitted ? "none" : "auto",
-                        transition: "none",
+                        fontFamily: "var(--font-dm-sans, sans-serif)",
+                        fontSize: "0.8rem",
+                        fontWeight: 800,
+                        backgroundColor: (isSubmitted || disabled || isSubmittingState)
+                            ? "#e9eef5"
+                            : "var(--success-text-color, #16a34a)",
+                        color: (isSubmitted || disabled || isSubmittingState) ? "#8795a9" : "#ffffff",
+                        border: (isSubmitted || disabled || isSubmittingState) ? "1px solid #d8e0eb" : "1px solid #16a34a",
+                        cursor: (isSubmitted || disabled || isSubmittingState) ? "not-allowed" : "pointer",
+                        pointerEvents: "auto",
+                        transition: "all 0.2s ease",
                         transform: "none",
                         boxShadow: "none",
                     }}
                 >
-                    {isSubmitted ? "Submitted" : "Submit"}
+                    <style>{`@keyframes footerSpin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+                    {isSubmitted ? (
+                        <>
+                            <Check size={16} aria-hidden="true" />
+                            <span>Submitted</span>
+                        </>
+                    ) : isSubmittingState ? (
+                        <>
+                            <Loader2 size={16} style={{ animation: "footerSpin 1s linear infinite" }} aria-hidden="true" />
+                            <span>Submitting...</span>
+                        </>
+                    ) : (
+                        <>
+                            <Send size={16} aria-hidden="true" />
+                            <span>Submit</span>
+                        </>
+                    )}
                 </button>
             </div>
 
@@ -219,6 +258,7 @@ export default function SubmissionFooter({
                                     }}
                                 >
                                     <button
+                                        disabled={isSubmittingState}
                                         onClick={() => setShowModal(false)}
                                         style={{
                                             width: "150px",
@@ -230,13 +270,15 @@ export default function SubmissionFooter({
                                             fontFamily: "var(--font-montserrat)",
                                             fontWeight: "var(--fw-bold)",
                                             fontSize: "var(--fs-body)",
-                                            cursor: "pointer",
+                                            cursor: isSubmittingState ? "not-allowed" : "pointer",
+                                            opacity: isSubmittingState ? 0.6 : 1,
                                         }}
                                     >
                                         {resolvedCancel}
                                     </button>
 
                                     <button
+                                        disabled={isSubmittingState}
                                         onClick={handleConfirm}
                                         style={{
                                             width: "150px",
@@ -244,14 +286,27 @@ export default function SubmissionFooter({
                                             border: "1px solid var(--success-text-color)",
                                             borderRadius: "20px",
                                             color: "var(--white-text-color)",
-                                            background: "var(--success-text-color)",
+                                            background: isSubmittingState ? "#64748b" : "var(--success-text-color)",
                                             fontFamily: "var(--font-montserrat)",
                                             fontWeight: "var(--fw-bold)",
                                             fontSize: "var(--fs-body)",
-                                            cursor: "pointer",
+                                            cursor: isSubmittingState ? "not-allowed" : "pointer",
+                                            opacity: isSubmittingState ? 0.7 : 1,
+                                            display: "inline-flex",
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                            gap: "6px",
                                         }}
                                     >
-                                        {resolvedConfirm}
+                                        {isSubmittingState ? (
+                                            <>
+                                                <style>{`@keyframes footerSpin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+                                                <Loader2 size={16} style={{ animation: "footerSpin 1s linear infinite" }} />
+                                                <span>Submitting...</span>
+                                            </>
+                                        ) : (
+                                            resolvedConfirm
+                                        )}
                                     </button>
                                 </div>
                             </>

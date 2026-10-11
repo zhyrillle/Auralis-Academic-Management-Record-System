@@ -438,9 +438,31 @@ export default function UserManagement() {
         next.adviser_grade_level_id = "";
         next.adviser_section_id = "";
         next.teaching_assignments = [];
+        const isDeptTaken = departments.some(
+          (d) => String(d.department_id) === String(prev.department_id) && d.head_user_id && String(d.head_user_id) !== String(prev.user_id)
+        ) || users.some(
+          (u) =>
+            String(u.user_id) !== String(prev.user_id) &&
+            (getDisplayRole(u) === "Department Head" || String(u.role).toLowerCase() === "department head" || String(u.role).toLowerCase() === "department_head") &&
+            String(u.department_id || "") === String(prev.department_id)
+        );
+        if (isDeptTaken) {
+          next.department_id = "";
+        }
       } else if (name === "role" && value === "Subject Teacher") {
         next.adviser_grade_level_id = "";
         next.adviser_section_id = "";
+      } else if (name === "role" && value === "Adviser") {
+        const isSectionTaken = sections.some(
+          (s) => String(s.section_id) === String(prev.adviser_section_id) && s.adviser_user_id && String(s.adviser_user_id) !== String(prev.user_id)
+        ) || users.some(
+          (u) =>
+            String(u.user_id) !== String(prev.user_id) &&
+            String(u.adviser_section_id || "") === String(prev.adviser_section_id)
+        );
+        if (isSectionTaken) {
+          next.adviser_section_id = "";
+        }
       }
       if (name === "adviser_grade_level_id") {
         next.adviser_section_id = "";
@@ -631,7 +653,6 @@ export default function UserManagement() {
                       <th>Email</th>
                       <th>Role</th>
                       <th>Department</th>
-                      <th>Status</th>
                       <th>Actions</th>
                     </tr>
                   </thead>
@@ -646,7 +667,6 @@ export default function UserManagement() {
                         <td>{user.email}</td>
                         <td><RoleBadge role={getDisplayRole(user)} /></td>
                         <td>{getUserDepartment(user)}</td>
-                        <td><StatusBadge status={user.account_status} /></td>
                         <td>
                           <div className="actions">
                             <button type="button" className="action-btn action-btn--view" title="View" aria-label={`View ${getUsername(user)}`} onClick={() => handleViewUser(user)}>
@@ -664,7 +684,7 @@ export default function UserManagement() {
                     ))}
                     {!loadingUsers && filteredUsers.length === 0 && (
                       <tr>
-                        <td className="users-table-empty" colSpan="6">
+                        <td className="users-table-empty" colSpan="5">
                           <strong>No users found</strong>
                           <span>Try changing the search term or filters.</span>
                         </td>
@@ -829,6 +849,7 @@ export default function UserManagement() {
             sections={sections}
             departments={departments}
             subjectOfferings={subjectOfferings}
+            users={users}
             loading={loadingOptions || loadingDetails}
             loadError={detailsError || optionsError}
             error={formError}

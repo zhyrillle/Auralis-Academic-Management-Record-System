@@ -11,7 +11,7 @@
   gap: 12px;
   box-sizing: border-box;
   width: 100%;
-  padding: 0 40px 0 12px;
+  padding: 0 46px 0 14px;
   color: #334155;
   background: #fff;
   border: 1px solid #dbe3ee;
@@ -37,7 +37,7 @@
 .dropdown-select__trigger > svg {
   position: absolute;
   top: 50%;
-  right: 14px;
+  right: 18px;
   color: #64748b;
   transform: translateY(-50%);
   pointer-events: none;
@@ -95,4 +95,19 @@
 .dropdown-select__trigger:focus-visible {
   border-color: #7393c4;
   box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1);
+}
+
+.dropdown-select__trigger.is-error {
+  border-color: #dc2626;
+}
+
+.dropdown-select__menu button:disabled {
+  color: #94a3b8;
+  background: transparent;
+  cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dropdown-select__menu { animation: none; }
+  .dropdown-select__trigger > svg { transition: none; }
 }

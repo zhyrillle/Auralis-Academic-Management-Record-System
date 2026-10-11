@@ -106,7 +106,8 @@ export default function PerformanceTeachers() {
     );
 
   const isFiltering = requestMode === "filtering";
-  const hasData = data.teachers.length > 0;
+  // Render the full layout whenever a payload exists; charts/tables show their own empty states.
+  const hasData = Array.isArray(data.teachers);
   const schoolYearOptions = data.availableSchoolYears.map((year) => ({
     value: year.value,
     label: year.label,
@@ -249,17 +250,18 @@ export default function PerformanceTeachers() {
               title="Performance Rate per Teacher"
               subtitle="Average grade across each teacher's assigned classes."
               items={rankedTeachers
-                .filter((teacher) => teacher.averageGrade > 0)
                 .map((teacher) => ({
                   id: teacher.id,
                   label: teacher.name,
                   value: teacher.averageGrade,
                   tone:
-                    teacher.averageGrade < 75
-                      ? "danger"
-                      : teacher.averageGrade < 80
-                        ? "warning"
-                        : "success",
+                    teacher.averageGrade <= 0
+                      ? "neutral"
+                      : teacher.averageGrade < 75
+                        ? "danger"
+                        : teacher.averageGrade < 80
+                          ? "warning"
+                          : "success",
                 }))}
               maxItems={10}
               viewportItems={Math.min(data.teachers.length, 10)}
@@ -278,9 +280,7 @@ export default function PerformanceTeachers() {
               title="Submission Monitor"
               subtitle="Grading-report completion by teacher and assigned classes."
               columns={columns}
-              data={submissionTeachers.filter(
-                (t) => t.assignments.length > 0 && (t.completion > 0 || t.averageGrade > 0)
-              )}
+              data={submissionTeachers}
               maxVisibleRows={10}
               viewportRows={Math.min(data.teachers.length, 10)}
               controls={

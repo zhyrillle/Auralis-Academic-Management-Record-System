@@ -1,15 +1,20 @@
 /* src/styles/atRiskPrediction.css */
 
 /* ============================================================
-   At-Risk Prediction Page Styles (Matching Attached Layout)
+   At-Risk Prediction Page Styles (Auralis Harmonized & Compact)
    ============================================================ */
 
-.ar-page {
+.ar-page,
+.ar-prediction-page {
+  box-sizing: border-box;
+  width: calc(100% - 32px);
+  max-width: 1440px;
+  min-width: 0;
+  margin: 0 auto;
+  padding: 4px 0 24px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  width: 100%;
-  padding-bottom: 40px;
+  gap: 16px;
 }
 
 /* Header */
@@ -18,11 +23,12 @@
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+  min-height: 40px;
 }
 
 .ar-title {
   font-family: var(--font-dm-sans, 'DM Sans', sans-serif);
-  font-size: 26px;
+  font-size: 24px;
   font-weight: 700;
   color: #0f172a;
   margin: 0;
@@ -31,47 +37,8 @@
 .ar-subtitle {
   font-size: 13px;
   color: #64748b;
-  margin: 4px 0 0 0;
+  margin: 2px 0 0 0;
   font-weight: 500;
-}
-
-.ar-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.ar-icon-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
-  border: 1px solid #e2e8f0;
-  background: #ffffff;
-  color: #475569;
-  cursor: pointer;
-  position: relative;
-  transition: all 0.2s ease;
-}
-
-.ar-icon-btn:hover {
-  background: #f8fafc;
-  color: #112d61;
-}
-
-.ar-badge-number {
-  position: absolute;
-  top: -4px;
-  right: -4px;
-  background-color: #ef4444;
-  color: #ffffff;
-  font-size: 10px;
-  font-weight: 700;
-  border-radius: 10px;
-  padding: 1px 5px;
-  line-height: 1.2;
 }
 
 /* Filter Row */
@@ -79,22 +46,22 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
   flex-wrap: wrap;
 }
 
 /* Tabs */
 .ar-tabs {
   display: inline-flex;
-  gap: 4px;
+  gap: 3px;
   background: #e2e8f0;
-  padding: 4px;
-  border-radius: 24px;
+  padding: 3px;
+  border-radius: 20px;
 }
 
 .ar-tab {
-  padding: 6px 18px;
-  border-radius: 20px;
+  padding: 5px 16px;
+  border-radius: 16px;
   border: none;
   background: transparent;
   color: #64748b;
@@ -112,14 +79,14 @@
 .ar-tab.ar-tab-active {
   background: #000000;
   color: #ffffff;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
 }
 
 /* Filter Group */
 .ar-filter-group {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .ar-filter-control-compact {
@@ -127,7 +94,8 @@
 }
 
 .ar-filter-select-compact {
-  padding: 7px 12px;
+  padding: 6px 12px;
+  height: 36px;
   border-radius: 8px;
   border: 1px solid #cbd5e1;
   background: #ffffff;
@@ -138,6 +106,7 @@
   outline: none;
   cursor: pointer;
   transition: border-color 0.2s;
+  box-sizing: border-box;
 }
 
 .ar-filter-select-compact:focus {
@@ -148,7 +117,7 @@
 .ar-error-banner {
   background-color: #fee2e2;
   color: #991b1b;
-  padding: 10px 16px;
+  padding: 8px 14px;
   border-radius: 8px;
   font-size: 13px;
   font-weight: 500;
@@ -158,31 +127,31 @@
 .ar-body {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 16px;
 }
 
 /* 4 Stat Cards Row */
 .ar-stats-row {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
+  gap: 12px;
 }
 
 .ar-stat-card {
   background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 12px;
-  padding: 18px 20px;
-  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.03);
+  padding: 12px 16px;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.03);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  min-height: 110px;
+  min-height: 96px;
   transition: transform 0.2s, box-shadow 0.2s;
 }
 
 .ar-stat-card:hover {
-  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.06);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
   transform: translateY(-1px);
 }
 
@@ -199,8 +168,8 @@
 }
 
 .ar-stat-icon-wrap {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -211,19 +180,19 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  margin-top: 6px;
+  margin-top: 4px;
 }
 
 .ar-stat-value {
   font-family: var(--font-dm-sans, sans-serif);
-  font-size: 26px;
+  font-size: 24px;
   font-weight: 700;
   color: #0f172a;
   line-height: 1.1;
 }
 
 .ar-stat-caption {
-  font-size: 12px;
+  font-size: 11.5px;
   color: #64748b;
   font-weight: 500;
 }
@@ -232,20 +201,20 @@
 .ar-prediction-sections {
   display: flex;
   flex-direction: column;
-  gap: 22px;
+  gap: 14px;
 }
 
 .ar-risk-section-group {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .ar-risk-section-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 4px;
+  padding: 0 2px;
 }
 
 .ar-risk-section-title {
@@ -258,10 +227,10 @@
   background: none;
   border: none;
   color: #64748b;
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
-  padding: 4px 8px;
+  padding: 3px 8px;
   border-radius: 6px;
   transition: all 0.2s;
 }
@@ -274,17 +243,17 @@
 .ar-risk-section-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
 .ar-no-data {
   background: #ffffff;
   border: 1px dashed #cbd5e1;
-  border-radius: 10px;
-  padding: 20px;
+  border-radius: 8px;
+  padding: 14px 16px;
   text-align: center;
   color: #94a3b8;
-  font-size: 13px;
+  font-size: 12.5px;
 }
 
 /* Student Cards */
@@ -294,28 +263,28 @@
   justify-content: space-between;
   background: #ffffff;
   border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 14px 20px;
-  gap: 20px;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03);
-  transition: all 0.2s ease;
+  border-radius: 10px;
+  padding: 10px 16px;
+  gap: 14px;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.03);
+  transition: all 0.15s ease;
 }
 
 .ar-student-card:hover {
-  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.07);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
 }
 
 .ar-student-main {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   flex: 1.5;
   min-width: 0;
 }
 
 .ar-student-avatar {
-  width: 44px;
-  height: 44px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -324,8 +293,8 @@
 }
 
 .ar-student-avatar-skeleton {
-  width: 44px;
-  height: 44px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   background: #e2e8f0;
 }
@@ -333,14 +302,14 @@
 .ar-student-info {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
   min-width: 0;
 }
 
 .ar-student-name {
   font-family: var(--font-dm-sans, sans-serif);
   font-weight: 700;
-  font-size: 15px;
+  font-size: 14px;
   color: #112d61;
   white-space: nowrap;
   overflow: hidden;
@@ -348,7 +317,7 @@
 }
 
 .ar-student-meta {
-  font-size: 12.5px;
+  font-size: 12px;
   color: #64748b;
   font-weight: 500;
   white-space: nowrap;
@@ -359,16 +328,16 @@
 .ar-student-flags {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
   flex: 1.2;
-  min-width: 180px;
+  min-width: 160px;
 }
 
 .ar-flag-row {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 12px;
+  gap: 5px;
+  font-size: 11.5px;
   font-weight: 600;
 }
 
@@ -385,24 +354,39 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 8px 16px;
-  border-radius: 10px;
-  min-width: 78px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  min-width: 68px;
   flex-shrink: 0;
 }
 
 .ar-score-value {
   font-family: var(--font-dm-sans, sans-serif);
-  font-size: 24px;
+  font-size: 20px;
   font-weight: 800;
   line-height: 1;
 }
 
 .ar-score-label {
-  font-size: 10px;
+  font-size: 9.5px;
   font-weight: 600;
   letter-spacing: 0.02em;
   margin-top: 2px;
+}
+
+/* Skeletons */
+.ar-skeleton-line {
+  height: 12px;
+  background: #e2e8f0;
+  border-radius: 4px;
+  margin-bottom: 4px;
+}
+
+.ar-student-score-skeleton {
+  width: 68px;
+  height: 48px;
+  background: #e2e8f0;
+  border-radius: 8px;
 }
 
 /* ============================================================
@@ -418,16 +402,16 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 20px;
+  padding: 16px;
   animation: fadeIn 0.15s ease-out;
 }
 
 .ar-modal-card {
   background: #ffffff;
-  border-radius: 16px;
+  border-radius: 12px;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
   width: 100%;
-  max-width: 780px;
+  max-width: 760px;
   max-height: 85vh;
   display: flex;
   flex-direction: column;
@@ -438,19 +422,19 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20px 24px;
+  padding: 14px 20px;
   border-bottom: 1px solid #e2e8f0;
 }
 
 .ar-modal-title-wrap {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .ar-modal-title-wrap h2 {
   font-family: var(--font-dm-sans, sans-serif);
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 700;
   color: #0f172a;
   margin: 0;
@@ -459,9 +443,9 @@
 .ar-modal-count-badge {
   background: #f1f5f9;
   color: #475569;
-  padding: 2px 10px;
-  border-radius: 12px;
-  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11.5px;
   font-weight: 600;
 }
 
@@ -473,9 +457,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
   transition: all 0.2s;
 }
 
@@ -485,12 +469,12 @@
 }
 
 .ar-modal-search {
-  padding: 14px 24px;
+  padding: 10px 20px;
   background: #f8fafc;
   border-bottom: 1px solid #e2e8f0;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   position: relative;
 }
 
@@ -502,8 +486,8 @@
   width: 100%;
   border: 1px solid #cbd5e1;
   background: #ffffff;
-  border-radius: 8px;
-  padding: 8px 12px 8px 34px;
+  border-radius: 6px;
+  padding: 7px 12px 7px 32px;
   font-size: 13px;
   color: #0f172a;
   outline: none;
@@ -515,7 +499,7 @@
 
 .ar-modal-clear {
   position: absolute;
-  right: 34px;
+  right: 30px;
   background: none;
   border: none;
   color: #94a3b8;
@@ -523,37 +507,50 @@
 }
 
 .ar-modal-list {
-  padding: 20px 24px;
+  padding: 14px 20px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
 .ar-modal-loading,
 .ar-modal-empty {
   text-align: center;
-  padding: 30px;
+  padding: 24px;
   color: #64748b;
-  font-size: 14px;
+  font-size: 13px;
 }
 
-/* Responsive */
-@media (max-width: 1024px) {
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* ============================================================
+   Responsive Tiers (Matching Auralis UI Handbook)
+   ============================================================ */
+
+@media (max-width: 1100px) {
+  .ar-page,
+  .ar-prediction-page {
+    width: 100%;
+  }
+
   .ar-stats-row {
     grid-template-columns: repeat(2, 1fr);
   }
 }
 
 @media (max-width: 768px) {
-  .ar-stats-row {
-    grid-template-columns: 1fr 1fr;
-  }
-
   .ar-student-card {
     flex-direction: column;
     align-items: flex-start;
-    gap: 14px;
+    gap: 10px;
   }
 
   .ar-student-flags {
@@ -562,5 +559,28 @@
 
   .ar-student-score {
     align-self: flex-end;
+  }
+}
+
+@media (max-width: 640px) {
+  .ar-stats-row {
+    grid-template-columns: 1fr;
+  }
+
+  .ar-filter-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .ar-filter-group {
+    width: 100%;
+  }
+
+  .ar-filter-control-compact {
+    flex: 1;
+  }
+
+  .ar-filter-select-compact {
+    width: 100%;
   }
 }

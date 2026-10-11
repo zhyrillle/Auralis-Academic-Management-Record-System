@@ -8,6 +8,7 @@ import {
   X,
   Layers,
   Lock,
+  BookOpen,
 } from "lucide-react";
 import backIconUrl from "../../assets/backButton.svg";
 import unavailableIconUrl from "../../assets/adviser-assets/unavailableicon.png";
@@ -26,15 +27,18 @@ import {
 import {
   calculateStudentGrades,
   DEFAULT_JHS_WEIGHTS,
-  getGradeDescriptor,
 } from "../../utils/depedTransmutation";
 import { triggerClassRecordPrint } from "../../utils/exportClassRecordPdf";
+import { getStoredUser } from "../../utils/auth";
+import { eligibilityMessages, getGradeSheetReopeningEligibility } from "../../services/gradingPeriodService";
 
+const EMPTY_SCORES = Object.freeze({});
 
-export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdateQuarterlyGrades }) {
+export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilIri, onUpdateQuarterlyGrades }) {
   const navigate = useNavigate();
   const location = useLocation();
   const params = useParams();
+  const currentUserId = getStoredUser()?.user_id;
 
   // Dynamic Class Context Resolution (from prop or router location state)
   const effectiveClass = useMemo(() => {
@@ -85,7 +89,8 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdat
     } catch (_) {}
     return "T1";
   });
-  const userSelectedTermRef = useRef(Boolean(sessionStorage.getItem(`classRecord_activeTerm_${subjectOfferingId}`)));
+  const userSelectedTermRef = useRef(false);
+  const hasDoneInitialTermSyncRef = useRef(false);
 
   // Sync / Cloud state (Google Docs inspiration: "saved" | "saving" | "offline")
   const [syncStatus, setSyncStatus] = useState("saved");
@@ -135,22 +140,85 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdat
   const isMapehRef = useRef(isMapeh);
   isMapehRef.current = isMapeh;
 
+  // English Subject Detection for PHIL-IRI (Philippine Informal Reading Inventory)
+  const isEnglish = useMemo(() => {
+    const name = classContextData?.subject_name || effectiveClass?.subject_name || effectiveClass?.subjectName || effectiveClass?.subject || "";
+    const code = classContextData?.subject_code || effectiveClass?.subject_code || effectiveClass?.subjectCode || "";
+    const str = `${name} ${code}`.toLowerCase();
+    return /\b(english|eng)\b/i.test(str) || str.includes("english");
+  }, [classContextData, effectiveClass]);
+
   // Term Lock & Availability state
-  const [isLocked, setIsLocked] = useState(false);
+  const [sheetIsLocked, setIsLocked] = useState(false);
   const [lockReason, setLockReason] = useState("");
   const [loadedTermName, setLoadedTermName] = useState("");
   const [activeTermName, setActiveTermName] = useState("");
+  const [loadedSheet, setLoadedSheet] = useState(null);
+  const [requestEligibility, setRequestEligibility] = useState(null);
+  const [reopeningNow, setReopeningNow] = useState(() => Date.now());
+  const recordSelectionKey = `${subjectOfferingId}:${sectionId}:${effectiveSubjectId}:${activeTerm}:${mapehComponent}`;
+  const [recordLoad, setRecordLoad] = useState({ key: "", status: "loading", error: "" });
+  const [termSwitchError, setTermSwitchError] = useState("");
+  const recordRequestRef = useRef(0);
+  const isRecordReady = recordLoad.key === recordSelectionKey && recordLoad.status === "ready";
+  const recordError = recordLoad.key === recordSelectionKey && recordLoad.status === "error" ? recordLoad.error : "";
+  const isRecordLoading = !isRecordReady && !recordError;
+  // Unknown permissions stay read-only until this exact selection has loaded.
+  const isLocked = !isRecordReady || sheetIsLocked;
+  const currentSheet = loadedSheet?.term === activeTerm ? loadedSheet : null;
+  const isUpcomingTerm = isRecordReady && sheetIsLocked && currentSheet?.isUpcoming;
+  const isTermLocked = isLocked && currentSheet?.lockStatus === "TERM_LOCKED";
+  const eligibilityReady = requestEligibility?.sheetId === currentSheet?.id
+    && requestEligibility?.term === activeTerm;
+  const requestOpensAt = new Date(requestEligibility?.reopening_requests_open_at ?? NaN).getTime();
+  const requestClosesAt = new Date(requestEligibility?.reopening_requests_close_at ?? NaN).getTime();
+  const isRequestWindowOpen = eligibilityReady && reopeningNow >= requestOpensAt && reopeningNow < requestClosesAt;
+  const canRequestChanges = isTermLocked && isRequestWindowOpen && requestEligibility?.eligible;
+  const requestHint = eligibilityReady
+    ? requestEligibility.error || eligibilityMessages[requestEligibility.reason] || "Request changes to this grade sheet."
+    : "Checking reopening eligibility…";
+
+  useEffect(() => {
+    const refreshClock = () => setReopeningNow(Date.now());
+    const now = Date.now();
+    const nextBoundary = [requestOpensAt, requestClosesAt].filter(time => time > now).sort((a, b) => a - b)[0];
+    const timer = nextBoundary === undefined ? null
+      : window.setTimeout(refreshClock, Math.min(nextBoundary - now + 1, 2147483647));
+    window.addEventListener("focus", refreshClock);
+    document.addEventListener("visibilitychange", refreshClock);
+    return () => {
+      if (timer !== null) window.clearTimeout(timer);
+      window.removeEventListener("focus", refreshClock);
+      document.removeEventListener("visibilitychange", refreshClock);
+    };
+  }, [requestOpensAt, requestClosesAt, reopeningNow]);
+
+  useEffect(() => {
+    if (!isTermLocked || !currentSheet?.id || !currentUserId) return;
+    let isCurrent = true;
+    getGradeSheetReopeningEligibility(currentUserId, currentSheet.id)
+      .then(result => {
+        if (isCurrent) {
+          setReopeningNow(Date.now());
+          setRequestEligibility({ ...result, sheetId: currentSheet.id, term: activeTerm });
+        }
+      })
+      .catch(error => {
+        if (isCurrent) setRequestEligibility({
+          eligible: false, error: error.message || "Unable to check reopening eligibility.",
+          sheetId: currentSheet.id, term: activeTerm,
+        });
+      });
+    return () => { isCurrent = false; };
+  }, [isTermLocked, currentSheet?.id, currentUserId, activeTerm]);
 
   // Component weights (WW 20%, PT 50%, EX 30%)
   const [weights, setWeights] = useState(DEFAULT_JHS_WEIGHTS);
 
-  // Effective weights dynamically resolving MAPEH 20/60/20 vs standard
+  // Saved administrator weights are authoritative; defaults apply only before loading.
   const effectiveWeights = useMemo(() => {
-    if (isMapeh) {
-      return { WW: 20, PT: 60, QA: 20, EX: 20 };
-    }
     return weights || DEFAULT_JHS_WEIGHTS;
-  }, [isMapeh, weights]);
+  }, [weights]);
 
   // Assessment Columns (Loaded dynamically from database)
   const [writtenWorkColumns, setWrittenWorkColumns] = useState([]);
@@ -379,10 +447,7 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdat
     const loadedTermName = data.current_term_name || data.term_name;
     const activeTermName = data.active_term_name;
     const effectiveIsMapeh = Boolean(data?.is_mapeh ?? isMapeh);
-    let weights = data.component_weights || null;
-    if (effectiveIsMapeh) {
-      weights = { ...(weights || {}), WW: 20, PT: 60, QA: 20, EX: 20 };
-    }
+    const weights = data.component_weights || null;
 
     const targetComp = data.mapeh_component || (effectiveIsMapeh ? (mapehComponentRef.current || "MA") : null);
 
@@ -440,7 +505,7 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdat
             assessment_id: aId,
             label: String(wwCols.length + 1),
             activity_name: ass.activity_name || ass.title || `Written Work ${wwCols.length + 1}`,
-            max_score: Number(ass.max_score || ass.highest_possible_score || 30),
+            max_score: Number(ass.max_score ?? ass.highest_possible_score ?? 30),
             date: ass.activity_date,
             status: ass.status || "ACTIVE",
             subj_comp_weight_id: ass.subj_comp_weight_id,
@@ -452,7 +517,7 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdat
             assessment_id: aId,
             label: String(ptCols.length + 1),
             activity_name: ass.activity_name || ass.title || `Performance Task ${ptCols.length + 1}`,
-            max_score: Number(ass.max_score || ass.highest_possible_score || 50),
+            max_score: Number(ass.max_score ?? ass.highest_possible_score ?? 50),
             date: ass.activity_date,
             status: ass.status || "ACTIVE",
             subj_comp_weight_id: ass.subj_comp_weight_id,
@@ -465,7 +530,7 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdat
             st2Ass = ass;
           } else if (/\b(te|term\s*exam|quarterly|quarterly\s*assessment|exam)\b/i.test(name) || !teAss) {
             teAss = ass;
-            qaHps = Number(ass.max_score || ass.highest_possible_score || (effectiveIsMapeh ? 25 : 50));
+            qaHps = Number(ass.max_score ?? ass.highest_possible_score ?? (effectiveIsMapeh ? 25 : 50));
             qaId = aId;
           }
         } else {
@@ -474,7 +539,7 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdat
             assessment_id: aId,
             label: String(wwCols.length + 1),
             activity_name: ass.activity_name || ass.title || `Written Work ${wwCols.length + 1}`,
-            max_score: Number(ass.max_score || ass.highest_possible_score || 30),
+            max_score: Number(ass.max_score ?? ass.highest_possible_score ?? 30),
             date: ass.activity_date,
             status: ass.status || "ACTIVE",
             subj_comp_weight_id: ass.subj_comp_weight_id,
@@ -566,6 +631,7 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdat
         }
 
         newGrades[String(st.student_id)] = {
+          savedSummary: st.saved_summary,
           writtenWorks: wwGrades,
           performanceTasks: ptGrades,
           examinations: exGrades,
@@ -630,13 +696,18 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdat
   // ============================================================
   const loadClassRecord = useCallback(
     async (termToLoad, targetComp = null) => {
-      setStudents([]);
-      setGrades({});
-
       const activeComp = targetComp || (isMapehRef.current ? mapehComponentRef.current : "MA");
+      const requestId = ++recordRequestRef.current;
+      const selectionKey = `${subjectOfferingId}:${sectionId}:${effectiveSubjectId}:${termToLoad}:${activeComp}`;
+      setRecordLoad({ key: selectionKey, status: "loading", error: "" });
+      setModalState(previous => ({ ...previous, isOpen: false }));
 
       try {
         const data = await getClassRecord(subjectOfferingId, termToLoad, sectionId, activeComp, effectiveSubjectId);
+        if (requestId !== recordRequestRef.current) return;
+        if (!data?.class_context || !Array.isArray(data.students) || !Array.isArray(data.assessments)) {
+          throw new Error("The class record response is incomplete. Please retry.");
+        }
 
         if (data && data.class_context) {
           const parsed = parseRecordPayload(data);
@@ -652,13 +723,25 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdat
           });
 
           // Sync active ongoing term on initial load if user hasn't explicitly chosen one
-          const hasUserChoice = userSelectedTermRef.current || sessionStorage.getItem(`classRecord_activeTerm_${subjectOfferingId}`);
-          if (parsed.activeTerm && !hasUserChoice && parsed.activeTerm !== termToLoad) {
-            setActiveTerm(parsed.activeTerm);
-            return;
+          if (!hasDoneInitialTermSyncRef.current && !userSelectedTermRef.current) {
+            hasDoneInitialTermSyncRef.current = true;
+            if (parsed.activeTerm && parsed.activeTerm !== termToLoad) {
+              try {
+                sessionStorage.setItem(`classRecord_activeTerm_${subjectOfferingId}`, parsed.activeTerm);
+              } catch (_) {}
+              setActiveTerm(parsed.activeTerm);
+              return;
+            }
           }
 
           setIsLocked(parsed.isLocked);
+          setLoadedSheet({
+            id: data.grade_sheet_id || data.grade_sheet?.grade_sheet_id,
+            lockStatus: data.lock_status || data.grade_sheet?.lock_status,
+            term: termToLoad,
+            isUpcoming: /^T[1-3]$/.test(data.active_term || "")
+              && Number(termToLoad.slice(1)) > Number(data.active_term.slice(1)),
+          });
           setLockReason(parsed.lockReason);
           setLoadedTermName(parsed.loadedTermName || termToLoad);
           if (parsed.activeTermName) setActiveTermName(parsed.activeTermName);
@@ -698,6 +781,7 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdat
             if (!mapehDatasetsRef.current[otherComp]) {
               getClassRecord(subjectOfferingId, termToLoad, sectionId, otherComp, effectiveSubjectId)
                 .then((otherData) => {
+                  if (requestId !== recordRequestRef.current) return;
                   if (otherData && otherData.class_context) {
                     const otherParsed = parseRecordPayload(otherData);
                     mapehDatasetsRef.current[otherComp] = {
@@ -721,13 +805,15 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdat
           }
 
           setSyncStatus(parsed.isLocked ? "locked" : "saved");
+          setRecordLoad({ key: selectionKey, status: "ready", error: "" });
         }
       } catch (err) {
+        if (requestId !== recordRequestRef.current) return;
         console.warn("Error loading class record:", err.message);
-        setSyncStatus("saved");
+        setRecordLoad({ key: selectionKey, status: "error", error: err.message || "Unable to load this term's class record." });
       }
     },
-    [subjectOfferingId, sectionId, parseRecordPayload]
+    [subjectOfferingId, sectionId, effectiveSubjectId, parseRecordPayload, isMapeh]
   );
 
   const loadClassRecordRef = useRef(loadClassRecord);
@@ -754,12 +840,14 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdat
     if (subjectOfferingId || sectionId) {
       loadClassRecordRef.current(activeTerm, mapehComponentRef.current);
     }
-  }, [subjectOfferingId, sectionId, activeTerm]);
+    return () => { recordRequestRef.current += 1; };
+  }, [subjectOfferingId, sectionId, effectiveSubjectId, activeTerm]);
 
   // MAPEH sub-component switch handler with instant state switch & full backend hydration
   const handleMapehComponentChange = useCallback(
     async (targetComp) => {
-      if (targetComp === mapehComponentRef.current) return;
+      if (!isRecordReady || targetComp === mapehComponentRef.current) return;
+      const requestBeforeSave = recordRequestRef.current;
 
       if (saveTimerRef.current) {
         clearTimeout(saveTimerRef.current);
@@ -767,6 +855,12 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdat
       }
       // 1. Immediately flush pending scores for the current component
       await flushPendingScoresRef.current();
+      if (requestBeforeSave !== recordRequestRef.current) return;
+      if (pendingQueueRef.current.size > 0) {
+        setTermSwitchError("Unsaved scores remain. Try switching again after the scores are saved.");
+        return;
+      }
+      setTermSwitchError("");
 
       // 2. Set active MAPEH component
       setMapehComponent(targetComp);
@@ -775,17 +869,28 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdat
       // 3. Immediately trigger backend reload for complete state and score hydration
       await loadClassRecord(activeTerm, targetComp);
     },
-    [activeTerm, loadClassRecord]
+    [activeTerm, loadClassRecord, isRecordReady]
   );
 
   // Term switch handler with immediate flush
-  const handleTermChange = (newTerm) => {
+  const handleTermChange = async (newTerm) => {
     if (newTerm === activeTerm) return;
+    if (pendingQueueRef.current.size > 0) {
+      const requestBeforeSave = recordRequestRef.current;
+      await flushPendingScoresRef.current();
+      if (requestBeforeSave !== recordRequestRef.current) return;
+      if (pendingQueueRef.current.size > 0) {
+        setTermSwitchError("Unsaved scores remain. Try switching again after the scores are saved.");
+        return;
+      }
+    }
+    setTermSwitchError("");
+    // Invalidate immediately, including the gap before the next load effect runs.
+    recordRequestRef.current += 1;
     userSelectedTermRef.current = true;
     try {
       sessionStorage.setItem(`classRecord_activeTerm_${subjectOfferingId}`, newTerm);
     } catch (_) {}
-    flushPendingScoresRef.current();
     mapehDatasetsRef.current = { MA: null, PEH: null };
     setActiveTerm(newTerm);
   };
@@ -819,7 +924,8 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdat
         writtenWorks: ww,
         performanceTasks: pt,
         examinations: ex,
-        quarterlyAssessment: ex.te || "",
+        quarterlyAssessment: ex.te ?? "",
+        savedSummary: studentGradesObj.savedSummary,
         writtenWorkColumns,
         performanceTaskColumns,
         examConfig,
@@ -837,14 +943,15 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdat
   }, [students, grades, writtenWorkColumns, performanceTaskColumns, examConfig, effectiveWeights, isMapeh]);
 
   useEffect(() => {
-    if (typeof onUpdateQuarterlyGrades === "function" && Object.keys(studentQuarterlyGradesMap).length > 0) {
+    if (isRecordReady && typeof onUpdateQuarterlyGrades === "function" && Object.keys(studentQuarterlyGradesMap).length > 0) {
       onUpdateQuarterlyGrades(activeTerm, studentQuarterlyGradesMap);
     }
-  }, [studentQuarterlyGradesMap, activeTerm, onUpdateQuarterlyGrades]);
+  }, [studentQuarterlyGradesMap, activeTerm, onUpdateQuarterlyGrades, isRecordReady]);
   // ============================================================
   // CONDITIONAL DISABLING FOR DOWNLOAD BUTTON
   // ============================================================
   const isDownloadDisabled = useMemo(() => {
+    if (!isRecordReady) return true;
     if (!students || students.length === 0) return true;
     if (writtenWorkColumns.length === 0 && performanceTaskColumns.length === 0) return true;
 
@@ -877,7 +984,7 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdat
     }
 
     return false;
-  }, [students, grades, writtenWorkColumns, performanceTaskColumns]);
+  }, [students, grades, writtenWorkColumns, performanceTaskColumns, isRecordReady]);
 
   // ============================================================
   // DEPED JHS EXPORT METADATA RESOLUTION
@@ -1067,6 +1174,7 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdat
     });
   };
 
+
   // ============================================================
   // DEBOUNCED QUEUE AUTO-SAVER (Fast, non-blocking, concurrency safe)
   // ============================================================
@@ -1156,65 +1264,6 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onUpdat
     if (studentObj) {
       queueScoreChange(
         cleanAssessmentId || columnId,
-        studentObj.student_id,
-        studentObj.student_section_id,
-        value
-      );
-    }
-  };
-
-  const handleSingleGradeChange = (studentId, field, value, maxScore, assessmentId) => {
-    if (isLocked) return;
-
-    const numVal = Number(value);
-    const cellKey = `${studentId}_qa`;
-    const maxAllowed = Number(maxScore || 0);
-
-    if (value !== "" && !isNaN(numVal) && numVal < 0) return;
-
-    // Feature 1: Exceeded Highest Possible Score (HPS) Validation for QA
-    if (value !== "" && !isNaN(numVal) && maxAllowed > 0 && numVal > maxAllowed) {
-      showErrorTooltip(cellKey, `Score cannot exceed ${maxAllowed}`);
-
-      // Immediately clear/reset the invalid value so it cannot be saved
-      setGrades((prev) => ({
-        ...prev,
-        [studentId]: {
-          ...prev[studentId],
-          [field]: "",
-        },
-      }));
-
-      const targetAssessmentId = assessmentId || quarterlyAssessmentId;
-      const studentObj = students.find((s) => s.id === studentId || String(s.student_id) === studentId);
-      if (studentObj) {
-        queueScoreChange(
-          targetAssessmentId || "qa",
-          studentObj.student_id,
-          studentObj.student_section_id,
-          ""
-        );
-      }
-      return;
-    }
-
-    if (errorTooltip?.cellKey === cellKey) {
-      setErrorTooltip(null);
-    }
-
-    setGrades((prev) => ({
-      ...prev,
-      [studentId]: {
-        ...prev[studentId],
-        [field]: value,
-      },
-    }));
-
-    const targetAssessmentId = assessmentId || (field === "quarterlyAssessment" ? quarterlyAssessmentId : null);
-    const studentObj = students.find((s) => s.id === studentId || String(s.student_id) === studentId);
-    if (studentObj) {
-      queueScoreChange(
-        targetAssessmentId || "qa",
         studentObj.student_id,
         studentObj.student_section_id,
         value
@@ -1508,18 +1557,35 @@ const formatToISODate = (val) => {
           <div
             className="gdocs-sync-status"
             title={
-              isLocked
+              !isRecordReady ? recordError || undefined : isUpcomingTerm
+                ? "This term has not started and is not yet open for editing."
+                : isLocked
                 ? `This class record belongs to a closed term (${loadedTermName || activeTerm}) and is read-only.`
                 : syncStatus === "offline"
                 ? "Working offline - changes will sync when online"
                 : "All changes automatically saved"
             }
           >
-            {isLocked ? (
-              <span className="gdocs-status-item locked">
-                <Lock size={14} />
-                <span>Read-Only ({loadedTermName || activeTerm})</span>
-              </span>
+            {!isRecordReady ? null : isLocked ? (
+              <>
+                <span className={`gdocs-status-item ${isUpcomingTerm ? "upcoming" : "locked"}`}>
+                  <span>{isUpcomingTerm ? "Upcoming term" : "Read mode"}</span>
+                  <Lock size={14} aria-hidden="true" />
+                </span>
+                {isTermLocked && isRequestWindowOpen && (
+                <span title={requestHint}>
+                  <button type="button" className="class-record-request-btn"
+                    disabled={!canRequestChanges} title={requestHint}
+                    onClick={() => {
+                      if (!canRequestChanges) return;
+                      const prefix = location.pathname.startsWith("/teacher") ? "/teacher" : "/adviser";
+                      navigate(`${prefix}/request?gradeSheetId=${encodeURIComponent(currentSheet.id)}`);
+                    }}>
+                    Request for changes
+                  </button>
+                </span>
+                )}
+              </>
             ) : (
               <>
                 {syncStatus === "saving" && (
@@ -1563,6 +1629,7 @@ const formatToISODate = (val) => {
               <button
                 type="button"
                 className={`mapeh-toggle-btn ${mapehComponent === "MA" ? "active" : ""}`}
+                disabled={!isRecordReady}
                 onClick={() => handleMapehComponentChange("MA")}
               >
                 Music & Arts
@@ -1570,6 +1637,7 @@ const formatToISODate = (val) => {
               <button
                 type="button"
                 className={`mapeh-toggle-btn ${mapehComponent === "PEH" ? "active" : ""}`}
+                disabled={!isRecordReady}
                 onClick={() => handleMapehComponentChange("PEH")}
               >
                 PE & Health
@@ -1579,6 +1647,26 @@ const formatToISODate = (val) => {
 
           {/* Row 2 — Action & Term Buttons */}
           <div className="class-record-actions-row">
+            {/* PHIL-IRI (ENGLISH SUBJECTS ONLY) */}
+            {isEnglish && (
+              <button
+                type="button"
+                className="class-record-action-btn phil-iri-btn"
+                onClick={
+                  onPhilIri
+                    ? () => onPhilIri(effectiveClass)
+                    : () => {
+                        const prefix = location.pathname.startsWith("/teacher") ? "/teacher" : "/adviser";
+                        navigate(`${prefix}/phil-iri`, { state: { activeClass: effectiveClass } });
+                      }
+                }
+                title="Philippine - Informal Reading Inventory (PHIL - IRI)"
+              >
+                <BookOpen size={16} />
+                PHIL-IRI
+              </button>
+            )}
+
             {/* ATTENDANCE WITH CONDITIONAL DISABLING */}
             <button
               type="button"
@@ -1593,7 +1681,7 @@ const formatToISODate = (val) => {
                     }
               }
               disabled={isLocked}
-              title={isLocked ? "Attendance is unavailable for closed/locked terms." : "Attendance"}
+              title={!isRecordReady ? "Attendance is unavailable while the record is loading or unavailable." : isLocked ? "Attendance is unavailable for closed/locked terms." : "Attendance"}
             >
               <span className="action-icon">▰</span>
               Attendance
@@ -1606,7 +1694,7 @@ const formatToISODate = (val) => {
               onClick={handleDownload}
               disabled={isDownloadDisabled}
               title={
-                isDownloadDisabled
+                !isRecordReady ? "Load this term's record before downloading." : isDownloadDisabled
                   ? "Please complete all student grades for this quarter before downloading the class record."
                   : "Download Official DepEd JHS Class Record (PDF)"
               }
@@ -1645,6 +1733,8 @@ const formatToISODate = (val) => {
         </div>
       </div>
 
+      {termSwitchError && <p className="cr-record-error-message" role="alert">{termSwitchError}</p>}
+
       {/* ============================================================
           UNAVAILABLE STATE OR MAIN CLASS RECORD SPREADSHEET
       ============================================================ */}
@@ -1654,26 +1744,39 @@ const formatToISODate = (val) => {
           <h3>This grading term is currently unavailable.</h3>
           <p>Access will be enabled once the official grading period begins.</p>
         </div>
+      ) : isRecordLoading ? (
+        <div className="cr-record-loading" role="status" aria-live="polite" aria-busy="true">
+          <p className="cr-record-loading-label">Loading Term {activeTerm.replace("T", "")} record…</p>
+          <div className="cr-record-skeleton" aria-hidden="true">
+            <div className="cr-record-skeleton-header">
+              <span className="cr-record-skeleton-seal" />
+              <div className="cr-record-skeleton-heading">
+                <h2>CLASS RECORD - TERM {activeTerm.replace("T", "")}</h2>
+                <div className="cr-record-skeleton-meta"><span /><span /><span /></div>
+                <div className="cr-record-skeleton-meta"><span /><span /></div>
+              </div>
+              <span className="cr-record-skeleton-seal" />
+            </div>
+            <div className="cr-record-skeleton-count" />
+            <div className="cr-record-skeleton-table">
+              <div className="cr-record-skeleton-table-head"><span /><span /><span /><span /><span /></div>
+              {Array.from({ length: 5 }, (_, row) => (
+                <div className="cr-record-skeleton-row" key={row}>
+                  {Array.from({ length: 5 }, (_, column) => <span key={column}><i /></span>)}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : recordError ? (
+        <div className="cr-record-load-error" role="alert">
+          <h3>Unable to load Term {activeTerm.replace("T", "")} record</h3>
+          <p>{recordError}</p>
+          <button type="button" className="class-record-request-btn"
+            onClick={() => loadClassRecordRef.current(activeTerm, mapehComponentRef.current)}>Retry</button>
+        </div>
       ) : (
         <div className="class-record-content">
-          {/* LOCK BANNER FOR CLOSED / INACTIVE TERMS */}
-          {isLocked && (
-            <div className="class-record-lock-banner">
-              <div className="lock-banner-left">
-                <div className="lock-icon-circle">
-                  <Lock size={16} />
-                </div>
-                <div className="lock-text">
-                  <strong>Read-Only Mode:</strong> This class record belongs to a closed term ({loadedTermName || activeTerm}) and is read-only.
-                </div>
-              </div>
-              <div className="lock-badge-tag">
-                <Lock size={12} />
-                <span>Term Locked</span>
-              </div>
-            </div>
-          )}
-
           {/* ============================================================
               OFFICIAL CLASS RECORD TEMPLATE HEADER & METADATA
           ============================================================ */}
@@ -1723,7 +1826,7 @@ const formatToISODate = (val) => {
             </div>
 
             {/* TOTAL STUDENTS COUNTER */}
-            <div className="student-count" style={{ padding: "0 10px 8px" }}>
+            <div className="student-count">
               Total Students: {students.length}
             </div>
 
@@ -1985,7 +2088,7 @@ const formatToISODate = (val) => {
                         ))}
                         <td className="cr-hps-cell">{totalWW_HPS}</td>
                         <td className="cr-hps-cell">{isMapeh ? "100.00" : "100"}</td>
-                        <td className="cr-hps-cell">{effectiveWeights.WW || 20}%</td>
+                        <td className="cr-hps-cell">{effectiveWeights.WW ?? "—"}%</td>
 
                         {/* PT HPS */}
                         {performanceTaskColumns.map((col) => (
@@ -2000,7 +2103,7 @@ const formatToISODate = (val) => {
                         ))}
                         <td className="cr-hps-cell">{totalPT_HPS}</td>
                         <td className="cr-hps-cell">{isMapeh ? "100.00" : "100"}</td>
-                        <td className="cr-hps-cell">{effectiveWeights.PT || (isMapeh ? 60 : 50)}%</td>
+                        <td className="cr-hps-cell">{effectiveWeights.PT ?? "—"}%</td>
 
                         {/* EX HPS & WEIGHTS */}
                         <td
@@ -2030,7 +2133,7 @@ const formatToISODate = (val) => {
                               {Number(examConfig.st1HPS || 25) + Number(examConfig.st2HPS || 25) + Number(examConfig.teHPS || 25)}
                             </td>
                             <td className="cr-hps-cell">100.00</td>
-                            <td className="cr-hps-cell">{effectiveWeights.EX || 20}%</td>
+                            <td className="cr-hps-cell">{effectiveWeights.EX ?? effectiveWeights.QA ?? "—"}%</td>
                           </>
                         ) : (
                           <>
@@ -2056,7 +2159,7 @@ const formatToISODate = (val) => {
                               {examConfig.teWeight}
                             </td>
                             <td className="cr-hps-cell">100</td>
-                            <td className="cr-hps-cell">{effectiveWeights.EX || effectiveWeights.QA || 30}%</td>
+                            <td className="cr-hps-cell">{effectiveWeights.EX ?? effectiveWeights.QA ?? "—"}%</td>
                           </>
                         )}
 
@@ -2084,14 +2187,18 @@ const formatToISODate = (val) => {
                         <>
                           {/* LEARNERS' NAMES DIVIDER ROW */}
                           <tr className="cr-learners-names-row">
-                            <td colSpan={totalTableCols}>LEARNERS' NAMES</td>
+                            <td colSpan={2} className="cr-learners-names-sticky-cell">
+                              LEARNERS' NAMES
+                            </td>
+                            <td colSpan={totalTableCols - 2} className="cr-learners-names-fill-cell" aria-hidden="true" />
                           </tr>
 
                           {/* MALE DIVIDER ROW */}
                           <tr className="cr-gender-row">
-                            <td colSpan={totalTableCols}>
+                            <td colSpan={2} className="cr-gender-sticky-cell">
                               MALE {maleStudents.length > 0 ? `(${maleStudents.length})` : ""}
                             </td>
+                            <td colSpan={totalTableCols - 2} className="cr-gender-fill-cell" aria-hidden="true" />
                           </tr>
 
                           {/* MALE STUDENTS */}
@@ -2116,9 +2223,10 @@ const formatToISODate = (val) => {
 
                           {/* FEMALE DIVIDER ROW */}
                           <tr className="cr-gender-row">
-                            <td colSpan={totalTableCols}>
+                            <td colSpan={2} className="cr-gender-sticky-cell">
                               FEMALE {femaleStudents.length > 0 ? `(${femaleStudents.length})` : ""}
                             </td>
+                            <td colSpan={totalTableCols - 2} className="cr-gender-fill-cell" aria-hidden="true" />
                           </tr>
 
                           {/* FEMALE STUDENTS */}
@@ -2154,7 +2262,7 @@ const formatToISODate = (val) => {
       {/* ============================================================
           MODERN ADD / EDIT COLUMN MODAL
       ============================================================ */}
-      {modalState.isOpen && (
+      {modalState.isOpen && isRecordReady && !isLocked && (
         <div className="class-record-modal-backdrop" onClick={() => setModalState((prev) => ({ ...prev, isOpen: false }))}>
           <div className="class-record-modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
@@ -2277,14 +2385,14 @@ function StudentRow({
   handleExamScoreChange,
   handleScoreBlur,
 }) {
-  const studentGrades = grades[student.id] || {};
-  const studentWW = studentGrades.writtenWorks || {};
-  const studentPT = studentGrades.performanceTasks || {};
-  const studentEX = studentGrades.examinations || {
+  const studentGrades = grades[student.id] || EMPTY_SCORES;
+  const studentWW = studentGrades.writtenWorks || EMPTY_SCORES;
+  const studentPT = studentGrades.performanceTasks || EMPTY_SCORES;
+  const studentEX = useMemo(() => studentGrades.examinations || {
     st1: studentGrades.st1 || "",
     st2: studentGrades.st2 || "",
     te: studentGrades.te || studentGrades.quarterlyAssessment || "",
-  };
+  }, [studentGrades]);
 
   // Real-time calculation with DepEd Transmutation Table
   const rowCalculation = useMemo(() => {
@@ -2292,7 +2400,8 @@ function StudentRow({
       writtenWorks: studentWW,
       performanceTasks: studentPT,
       examinations: studentEX,
-      quarterlyAssessment: studentEX.te || "",
+      quarterlyAssessment: studentEX.te ?? "",
+      savedSummary: studentGrades.savedSummary,
       writtenWorkColumns,
       performanceTaskColumns,
       examConfig,
@@ -2300,7 +2409,7 @@ function StudentRow({
       isMapeh: Boolean(isMapeh),
       isMapehSubject: Boolean(isMapeh),
     });
-  }, [studentWW, studentPT, studentEX, writtenWorkColumns, performanceTaskColumns, examConfig, weights, isMapeh]);
+  }, [studentWW, studentPT, studentEX, studentGrades.savedSummary, writtenWorkColumns, performanceTaskColumns, examConfig, weights, isMapeh]);
 
   return (
     <tr className="student-row">

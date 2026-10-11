@@ -3,6 +3,19 @@ const router = express.Router();
 const AtRiskPrediction = require('../models/AtRiskPrediction');
 
 /**
+ * GET /api/principal/at-risk-prediction/options
+ */
+router.get('/options', async (req, res) => {
+  try {
+    const options = await AtRiskPrediction.getOptions();
+    res.json(options);
+  } catch (err) {
+    console.error("Error in /api/principal/at-risk-prediction/options:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
  * GET /api/principal/at-risk-prediction/summary
  * Query params: schoolYear, term, gradeLevel
  */

@@ -126,6 +126,10 @@ router.get('/student/:identifier', async (req, res) => {
   try {
     const { identifier } = req.params;
     const cleanId = String(identifier).trim();
+    const schoolYearId = req.query.schoolYearId;
+    if (schoolYearId !== undefined && (typeof schoolYearId !== 'string' || !/^[1-9]\d*$/.test(schoolYearId))) {
+      return res.status(400).json({ error: "Invalid school year" });
+    }
 
     // 1. Find Student record
     let student = null;
@@ -162,7 +166,7 @@ router.get('/student/:identifier', async (req, res) => {
 
     // 2. Find Student Section & Section details
     let sectionInfo = null;
-    if (studentSectionId) {
+    if (studentSectionId && schoolYearId === undefined) {
       const [secRows] = await db.execute(
         `SELECT ss.student_section_id, ss.section_id, ss.school_year_id,
                 sec.section_name, sec.program_id,
@@ -192,14 +196,18 @@ router.get('/student/:identifier', async (req, res) => {
          LEFT JOIN PROGRAM p ON p.program_id = sec.program_id
          LEFT JOIN GRADE_LEVEL gl ON sec.grade_level_id = gl.grade_level_id
          LEFT JOIN SCHOOL_YEAR sy ON ss.school_year_id = sy.school_year_id
-         WHERE ss.student_id = ?
+         WHERE ss.student_id = ? ${schoolYearId === undefined ? '' : 'AND ss.school_year_id = ?'}
          ORDER BY ss.student_section_id DESC LIMIT 1`,
-        [student.student_id]
+        schoolYearId === undefined ? [student.student_id] : [student.student_id, schoolYearId]
       );
       if (secRows.length > 0) {
         sectionInfo = secRows[0];
         studentSectionId = sectionInfo.student_section_id;
       }
+    }
+
+    if (schoolYearId !== undefined && !sectionInfo) {
+      return res.status(404).json({ error: "Student is not enrolled in the selected school year" });
     }
 
     // 3. Resolve Section Adviser & Principal Details
@@ -301,8 +309,12 @@ router.get('/student/:identifier', async (req, res) => {
            FROM STUDENT_GRADE sg
            INNER JOIN SUBJECT_OFFERING so ON so.subject_offering_id = sg.subject_offering_id
            INNER JOIN SUBJECT s ON s.subject_id = so.subject_id
-           WHERE sg.student_section_id = ? OR sg.student_id = ?`,
-          [studentSectionId || 0, student.student_id || 0]
+           WHERE ${schoolYearId === undefined
+             ? 'sg.student_section_id = ? OR sg.student_id = ?'
+             : 'sg.student_section_id = ? AND sg.student_id = ? AND so.school_year_id = ?'}`,
+          schoolYearId === undefined
+            ? [studentSectionId || 0, student.student_id || 0]
+            : [studentSectionId, student.student_id, schoolYearId]
         );
         studentGradeRows = sgRows;
       } catch (sgErr) {

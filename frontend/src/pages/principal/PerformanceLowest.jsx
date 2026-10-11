@@ -82,10 +82,11 @@ export default function PerformanceLowest() {
     );
 
   const isFiltering = requestMode === "filtering";
+  // Render the full layout whenever a payload exists; lists fall back to placeholder slots.
   const hasData =
-    data.gradeLevels.length > 0 &&
-    data.sections.length > 0 &&
-    data.subjects.length > 0;
+    Array.isArray(data.gradeLevels) &&
+    Array.isArray(data.sections) &&
+    Array.isArray(data.subjects);
   const schoolYearOptions = data.availableSchoolYears.map((year) => ({
     value: year.value,
     label: year.label,
@@ -97,82 +98,68 @@ export default function PerformanceLowest() {
       label: `Grade ${level}`,
     })),
   ];
-  const cards = hasData
-    ? [
-        {
-          label: "Lowest Grade Level",
-          value: data.summary.lowestGradeLevel.label,
-          description: `Average ${data.summary.lowestGradeLevel.averageGrade}`,
-          icon: GraduationCap,
-          tone: "navy",
-        },
-        {
-          label: "Lowest Section",
-          value: data.summary.lowestSection.label,
-          description: `Average ${data.summary.lowestSection.averageGrade}`,
-          icon: Users,
-          tone: "green",
-        },
-        {
-          label: "Lowest Subject",
-          value: data.summary.lowestSubject.label,
-          description: `Average ${data.summary.lowestSubject.averageGrade}`,
-          icon: BookOpenCheck,
-          tone: "red",
-        },
-        {
-          label: "At-Risk Students",
-          value: data.summary.atRiskStudents,
-          description: "Estimated learners below passing",
-          icon: AlertTriangle,
-          tone: "gold",
-        },
-      ]
-    : [];
-  const hasGradeLevels = data.gradeLevels.some((item) => item.averageGrade > 0);
-  const rankedGradeLevels = hasGradeLevels
-    ? data.gradeLevels.map((item) => ({
+  const lowestCard = (item) => ({
+    value: item?.label || "—",
+    description: item ? `Average ${item.averageGrade}` : "No data",
+  });
+  const cards = [
+    {
+      label: "Lowest Grade Level",
+      ...lowestCard(data.summary?.lowestGradeLevel),
+      icon: GraduationCap,
+      tone: "navy",
+    },
+    {
+      label: "Lowest Section",
+      ...lowestCard(data.summary?.lowestSection),
+      icon: Users,
+      tone: "green",
+    },
+    {
+      label: "Lowest Subject",
+      ...lowestCard(data.summary?.lowestSubject),
+      icon: BookOpenCheck,
+      tone: "red",
+    },
+    {
+      label: "At-Risk Students",
+      value: data.summary?.atRiskStudents ?? 0,
+      description: "Learners with a general average below 75",
+      icon: AlertTriangle,
+      tone: "gold",
+    },
+  ];
+  const toRanked = (items) =>
+    items
+      .filter((item) => item.averageGrade > 0)
+      .map((item) => ({
         id: item.id,
         label: item.label,
         value: item.averageGrade,
         tone: toneFor(item.averageGrade),
-      }))
-    : Array.from({ length: 4 }, (_, i) => ({
-        id: `gl-slot-${i + 1}`,
-        label: "—",
-        value: 0,
-        tone: "neutral",
       }));
+  const placeholderSlots = (prefix, count) =>
+    Array.from({ length: count }, (_, i) => ({
+      id: `${prefix}-slot-${i + 1}`,
+      label: "—",
+      value: 0,
+      tone: "neutral",
+    }));
 
-  const hasSections = data.sections.some((item) => item.averageGrade > 0);
-  const rankedSections = hasSections
-    ? data.sections.map((item) => ({
-        id: item.id,
-        label: item.label,
-        value: item.averageGrade,
-        tone: toneFor(item.averageGrade),
-      }))
-    : Array.from({ length: 5 }, (_, i) => ({
-        id: `sec-slot-${i + 1}`,
-        label: "—",
-        value: 0,
-        tone: "neutral",
-      }));
+  const gradedGradeLevels = toRanked(data.gradeLevels);
+  const rankedGradeLevels = gradedGradeLevels.length
+    ? gradedGradeLevels
+    : placeholderSlots("gl", 4);
 
-  const hasSubjects = data.subjects.some((item) => item.averageGrade > 0);
-  const rankedSubjects = hasSubjects
-    ? data.subjects.map((item) => ({
-        id: item.id,
-        label: item.label,
-        value: item.averageGrade,
-        tone: toneFor(item.averageGrade),
-      }))
-    : Array.from({ length: 5 }, (_, i) => ({
-        id: `subj-slot-${i + 1}`,
-        label: "—",
-        value: 0,
-        tone: "neutral",
-      }));
+  const gradedSections = toRanked(data.sections);
+  const rankedSections = gradedSections.length
+    ? gradedSections
+    : placeholderSlots("sec", 5);
+
+  const gradedSubjects = toRanked(data.subjects);
+  const rankedSubjects = gradedSubjects.length
+    ? gradedSubjects
+    : placeholderSlots("subj", 5);
 
   return (
     <main className="pa-page pp-page">
@@ -279,10 +266,15 @@ export default function PerformanceLowest() {
                     id: item.id,
                     label: item.label,
                     shortLabel: `G${item.gradeLevel}`,
-                    value: Math.round((100 - item.passRate) * 10) / 10,
+                    value: Number(item.failRate ?? 0),
                   }))}
                   minimum={0}
-                  maximum={40}
+                  maximum={Math.max(
+                    40,
+                    Math.ceil(
+                      Math.max(0, ...data.gradeLevels.map((item) => Number(item.failRate ?? 0))) / 10,
+                    ) * 10,
+                  )}
                   suffix="%"
                   ariaLabel="Fail rate by grade level"
                 />

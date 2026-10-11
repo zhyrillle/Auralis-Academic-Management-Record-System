@@ -49,6 +49,7 @@ export default function DashboardLayout({ user, onLogout }) {
       <div className="main-content-wrapper">
         {/* Top Navbar */}
         <Navbar
+          user={user}
           onToggleSidebar={() => setCollapsed(!collapsed)}
           onToggleMobileSidebar={handleMobileSidebarToggle}
         />

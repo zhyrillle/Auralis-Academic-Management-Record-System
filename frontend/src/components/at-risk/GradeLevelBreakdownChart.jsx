@@ -1,9 +1,9 @@
 import React from "react";
 
 const BAR_COLORS = {
-  medium: "#c28b00", // Amber
-  low: "#15803d",    // Green
-  high: "#b91c1c",   // Red
+  high: "#dc2626",   // Red
+  medium: "#d97706", // Amber
+  low: "#16A34A",    // Green
 };
 
 // Default baseline data matching mockup if newly initialized

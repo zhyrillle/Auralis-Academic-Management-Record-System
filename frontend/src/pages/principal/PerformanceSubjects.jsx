@@ -84,7 +84,8 @@ export default function PerformanceSubjects() {
     );
 
   const isFiltering = requestMode === "filtering";
-  const hasData = data.subjects.length > 0;
+  // Render the full layout whenever a payload exists; charts/tables show their own empty states.
+  const hasData = Array.isArray(data.subjects);
   const schoolYearOptions = data.availableSchoolYears.map((year) => ({
     value: year.value,
     label: year.label,

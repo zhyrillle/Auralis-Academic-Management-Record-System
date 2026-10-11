@@ -130,6 +130,7 @@
 .pp-status--on-track { color: #08745a; background: #dff6ed; }
 .pp-status--monitor { color: #986700; background: #fff1c8; }
 .pp-status--needs-attention { color: #b93030; background: #fde5e5; }
+.pp-status--no-data { color: #64748b; background: #f1f5f9; }
 
 .pp-inline-progress {
   display: flex;

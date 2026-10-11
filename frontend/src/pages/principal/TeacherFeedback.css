@@ -6,13 +6,17 @@
 .tf-container {
   display: flex;
   flex-direction: column;
-  gap: 24px;
-  padding: 28px 36px 48px;
+  gap: 16px;
+  padding: 16px 20px 24px;
   background-color: #F8FAFC;
   min-height: 100%;
   color: #1E293B;
   font-family: inherit;
   box-sizing: border-box;
+  width: calc(100% - 32px);
+  max-width: 1440px;
+  margin: 0 auto;
+  min-width: 0;
 }
 
 /* --------------------------------------------------------------------------
@@ -38,48 +42,7 @@
   margin: 0;
 }
 
-.tf-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
 
-.tf-header-icon-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background-color: #FFFFFF;
-  border: 1px solid #E2E8F0;
-  color: #334155;
-  cursor: pointer;
-  position: relative;
-  transition: all 0.2s ease;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-}
-
-.tf-header-icon-btn:hover {
-  background-color: #F1F5F9;
-  border-color: #CBD5E1;
-}
-
-.tf-notif-badge {
-  position: absolute;
-  top: -2px;
-  right: -2px;
-  background-color: #EF4444;
-  color: #FFFFFF;
-  font-size: 0.65rem;
-  font-weight: 700;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
 
 /* --------------------------------------------------------------------------
    Controls Filter Bar (Term Tabs & School Year)

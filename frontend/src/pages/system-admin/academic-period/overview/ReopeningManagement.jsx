@@ -23,7 +23,7 @@ export default function ReopeningManagement({
       <div className="reopening-management__heading">
         <div>
           <h2 id="reopening-management-title">Reopening Management</h2>
-          <p>Review and monitor scoped corrections for {term.label}.</p>
+          <p>Review and monitor late submissions and corrections for {term.label}.</p>
         </div>
         <Badge variant={reopenings.length > 0 ? "temporary" : "neutral"}>
           {requests.length + reopenings.length} items

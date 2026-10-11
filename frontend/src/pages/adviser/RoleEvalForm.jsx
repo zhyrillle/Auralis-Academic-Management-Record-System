@@ -211,7 +211,7 @@ export default function RoleEvalForm({ formType, person, onBack, onCancel }) {
         {/* ── Part 1: Likert Scale ── */}
         <div className="tef-part">
           <h3 className="tef-part-title">
-            Part 1 — Likert Scale{" "}
+            Part 1 — Performance Assessment{" "}
             <span className="tef-part-hint">(1 = Strongly Disagree · 5 = Strongly Agree)</span>
           </h3>
           <div className="tef-likert-list">
@@ -247,7 +247,7 @@ export default function RoleEvalForm({ formType, person, onBack, onCancel }) {
 
         {/* ── Part 2: Open-Ended ── */}
         <div className="tef-part">
-          <h3 className="tef-part-title">Part 2 — Open-Ended Questions</h3>
+          <h3 className="tef-part-title">Part 2 — Comments & Suggestions</h3>
           {openEnded.map((label, i) => (
             <div
               key={i}
