@@ -19,7 +19,7 @@ export default function StudentSF9Page(props) {
   const identity = student?.student_id || student?.studentId || student?.student_section_id || student?.studentSectionId || student?.lrn || student?.id || "default";
   const schoolYear = student?.schoolYearId || student?.schoolYear || "";
   // Remount learner-specific state before showing another learner's report.
-  return <StudentSF9Details key={`${identity}:${schoolYear}:${props.reportIdentifier || ""}`} {...props} />;
+  return <StudentSF9Details key={`${identity}:${schoolYear}:${props.reportIdentifier || ""}:${props.currentTerm || ""}`} {...props} />;
 }
 
 function StudentReportSkeleton({ student, onBack }) {
@@ -48,7 +48,7 @@ function StudentReportSkeleton({ student, onBack }) {
   </div>;
 }
 
-function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab, isAdviser: propIsAdviser, reportIdentifier, loadReport = getStudentSF9Details }) {
+function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab, isAdviser: propIsAdviser, reportIdentifier, currentTerm: propCurrentTerm, loadReport = getStudentSF9Details }) {
   const storedUser = useMemo(() => getStoredUser(), []);
   const normRole = useMemo(() => normalizeRole(storedUser?.role, storedUser), [storedUser]);
   const userRole = propUserRole || (normRole === "adviser" ? "adviser" : normRole === "principal" ? "principal" : "teacher");
@@ -175,6 +175,108 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
     ];
   }, [sf9Data]);
 
+  const currentTermInfo = useMemo(() => {
+    // 1. Check explicit prop or student object
+    const rawProp = propCurrentTerm || student?.currentTerm || student?.activeTerm || student?.selectedTerm || student?.term;
+    let code = null;
+    let label = null;
+
+    if (rawProp) {
+      if (typeof rawProp === "string") {
+        const match = rawProp.match(/(\d+)/);
+        if (match) {
+          code = `T${match[1]}`;
+          label = `Term ${match[1]}`;
+        }
+      } else if (rawProp.termCode) {
+        code = rawProp.termCode;
+        label = rawProp.termName || `Term ${rawProp.position || rawProp.termCode.replace("T", "")}`;
+      } else if (rawProp.position) {
+        code = `T${rawProp.position}`;
+        label = `Term ${rawProp.position}`;
+      }
+    }
+
+    // 2. Check sf9Data.currentTerm from API
+    if (!code && sf9Data?.currentTerm) {
+      if (sf9Data.currentTerm.termCode) {
+        code = sf9Data.currentTerm.termCode;
+        label = sf9Data.currentTerm.termName || `Term ${sf9Data.currentTerm.position || code.replace("T", "")}`;
+      } else if (sf9Data.currentTerm.position) {
+        code = `T${sf9Data.currentTerm.position}`;
+        label = `Term ${sf9Data.currentTerm.position}`;
+      }
+    }
+
+    // Fallback: Default to T1
+    code = code || "T1";
+    label = label || "Term 1";
+
+    const position = code === "T3" ? 3 : code === "T2" ? 2 : 1;
+    const requiredKeys = position === 3 ? ["t1", "t2", "t3"] : position === 2 ? ["t1", "t2"] : ["t1"];
+
+    return {
+      code,
+      label,
+      position,
+      requiredKeys,
+    };
+  }, [propCurrentTerm, student, sf9Data?.currentTerm]);
+
+  const gradeCompleteness = useMemo(() => {
+    if (!sf9Data || !grades || grades.length === 0) {
+      return { isComplete: false, missingDetails: ["Grades data not loaded"] };
+    }
+
+    const missing = [];
+    const { requiredKeys } = currentTermInfo;
+
+    const mapehHeader = grades.find((g) => g.code === "mapeh" || g.isHeader);
+    const mapehSubs = grades.filter((g) => g.isSubSubject);
+
+    for (const key of requiredKeys) {
+      const termNum = key.replace("t", "");
+      const termLabel = `Term ${termNum}`;
+
+      // 1. Regular subjects (exclude header and sub-subjects)
+      for (const subj of grades) {
+        if (subj.isHeader || subj.isSubSubject) continue;
+        const val = subj[key];
+        const hasValidNum = val !== "" && val !== null && val !== undefined && Number.isFinite(Number(val)) && Number(val) > 0;
+        if (!hasValidNum) {
+          missing.push(`${subj.name} (${termLabel})`);
+        }
+      }
+
+      // 2. MAPEH (complete if either header has grade OR all sub-subjects have grades)
+      if (mapehHeader || mapehSubs.length > 0) {
+        const headerVal = mapehHeader ? mapehHeader[key] : null;
+        const hasHeaderGrade = headerVal !== "" && headerVal !== null && headerVal !== undefined && Number.isFinite(Number(headerVal)) && Number(headerVal) > 0;
+
+        if (!hasHeaderGrade) {
+          if (mapehSubs.length > 0) {
+            for (const sub of mapehSubs) {
+              const subVal = sub[key];
+              const hasSubGrade = subVal !== "" && subVal !== null && subVal !== undefined && Number.isFinite(Number(subVal)) && Number(subVal) > 0;
+              if (!hasSubGrade) {
+                missing.push(`${sub.name} (${termLabel})`);
+              }
+            }
+          } else {
+            missing.push(`MAPEH (${termLabel})`);
+          }
+        }
+      }
+    }
+
+    return {
+      isComplete: missing.length === 0,
+      missingDetails: missing,
+    };
+  }, [sf9Data, grades, currentTermInfo]);
+
+  const isGradesComplete = gradeCompleteness.isComplete;
+
   // Performance Descriptors matching the official layout
   const performanceDescriptors = [
     { scale: "90-100", desc: "Advancing", remarks: "Passed" },
@@ -229,6 +331,10 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
 
   const handleDownloadPDF = async () => {
     if (loading || loadError || !sf9Data) return;
+    if (activeTab === "sf9" && !isGradesComplete) {
+      showToast(`Cannot download SF9: Learner's grades are not yet complete for ${currentTermInfo.label}.`, "error");
+      return;
+    }
     try {
       showToast(`Generating PDF for ${studentProfile.name || "Student"}...`, "info", CheckCircle2);
       await exportSf9Pdf({
@@ -249,6 +355,10 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
 
   const handlePrint = () => {
     if (loading || loadError || !sf9Data) return;
+    if (activeTab === "sf9" && !isGradesComplete) {
+      showToast(`Cannot print or save as PDF: Learner's grades are not yet complete for ${currentTermInfo.label}.`, "error");
+      return;
+    }
     const originalTitle = document.title;
     const lastName = getStudentLastName();
     const fileName = `${lastName}_SF9`;
@@ -402,7 +512,7 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
   if (loading) return <StudentReportSkeleton student={student} onBack={onBack} />;
 
   return (
-    <div className="student-sf9-container" aria-busy={loading}>
+    <div className={`student-sf9-container ${activeTab === "sf9" && !isGradesComplete && sf9Data ? "grades-incomplete" : ""}`} aria-busy={loading}>
       {sf9Data?.warnings?.length > 0 && <aside className="sf9-report-warnings" aria-label="Report completeness notes">
         <strong>Review before issuing</strong>
         <ul>{sf9Data.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>
@@ -530,17 +640,44 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
               </button>
             </div>
 
-            <button className="sf9-download-btn" onClick={handleDownloadPDF} disabled={loading || loadError || !sf9Data} title="Download SF9 PDF">
+            <button
+              className="sf9-print-btn"
+              onClick={handlePrint}
+              disabled={loading || loadError || !sf9Data || !isGradesComplete}
+              title={!isGradesComplete ? "Incomplete grades" : "Open browser print dialog to print or save SF9 as PDF"}
+            >
+              <Printer size={16} />
+              <span>Print</span>
+            </button>
+            <button
+              className="sf9-download-btn"
+              onClick={handleDownloadPDF}
+              disabled={loading || loadError || !sf9Data || !isGradesComplete}
+              title={!isGradesComplete ? "Incomplete grades" : "Download SF9 PDF"}
+            >
               <Download size={16} />
               <span>Download PDF</span>
-            </button>
-            <button className="sf9-print-btn" onClick={handlePrint} disabled={loading || loadError || !sf9Data} title="Open browser print dialog to print or save SF9 as PDF">
-              <Printer size={16} />
-              <span>Print / Save as PDF</span>
             </button>
           </div>
         )}
       </div>
+
+      {/* Notice Banner between Tabs and SF9 Preview */}
+      {activeTab === "sf9" && isAdviser && !loading && !loadError && sf9Data && !isGradesComplete && (
+        <div className="sf9-incomplete-banner no-print" role="alert">
+          <div className="sf9-incomplete-banner-icon">
+            <span aria-hidden="true" style={{ fontSize: "16px" }}>⚠️</span>
+          </div>
+          <div className="sf9-incomplete-banner-text">
+            <strong>Download and Print Disabled:</strong> Learner's grades are not yet complete for {currentTermInfo.label}.
+            {gradeCompleteness.missingDetails.length > 0 && (
+              <span className="sf9-incomplete-missing-subjects">
+                {" "}Missing grades in: {gradeCompleteness.missingDetails.slice(0, 4).join(", ")}{gradeCompleteness.missingDetails.length > 4 ? ` (+${gradeCompleteness.missingDetails.length - 4} more)` : ""}.
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Tab Contents */}
       {activeTab === "sf9" && isAdviser ? (
@@ -573,131 +710,132 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
                   </div>
                 </div>
               </div>
+            </div>
 
-              {/* Learner Information Underlined Form Fields */}
-              <div className="sf9-student-info-section">
-                <div className="sf9-info-line-row">
-                  <div className="sf9-info-field grow-name">
-                    <span className="sf9-field-label">Name:</span>
-                    <span className="sf9-field-underline uppercase-val">{studentProfile.name}</span>
-                  </div>
-                  <div className="sf9-info-field age-field">
-                    <span className="sf9-field-label">Age:</span>
-                    <span className="sf9-field-underline text-center">{studentProfile.age}</span>
-                  </div>
-                  <div className="sf9-info-field sex-field">
-                    <span className="sf9-field-label">Sex:</span>
-                    <span className="sf9-field-underline text-center">{studentProfile.sex}</span>
-                  </div>
+            {/* Learner Information Underlined Form Fields */}
+            <div className="sf9-student-info-section">
+              <div className="sf9-info-line-row">
+                <div className="sf9-info-field grow-name">
+                  <span className="sf9-field-label">Name:</span>
+                  <span className="sf9-field-underline uppercase-val">{studentProfile.name}</span>
                 </div>
-
-                <div className="sf9-info-line-row">
-                  <div className="sf9-info-field grow-name">
-                    <span className="sf9-field-label">LRN:</span>
-                    <span className="sf9-field-underline">{studentProfile.lrn}</span>
-                  </div>
-                  <div className="sf9-info-field grade-field">
-                    <span className="sf9-field-label">Grade:</span>
-                    <span className="sf9-field-underline text-center">{studentProfile.grade}</span>
-                  </div>
-                  <div className="sf9-info-field section-field">
-                    <span className="sf9-field-label">Section:</span>
-                    <span className="sf9-field-underline text-center">{studentProfile.section}</span>
-                  </div>
+                <div className="sf9-info-field age-field">
+                  <span className="sf9-field-label">Age:</span>
+                  <span className="sf9-field-underline text-center">{studentProfile.age}</span>
                 </div>
-
-                <div className="sf9-info-line-row">
-                  <div className="sf9-info-field full-field">
-                    <span className="sf9-field-label">Program:</span>
-                    <span className="sf9-field-underline">{studentProfile.program}</span>
-                  </div>
+                <div className="sf9-info-field sex-field">
+                  <span className="sf9-field-label">Sex:</span>
+                  <span className="sf9-field-underline text-center">{studentProfile.sex}</span>
                 </div>
               </div>
 
-              {/* Dear Parents Note */}
-              <div className="sf9-dear-parents-block">
-                <p className="sf9-dp-salutation">Dear Parents,</p>
-                <p className="sf9-dp-body">
-                  This Performance Report shows the ability and progress your child has made in the different learning areas as well as his/her core values.
-                </p>
-                <p className="sf9-dp-body">
-                  The school welcomes you should you desire to know more about your child's progress.
-                </p>
+              <div className="sf9-info-line-row">
+                <div className="sf9-info-field grow-name">
+                  <span className="sf9-field-label">LRN:</span>
+                  <span className="sf9-field-underline">{studentProfile.lrn}</span>
+                </div>
+                <div className="sf9-info-field grade-field">
+                  <span className="sf9-field-label">Grade:</span>
+                  <span className="sf9-field-underline text-center">{studentProfile.grade}</span>
+                </div>
+                <div className="sf9-info-field section-field">
+                  <span className="sf9-field-label">Section:</span>
+                  <span className="sf9-field-underline text-center">{studentProfile.section}</span>
+                </div>
               </div>
 
-              {/* Learning Progress & Achievement Table */}
-              <div className="sf9-table-heading">LEARNING PROGRESS AND ACHIEVEMENT</div>
-              <table className="sf9-official-table sf9-grades-table">
+              <div className="sf9-info-line-row">
+                <div className="sf9-info-field full-field">
+                  <span className="sf9-field-label">Program:</span>
+                  <span className="sf9-field-underline">{studentProfile.program}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Dear Parents Note */}
+            <div className="sf9-dear-parents-block">
+              <p className="sf9-dp-salutation">Dear Parents,</p>
+              <p className="sf9-dp-body">
+                This Performance Report shows the ability and progress your child has made in the different learning areas as well as his/her core values.
+              </p>
+              <p className="sf9-dp-body">
+                The school welcomes you should you desire to know more about your child's progress.
+              </p>
+            </div>
+
+            {/* Learning Progress & Achievement Table */}
+            <div className="sf9-table-heading">LEARNING PROGRESS AND ACHIEVEMENT</div>
+            <table className="sf9-official-table sf9-grades-table">
+              <thead>
+                <tr>
+                  <th rowSpan="2" className="col-subjects">Subjects</th>
+                  <th colSpan="3" className="col-term-head">TERM</th>
+                  <th rowSpan="2" className="col-final">Final<br />Grade</th>
+                  <th rowSpan="2" className="col-remarks">Remarks</th>
+                </tr>
+                <tr>
+                  <th className="col-subterm">1</th>
+                  <th className="col-subterm">2</th>
+                  <th className="col-subterm">3</th>
+                </tr>
+              </thead>
+              <tbody>
+                {grades.map((row, idx) => (
+                  <tr key={idx} className={row.isHeader ? "subject-header-row" : ""}>
+                    <td className={row.isSubSubject ? "subj-title-sub" : "subj-title-main"}>
+                      {row.name}
+                    </td>
+                    <td className="grade-num">{row.t1 || ""}</td>
+                    <td className="grade-num">{row.t2 || ""}</td>
+                    <td className="grade-num">{row.t3 || ""}</td>
+                    <td className="grade-num font-bold">{row.final || ""}</td>
+                    <td className="grade-remark">{row.remark || ""}</td>
+                  </tr>
+                ))}
+
+                {/* Empty spacer row matching official template */}
+                <tr className="empty-spacer-row">
+                  <td>&nbsp;</td>
+                  <td>&nbsp;</td>
+                  <td>&nbsp;</td>
+                  <td>&nbsp;</td>
+                  <td>&nbsp;</td>
+                  <td>&nbsp;</td>
+                </tr>
+
+                {/* General Average */}
+                <tr className="general-average-row">
+                  <td colSpan="4" className="general-avg-label">General Average</td>
+                  <td className="grade-num font-bold">{studentProfile.termGrade}</td>
+                  <td className="grade-remark font-bold">{studentProfile.termGrade !== "" ? (studentProfile.honorStatus || "Passed") : ""}</td>
+                </tr>
+              </tbody>
+            </table>
+
+            {/* Performance Descriptors Table */}
+            <div className="sf9-descriptors-wrapper">
+              <div className="sf9-descriptors-title">PERFORMANCE DESCRIPTORS</div>
+              <table className="sf9-descriptors-table-clean">
                 <thead>
                   <tr>
-                    <th rowSpan="2" className="col-subjects">Subjects</th>
-                    <th colSpan="3" className="col-term-head">TERM</th>
-                    <th rowSpan="2" className="col-final">Final<br />Grade</th>
-                    <th rowSpan="2" className="col-remarks">Remarks</th>
-                  </tr>
-                  <tr>
-                    <th className="col-subterm">1</th>
-                    <th className="col-subterm">2</th>
-                    <th className="col-subterm">3</th>
+                    <th style={{ width: "35%", textAlign: "center" }}>Grading Scale</th>
+                    <th style={{ width: "35%", textAlign: "center" }}>Description</th>
+                    <th style={{ width: "30%", textAlign: "center" }}>Remarks</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {grades.map((row, idx) => (
-                    <tr key={idx} className={row.isHeader ? "subject-header-row" : ""}>
-                      <td className={row.isSubSubject ? "subj-title-sub" : "subj-title-main"}>
-                        {row.name}
-                      </td>
-                      <td className="grade-num">{row.t1 || ""}</td>
-                      <td className="grade-num">{row.t2 || ""}</td>
-                      <td className="grade-num">{row.t3 || ""}</td>
-                      <td className="grade-num font-bold">{row.final || ""}</td>
-                      <td className="grade-remark">{row.remark || ""}</td>
+                  {performanceDescriptors.map((desc, idx) => (
+                    <tr key={idx}>
+                      <td style={{ textAlign: "center" }}>{desc.scale}</td>
+                      <td style={{ textAlign: "center" }}>{desc.desc}</td>
+                      <td style={{ textAlign: "center" }}>{desc.remarks}</td>
                     </tr>
                   ))}
-
-                  {/* Empty spacer row matching official template */}
-                  <tr className="empty-spacer-row">
-                    <td>&nbsp;</td>
-                    <td>&nbsp;</td>
-                    <td>&nbsp;</td>
-                    <td>&nbsp;</td>
-                    <td>&nbsp;</td>
-                    <td>&nbsp;</td>
-                  </tr>
-
-                  {/* General Average */}
-                  <tr className="general-average-row">
-                    <td colSpan="4" className="general-avg-label">General Average</td>
-                    <td className="grade-num font-bold">{studentProfile.termGrade}</td>
-                    <td className="grade-remark font-bold">{studentProfile.termGrade !== "" ? (studentProfile.honorStatus || "Passed") : ""}</td>
-                  </tr>
                 </tbody>
               </table>
-
-              {/* Performance Descriptors Table */}
-              <div className="sf9-descriptors-wrapper">
-                <div className="sf9-descriptors-title">PERFORMANCE DESCRIPTORS</div>
-                <table className="sf9-descriptors-table-clean">
-                  <thead>
-                    <tr>
-                      <th style={{ width: "35%", textAlign: "center" }}>Grading Scale</th>
-                      <th style={{ width: "35%", textAlign: "center" }}>Description</th>
-                      <th style={{ width: "30%", textAlign: "center" }}>Remarks</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {performanceDescriptors.map((desc, idx) => (
-                      <tr key={idx}>
-                        <td style={{ textAlign: "center" }}>{desc.scale}</td>
-                        <td style={{ textAlign: "center" }}>{desc.desc}</td>
-                        <td style={{ textAlign: "center" }}>{desc.remarks}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
             </div>
+
+          </div>
 
           {/* ============================================================
               BACK PAGE (PAGE 2): ATTENDANCE, REMARKS, SIGNATURES, TRANSFER & CANCELLATION
@@ -774,6 +912,7 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
                       />
                     </div>
                   </div>
+                </div>
 
                   <div className="sf9-comment-term-row">
                     <span className="sf9-term-label font-bold">Term 3</span>
@@ -789,7 +928,6 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
                     </div>
                   </div>
                 </div>
-              </div>
 
               {/* Section 3: PARENTS/GUARDIAN'S SIGNATURE (Full-Width Lined Block) */}
               <div className="sf9-section-block sf9-parent-signatures-full">
@@ -809,6 +947,7 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
                   </div>
                 </div>
               </div>
+            </div>
 
               {/* Section 4: CERTIFICATE OF TRANSFER */}
               <div className="sf9-section-block sf9-certificate-section">
@@ -827,21 +966,16 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
                     <span className="sf9-cert-underline">{studentProfile.eligibleForAdmission || ""}</span>
                   </div>
                 </div>
-
-                <div className="sf9-approved-block">
-                  <div className="sf9-approved-title font-bold">Approved:</div>
-                  <div className="sf9-transfer-signatures-row">
-                    <div className="sf9-sig-signatory-col school-head-sig">
-                      <div className="sf9-signatory-line font-bold">{studentProfile.principalName}</div>
-                      <div className="sf9-signatory-role">School Head</div>
-                    </div>
-                    <div className="sf9-sig-signatory-col adviser-sig">
-                      <div className="sf9-signatory-line font-bold">{studentProfile.adviserName}</div>
-                      <div className="sf9-signatory-role">Adviser</div>
-                    </div>
-                  </div>
+                <div className="sf9-parent-sig-row">
+                  <span className="sf9-parent-sig-label font-bold">Term 2</span>
+                  <div className="sf9-parent-sig-line"></div>
+                </div>
+                <div className="sf9-parent-sig-row">
+                  <span className="sf9-parent-sig-label font-bold">Term 3</span>
+                  <div className="sf9-parent-sig-line"></div>
                 </div>
               </div>
+            </div>
 
               {/* Section 5: CANCELLATION OF ELIGIBILITY TO TRANSFER */}
               <div className="sf9-section-block sf9-cancellation-section">
@@ -856,16 +990,46 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
                     <span className="sf9-cert-underline"></span>
                   </div>
                 </div>
+              </div>
 
-                <div className="sf9-cancel-signatory-row">
+              <div className="sf9-approved-block">
+                <div className="sf9-approved-title font-bold">Approved:</div>
+                <div className="sf9-transfer-signatures-row">
                   <div className="sf9-sig-signatory-col school-head-sig">
                     <div className="sf9-signatory-line font-bold">{studentProfile.principalName}</div>
                     <div className="sf9-signatory-role">School Head</div>
                   </div>
+                  <div className="sf9-sig-signatory-col adviser-sig">
+                    <div className="sf9-signatory-line font-bold">{studentProfile.adviserName}</div>
+                    <div className="sf9-signatory-role">Adviser</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Section 5: CANCELLATION OF ELIGIBILITY TO TRANSFER */}
+            <div className="sf9-section-block sf9-cancellation-section">
+              <div className="sf9-table-heading">CANCELLATION OF ELIGIBILITY TO TRANSFER</div>
+              <div className="sf9-cancel-row">
+                <div className="sf9-cancel-field cancel-admitted">
+                  <span className="sf9-cert-label">Admitted in:</span>
+                  <span className="sf9-cert-underline"></span>
+                </div>
+                <div className="sf9-cancel-field cancel-date">
+                  <span className="sf9-cert-label">Date:</span>
+                  <span className="sf9-cert-underline"></span>
                 </div>
               </div>
 
+              <div className="sf9-cancel-signatory-row">
+                <div className="sf9-sig-signatory-col school-head-sig">
+                  <div className="sf9-signatory-line font-bold">{studentProfile.principalName}</div>
+                  <div className="sf9-signatory-role">School Head</div>
+                </div>
+              </div>
             </div>
+
+          </div>
 
         </div>
       ) : activeTab === "sf10" && isAdviser ? (

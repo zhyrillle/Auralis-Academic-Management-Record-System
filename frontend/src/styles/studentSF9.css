@@ -226,17 +226,19 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 16px;
+  flex-wrap: nowrap;
+  gap: 12px;
   margin-top: 4px;
+  width: 100%;
 }
 
 .sf9-tabs-outer {
   background-color: #e2e8f0;
-  padding: 5px;
+  padding: 4px;
   border-radius: 30px;
   display: inline-flex;
   gap: 4px;
+  flex-shrink: 0;
 }
 
 .sf9-tab-button {
@@ -246,10 +248,11 @@
   font-family: var(--font-dm-sans, sans-serif);
   font-size: var(--fs-subtext, 13px);
   font-weight: var(--fw-semibold, 600);
-  padding: 8px 24px;
+  padding: 7px 16px;
   border-radius: 25px;
   cursor: pointer;
   transition: all 0.25s ease;
+  white-space: nowrap;
 }
 
 .sf9-tab-button:hover {
@@ -265,7 +268,9 @@
 .sf9-actions-toolbar {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
+  flex-shrink: 0;
+  flex-wrap: nowrap;
 }
 
 .sf9-view-modes {
@@ -275,6 +280,7 @@
   border-radius: 8px;
   padding: 3px;
   gap: 2px;
+  flex-shrink: 0;
 }
 
 .sf9-view-btn {
@@ -283,10 +289,11 @@
   color: #475569;
   font-size: 12px;
   font-weight: 600;
-  padding: 6px 14px;
+  padding: 6px 12px;
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.2s;
+  white-space: nowrap;
 }
 
 .sf9-view-btn.active {
@@ -304,12 +311,14 @@
   color: #ffffff;
   border: 1px solid #123062;
   border-radius: 8px;
-  padding: 8px 16px;
+  padding: 7px 14px;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
   box-shadow: 0 4px 12px rgba(18, 48, 98, 0.2);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .sf9-download-btn:hover,
@@ -1412,6 +1421,65 @@
     padding: 0 2px !important;
   }
 
+
+  /* Page 2 Print Spacing (Single-Column Vertical Stack) */
+  .sf9-section-block {
+    margin-bottom: 18pt !important;
+  }
+
+  .sf9-attendance-table-clean {
+    border: 1px solid #000000 !important;
+    font-size: 10px !important;
+    margin-bottom: 0 !important;
+  }
+
+  .sf9-attendance-table-clean tbody tr {
+    height: 16pt !important;
+  }
+
+  .sf9-attendance-table-clean thead tr {
+    height: 20pt !important;
+  }
+
+  .sf9-attendance-table-clean th,
+  .sf9-attendance-table-clean td {
+    font-size: 10px !important;
+    padding: 3px 2px !important;
+  }
+
+  .sf9-term-comments-box {
+    border: 1px solid #000000 !important;
+    height: 132pt !important;
+  }
+
+  .sf9-comment-term-row {
+    height: 44pt !important;
+    padding: 6px 10px !important;
+    border-bottom: 1px solid #000000 !important;
+    box-sizing: border-box !important;
+  }
+
+  .sf9-comment-input {
+    border: none !important;
+    outline: none !important;
+    resize: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    font-size: 10px !important;
+    line-height: 1.25 !important;
+  }
+
+  .sf9-parent-signatures-full {
+    margin-bottom: 20pt !important;
+  }
+
+  .sf9-parent-sig-stack {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 18pt !important;
+    padding: 0 2px !important;
+  }
+
   .sf9-parent-sig-row {
     display: flex !important;
     align-items: flex-end !important;
@@ -1496,10 +1564,74 @@
 }
 .sf9-report-warnings { margin-bottom: 16px; padding: 12px 18px; border: 1px solid #e5c76b; border-radius: 8px; background: #fffbee; color: #664d10; font-size: 13px; }
 .sf9-report-warnings ul { margin: 8px 0 0; padding-left: 20px; }
-.sf9-print-btn:disabled { opacity: .5; cursor: not-allowed; }
+.sf9-download-btn:disabled,
+.sf9-print-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+.sf9-incomplete-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background-color: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-left: 4px solid #ea580c;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 20px;
+  color: #9a3412;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.sf9-incomplete-banner-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-top: 1px;
+}
+
+.sf9-incomplete-banner-text strong {
+  color: #c2410c;
+  font-weight: 700;
+  margin-right: 4px;
+}
+
+.sf9-incomplete-missing-subjects {
+  color: #9a3412;
+  font-style: italic;
+  font-size: 12.5px;
+}
+
 .sf9-export-review-note { font-size: 10px; font-style: italic; margin: 4px 0; }
 @media print {
   .sf9-report-warnings { font-size: 9pt; background: white; border-color: #888; break-inside: avoid; }
+
+  .student-sf9-container.grades-incomplete .sf9-document-spread {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  .student-sf9-container.grades-incomplete::after {
+    display: block !important;
+    visibility: visible !important;
+    content: "OFFICIAL SF9 UNAVAILABLE: Student's grades are not yet complete for the current term.";
+    position: fixed;
+    top: 40%;
+    left: 10%;
+    right: 10%;
+    text-align: center;
+    font-size: 14pt;
+    font-weight: 700;
+    color: #b91c1c;
+    border: 2px dashed #b91c1c;
+    padding: 24pt;
+    border-radius: 8pt;
+  }
 }
 
 .sf9-skeleton-block { display: block; width: 65%; height: 12px; border-radius: 4px; background: #f1f3f5; }
