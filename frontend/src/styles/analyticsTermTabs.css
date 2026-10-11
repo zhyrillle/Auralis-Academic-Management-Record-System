@@ -1,0 +1,28 @@
+.pa-term-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  background: #f4f7fa;
+  border: 1px solid #e3eaf2;
+  border-radius: 9px;
+}
+.pa-term-tabs button {
+  min-height: 34px;
+  padding: 7px 15px;
+  color: #5e6e84;
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  font: inherit;
+  font-size: .78rem;
+  font-weight: 650;
+  cursor: pointer;
+  transition: background .16s ease, color .16s ease, box-shadow .16s ease;
+}
+.pa-term-tabs button:hover:not(:disabled) { color: var(--pa-navy, #123062); background: rgba(255, 255, 255, .55); }
+.pa-term-tabs button.is-active,
+.pa-term-tabs button.is-active:hover:not(:disabled) { color: #fff; background: var(--pa-navy, #123062); box-shadow: 0 3px 8px rgba(18, 48, 98, .18); }
+.pa-term-tabs button:focus-visible { outline: 3px solid rgba(37, 99, 235, .2); outline-offset: 2px; }
+.pa-term-tabs button:disabled { cursor: wait; opacity: .6; }
+@media (prefers-reduced-motion: reduce) { .pa-term-tabs button { transition: none; } }

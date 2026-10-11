@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import useCachedQuery from "../../services/useCachedQuery";
+import { cacheKey } from "../../services/navigationCache";
+import { useMemo, useState } from "react";
 import {
   Users,
   Search,
@@ -32,11 +34,17 @@ const GRADE_FILTER_TABS = [
   { id: "unassigned", label: "Unassigned" },
 ];
 
+async function loadStudentCatalog() {
+  const [students, programs] = await Promise.all([fetchStudents(), fetchPrograms()]);
+  return { students, programs };
+}
+
+const EMPTY_LIST = [];
+
 export default function ManageStudents() {
-  const [students, setStudents] = useState([]);
-  const [programs, setPrograms] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const { data, loading, error, refresh: loadData } = useCachedQuery(cacheKey('admin:students'), loadStudentCatalog);
+  const students = data?.students || EMPTY_LIST;
+  const programs = data?.programs || EMPTY_LIST;
 
   // Filters
   const [gradeFilter, setGradeFilter] = useState("all");
@@ -62,29 +70,6 @@ export default function ManageStudents() {
     setToast({ message, type });
     setTimeout(() => setToast(null), 4000);
   };
-
-  // Load students & programs from backend
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const [studentsData, programsData] = await Promise.all([
-        fetchStudents(),
-        fetchPrograms(),
-      ]);
-      setStudents(studentsData);
-      setPrograms(programsData);
-    } catch (err) {
-      console.error("Failed to load students:", err);
-      setError(err.message || "Unable to fetch students from database.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadData();
-  }, []);
 
   // Compute Grade level normalization
   const normalizeGrade = (student) => {

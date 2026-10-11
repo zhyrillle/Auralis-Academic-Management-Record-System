@@ -6,13 +6,35 @@
 .phil-iri-page-container {
   display: flex;
   flex-direction: column;
-  width: 100%;
+  width: calc(100% - 32px);
+  max-width: 1440px;
+  margin: 0 auto;
   min-height: 100vh;
   background-color: #f8fafc;
-  padding: 24px 32px 60px 32px;
+  padding: 0 0 60px;
   box-sizing: border-box;
   gap: 20px;
 }
+
+.sections-page-container .phil-iri-page-container { width: 100%; min-height: 0; }
+@media (max-width: 1100px) { .phil-iri-page-container { width: 100%; } }
+
+.phil-iri-document-skeleton { padding: 24px 32px; border: 1px solid #e2e8f0; border-radius: 14px; background: #fff; min-height: 460px; }
+.phil-iri-skeleton-block { display: block; border-radius: 5px; background: linear-gradient(90deg, #edf1f6 25%, #f8fafc 50%, #edf1f6 75%); background-size: 200% 100%; animation: phil-iri-skeleton-shimmer 1.4s ease-in-out infinite; height: 14px; }
+.phil-iri-skeleton-heading { display: flex; flex-direction: column; align-items: center; gap: 12px; margin-bottom: 24px; }
+.phil-iri-skeleton-seal { width: 56px; height: 56px; border-radius: 50%; }
+.phil-iri-skeleton-title { width: 65%; height: 22px; }
+.phil-iri-skeleton-subtitle { width: 30%; }
+.phil-iri-skeleton-meta { display: flex; justify-content: space-between; gap: 20px; margin-bottom: 20px; }
+.phil-iri-skeleton-meta .phil-iri-skeleton-block { width: 35%; }
+.phil-iri-skeleton-table { border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden; }
+.phil-iri-skeleton-row { display: grid; grid-template-columns: 30px 2.5fr repeat(7, 1fr); gap: 12px; padding: 12px; border-bottom: 1px solid #edf1f6; }
+.phil-iri-skeleton-row:first-child { background: #f8fafc; padding-block: 18px; }
+.phil-iri-skeleton-row:last-child { border-bottom: 0; }
+.phil-iri-skeleton-footer { display: flex; justify-content: space-around; gap: 24px; margin-top: 32px; }
+.phil-iri-skeleton-footer .phil-iri-skeleton-block { width: 24%; }
+@keyframes phil-iri-skeleton-shimmer { to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { .phil-iri-skeleton-block { animation: none; } }
 
 /* TOP HEADER */
 .phil-iri-page-header {
@@ -20,7 +42,12 @@
   align-items: center;
   gap: 16px;
   margin-bottom: 4px;
+  flex-wrap: wrap;
 }
+.phil-iri-header-tabs { margin-left: auto; flex-shrink: 0; }
+.phil-iri-header-titles { min-width: 0; }
+.phil-iri-page-title-row { flex-wrap: wrap; }
+@media (max-width: 700px) { .phil-iri-header-tabs { margin-left: 44px; } }
 
 .phil-iri-back-btn {
   display: flex;

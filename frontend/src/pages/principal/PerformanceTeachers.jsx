@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import useCachedQuery from "../../services/useCachedQuery";
+import { cacheKey } from "../../services/navigationCache";
+import { useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -40,53 +42,20 @@ const matchesTeacher = (teacher, query) => {
 export default function PerformanceTeachers() {
   const [term, setTerm] = useState("overall");
   const [schoolYear, setSchoolYear] = useState(DEFAULT_YEAR);
-  const [data, setData] = useState(null);
-  const [requestMode, setRequestMode] = useState("initial");
-  const [error, setError] = useState("");
-  const [retryKey, setRetryKey] = useState(0);
+  const { data, loading, refreshing, error, refresh } = useCachedQuery(
+    cacheKey("performance:teachers", { term, schoolYear }), () => getTeacherPerformance({ term, schoolYear }),
+    { keepPreviousData: true },
+  );
   const [rankingQuery, setRankingQuery] = useState("");
   const [submissionQuery, setSubmissionQuery] = useState("");
   const [chartQuery, setChartQuery] = useState("");
   const [selectedTeacherIds, setSelectedTeacherIds] = useState(null);
-  const requestId = useRef(0);
 
-  useEffect(() => {
-    const currentRequest = ++requestId.current;
-    getTeacherPerformance({ term, schoolYear })
-      .then((nextData) => {
-        if (currentRequest !== requestId.current) return;
-        setData(nextData);
-        setSelectedTeacherIds((current) =>
-          current === null
-            ? nextData.teachers.map((teacher) => teacher.id)
-            : current.filter((id) =>
-                nextData.teachers.some((teacher) => teacher.id === id),
-              ),
-        );
-      })
-      .catch((requestError) => {
-        if (currentRequest === requestId.current)
-          setError(
-            requestError.message || "Unable to load teacher performance.",
-          );
-      })
-      .finally(() => {
-        if (currentRequest === requestId.current) setRequestMode("idle");
-      });
-  }, [term, schoolYear, retryKey]);
 
-  const changeFilter = (setter) => (value) => {
-    setRequestMode("filtering");
-    setError("");
-    setter(value);
-  };
-  const retry = () => {
-    setRequestMode(data ? "filtering" : "initial");
-    setError("");
-    setRetryKey((value) => value + 1);
-  };
+  const changeFilter = (setter) => (value) => setter(value);
+  const retry = refresh;
 
-  if (requestMode === "initial" && !data) return <AnalyticsSkeleton table />;
+  if (loading && !data) return <AnalyticsSkeleton table />;
   if (!data && error)
     return (
       <main className="pa-page pp-page">
@@ -105,7 +74,7 @@ export default function PerformanceTeachers() {
       </main>
     );
 
-  const isFiltering = requestMode === "filtering";
+  const isFiltering = refreshing;
   // Render the full layout whenever a payload exists; charts/tables show their own empty states.
   const hasData = Array.isArray(data.teachers);
   const schoolYearOptions = data.availableSchoolYears.map((year) => ({
@@ -122,7 +91,7 @@ export default function PerformanceTeachers() {
     matchesTeacher(teacher, chartQuery),
   );
   const selectedChartTeachers = chartTeachers.filter((teacher) =>
-    selectedTeacherIds?.includes(teacher.id),
+    (selectedTeacherIds === null || selectedTeacherIds.includes(teacher.id)),
   );
   const cards = [
     {
@@ -320,13 +289,14 @@ export default function PerformanceTeachers() {
                       code: teacher.name,
                       color: teacher.color,
                     }))}
-                  selectedIds={selectedTeacherIds || []}
+                  selectedIds={selectedTeacherIds ?? data.teachers.map(teacher => teacher.id)}
                   onToggle={(id) =>
-                    setSelectedTeacherIds((current) =>
-                      current.includes(id)
-                        ? current.filter((teacherId) => teacherId !== id)
-                        : [...current, id],
-                    )
+                    setSelectedTeacherIds((current) => {
+                      const selected = current ?? data.teachers.map(teacher => teacher.id);
+                      return selected.includes(id)
+                        ? selected.filter(teacherId => teacherId !== id)
+                        : [...selected, id];
+                    })
                   }
                   onAll={() =>
                     setSelectedTeacherIds(

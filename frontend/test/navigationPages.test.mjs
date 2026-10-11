@@ -1,0 +1,110 @@
+// Render the real pages with in-memory sample payloads; never contact the database.
+import assert from 'node:assert/strict';
+import { mkdtempSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import React from 'react';
+import { renderToString } from 'react-dom/server';
+import { createServer } from 'vite';
+import { MemoryRouter } from 'react-router-dom';
+
+globalThis.localStorage = { getItem: () => null };
+globalThis.window = { location: { origin: 'http://localhost' }, addEventListener: () => {},
+  atob: globalThis.atob, btoa: globalThis.btoa, console };
+globalThis.fetch = async () => ({ ok: false, status: 503 });
+const server = await createServer({
+  cacheDir: mkdtempSync(path.join(os.tmpdir(), 'auralis-navigation-render-')),
+  // The report catalog doesn't mount a selected learner's browser-only PDF/export view.
+  plugins: [{ name: 'skip-unmounted-report-export-view', enforce: 'pre', load(id) {
+    if (id.replaceAll('\\', '/').endsWith('/pages/adviser/StudentSF9Page.jsx')) {
+      return 'export default function StudentSF9Page() { return null; }';
+    }
+  } }],
+  server: { middlewareMode: true, ws: false }, appType: 'custom',
+});
+try {
+  const { cacheKey, loadCached } = await server.ssrLoadModule('/src/services/navigationCache.js');
+  const performance = await server.ssrLoadModule('/src/services/principalPerformanceService.js');
+  const year = { value: '2026-2027', label: 'SY 2026–2027' };
+  const years = [year, { value: '2025-2026', label: 'SY 2025–2026' }];
+  const seed = (name, filters, data) => loadCached(cacheKey(name, filters), async () => data);
+  const common = { term: 'overall', schoolYear: year, availableSchoolYears: years, availableGradeLevels: [] };
+  await seed('performance:grades', { term: 'overall', schoolYear: year.value }, await performance.getGradeLevelPerformance({}));
+  await seed('performance:subjects', { term: 'overall', schoolYear: year.value, gradeLevel: 'all' }, await performance.getSubjectPerformance({}));
+  await seed('performance:teachers', { term: 'overall', schoolYear: year.value }, await performance.getTeacherPerformance({}));
+  await seed('performance:lowest', { term: 'overall', schoolYear: year.value, gradeLevel: 'all' }, await performance.getLowestPerformers({}));
+  await seed('performance:sections', { term: 'overall', schoolYear: year.value }, { ...common,
+    summary: { averageGrade: 0, passRate: 0, failRate: 0, totalLearners: 0, needsAttention: 0 }, sections: [], bands: [] });
+  await seed('analytics:historical', { term: 'overall', primarySchoolYear: year.value, comparisonSchoolYear: '2025-2026' },
+    { ...common, primarySchoolYear: year, comparisonSchoolYear: years[1], subjects: [], totalStudents: 0 });
+  const analytics = await server.ssrLoadModule('/src/services/principalAnalyticsService.js');
+  await seed('analytics:subject-trend', { term: 'overall', schoolYear: year.value, gradeLevel: 'all' },
+    await analytics.getSubjectPerformanceTrend({}));
+  await seed('reports:catalog', {}, { students: [], sections: [], enrollments: [], grades: [], years: [] });
+  await seed('admin:account-summary', {}, { totalAccounts: 0, activeAccounts: 0, inactiveAccounts: 0, roles: {} });
+  await seed('admin:audit-events', {}, []);
+  await seed('admin:users', {}, []);
+  await seed('admin:user-options', {}, { gradeLevels: [], sections: [], departments: [], subjectOfferings: [] });
+  await seed('admin:students', {}, { students: [], programs: [] });
+  await seed('admin:sections', {}, { sections: [], students: [], gradeLevels: [] });
+  await seed('admin:weights', {}, { schoolYears: [], currentSchoolYear: { school_year_id: 1, starts_on: 2026, ends_on: 2027 }, configuration: { rows: [] } });
+  await seed('admin:academic-period', { userId: 1, schoolYearId: 'current' }, {
+    schoolYears: [], selectedSchoolYearId: '', terms: [], departmentsByTerm: {}, subjectsByTerm: {},
+    gradeSheetRecordsByTerm: {}, reopeningRequests: [], activeReopenings: [],
+    upcomingSchoolYear: null, upcomingPeriods: [], suggestedUpcomingPeriods: [],
+  });
+  const pages = [
+    ...['PerformanceGradeLevels', 'PerformanceSections', 'PerformanceSubjects', 'PerformanceTeachers',
+      'PerformanceLowest', 'HistoricalComparison', 'SubjectPerformanceTrend', 'PrincipalReports'].map(name => ['principal', name]),
+    ...['AdminDashboard', 'ManageUsers', 'ManageStudents', 'StudentSectionManagement', 'WSConfig', 'AcademicPeriod'].map(name => ['system-admin', name]),
+  ];
+  for (const [folder, name] of pages) {
+    const { default: Page } = await server.ssrLoadModule('/src/pages/'+folder+'/'+name+'.jsx');
+    const html = renderToString(React.createElement(MemoryRouter, null, React.createElement(Page, { user: { user_id: 1 } })));
+    assert(html.length > 100, name+' renders content');
+    assert(!/pa-skeleton|mu-skeleton|grade-lock-skeleton|ws-config-skeleton/.test(html), name+' skips initial loading with cached data');
+    process.stdout.write('PASS '+name+' loaded-view render\n');
+  }
+
+  // Exercise the actual adviser service/cache boundary, not a duplicate test implementation.
+  const { clearNavigationCache, apiFetch } = await server.ssrLoadModule('/src/services/navigationCache.js');
+  const { getSectionDetails } = await server.ssrLoadModule('/src/services/sectionDetailsService.js');
+  let signedInUser = { user_id: 10, role: 'adviser' };
+  globalThis.localStorage = { getItem: () => JSON.stringify(signedInUser) };
+  clearNavigationCache();
+  const originalFetch = globalThis.fetch;
+  let reads = 0;
+  globalThis.fetch = async (url, options) => {
+    if (options?.method === 'PUT') return { ok: true };
+    reads++;
+    return { ok: true, json: async () => ({ version: reads, term: new URL(url).searchParams.get('term'),
+      userId: options.headers['X-Auralis-User-Id'] }) };
+  };
+  try {
+    const request = { assignmentType: 'advisory', assignmentId: 9, userId: 10, term: 'T1' };
+    const [first, shared] = await Promise.all([getSectionDetails(request), getSectionDetails(request)]);
+    assert.deepEqual(first, shared); assert.equal(reads, 1);
+    await getSectionDetails({ ...request, term: 'T2' });
+    assert.equal((await getSectionDetails(request)).version, first.version);
+    assert.equal(reads, 2);
+    process.stdout.write('PASS adviser concurrent reads and term navigation reuse cached records\n');
+
+    assert.equal((await getSectionDetails({ ...request, force: true })).version, 3);
+    assert.equal((await getSectionDetails(request)).version, 3);
+    process.stdout.write('PASS adviser Refresh replaces the cached response\n');
+
+    await apiFetch('/synthetic-grade-save', { method: 'PUT' });
+    assert.equal((await getSectionDetails(request)).version, 4);
+    signedInUser = { user_id: 20, role: 'adviser' };
+    const otherUser = await getSectionDetails({ ...request, userId: 20 });
+    assert.equal(otherUser.version, 5); assert.equal(otherUser.userId, '20');
+    process.stdout.write('PASS grade saves and user changes invalidate adviser statuses\n');
+
+    clearNavigationCache();
+    globalThis.fetch = async () => ({ ok: false, status: 503, json: async () => ({ message: 'Service unavailable' }) });
+    await assert.rejects(getSectionDetails({ ...request, userId: 20 }), /Service unavailable/);
+    globalThis.fetch = async () => ({ ok: true, json: async () => ({ recovered: true }) });
+    assert.equal((await getSectionDetails({ ...request, userId: 20 })).recovered, true);
+    process.stdout.write('PASS failed adviser reads remain retryable\n');
+  } finally { globalThis.fetch = originalFetch; }
+} finally { await server.close(); }

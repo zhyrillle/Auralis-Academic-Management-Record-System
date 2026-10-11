@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import useCachedQuery from "../../services/useCachedQuery";
+import { cacheKey } from "../../services/navigationCache";
+import { useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -28,41 +30,16 @@ const DEFAULT_YEAR = "2026-2027";
 export default function PerformanceGradeLevels() {
   const [term, setTerm] = useState("overall");
   const [schoolYear, setSchoolYear] = useState(DEFAULT_YEAR);
-  const [data, setData] = useState(null);
-  const [requestMode, setRequestMode] = useState("initial");
-  const [error, setError] = useState("");
-  const [retryKey, setRetryKey] = useState(0);
-  const requestId = useRef(0);
+  const { data, loading, refreshing, error, refresh } = useCachedQuery(
+    cacheKey("performance:grades", { term, schoolYear }), () => getGradeLevelPerformance({ term, schoolYear }),
+    { keepPreviousData: true },
+  );
 
-  useEffect(() => {
-    const currentRequest = ++requestId.current;
-    getGradeLevelPerformance({ term, schoolYear })
-      .then((nextData) => {
-        if (currentRequest === requestId.current) setData(nextData);
-      })
-      .catch((requestError) => {
-        if (currentRequest === requestId.current)
-          setError(
-            requestError.message || "Unable to load grade-level performance.",
-          );
-      })
-      .finally(() => {
-        if (currentRequest === requestId.current) setRequestMode("idle");
-      });
-  }, [term, schoolYear, retryKey]);
 
-  const changeFilter = (setter) => (value) => {
-    setRequestMode("filtering");
-    setError("");
-    setter(value);
-  };
-  const retry = () => {
-    setRequestMode(data ? "filtering" : "initial");
-    setError("");
-    setRetryKey((value) => value + 1);
-  };
+  const changeFilter = (setter) => (value) => setter(value);
+  const retry = refresh;
 
-  if (requestMode === "initial" && !data) return <AnalyticsSkeleton table />;
+  if (loading && !data) return <AnalyticsSkeleton table />;
   if (!data && error) {
     return (
       <main className="pa-page pp-page">
@@ -82,7 +59,7 @@ export default function PerformanceGradeLevels() {
     );
   }
 
-  const isFiltering = requestMode === "filtering";
+  const isFiltering = refreshing;
   const hasData = data.gradeLevels.length > 0;
   const schoolYearOptions = data.availableSchoolYears.map((year) => ({
     value: year.value,

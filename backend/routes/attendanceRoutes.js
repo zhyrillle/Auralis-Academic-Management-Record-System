@@ -9,7 +9,7 @@ router.get('/', async (req, res) => {
     const records = await Attendance.findAll();
     res.json(records);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: err.message });
   }
 });
 
@@ -19,17 +19,19 @@ router.get('/sheet/:sheetId', async (req, res) => {
     const records = await Attendance.findBySheetId(req.params.sheetId);
     res.json(records);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: err.message });
   }
 });
 
 // GET all attendance records for a section (all sheets + all students)
 router.get('/section/:sectionId', async (req, res) => {
   try {
-    const records = await Attendance.findBySectionId(req.params.sectionId);
+    const schoolYearId = req.query.schoolYearId;
+    if (schoolYearId !== undefined && !/^[1-9]\d*$/.test(String(schoolYearId))) return res.status(400).json({ error: 'Invalid school year.' });
+    const records = await Attendance.findBySectionId(req.params.sectionId, schoolYearId);
     res.json(records);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: err.message });
   }
 });
 
@@ -44,7 +46,7 @@ router.post('/save-remarks', async (req, res) => {
     const id = await Attendance.saveRemarks(attendance_sheet_id, rawId, remarks, status);
     res.json({ message: 'Remarks saved successfully', attendance_id: id });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: err.message });
   }
 });
 
@@ -96,7 +98,7 @@ router.post('/bulk-save', async (req, res) => {
 
     res.json({ message: 'Attendance saved successfully', ids });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: err.message });
   }
 });
 
@@ -106,7 +108,7 @@ router.get('/:id', async (req, res) => {
     if (!record) return res.status(404).json({ message: 'Attendance record not found' });
     res.json(record);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: err.message });
   }
 });
 
@@ -115,7 +117,7 @@ router.post('/', async (req, res) => {
     const id = await Attendance.create(req.body);
     res.status(201).json({ message: 'Attendance recorded successfully', attendance_id: id });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: err.message });
   }
 });
 
@@ -124,7 +126,7 @@ router.put('/:id', async (req, res) => {
     const updated = await Attendance.update(req.params.id, req.body);
     res.json(updated);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: err.message });
   }
 });
 
@@ -134,7 +136,7 @@ router.delete('/:id', async (req, res) => {
     if (!success) return res.status(404).json({ message: 'Attendance record not found' });
     res.json({ message: 'Attendance record deleted successfully' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: err.message });
   }
 });
 

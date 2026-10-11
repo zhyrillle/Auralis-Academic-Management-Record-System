@@ -5,3 +5,5 @@ backend/uploads/
 frontend/.env
 frontend/.env.local
 frontend/.env.*.local
+__pycache__/
+*.pyc

@@ -6,6 +6,9 @@ import { ChevronDown, LogOut, CircleUser } from "lucide-react";
 import logoName from "../../assets/auralis-logo-name.png";
 import logoIcon from "../../assets/auralis-logo.png";
 
+const isRouteActive = (pathname, path) => Boolean(path)
+  && (pathname === path || pathname.startsWith(`${path}/`));
+
 export default function Sidebar({ user, onLogout, collapsed = false, mobileOpen = false, onCloseMobile }) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -27,7 +30,7 @@ export default function Sidebar({ user, onLogout, collapsed = false, mobileOpen 
         menuItems.map((item, index) => [
           index,
           Boolean(
-            item.submenu?.some((sub) => location.pathname === sub.path),
+            item.submenu?.some((sub) => isRouteActive(location.pathname, sub.path)),
           ),
         ]),
       ),
@@ -89,9 +92,9 @@ export default function Sidebar({ user, onLogout, collapsed = false, mobileOpen 
           {menuItems.map((item, index) => {
             const hasSubmenu = !!item.submenu;
             const isSubActive = hasSubmenu
-              ? item.submenu.some((sub) => location.pathname === sub.path)
+              ? item.submenu.some((sub) => isRouteActive(location.pathname, sub.path))
               : false;
-            const isDirectActive = location.pathname === item.path;
+            const isDirectActive = isRouteActive(location.pathname, item.path);
             const isActive = isDirectActive || isSubActive;
             const isOpen = openMenus[index] ?? routeOpenMenus[index] ?? false;
 
@@ -131,7 +134,7 @@ export default function Sidebar({ user, onLogout, collapsed = false, mobileOpen 
                   {/* Submenu links */}
                   <div className="sidebar-submenu">
                     {item.submenu.map((subItem, subIndex) => {
-                      const isSubItemActive = location.pathname === subItem.path;
+                      const isSubItemActive = isRouteActive(location.pathname, subItem.path);
                       return (
                         <Link
                           key={subIndex}

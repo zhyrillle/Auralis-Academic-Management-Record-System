@@ -23,6 +23,7 @@ import AdviserFeedback from "./pages/adviser/AdviserFeedback";
 import ProfilePage from "./pages/ProfilePage";
 import AtRiskBreakdown from "./pages/principal/AtRiskBreakdown";
 import AtRiskPrediction from "./pages/principal/AtRiskPrediction";
+import AtRiskLearners from "./pages/principal/AtRiskLearners";
 import PerformanceGradeLevels from "./pages/principal/PerformanceGradeLevels";
 import PerformanceSections from "./pages/principal/PerformanceSections";
 import PerformanceSubjects from "./pages/principal/PerformanceSubjects";
@@ -123,6 +124,10 @@ export default function App() {
           <Route
             path="/principal/at-risk-students/breakdown"
             element={<AtRiskBreakdown />}
+          />
+          <Route
+            path="/principal/at-risk-students/:origin/learners/:level"
+            element={<AtRiskLearners />}
           />
           <Route
             path="/principal/performance-level/grade-levels"

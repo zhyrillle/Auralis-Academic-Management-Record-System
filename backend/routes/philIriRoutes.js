@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const PhilIriAssessment = require('../models/PhilIriAssessment');
 
+router.use('/screening', require('./philIriScreeningRoutes'));
+
 // GET /api/phil-iri/coordinator/english (Dynamic English Department Coordinator from DB)
 router.get('/coordinator/english', async (req, res) => {
   try {
@@ -44,10 +46,11 @@ router.get('/coordinator/english', async (req, res) => {
 router.get('/:sectionId', async (req, res) => {
   try {
     const { sectionId } = req.params;
-    const testType = req.query.testType || 'PRE_TEST';
+    const testType = req.query.testType || 'POST_TEST';
     const subjectOfferingId = req.query.subjectOfferingId || null;
+    const schoolYearId = req.query.schoolYearId || null;
 
-    const records = await PhilIriAssessment.findBySection(sectionId, testType, subjectOfferingId);
+    const records = await PhilIriAssessment.findBySection(sectionId, testType, subjectOfferingId, schoolYearId);
 
     // Query assigned English Department Head dynamically from database
     let coordinator = null;
@@ -104,7 +107,7 @@ router.get('/:sectionId', async (req, res) => {
 // POST /api/phil-iri/batch
 router.post('/batch', async (req, res) => {
   try {
-    let { records, sectionId, subjectOfferingId, user_id } = req.body;
+    let { records, sectionId, subjectOfferingId, schoolYearId, user_id } = req.body;
     if (!Array.isArray(records)) {
       return res.status(400).json({ success: false, error: 'records array is required' });
     }
@@ -119,9 +122,10 @@ router.post('/batch', async (req, res) => {
           SELECT so.subject_offering_id 
           FROM SUBJECT_OFFERING so 
           JOIN SUBJECT s ON so.subject_id = s.subject_id 
-          WHERE so.section_id = ? AND (UPPER(s.subject_code) = 'ENG' OR UPPER(s.subject_name) LIKE '%ENGLISH%')
+          WHERE so.section_id = ? ${schoolYearId ? 'AND so.school_year_id = ?' : ''}
+            AND (UPPER(s.subject_code) = 'ENG' OR UPPER(s.subject_name) LIKE '%ENGLISH%')
           LIMIT 1
-        `, [sectionId]);
+        `, schoolYearId ? [sectionId, schoolYearId] : [sectionId]);
         if (offeringRows && offeringRows.length > 0) {
           resolvedOfferingId = offeringRows[0].subject_offering_id;
         }
@@ -146,8 +150,9 @@ router.post('/batch', async (req, res) => {
     if (!effectiveUserId && sectionId) {
       try {
         const [saaRows] = await require('../config/db').execute(`
-          SELECT user_id FROM SECTION_ADVISER_ASSIGNMENT WHERE section_id = ? ORDER BY adviser_assignment_id DESC LIMIT 1
-        `, [sectionId]);
+          SELECT user_id FROM SECTION_ADVISER_ASSIGNMENT WHERE section_id = ?
+            ${schoolYearId ? 'AND school_year_id = ?' : ''} ORDER BY adviser_assignment_id DESC LIMIT 1
+        `, schoolYearId ? [sectionId, schoolYearId] : [sectionId]);
         if (saaRows && saaRows.length > 0 && saaRows[0].user_id) {
           effectiveUserId = saaRows[0].user_id;
         }

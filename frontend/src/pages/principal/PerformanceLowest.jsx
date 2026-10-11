@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import useCachedQuery from "../../services/useCachedQuery";
+import { cacheKey } from "../../services/navigationCache";
+import { useState } from "react";
 import {
   AlertTriangle,
   BookOpenCheck,
@@ -28,41 +30,16 @@ export default function PerformanceLowest() {
   const [term, setTerm] = useState("overall");
   const [schoolYear, setSchoolYear] = useState(DEFAULT_YEAR);
   const [gradeLevel, setGradeLevel] = useState("all");
-  const [data, setData] = useState(null);
-  const [requestMode, setRequestMode] = useState("initial");
-  const [error, setError] = useState("");
-  const [retryKey, setRetryKey] = useState(0);
-  const requestId = useRef(0);
+  const { data, loading, refreshing, error, refresh } = useCachedQuery(
+    cacheKey("performance:lowest", { term, schoolYear, gradeLevel }), () => getLowestPerformers({ term, schoolYear, gradeLevel }),
+    { keepPreviousData: true },
+  );
 
-  useEffect(() => {
-    const currentRequest = ++requestId.current;
-    getLowestPerformers({ term, schoolYear, gradeLevel })
-      .then((nextData) => {
-        if (currentRequest === requestId.current) setData(nextData);
-      })
-      .catch((requestError) => {
-        if (currentRequest === requestId.current)
-          setError(
-            requestError.message || "Unable to load lowest-performing areas.",
-          );
-      })
-      .finally(() => {
-        if (currentRequest === requestId.current) setRequestMode("idle");
-      });
-  }, [term, schoolYear, gradeLevel, retryKey]);
 
-  const changeFilter = (setter) => (value) => {
-    setRequestMode("filtering");
-    setError("");
-    setter(value);
-  };
-  const retry = () => {
-    setRequestMode(data ? "filtering" : "initial");
-    setError("");
-    setRetryKey((value) => value + 1);
-  };
+  const changeFilter = (setter) => (value) => setter(value);
+  const retry = refresh;
 
-  if (requestMode === "initial" && !data) return <AnalyticsSkeleton table />;
+  if (loading && !data) return <AnalyticsSkeleton table />;
   if (!data && error)
     return (
       <main className="pa-page pp-page">
@@ -81,7 +58,7 @@ export default function PerformanceLowest() {
       </main>
     );
 
-  const isFiltering = requestMode === "filtering";
+  const isFiltering = refreshing;
   // Render the full layout whenever a payload exists; lists fall back to placeholder slots.
   const hasData =
     Array.isArray(data.gradeLevels) &&

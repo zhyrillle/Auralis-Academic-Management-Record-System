@@ -1,5 +1,5 @@
-import React from "react";
 import StudentRiskCard from "./StudentRiskCard";
+import { sortByRisk } from '../../utils/riskPresentation';
 
 const TITLE_MAP = {
   low: "Low risk — preventive support recommended",
@@ -13,27 +13,26 @@ const RISK_CONFIG = {
   high: { accent: "#dc2626", titleColor: "#b91c1c" },
 };
 
-const DEFAULT_LIMIT = 2;
+const DEFAULT_LIMIT = 3;
 
 export default function RiskSection({ riskLevel, title, students = [], totalCount = 0, loading, onSeeAll }) {
   const config = RISK_CONFIG[riskLevel] || RISK_CONFIG.low;
-  const displayStudents = (students || []).slice(0, DEFAULT_LIMIT);
-  const hasMore = totalCount > DEFAULT_LIMIT;
+  const displayStudents = sortByRisk(students || []).slice(0, DEFAULT_LIMIT);
 
   return (
     <div className="ar-risk-section-group">
       <div className="ar-risk-section-header">
         <span className="ar-risk-section-title" style={{ color: config.titleColor }}>
-          {title || TITLE_MAP[riskLevel]}
+          {title || TITLE_MAP[riskLevel]} · {loading ? '—' : totalCount} learners
         </span>
-        <button className="ar-see-all-btn" type="button" onClick={() => onSeeAll?.(riskLevel)}>
+        <button className="ar-see-all-btn" type="button" disabled={loading || !totalCount} onClick={() => onSeeAll?.(riskLevel)}>
           See all
         </button>
       </div>
 
       <div className="ar-risk-section-list">
         {loading ? (
-          Array.from({ length: 2 }).map((_, idx) => (
+          Array.from({ length: DEFAULT_LIMIT }).map((_, idx) => (
             <StudentRiskCard key={idx} riskLevel={riskLevel} loading />
           ))
         ) : displayStudents.length === 0 ? (

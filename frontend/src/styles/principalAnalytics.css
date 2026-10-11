@@ -79,55 +79,12 @@
   padding-right: 0px;
 }
 
-.pa-term-tabs {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px;
-  background: #f4f7fa;
-  border: 1px solid #e3eaf2;
-  border-radius: 9px;
-}
-
-.pa-term-tabs button {
-  min-height: 34px;
-  padding: 7px 15px;
-  color: #5e6e84;
-  background: transparent;
-  border: 0;
-  border-radius: 7px;
-  font: inherit;
-  font-size: 0.78rem;
-  font-weight: 650;
-  cursor: pointer;
-  transition:
-    background 0.16s ease,
-    color 0.16s ease,
-    box-shadow 0.16s ease;
-}
-
-.pa-term-tabs button:hover:not(:disabled) {
-  color: var(--pa-navy);
-  background: rgba(255, 255, 255, 0.55);
-}
-
-.pa-term-tabs button.is-active {
-  color: #fff;
-  background: var(--pa-navy);
-  box-shadow: 0 3px 8px rgba(18, 48, 98, 0.18);
-}
-
-.pa-term-tabs button:focus-visible,
 .pa-legend button:focus-visible,
 .pa-legend-actions button:focus-visible,
 .pa-retry-button:focus-visible,
 .pa-inline-error button:focus-visible {
   outline: 3px solid rgba(37, 99, 235, 0.2);
   outline-offset: 2px;
-}
-
-.pa-term-tabs button:disabled {
-  cursor: wait;
 }
 
 .pa-filter-controls {

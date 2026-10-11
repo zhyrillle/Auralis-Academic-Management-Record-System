@@ -1,3 +1,5 @@
+import { cacheKey, loadCached } from './navigationCache.js';
+
 const API_BASE_URL = (
   import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api"
 ).replace(/\/$/, "");
@@ -25,21 +27,28 @@ export const getSectionDetails = async ({
   term = "T1",
   userId,
   signal,
+  force = false,
 }) => {
-  const response = await fetch(
-    `${API_BASE_URL}/section-details/${encodeURIComponent(assignmentType)}/${encodeURIComponent(assignmentId)}?term=${encodeURIComponent(term)}`,
-    {
-      headers: { "X-Auralis-User-Id": String(userId) },
-      signal,
-    },
-  );
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new SectionDetailsRequestError(
-      data.message || "The Section Details request could not be completed.",
-      data.code || "SECTION_DETAILS_REQUEST_FAILED",
-      response.status,
+  const read = async () => {
+    const response = await fetch(
+      `${API_BASE_URL}/section-details/${encodeURIComponent(assignmentType)}/${encodeURIComponent(assignmentId)}?term=${encodeURIComponent(term)}`,
+      {
+        headers: { "X-Auralis-User-Id": String(userId) },
+        signal,
+      },
     );
-  }
-  return data;
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new SectionDetailsRequestError(
+        data.message || "The Section Details request could not be completed.",
+        data.code || "SECTION_DETAILS_REQUEST_FAILED",
+        response.status,
+      );
+    }
+    return data;
+  };
+  // Shared reads must not inherit one caller's abort signal.
+  if (signal) return read();
+  return loadCached(cacheKey('section-details:v3', { assignmentType, assignmentId: Number(assignmentId),
+    term, userId: Number(userId) }), read, { force });
 };

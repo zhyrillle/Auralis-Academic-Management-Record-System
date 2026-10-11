@@ -1,13 +1,15 @@
+import { apiFetch as fetch } from "./navigationCache";
 import { API_BASE_URL } from "./classRecordApi";
 
-const getStorageKey = (sectionId, testType) => `phil_iri_${sectionId}_${testType}`;
+const getStorageKey = (sectionId, testType, schoolYearId) =>
+  `phil_iri_${sectionId}_${testType}${schoolYearId ? `_sy_${schoolYearId}` : ""}`;
 
 /**
  * Fetch PHIL-IRI records for a specific section and test type ('PRE_TEST' or 'POST_TEST').
  * Automatically falls back to localStorage if table is not yet created in the database.
  */
-export async function getPhilIriRecords(sectionId, testType = "PRE_TEST", subjectOfferingId = null) {
-  const storageKey = getStorageKey(sectionId, testType);
+export async function getPhilIriRecords(sectionId, testType = "POST_TEST", subjectOfferingId = null, schoolYearId = null) {
+  const storageKey = getStorageKey(sectionId, testType, schoolYearId);
   let localCache = null;
   try {
     const raw = localStorage.getItem(storageKey);
@@ -19,6 +21,7 @@ export async function getPhilIriRecords(sectionId, testType = "PRE_TEST", subjec
     if (subjectOfferingId) {
       url += `&subjectOfferingId=${encodeURIComponent(subjectOfferingId)}`;
     }
+    if (schoolYearId) url += `&schoolYearId=${encodeURIComponent(schoolYearId)}`;
     const res = await fetch(url);
     if (res.ok) {
       const data = await res.json();
@@ -59,13 +62,14 @@ export async function getPhilIriRecords(sectionId, testType = "PRE_TEST", subjec
 export async function savePhilIriBatch({
   sectionId,
   subjectOfferingId,
+  schoolYearId,
   userId,
-  testType = "PRE_TEST",
+  testType = "POST_TEST",
   records = [],
   passageWordsCount = 70,
   totalCompItems = 5,
 }) {
-  const storageKey = getStorageKey(sectionId, testType);
+  const storageKey = getStorageKey(sectionId, testType, schoolYearId);
 
   // 1. Always backup to local storage first to prevent any data loss
   try {
@@ -89,6 +93,7 @@ export async function savePhilIriBatch({
         records,
         sectionId,
         subjectOfferingId,
+        schoolYearId,
         user_id: userId,
       }),
     });

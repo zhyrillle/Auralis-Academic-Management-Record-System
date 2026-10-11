@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const AttendanceSheet = require('../models/AttendanceSheet');
+const AttendanceDayService = require('../services/AttendanceDayService');
+const { resolveCurrentUser } = require('../middleware/resolveCurrentUser');
 
 router.get('/', async (req, res) => {
   try {
@@ -24,7 +26,9 @@ router.get('/adviser/:adviserAssignmentId', async (req, res) => {
 // GET all sheets for a specific section
 router.get('/section/:sectionId', async (req, res) => {
   try {
-    const sheets = await AttendanceSheet.findBySectionId(req.params.sectionId);
+    const schoolYearId = req.query.schoolYearId;
+    if (schoolYearId !== undefined && !/^[1-9]\d*$/.test(String(schoolYearId))) return res.status(400).json({ error: 'Invalid school year.' });
+    const sheets = await AttendanceSheet.findBySectionId(req.params.sectionId, schoolYearId);
     res.json(sheets);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -62,6 +66,19 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+router.patch('/:id/no-classes', resolveCurrentUser, async (req, res) => {
+  try {
+    const result = await AttendanceDayService.setNoClasses({
+      sheetId: req.params.id, reason: req.body.reason,
+      confirmExistingRecords: req.body.confirmExistingRecords,
+      userId: req.currentUser.user_id,
+    });
+    res.json(result);
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: err.message, code: err.code });
+  }
+});
+
 router.post('/', async (req, res) => {
   try {
     const id = await AttendanceSheet.create(req.body);
@@ -76,7 +93,7 @@ router.put('/:id', async (req, res) => {
     const updated = await AttendanceSheet.update(req.params.id, req.body);
     res.json(updated);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: err.message });
   }
 });
 
@@ -86,7 +103,7 @@ router.delete('/:id', async (req, res) => {
     if (!success) return res.status(404).json({ message: 'Attendance Sheet not found' });
     res.json({ message: 'Attendance Sheet deleted successfully' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: err.message });
   }
 });
 

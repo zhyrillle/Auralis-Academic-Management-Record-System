@@ -1,4 +1,6 @@
-import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import useCachedQuery from "../../services/useCachedQuery";
+import { cacheKey } from "../../services/navigationCache";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import DropdownSelect from "../../components/common/DropdownSelect";
 import { Plus, X, Edit, Users, Eye, CheckCircle2, AlertCircle, Loader2, Trash2 } from "lucide-react";
 import {
@@ -116,57 +118,19 @@ function ActionMenu({ section, onEdit, onManageStudents, onViewStudents, onDelet
   );
 }
 
-export default function StudentSectionManagement() {
-  const [sections, setSections] = useState([]);
-  const [students, setStudents] = useState([]);
-  const [gradeLevels, setGradeLevels] = useState([
-    { id: 1, name: "G7", label: "Grade 7", value: "1" },
-    { id: 2, name: "G8", label: "Grade 8", value: "2" },
-    { id: 3, name: "G9", label: "Grade 9", value: "3" },
-    { id: 4, name: "G10", label: "Grade 10", value: "4" },
-  ]);
-
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [feedback, setFeedback] = useState(null);
-
-  const [sectionLevelFilter, setSectionLevelFilter] = useState("All Levels");
-  const [sectionSearch, setSectionSearch] = useState("");
-  const [viewSearch, setViewSearch] = useState("");
-  const [massSelectedStudents, setMassSelectedStudents] = useState(new Set());
-  const [studentSpecializations, setStudentSpecializations] = useState({});
-  const [studentSearch, setStudentSearch] = useState("");
-  const [studentSectionFilter, setStudentSectionFilter] = useState("All Sections");
-  const [studentStatusFilter, setStudentStatusFilter] = useState("All Students");
-  const [selectedStudentIds, setSelectedStudentIds] = useState(new Set());
-  const [studentPage, setStudentPage] = useState(1);
-  const studentsPerPage = 10;
-
-  // Modal states
-  const [activeModal, setActiveModal] = useState(null);
-
-  // Modal context data
-  const [sectionFormData, setSectionFormData] = useState({ id: null, name: "", grade_level_id: 1, level: "G7", is_specialized: false, program_id: "1" });
-  const [assignFormData, setAssignFormData] = useState({ section_id: "" });
-  const [targetSection, setTargetSection] = useState(null);
-  const [targetStudent, setTargetStudent] = useState(null);
-  const [manageSearch, setManageSearch] = useState("");
-
-  const showFeedback = (type, message) => {
-    setFeedback({ type, message });
-    setTimeout(() => {
-      setFeedback(null);
-    }, 4000);
-  };
-
-  const loadData = useCallback(async () => {
-    try {
-      setIsLoading(true);
+const DEFAULT_GRADE_LEVELS = [
+  { id: 1, name: "G7", label: "Grade 7", value: "1" },
+  { id: 2, name: "G8", label: "Grade 8", value: "2" },
+  { id: 3, name: "G9", label: "Grade 9", value: "3" },
+  { id: 4, name: "G10", label: "Grade 10", value: "4" },
+];
+async function loadSectionCatalog() {
+  let sections = [], students = [], gradeLevels = DEFAULT_GRADE_LEVELS;
       const [sectionsData, gradeLevelsData, studentsData, studentSectionsData] = await Promise.all([
-        fetchSections().catch(() => []),
-        fetchGradeLevels().catch(() => []),
-        fetchStudents().catch(() => []),
-        fetchStudentSections().catch(() => []),
+        fetchSections(),
+        fetchGradeLevels(),
+        fetchStudents(),
+        fetchStudentSections(),
       ]);
 
       const gradeMap = new Map();
@@ -175,7 +139,7 @@ export default function StudentSectionManagement() {
           gradeMap.set(Number(gl.grade_level_id), gl.grade_level_name);
         });
 
-        setGradeLevels(
+        gradeLevels = (
           gradeLevelsData.map((gl) => ({
             id: gl.grade_level_id,
             name: gl.grade_level_name,
@@ -207,7 +171,7 @@ export default function StudentSectionManagement() {
       }
 
       if (Array.isArray(sectionsData)) {
-        setSections(
+        sections = (
           sectionsData.map((s) => {
             const secId = Number(s.section_id || s.id);
             const glId = Number(s.grade_level_id);
@@ -232,7 +196,7 @@ export default function StudentSectionManagement() {
       }
 
       if (Array.isArray(studentsData)) {
-        setStudents(
+        students = (
           studentsData.map((st) => {
             const sId = Number(st.student_id || st.id);
             const ssEntry = studentSectionMap.get(sId);
@@ -281,17 +245,47 @@ export default function StudentSectionManagement() {
           })
         );
       }
-    } catch (err) {
-      console.error("Error loading student section management data:", err);
-      showFeedback("error", "Failed to load sections and students from the server.");
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+  return { sections, students, gradeLevels };
+}
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+const EMPTY_LIST = [];
+
+export default function StudentSectionManagement() {
+  const { data, loading: isLoading, error, refresh: loadData } = useCachedQuery(cacheKey('admin:sections'), loadSectionCatalog);
+  const sections = data?.sections || EMPTY_LIST;
+  const students = data?.students || EMPTY_LIST;
+  const gradeLevels = data?.gradeLevels || DEFAULT_GRADE_LEVELS;
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [feedback, setFeedback] = useState(null);
+
+  const [sectionLevelFilter, setSectionLevelFilter] = useState("All Levels");
+  const [sectionSearch, setSectionSearch] = useState("");
+  const [viewSearch, setViewSearch] = useState("");
+  const [massSelectedStudents, setMassSelectedStudents] = useState(new Set());
+  const [studentSpecializations, setStudentSpecializations] = useState({});
+  const [studentSearch, setStudentSearch] = useState("");
+  const [studentSectionFilter, setStudentSectionFilter] = useState("All Sections");
+  const [studentStatusFilter, setStudentStatusFilter] = useState("All Students");
+  const [selectedStudentIds, setSelectedStudentIds] = useState(new Set());
+  const [studentPage, setStudentPage] = useState(1);
+  const studentsPerPage = 10;
+
+  // Modal states
+  const [activeModal, setActiveModal] = useState(null);
+
+  // Modal context data
+  const [sectionFormData, setSectionFormData] = useState({ id: null, name: "", grade_level_id: 1, level: "G7", is_specialized: false, program_id: "1" });
+  const [assignFormData, setAssignFormData] = useState({ section_id: "" });
+  const [targetSection, setTargetSection] = useState(null);
+  const [targetStudent, setTargetStudent] = useState(null);
+  const [manageSearch, setManageSearch] = useState("");
+
+  const showFeedback = (type, message) => {
+    setFeedback({ type, message });
+    setTimeout(() => {
+      setFeedback(null);
+    }, 4000);
+  };
 
   const getSectionStudentCount = (sectionId) =>
     students.filter((s) => Number(s.section_id) === Number(sectionId)).length;
@@ -598,7 +592,7 @@ export default function StudentSectionManagement() {
         </div>
 
         {/* Feedback Alert */}
-        {feedback && (
+        {(feedback || error) && (
           <div
             style={{
               padding: "12px 18px",
@@ -609,17 +603,17 @@ export default function StudentSectionManagement() {
               gap: "10px",
               fontSize: "0.9rem",
               fontWeight: 500,
-              backgroundColor: feedback.type === "success" ? "#ecfdf5" : "#fef2f2",
-              color: feedback.type === "success" ? "#065f46" : "#991b1b",
-              border: `1px solid ${feedback.type === "success" ? "#a7f3d0" : "#fecaca"}`,
+              backgroundColor: (feedback?.type || "error") === "success" ? "#ecfdf5" : "#fef2f2",
+              color: feedback?.type === "success" ? "#065f46" : "#991b1b",
+              border: `1px solid ${feedback?.type === "success" ? "#a7f3d0" : "#fecaca"}`,
             }}
           >
-            {feedback.type === "success" ? (
+            {feedback?.type === "success" ? (
               <CheckCircle2 size={18} color="#059669" />
             ) : (
               <AlertCircle size={18} color="#dc2626" />
             )}
-            <span>{feedback.message}</span>
+            <span>{feedback?.message || error}</span>
           </div>
         )}
 

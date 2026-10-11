@@ -1,0 +1,211 @@
+/* Screen-only Post-Test presentation. The PDF keeps its isolated print styles. */
+.post-test-page .phil-iri-header-titles { flex: 1; }
+.post-test-page .phil-iri-subheader {
+  flex-wrap: wrap;
+}
+
+.post-test-page .phil-iri-controls-subrow {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.post-test-page .phil-iri-params-bar {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  border-radius: 0;
+  gap: 14px;
+}
+
+.post-test-page .phil-iri-param-field {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+}
+
+.post-test-page .phil-iri-param-field label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #64748b;
+}
+
+.post-test-page .phil-iri-param-field input {
+  width: 112px;
+  height: 36px;
+  padding: 6px 10px;
+  box-sizing: border-box;
+  font-family: inherit;
+  font-size: 14px;
+  text-align: left;
+}
+
+.post-test-page .phil-iri-actions-cluster {
+  align-self: flex-end;
+}
+
+.post-test-page .phil-iri-action-btn {
+  height: 36px;
+  box-sizing: border-box;
+}
+
+.post-test-page .phil-iri-action-btn:disabled {
+  opacity: .55;
+  cursor: default;
+}
+
+.post-test-page .phil-iri-document-scroll {
+  justify-content: flex-start;
+  padding-bottom: 8px;
+}
+
+.post-test-page .phil-iri-sheet {
+  min-width: 0;
+  min-height: 0;
+  flex-shrink: 0;
+  padding: 24px;
+  color: #1e293b;
+}
+
+.post-test-page .phil-iri-sheet-header,
+.post-test-page .phil-iri-sheet-header > * {
+  font-family: Calibri, "Segoe UI", sans-serif;
+}
+
+.post-test-page .phil-iri-sheet-dept { font-size: 12px; line-height: 1.45; }
+.post-test-page .phil-iri-sheet-school { font-size: 14px; margin-bottom: 12px; }
+.post-test-page .phil-iri-sheet-title { padding: 8px 12px; font-size: 16px; background: #fff2cc; }
+.post-test-page .phil-iri-sheet-subject { margin-top: 8px; font-size: 14px; }
+.post-test-page .phil-iri-sheet-test-label { font-size: 13px; text-decoration: none; }
+.post-test-page .phil-iri-sheet-sy { font-size: 12px; margin-bottom: 16px; }
+.post-test-page .phil-iri-sheet-meta-row,
+.post-test-page .phil-iri-sheet-meta-subrow { font-size: 13px; line-height: 1.5; gap: 16px; }
+.post-test-page .phil-iri-sheet-meta-row { flex-wrap: wrap; }
+.post-test-page .phil-iri-sheet-meta-subrow { margin-bottom: 12px; }
+
+.post-test-table-scroll { overflow-x: auto; margin-bottom: 20px; }
+.post-test-table-scroll:focus-visible { outline: 2px solid #8ba7c7; outline-offset: 3px; }
+.post-test-page .phil-iri-sheet-table {
+  table-layout: fixed;
+  border-color: #cbd5e1;
+  font-size: 13px;
+  margin-bottom: 0;
+  min-width: 980px;
+}
+
+.post-test-page .phil-iri-sheet-table th,
+.post-test-page .phil-iri-sheet-table td {
+  border-color: #cbd5e1;
+  padding: 8px 6px;
+  line-height: 1.4;
+}
+
+.post-test-page .phil-iri-sheet-table thead th {
+  background: #fff8e5;
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+  overflow-wrap: break-word;
+}
+
+.post-test-page .phil-iri-sheet-table thead tr:first-child th[colspan] {
+  background: #fff2cc;
+  font-size: 13px;
+}
+
+.post-test-page .phil-iri-sheet-table .col-no { width: 28px; min-width: 0; }
+.post-test-page .phil-iri-sheet-table .col-learner-name { width: 22%; white-space: normal; }
+.post-test-page .phil-iri-sheet-table .col-words-read,
+.post-test-page .phil-iri-sheet-table .col-comp-score { width: auto; min-width: 0; }
+.post-test-page .phil-iri-sheet-table .col-oral-pct,
+.post-test-page .phil-iri-sheet-table .col-comp-pct { width: auto; min-width: 0; }
+.post-test-page .phil-iri-sheet-table .col-oral-level,
+.post-test-page .phil-iri-sheet-table .col-comp-level { width: auto; min-width: 0; }
+.post-test-page .phil-iri-sheet-table .col-overall-level { width: 12%; min-width: 0; }
+
+.post-test-page .phil-iri-sheet-table .post-test-gender-row th {
+  background: #f8fafc;
+  text-align: left;
+  padding: 7px 10px;
+  font-size: 12px;
+  letter-spacing: .3px;
+  color: #64748b;
+}
+
+.post-test-page .phil-iri-sheet-table tbody tr:not(.post-test-gender-row):hover { background: #fafcff; }
+.post-test-page .phil-iri-table-input {
+  min-height: 25px;
+  padding: 2px 0;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  color: #000;
+  font-family: Teko, "Arial Narrow", sans-serif;
+  font-size: 21px;
+  font-weight: 400;
+  line-height: 1;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.post-test-page .phil-iri-table-input::-webkit-inner-spin-button,
+.post-test-page .phil-iri-table-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+
+.post-test-page .phil-iri-table-input:focus {
+  background: #fffdf5;
+  outline: 1px solid #dbe4ee;
+}
+
+.post-test-page .reading-level-text {
+  display: inline-block;
+  font-size: 12px;
+  line-height: 1.4;
+  font-weight: 600;
+  padding: 3px 4px;
+  border-radius: 4px;
+}
+
+.post-test-page .reading-level-text:empty { padding: 0; }
+.post-test-page .reading-level-text.independent { color: #166534; background: #edf8f0; }
+.post-test-page .reading-level-text.instructional { color: #854d0e; background: #fff8e5; }
+.post-test-page .reading-level-text.frustration { color: #991b1b; background: #fdf0f0; }
+
+.post-test-page .phil-iri-sheet-summary-box { margin-bottom: 20px; }
+.post-test-page .phil-iri-sheet-summary-table { width: 100%; font-size: 13px; font-weight: 400; }
+.post-test-page .phil-iri-sheet-summary-table caption { text-align: left; font-size: 14px; font-weight: 700; padding-bottom: 10px; }
+.post-test-page .phil-iri-sheet-summary-table th,
+.post-test-page .phil-iri-sheet-summary-table td { padding: 8px 12px; font-size: 13px; text-align: center; }
+.post-test-page .phil-iri-sheet-summary-table thead th { font-size: 11px; background: #f8fafc; }
+.post-test-page .phil-iri-sheet-summary-table th:first-child { text-align: left; }
+.post-test-page .phil-iri-sheet-summary-table .phil-iri-total-row > * { background: #fff8e5 !important; font-weight: 700; }
+.post-test-page .phil-iri-underline-val { min-width: 0; padding: 0; border: 0; }
+.post-test-page .phil-iri-sheet-bottom-block { margin-top: 4px; }
+.post-test-page .phil-iri-sheet-signatures { padding: 0; margin: 0 0 20px; }
+.post-test-page .phil-iri-sig-col { display: flex; flex-direction: column; align-items: center; }
+.post-test-page .phil-iri-sig-col .sig-title { width: 100%; max-width: 280px; margin: 0 0 12px; font-size: 12px; text-align: left; }
+.post-test-page .sig-person-block { width: 100%; max-width: 280px; }
+.post-test-page .sig-person-block.right-person { width: 100%; margin-left: 0; }
+.post-test-page .phil-iri-sig-col .sig-name { font-size: 13px; margin: 0 0 4px; }
+.post-test-page .phil-iri-sig-col .sig-role { font-size: 12px; line-height: 1.4; }
+.post-test-page .phil-iri-sheet-footer { border-color: #cbd5e1; font-size: 11px; padding-top: 12px; }
+.post-test-empty { padding: 24px; color: #64748b; }
+.post-test-empty strong { font-size: 14px; color: #334155; }
+.post-test-empty p { margin: 6px 0 0; font-size: 13px; }
+
+@media (max-width: 700px) {
+  .post-test-page .phil-iri-page-header { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 12px 16px; }
+  .post-test-page .phil-iri-back-btn { align-self: start; margin-top: 2px; }
+  .post-test-page .phil-iri-header-tabs { grid-column: 2; margin-left: 0; justify-self: start; }
+  .post-test-page .phil-iri-page-title-row { gap: 8px; }
+  .post-test-page .phil-iri-sync-status { font-size: 12px; }
+  .post-test-page .phil-iri-controls-group { width: 100%; align-items: flex-start; }
+  .post-test-page .phil-iri-controls-subrow { justify-content: flex-start; align-items: flex-end; }
+  .post-test-page .phil-iri-params-bar { gap: 10px; }
+  .post-test-page .phil-iri-tab-button { padding: 8px 14px; }
+  .post-test-page .phil-iri-sheet { padding: 16px; }
+  .post-test-page .phil-iri-sheet-summary-box { display: block; overflow-x: auto; }
+  .post-test-page .phil-iri-sheet-summary-table { min-width: 480px; }
+  .post-test-page .phil-iri-sheet-signatures { flex-direction: column; gap: 20px; }
+  .post-test-page .phil-iri-sig-col { width: 100%; }
+  .post-test-page .phil-iri-sheet-footer { flex-wrap: wrap; gap: 12px; }
+  .post-test-page .phil-iri-gold-seal { width: 100%; }
+}

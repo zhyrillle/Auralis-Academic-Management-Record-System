@@ -1,3 +1,4 @@
+import { apiFetch as fetch } from "../../services/navigationCache";
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useLocation } from "react-router-dom";

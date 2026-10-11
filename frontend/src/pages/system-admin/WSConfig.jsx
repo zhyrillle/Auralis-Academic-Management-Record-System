@@ -1,3 +1,4 @@
+import { cacheKey, getCachedData, loadCached } from "../../services/navigationCache";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
@@ -92,7 +93,8 @@ const selectCurrentSchoolYear = (schoolYears) =>
 const formatSchoolYear = (schoolYear) =>
   schoolYear ? `${schoolYear.starts_on}–${schoolYear.ends_on}` : "";
 
-const fetchCurrentConfiguration = async () => {
+const configurationKey = cacheKey('admin:weights');
+const fetchCurrentConfiguration = (force = false) => loadCached(configurationKey, async () => {
   const schoolYears = await getSchoolYears();
   const currentSchoolYear = selectCurrentSchoolYear(schoolYears);
 
@@ -107,7 +109,7 @@ const fetchCurrentConfiguration = async () => {
   );
 
   return { schoolYears, currentSchoolYear, configuration };
-};
+}, { force });
 
 const copyWeights = (weights) =>
   weights.map((weight) => ({
@@ -162,14 +164,16 @@ const getRowError = (weight) => {
 };
 
 export default function WSConfig() {
-  const [savedWeights, setSavedWeights] = useState([]);
-  const [draftWeights, setDraftWeights] = useState([]);
-  const [schoolYears, setSchoolYears] = useState([]);
-  const [currentSchoolYear, setCurrentSchoolYear] = useState(null);
-  const [schoolYearId, setSchoolYearId] = useState(null);
+  const cached = getCachedData(configurationKey);
+  const cachedWeights = cached ? mapConfigurationRows(cached.configuration.rows || []) : [];
+  const [savedWeights, setSavedWeights] = useState(() => copyWeights(cachedWeights));
+  const [draftWeights, setDraftWeights] = useState(() => copyWeights(cachedWeights));
+  const [schoolYears, setSchoolYears] = useState(() => cached?.schoolYears || []);
+  const [currentSchoolYear, setCurrentSchoolYear] = useState(() => cached?.currentSchoolYear || null);
+  const [schoolYearId, setSchoolYearId] = useState(() => cached ? Number(cached.currentSchoolYear.school_year_id) : null);
   const [isEditing, setIsEditing] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [hasLoadedConfiguration, setHasLoadedConfiguration] = useState(false);
+  const [isLoading, setIsLoading] = useState(!cached);
+  const [hasLoadedConfiguration, setHasLoadedConfiguration] = useState(Boolean(cached));
   const [isSaving, setIsSaving] = useState(false);
   const [requestError, setRequestError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
@@ -202,7 +206,7 @@ export default function WSConfig() {
     setRequestError("");
 
     try {
-      const result = await fetchCurrentConfiguration();
+      const result = await fetchCurrentConfiguration(true);
       const { configuration } = result;
       const mappedWeights = mapConfigurationRows(configuration.rows || []);
 
@@ -434,7 +438,8 @@ export default function WSConfig() {
     setHistoryError("");
 
     try {
-      const configuration = await getSubjectWeightConfiguration(nextYearId);
+      const configuration = await loadCached(cacheKey('admin:weights:history', { schoolYearId: nextYearId }),
+        () => getSubjectWeightConfiguration(nextYearId));
       const nextWeights = mapConfigurationRows(configuration.rows || [], {
         useDefaults: false,
         includeUnconfigured: false,

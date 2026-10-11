@@ -5,7 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 // Exercise the actual route without creating a database connection.
-function routeHarness({ missingEnrollment = false } = {}) {
+function routeHarness({ missingEnrollment = false, attendanceSheets = [], attendanceRows = [] } = {}) {
   const calls = [];
   let handler;
   const router = { get: (_path, route) => { handler = route; } };
@@ -20,6 +20,10 @@ function routeHarness({ missingEnrollment = false } = {}) {
         section_name: 'History', grade_level_name: 'Grade 8',
         starts_on: '2025-06-01', ends_on: '2026-03-31',
       }]];
+      if (sql.includes('FROM ATTENDANCE_SHEET ash')) return [attendanceSheets];
+      if (sql.includes('SELECT attendance_sheet_id, status FROM ATTENDANCE')) {
+        return [attendanceRows.filter(row => params.slice(0, -1).includes(row.attendance_sheet_id))];
+      }
       return [[]];
     },
   };
@@ -29,6 +33,7 @@ function routeHarness({ missingEnrollment = false } = {}) {
       if (name === 'express') return { Router: () => router };
       if (name === '../config/db') return db;
       if (name === '../services/MasterSheetService') return {};
+      if (name === '../services/AttendanceSummaryService') return require('../services/AttendanceSummaryService');
       throw new Error(`Unexpected dependency: ${name}`);
     },
   });
@@ -79,4 +84,25 @@ test('SF9 existing callers without a selected year keep latest-enrollment behavi
   const enrollment = harness.calls.find(({ sql }) => sql.includes('FROM STUDENT_SECTION ss'));
   assert.doesNotMatch(enrollment.sql, /AND ss\.school_year_id/);
   assert.deepEqual(enrollment.params, [41]);
+});
+
+test('SF9 excludes holiday attendance and deducts duplicate-marked dates only once', async () => {
+  const harness = routeHarness({ attendanceSheets: [
+    { attendance_sheet_id: 1, attendance_date: '2025-06-12', no_class_reason: 'HOLIDAY' },
+    { attendance_sheet_id: 2, attendance_date: '2025-06-12', no_class_reason: 'HOLIDAY' },
+    { attendance_sheet_id: 3, attendance_date: '2025-06-13', no_class_reason: null },
+  ], attendanceRows: [
+    { attendance_sheet_id: 1, status: 'A' },
+    { attendance_sheet_id: 2, status: 'P' },
+    { attendance_sheet_id: 3, status: 'P' },
+  ] });
+  const response = await harness.run({ schoolYearId: '2' });
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.attendanceData.classDays[0], 20); // June 2025 has 21 weekdays.
+  assert.equal(response.body.attendanceData.daysPresent[0], 1);
+  assert.equal(response.body.attendanceData.daysAbsent[0], 0);
+  const sheetQuery = harness.calls.find(({ sql }) => sql.includes('FROM ATTENDANCE_SHEET ash'));
+  assert.deepEqual(sheetQuery.params, [7, 2]);
+  assert.match(sheetQuery.sql, /school_year_id = \?/);
+  assert.match(sheetQuery.sql, /attendance_scope = 'SECTION'/);
 });
