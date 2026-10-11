@@ -311,7 +311,7 @@ router.get('/summary', async (req, res) => {
 
       // 1. Overall average
       const [gradeStatsRows] = await db.execute(
-        `SELECT 
+        `SELECT
            AVG(COALESCE(sg.quarterly_grade, sg.initial_grade)) AS avg_grade,
            COUNT(DISTINCT sg.student_id) AS graded_students,
            COUNT(*) AS total_encoded_records
@@ -327,7 +327,7 @@ router.get('/summary', async (req, res) => {
 
       // 2. Average by term to compute diff
       const [termAvgRows] = await db.execute(
-        `SELECT 
+        `SELECT
            sg.term,
            AVG(COALESCE(sg.quarterly_grade, sg.initial_grade)) AS term_avg
          FROM STUDENT_GRADE sg
@@ -348,7 +348,7 @@ router.get('/summary', async (req, res) => {
 
       // 3. Lowest performing section
       const [secPerformanceRows] = await db.execute(
-        `SELECT 
+        `SELECT
            sec.section_name,
            AVG(COALESCE(sg.quarterly_grade, sg.initial_grade)) AS sec_avg
          FROM STUDENT_GRADE sg
@@ -615,13 +615,14 @@ router.get('/attendance-trend', async (req, res) => {
       }
 
       const [attRows] = await db.execute(
-        `SELECT 
+        `SELECT
            ash.attendance_date,
            COUNT(*) AS present_count
          FROM ATTENDANCE att
          INNER JOIN ATTENDANCE_SHEET ash ON ash.attendance_sheet_id = att.attendance_sheet_id
          WHERE (${filterClauses.join(' OR ')})
            AND att.status = 'P'
+           AND ash.no_class_reason IS NULL
          GROUP BY ash.attendance_date
          ORDER BY ash.attendance_date ASC
          LIMIT 5`,
@@ -657,7 +658,7 @@ router.get('/test-exam-results', async (req, res) => {
     }
 
     let sql = `
-      SELECT 
+      SELECT
         sec.section_id,
         sec.section_name,
         ga.activity_name,
@@ -693,7 +694,7 @@ router.get('/test-exam-results', async (req, res) => {
     const termNum = termParam.replace(/[^0-9]/g, '');
     if (termNum) {
       sql += ` AND (
-        gs.term_id = ? 
+        gs.term_id = ?
         OR at.term_name LIKE ?
         OR gs.term_id IN (SELECT term_id FROM ACADEMIC_TERM WHERE term_name LIKE ?)
       )`;
@@ -836,7 +837,7 @@ router.get('/subject-area-performance', async (req, res) => {
 
     // 2. Query all subjects offered in this advisory section and their class averages for the given term
     const [advRows] = await db.execute(
-      `SELECT 
+      `SELECT
          s.subject_name,
          s.subject_code,
          COUNT(DISTINCT ss.student_id) AS student_count,
@@ -844,7 +845,7 @@ router.get('/subject-area-performance', async (req, res) => {
        FROM SUBJECT_OFFERING so
        JOIN SUBJECT s ON s.subject_id = so.subject_id
        LEFT JOIN STUDENT_SECTION ss ON ss.section_id = so.section_id
-       LEFT JOIN STUDENT_GRADE sg ON sg.subject_offering_id = so.subject_offering_id 
+       LEFT JOIN STUDENT_GRADE sg ON sg.subject_offering_id = so.subject_offering_id
          AND (UPPER(sg.term) LIKE ? OR UPPER(sg.term) LIKE ?)
        WHERE so.section_id = ?
        GROUP BY s.subject_id, s.subject_name, s.subject_code
@@ -905,7 +906,7 @@ router.get('/core-values', async (req, res) => {
         const sectionId = advSection[0].section_id;
 
         const [grades] = await db.execute(
-          `SELECT 
+          `SELECT
              s.subject_code,
              AVG(COALESCE(sg.quarterly_grade, sg.initial_grade)) AS avg_grade
            FROM SUBJECT_OFFERING so
@@ -1036,13 +1037,13 @@ router.get('/grade-range-report', async (req, res) => {
     }
 
     let sectionSql = `
-      SELECT DISTINCT 
-        gl.grade_level_id, 
-        sec.section_id, 
-        sec.section_name, 
-        gl.grade_level_name, 
-        so.subject_offering_id, 
-        s.subject_id, 
+      SELECT DISTINCT
+        gl.grade_level_id,
+        sec.section_id,
+        sec.section_name,
+        gl.grade_level_name,
+        so.subject_offering_id,
+        s.subject_id,
         s.subject_name
       FROM TEACHER_ASSIGNMENT ta
       JOIN SUBJECT_OFFERING so ON so.subject_offering_id = ta.subject_offering_id

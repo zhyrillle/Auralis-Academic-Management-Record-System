@@ -1,6 +1,6 @@
 import backIconUrl from "../../assets/backButton.svg";
 
-export default function SectionDetailsSkeleton({ onBack }) {
+export default function SectionDetailsSkeleton({ onBack, isAdvisory = true }) {
   return (
     <div className="section-details-page section-details-skeleton" aria-label="Loading Section Details">
       <div className="section-details-header-bar">
@@ -17,8 +17,8 @@ export default function SectionDetailsSkeleton({ onBack }) {
         </div>
       </div>
 
-      <div className="kpi-summary-grid">
-        {Array.from({ length: 6 }, (_, index) => (
+      <div className="kpi-summary-grid kpi-summary-grid--grades-only">
+        {Array.from({ length: 5 }, (_, index) => (
           <div className="kpi-card" key={index}>
             <div className="section-details-skeleton-line skeleton-kpi-label" />
             <div className="section-details-skeleton-line skeleton-kpi-value" />
@@ -29,10 +29,9 @@ export default function SectionDetailsSkeleton({ onBack }) {
 
       <div className="toolbar-row">
         <div className="section-details-skeleton-line skeleton-search" />
-        <div className="section-details-skeleton-filters">
+        {isAdvisory && <div className="section-details-skeleton-filters">
           <div className="section-details-skeleton-line skeleton-filter" />
-          <div className="section-details-skeleton-line skeleton-filter" />
-        </div>
+        </div>}
       </div>
 
       <div className="table-container-card">

@@ -3,9 +3,12 @@ import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { AlertCircle, ArrowDownNarrowWide, Eye, RefreshCw, Users } from "lucide-react";
 
 import EmptyState from "../../components/common/EmptyState.jsx";
+import Badge from "../../components/common/Badge.jsx";
 import SearchBar from "../../components/common/SearchBar.jsx";
 import SelectFilter from "../../components/common/SelectFilter.jsx";
 import TermToggleGroup from "../../components/common/TermToggleGroup.jsx";
+import PredictionInfoButton from "../../components/at-risk/PredictionInfoButton.jsx";
+import { RISK_BANDS } from "../../utils/riskPresentation.js";
 import { getStoredUser } from "../../utils/auth.js";
 import {
   getSectionDetails,
@@ -16,12 +19,7 @@ import SectionDetailsSkeleton from "./SectionDetailsSkeleton.jsx";
 import backIconUrl from "../../assets/backButton.svg";
 
 import "../../styles/sectionDetails.css";
-
-const SORT_OPTIONS = [
-  { label: "Student Name", value: "name" },
-  { label: "LRN", value: "lrn" },
-  { label: "Term Grade", value: "termGrade" },
-];
+import "../../styles/modelPreview.css";
 
 const PERFORMANCE_BANDS = [
   { key: "ADVANCING", colorClass: "advancing" },
@@ -42,7 +40,9 @@ const HONOR_LABELS = {
   WITH_HIGH_HONORS: "With High Honors",
   WITH_HIGHEST_HONORS: "With Highest Honors",
   NONE: "None",
-  UNAVAILABLE: "Unavailable",
+  AWAITING_GRADES: "Awaiting grades",
+  NEEDS_REVIEW: "Needs review",
+  UNAVAILABLE: "Awaiting grades",
 };
 
 export default function SectionDetails({
@@ -85,11 +85,13 @@ export default function SectionDetails({
   const [selectedTerm, setSelectedTerm] = useState("T1");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedHonor, setSelectedHonor] = useState(null);
+  const [selectedRisk, setSelectedRisk] = useState(null);
   const [sortBy, setSortBy] = useState("name");
   const [sortAscending, setSortAscending] = useState(true);
   const [activeSf9Student, setActiveSf9Student] = useState(null);
 
   const isSectionAdviser = useMemo(() => {
+    if (data?.context?.assignmentType) return data.context.assignmentType === "advisory";
     if (data?.assignmentType) return data.assignmentType === "advisory";
     if (data?.meta?.assignmentType) return data.meta.assignmentType === "advisory";
     if (activeSection?.assignmentType) return activeSection.assignmentType === "advisory";
@@ -109,6 +111,16 @@ export default function SectionDetails({
     || activeSection?.sectionId
     || activeSection?.id;
 
+  const isEnglishTeachingClass = !isSectionAdviser && data?.capabilities?.atRiskApplicable === true;
+  const showEnglishRisk = isEnglishTeachingClass && selectedTerm !== "T3";
+  const termLabel = data?.context?.selectedTerm?.label || `Term ${selectedTerm.slice(1)}`;
+  const sortOptions = [
+    { label: "Student Name", value: "name" },
+    { label: "LRN", value: "lrn" },
+    { label: `${termLabel} Grade`, value: "termGrade" },
+  ];
+  const tableMode = isSectionAdviser ? "advisory" : showEnglishRisk ? "english" : "teaching";
+
   const [initialLoading, setInitialLoading] = useState(
     Boolean(activeSection && assignmentId && userId),
   );
@@ -117,7 +129,7 @@ export default function SectionDetails({
   const requestSequenceRef = useRef(0);
   const failedTermRef = useRef(null);
 
-  const loadDetails = useCallback(async (term) => {
+  const loadDetails = useCallback(async (term, force = false) => {
     if (!assignmentId || !assignmentType || !userId) return;
     const requestSequence = requestSequenceRef.current + 1;
     requestSequenceRef.current = requestSequence;
@@ -133,12 +145,14 @@ export default function SectionDetails({
         assignmentId,
         term,
         userId,
+        force,
       });
       if (requestSequence !== requestSequenceRef.current) return;
       dataRef.current = nextData;
       failedTermRef.current = null;
       setData(nextData);
       setSelectedTerm(term);
+      if (!nextData.capabilities?.atRiskAvailable) setSelectedRisk(null);
     } catch (requestError) {
       if (requestSequence !== requestSequenceRef.current) return;
       failedTermRef.current = term;
@@ -163,6 +177,7 @@ export default function SectionDetails({
       setSelectedTerm("T1");
       setSearchQuery("");
       setSelectedHonor(null);
+      setSelectedRisk(null);
       if (assignmentId && assignmentType && userId) loadDetails("T1");
     });
     return () => {
@@ -178,7 +193,9 @@ export default function SectionDetails({
         || learner.name.toLowerCase().includes(query)
         || String(learner.lrn || "").toLowerCase().includes(query);
       const matchesHonor = !selectedHonor || learner.honorStatus === selectedHonor;
-      return matchesSearch && matchesHonor;
+      const matchesRisk = !selectedRisk || (learner.riskAssessment?.status === "available"
+        && learner.riskAssessment.riskLevel === selectedRisk);
+      return matchesSearch && matchesHonor && matchesRisk;
     });
 
     return [...result].sort((left, right) => {
@@ -197,7 +214,7 @@ export default function SectionDetails({
         ? leftValue.localeCompare(rightValue)
         : rightValue.localeCompare(leftValue);
     });
-  }, [data, searchQuery, selectedHonor, sortAscending, sortBy]);
+  }, [data, searchQuery, selectedHonor, selectedRisk, sortAscending, sortBy]);
 
   const kpiCards = useMemo(() => {
     const bands = data?.summary?.performanceBands || {};
@@ -208,35 +225,53 @@ export default function SectionDetails({
         range: bands[key]?.range || "—",
         colorClass,
       })),
-      {
-        label: "At-risk",
-        count: "—",
-        range: "Soon",
-        colorClass: "atrisk unavailable",
-      },
     ];
   }, [data]);
 
   const handleActionClick = (learner) => {
     if (onViewStudent) onViewStudent(learner);
-    else setActiveSf9Student(learner);
+    else setActiveSf9Student({
+      studentId: learner.studentId,
+      studentSectionId: learner.studentSectionId,
+      lrn: learner.lrn,
+      name: learner.name,
+      schoolYearId: data.context.schoolYear.id,
+      schoolYear: data.context.schoolYear.label,
+      section: data.context.sectionName,
+      gradeLevel: data.context.gradeLevel,
+      // SF9 determines its own year-end standing; a selected-term honor is not a final award.
+    });
   };
 
   const handleHonorToggle = (honorKey) => {
     setSelectedHonor((current) => current === honorKey ? null : honorKey);
   };
 
-  const renderHonorBadge = (status) => {
+  const renderHonorBadge = (learner) => {
+    const status = learner.honorStatus;
     const classNames = {
       WITH_HONORS: "badge-honor-with",
       WITH_HIGH_HONORS: "badge-honor-high",
       WITH_HIGHEST_HONORS: "badge-honor-highest",
       NONE: "badge-honor-none",
       UNAVAILABLE: "badge-honor-unavailable",
+      AWAITING_GRADES: "badge-honor-unavailable",
+      NEEDS_REVIEW: "badge-honor-unavailable",
     };
+    const hasCompletionDetails = learner.gradeState !== "COMPLETE" && Boolean(learner.gradeSummary);
+    const tooltipId = `honor-completion-${learner.studentSectionId}`;
     return (
-      <span className={`badge-rect ${classNames[status] || "badge-honor-unavailable"}`}>
-        {HONOR_LABELS[status] || "Unavailable"}
+      <span className="section-honor-status"
+        tabIndex={hasCompletionDetails ? 0 : undefined}
+        aria-describedby={hasCompletionDetails ? tooltipId : undefined}>
+        <Badge className={`badge-rect ${classNames[status] || "badge-honor-unavailable"}`}>
+          {HONOR_LABELS[status] || "Awaiting grades"}
+        </Badge>
+        {hasCompletionDetails && (
+          <span className="section-honor-tooltip" id={tooltipId} role="tooltip">
+            {learner.gradeSummary.completeSubjects} / {learner.gradeSummary.requiredSubjects} subjects ready
+          </span>
+        )}
       </span>
     );
   };
@@ -270,7 +305,7 @@ export default function SectionDetails({
     );
   }
 
-  if (initialLoading && !data) return <SectionDetailsSkeleton onBack={backAction} />;
+  if (initialLoading && !data) return <SectionDetailsSkeleton onBack={backAction} isAdvisory={isSectionAdviser} />;
 
   if (error && !data) {
     return (
@@ -283,7 +318,7 @@ export default function SectionDetails({
             title="Section Details could not be loaded"
             description={error}
           />
-          <button className="section-details-retry-btn" type="button" onClick={() => loadDetails(failedTermRef.current || "T1")}>
+          <button className="section-details-retry-btn" type="button" onClick={() => loadDetails(failedTermRef.current || "T1", true)}>
             <RefreshCw size={16} aria-hidden="true" />
             Retry
           </button>
@@ -300,9 +335,19 @@ export default function SectionDetails({
         <strong>{data?.context?.gradeLevel} – {data?.context?.sectionName}</strong>
         <span>{data?.context?.subject?.name || "Advisory average"}</span>
         <span>{data?.context?.schoolYear?.label}</span>
+        <button className="section-details-refresh" type="button" onClick={() => loadDetails(selectedTerm, true)} disabled={updating} aria-label="Refresh grades and statuses" title="Refresh grades and statuses">
+          <RefreshCw size={16} aria-hidden="true" />Refresh
+        </button>
       </div>
 
-      <div className="kpi-summary-grid">
+      {(isSectionAdviser || isEnglishTeachingClass) && <div className="section-details-status-note" role="status">
+        {isSectionAdviser
+          ? <div><p>Honor standing uses complete, submitted or locked {data?.context?.selectedTerm?.label} grades with every learning area passed. It is a term standing, not a year-end award.</p></div>
+          : <div aria-hidden="true" />}
+        {isEnglishTeachingClass && <PredictionInfoButton />}
+      </div>}
+
+      <div className="kpi-summary-grid kpi-summary-grid--grades-only">
         {kpiCards.map((kpi) => (
           <div key={kpi.label} className="kpi-card">
             <span className="kpi-label">{kpi.label}</span>
@@ -318,15 +363,22 @@ export default function SectionDetails({
         </div>
 
         <div className="toolbar-right">
-          <div className="filter-segmented-group filter-segmented-group--disabled" aria-label="At-risk filter unavailable">
-            {["Low", "Medium", "High"].map((label) => (
-              <button key={label} type="button" className="filter-rect-btn" disabled title="At-risk assessments are not available yet">
-                {label}
-              </button>
-            ))}
-          </div>
+          {showEnglishRisk && <div className="section-filter-block">
+            <span className="section-filter-label">English risk{data?.riskContext?.targetTerm ? ` · Term ${data.riskContext.targetTerm.slice(1)}` : ""}</span>
+            <div className="filter-segmented-group" aria-label="English risk filter">
+              {RISK_BANDS.map(({ level, label }) => (
+                <button key={level} type="button" className={`filter-rect-btn ${selectedRisk === level ? "active" : ""}`}
+                  disabled={!data?.capabilities?.atRiskAvailable} aria-pressed={selectedRisk === level}
+                  onClick={() => setSelectedRisk(current => current === level ? null : level)}>
+                  {label.replace(" Risk", "")}
+                </button>
+              ))}
+            </div>
+          </div>}
 
           {isSectionAdviser && (
+            <div className="section-filter-block">
+            <span className="section-filter-label">Honor standing · {data?.context?.selectedTerm?.label}</span>
             <div className="filter-segmented-group" aria-label="Honor standing filter">
               {HONOR_FILTERS.map(({ key, label }) => (
                 <button
@@ -340,6 +392,7 @@ export default function SectionDetails({
                 </button>
               ))}
             </div>
+            </div>
           )}
         </div>
       </div>
@@ -348,7 +401,7 @@ export default function SectionDetails({
         <div className="section-details-error-banner" role="alert">
           <AlertCircle size={18} aria-hidden="true" />
           <span>{error} The previous term remains visible.</span>
-          <button type="button" onClick={() => loadDetails(failedTermRef.current || selectedTerm)}>Retry</button>
+          <button type="button" onClick={() => loadDetails(failedTermRef.current || selectedTerm, true)}>Retry</button>
         </div>
       )}
 
@@ -371,7 +424,7 @@ export default function SectionDetails({
           <div className="sub-header-controls">
             <div className="sort-wrapper">
               <span className="sort-label">Sort:</span>
-              <SelectFilter value={sortBy} onChange={setSortBy} options={SORT_OPTIONS} minWidth="150px" />
+              <SelectFilter value={sortBy} onChange={setSortBy} options={sortOptions} minWidth="150px" />
               <button
                 type="button"
                 className="sort-order-btn"
@@ -399,14 +452,14 @@ export default function SectionDetails({
           />
         ) : (
           <div className="section-details-table-scroll">
-            <table className="section-data-table">
+            <table className={`section-data-table section-data-table--${tableMode}`}>
               <thead>
                 <tr>
                   <th className="text-center section-number-column">No.</th>
                   <th className="text-left section-lrn-column">LRN</th>
                   <th className="text-left section-name-column">Student Name</th>
-                  <th className="text-center section-risk-column">At-risk Status</th>
-                  <th className="text-center section-grade-column">Term Grade</th>
+                  {showEnglishRisk && <th className="text-center section-risk-column">At-risk Status<span className="section-status-detail">English{data?.riskContext?.targetTerm ? ` · Term ${data.riskContext.targetTerm.slice(1)}` : ""}</span></th>}
+                  <th className="text-center section-grade-column">{termLabel} Grade</th>
                   {isSectionAdviser && <th className="text-center section-honor-column">Honor Status</th>}
                   <th className="text-center section-action-column">Action</th>
                 </tr>
@@ -415,15 +468,19 @@ export default function SectionDetails({
                 {filteredLearners.length > 0 ? filteredLearners.map((learner, index) => (
                   <tr key={learner.studentSectionId}>
                     <td className="text-center">{index + 1}</td>
-                    <td className="text-left student-lrn">{learner.lrn || "—"}</td>
-                    <td className="text-left student-name">{learner.name}</td>
-                    <td className="text-center">
-                      <span className="badge-rect badge-risk-unavailable">Soon</span>
-                    </td>
+                    <td className="text-left section-learner-lrn">{learner.lrn || "—"}</td>
+                    <td className="text-left section-learner-name">{learner.name}</td>
+                    {showEnglishRisk && <td className="text-center" title={learner.riskAssessment?.reason || "Preliminary next-term English risk; not an official grade."}>
+                      <Badge className={`badge-rect ${learner.riskAssessment?.status === "available"
+                        ? `badge-risk-${learner.riskAssessment.riskLevel === "high" ? "atrisk" : learner.riskAssessment.riskLevel}`
+                        : "badge-risk-unavailable"}`}>
+                        {learner.riskAssessment?.label || "Awaiting records"}
+                      </Badge>
+                    </td>}
                     <td className={`text-center ${learner.gradeState === "INCOMPLETE" ? "grade-incomplete" : ""}`}>
                       {Number.isFinite(learner.termGrade) ? learner.termGrade : "Incomplete"}
                     </td>
-                    {isSectionAdviser && <td className="text-center">{renderHonorBadge(learner.honorStatus)}</td>}
+                    {isSectionAdviser && <td className="text-center">{renderHonorBadge(learner)}</td>}
                     <td className="text-center">
                       <button
                         type="button"
@@ -438,8 +495,8 @@ export default function SectionDetails({
                   </tr>
                 )) : (
                   <tr>
-                    <td colSpan={isSectionAdviser ? 7 : 6} className="section-details-no-results">
-                      No learners match the current search and honor filters.
+                    <td colSpan={5 + Number(isSectionAdviser) + Number(showEnglishRisk)} className="section-details-no-results">
+                      No learners match the current search and status filters.
                     </td>
                   </tr>
                 )}

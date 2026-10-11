@@ -90,6 +90,9 @@
   .kpi-summary-grid {
     grid-template-columns: repeat(6, minmax(0, 1fr));
   }
+  .section-details-page .kpi-summary-grid--grades-only {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
 }
 
 .kpi-card {
@@ -167,6 +170,39 @@
   gap: 15px;
   flex-wrap: wrap;
 }
+
+.section-details-page .section-details-refresh {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border: 1px solid #dbe5f3;
+  border-radius: 8px;
+  background: white;
+  color: #173968;
+  cursor: pointer;
+}
+.section-details-page .section-details-status-note {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px 24px;
+  margin: 0 0 20px;
+  color: #526984;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.section-details-page .section-details-status-note > div { flex: 1 1 560px; }
+.section-details-page .section-details-status-note p { margin: 0 0 4px; }
+.section-details-page .section-filter-block { display: flex; flex-direction: column; gap: 5px; }
+.section-details-page .section-filter-label { font-size: 12px; color: #526984; }
+.section-details-page .section-status-detail { display: block; margin-top: 5px; color: #667d99; font-size: 11px; font-weight: 400; line-height: 1.35; }
+.section-details-page .filter-rect-btn:disabled { opacity: .5; cursor: not-allowed; background: transparent; color: #526984; }
+.section-details-page .filter-rect-btn:focus-visible,
+.section-details-page .section-details-refresh:focus-visible { outline: 2px solid #315a95; outline-offset: 3px; }
+.section-details-page .filter-segmented-group { padding: 3px 6px; height: 36px; background: #edf2f8; }
 
 /* Rectangular Filter Groups (Risk & Honor) */
 .filter-segmented-group {
@@ -333,11 +369,55 @@
   text-align: center;
 }
 
-.student-lrn,
-.student-name {
+.section-details-page .section-data-table .section-learner-lrn,
+.section-details-page .section-data-table .section-learner-name {
+  display: table-cell;
+  margin: 0;
   color: var(--subtext-color);
   vertical-align: middle;
   line-height: 1.2;
+}
+
+.section-details-page .section-learner-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.section-details-page .section-honor-status {
+  display: block;
+  position: relative;
+  border-radius: 8px;
+}
+
+.section-details-page .section-honor-status[tabindex] { cursor: help; }
+.section-details-page .section-honor-status:focus-visible {
+  outline: 2px solid #315a95;
+  outline-offset: 3px;
+}
+
+.section-details-page .section-honor-tooltip {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 6px);
+  transform: translateX(-50%);
+  z-index: 3;
+  width: max-content;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: #173968;
+  color: #fff;
+  box-shadow: 0 3px 10px rgba(18, 48, 98, .15);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.4;
+  opacity: 0;
+  visibility: hidden;
+}
+
+.section-details-page .section-honor-status:hover .section-honor-tooltip,
+.section-details-page .section-honor-status:focus-within .section-honor-tooltip {
+  opacity: 1;
+  visibility: visible;
 }
 
 /* Rectangular Status Badges taking full width of column header width */
@@ -461,6 +541,21 @@
 .section-grade-column { width: 12%; }
 .section-honor-column { width: 16%; }
 .section-action-column { width: 7%; }
+
+.section-details-page .section-data-table--advisory .section-lrn-column { width: 20%; }
+.section-details-page .section-data-table--advisory .section-name-column { width: 32%; }
+.section-details-page .section-data-table--advisory .section-grade-column { width: 14%; }
+.section-details-page .section-data-table--advisory .section-honor-column { width: 22%; }
+.section-details-page .section-data-table--english .section-lrn-column { width: 18%; }
+.section-details-page .section-data-table--english .section-name-column { width: 30%; }
+.section-details-page .section-data-table--english .section-risk-column { width: 20%; }
+.section-details-page .section-data-table--english .section-grade-column { width: 17%; }
+.section-details-page .section-data-table--english .section-action-column { width: 10%; }
+.section-details-page .section-data-table--teaching .section-number-column { width: 6%; }
+.section-details-page .section-data-table--teaching .section-lrn-column { width: 22%; }
+.section-details-page .section-data-table--teaching .section-name-column { width: 42%; }
+.section-details-page .section-data-table--teaching .section-grade-column { width: 20%; }
+.section-details-page .section-data-table--teaching .section-action-column { width: 10%; }
 
 .badge-risk-unavailable,
 .badge-honor-unavailable {
