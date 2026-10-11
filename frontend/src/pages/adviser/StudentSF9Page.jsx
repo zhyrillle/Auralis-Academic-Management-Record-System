@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useEffect } from "react";
-import { Eye, Download, FileText, Sparkles, Printer, FileSpreadsheet } from "lucide-react";
+import { useState, useMemo, useEffect } from "react";
+import { Eye, Download, FileText, Sparkles, Printer, FileSpreadsheet, CheckCircle2, Loader2 } from "lucide-react";
 import "../../styles/studentSF9.css";
 
 import depedLogo from "../../assets/deped_logo.png";
@@ -7,66 +7,115 @@ import gccnhsLogo from "../../assets/gccnhs_logo.png";
 import backIconUrl from "../../assets/backButton.svg";
 import { getStoredUser, normalizeRole } from "../../utils/auth";
 import { getStudentSF9Details } from "../../services/studentSf9Service";
+import { getStudentSF10Details } from "../../services/reportService";
 import Toast from "../../components/common/Toast.jsx";
+import { exportSf9Pdf } from "../../utils/exportSf9Pdf";
+import SF10PreviewModal from "../../components/SF10PreviewModal.jsx";
+import { exportSf10Excel } from "../../utils/exportSf10Excel.js";
+import JSZip from "jszip";
 
-export default function StudentSF9Page({ student, onBack, userRole: propUserRole, initialTab }) {
+export default function StudentSF9Page(props) {
+  const student = props.student;
+  const identity = student?.student_id || student?.studentId || student?.student_section_id || student?.studentSectionId || student?.lrn || student?.id || "default";
+  const schoolYear = student?.schoolYearId || student?.schoolYear || "";
+  // Remount learner-specific state before showing another learner's report.
+  return <StudentSF9Details key={`${identity}:${schoolYear}:${props.reportIdentifier || ""}:${props.currentTerm || ""}`} {...props} />;
+}
+
+function StudentReportSkeleton({ student, onBack }) {
+  return <div className="student-sf9-container" role="status" aria-label="Loading learner report" aria-busy="true">
+    <div className="sf9-header-bar no-print">
+      <button className="back-btn" onClick={onBack} aria-label="Back"><img src={backIconUrl} alt="" width={17} height={17} /></button>
+      <h1 className="sf9-section-title">{student?.section || "Student Reports"}</h1>
+    </div>
+    <div className="student-header-grid sf9-report-skeleton" aria-hidden="true">
+      {Array.from({ length: 5 }, (_, index) => <div className="sf9-skeleton-card" key={index}>
+        <span className="sf9-skeleton-block sf9-skeleton-heading" /><span className="sf9-skeleton-block" />
+      </div>)}
+    </div>
+    <div className="sf9-skeleton-tabs" aria-hidden="true">
+      {Array.from({ length: 3 }, (_, index) => <span className="sf9-skeleton-block" key={index} />)}
+    </div>
+    <div className="sf9-skeleton-sheet" aria-hidden="true">
+      <span className="sf9-skeleton-block sf9-skeleton-title" />
+      <span className="sf9-skeleton-block sf9-skeleton-subtitle" />
+      <div className="sf9-skeleton-table">
+        {Array.from({ length: 7 }, (_, row) => <div className="sf9-skeleton-row" key={row}>
+          {Array.from({ length: 4 }, (_, column) => <span className="sf9-skeleton-block" key={column} />)}
+        </div>)}
+      </div>
+    </div>
+  </div>;
+}
+
+function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab, isAdviser: propIsAdviser, reportIdentifier, currentTerm: propCurrentTerm, loadReport = getStudentSF9Details }) {
   const storedUser = useMemo(() => getStoredUser(), []);
   const normRole = useMemo(() => normalizeRole(storedUser?.role, storedUser), [storedUser]);
   const userRole = propUserRole || (normRole === "adviser" ? "adviser" : normRole === "principal" ? "principal" : "teacher");
-  const isAdviser = userRole === "adviser" || userRole === "principal";
+  const isAdviser = typeof propIsAdviser === "boolean"
+    ? propIsAdviser
+    : (userRole === "adviser" || userRole === "principal");
 
-  const [activeTab, setActiveTab] = useState(initialTab || (isAdviser ? "sf9" : "personal"));
+  const [requestedTab, setActiveTab] = useState(() => {
+    if (!isAdviser) return "personal";
+    return initialTab || "sf9";
+  });
+
+  const activeTab = isAdviser ? requestedTab : "personal";
   const [viewMode, setViewMode] = useState("spread"); // "spread", "front", "back"
+  const [sf10ToolbarHost, setSF10ToolbarHost] = useState(null);
   const [sf9Data, setSf9Data] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const identifier = reportIdentifier || student?.student_id || student?.studentId || student?.student_section_id || student?.studentSectionId || student?.lrn || student?.id;
+  const schoolYearId = student?.schoolYearId;
+  const [loading, setLoading] = useState(Boolean(identifier));
+  const [loadError, setLoadError] = useState(false);
+  const [requestAttempt, setRequestAttempt] = useState(0);
+  const [downloadingSF10, setDownloadingSF10] = useState(false);
+  const [downloadingZip, setDownloadingZip] = useState(false);
+  // This details component remounts for a different learner/school year.
+  const [cachedSF10Data, setCachedSF10Data] = useState(null);
 
   // Teacher Comments/Remarks state for terms with frontend localStorage persistence
   const studentKey = student?.lrn || student?.student_id || student?.studentId || student?.id || "default";
   const storageKey = `sf9_comments_${studentKey}`;
 
-  const [comments, setComments] = useState({
-    term1: "",
-    term2: "",
-    term3: ""
-  });
-
-  useEffect(() => {
+  const [comments, setComments] = useState(() => {
+    if (userRole === "principal") return { term1: "", term2: "", term3: "" };
     try {
       const saved = localStorage.getItem(storageKey);
       if (saved) {
-        setComments(JSON.parse(saved));
-        return;
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          return { term1: "", term2: "", term3: "", ...parsed };
+        }
       }
     } catch (e) {
       console.error("Error loading saved SF9 comments:", e);
     }
-    setComments({ term1: "", term2: "", term3: "" });
-  }, [storageKey]);
+    return { term1: "", term2: "", term3: "" };
+  });
 
   const handleCommentChange = (term, val) => {
-    setComments(prev => {
-      const updated = { ...prev, [term]: val };
-      try {
-        localStorage.setItem(storageKey, JSON.stringify(updated));
-      } catch (e) {
-        console.error("Error saving SF9 comments:", e);
-      }
-      return updated;
-    });
+    const updated = { ...comments, [term]: val };
+    setComments(updated);
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(updated));
+    } catch (e) {
+      console.error("Error saving SF9 comments:", e);
+    }
   };
 
   useEffect(() => {
     let isMounted = true;
-    const identifier = student?.student_id || student?.studentId || student?.student_section_id || student?.studentSectionId || student?.lrn || student?.id;
     if (identifier) {
-      setLoading(true);
-      getStudentSF9Details(identifier)
+      loadReport(identifier, { schoolYearId })
         .then((data) => {
           if (isMounted && data) {
             setSf9Data(data);
           }
         })
         .catch((err) => {
+          if (isMounted) setLoadError(true);
           console.error("Failed to load dynamic SF9 data:", err);
         })
         .finally(() => {
@@ -74,7 +123,7 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
         });
     }
     return () => { isMounted = false; };
-  }, [student]);
+  }, [identifier, schoolYearId, requestAttempt, loadReport]);
 
   // Dynamic student records matching official layout
   const studentProfile = useMemo(() => {
@@ -86,6 +135,7 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
       grade: fetched.grade || student?.grade || "",
       section: fetched.section || student?.section || "",
       program: fetched.program || student?.program || "",
+      sex: fetched.sex || student?.sex || student?.gender || "",
       age: sf9Data ? (fetched.age ?? "") : (student?.age ?? ""),
       schoolYear: fetched.schoolYear || student?.schoolYear || "",
       dateOfBirth: fetched.dateOfBirth || student?.dateOfBirth || "",
@@ -99,7 +149,7 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
       principalName: (() => {
         const raw = fetched.principalName || student?.principalName || "";
         if (!raw) return "";
-        return (raw.toUpperCase().includes("PH.D") || raw.toUpperCase().includes("PHD")) ? raw : `${raw}, Ph.D.`;
+        return raw;
       })(),
       admittedToGrade: "", // Leave blank as requested
       eligibleForAdmission: "" // Leave blank as requested
@@ -125,13 +175,115 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
     ];
   }, [sf9Data]);
 
+  const currentTermInfo = useMemo(() => {
+    // 1. Check explicit prop or student object
+    const rawProp = propCurrentTerm || student?.currentTerm || student?.activeTerm || student?.selectedTerm || student?.term;
+    let code = null;
+    let label = null;
+
+    if (rawProp) {
+      if (typeof rawProp === "string") {
+        const match = rawProp.match(/(\d+)/);
+        if (match) {
+          code = `T${match[1]}`;
+          label = `Term ${match[1]}`;
+        }
+      } else if (rawProp.termCode) {
+        code = rawProp.termCode;
+        label = rawProp.termName || `Term ${rawProp.position || rawProp.termCode.replace("T", "")}`;
+      } else if (rawProp.position) {
+        code = `T${rawProp.position}`;
+        label = `Term ${rawProp.position}`;
+      }
+    }
+
+    // 2. Check sf9Data.currentTerm from API
+    if (!code && sf9Data?.currentTerm) {
+      if (sf9Data.currentTerm.termCode) {
+        code = sf9Data.currentTerm.termCode;
+        label = sf9Data.currentTerm.termName || `Term ${sf9Data.currentTerm.position || code.replace("T", "")}`;
+      } else if (sf9Data.currentTerm.position) {
+        code = `T${sf9Data.currentTerm.position}`;
+        label = `Term ${sf9Data.currentTerm.position}`;
+      }
+    }
+
+    // Fallback: Default to T1
+    code = code || "T1";
+    label = label || "Term 1";
+
+    const position = code === "T3" ? 3 : code === "T2" ? 2 : 1;
+    const requiredKeys = position === 3 ? ["t1", "t2", "t3"] : position === 2 ? ["t1", "t2"] : ["t1"];
+
+    return {
+      code,
+      label,
+      position,
+      requiredKeys,
+    };
+  }, [propCurrentTerm, student, sf9Data?.currentTerm]);
+
+  const gradeCompleteness = useMemo(() => {
+    if (!sf9Data || !grades || grades.length === 0) {
+      return { isComplete: false, missingDetails: ["Grades data not loaded"] };
+    }
+
+    const missing = [];
+    const { requiredKeys } = currentTermInfo;
+
+    const mapehHeader = grades.find((g) => g.code === "mapeh" || g.isHeader);
+    const mapehSubs = grades.filter((g) => g.isSubSubject);
+
+    for (const key of requiredKeys) {
+      const termNum = key.replace("t", "");
+      const termLabel = `Term ${termNum}`;
+
+      // 1. Regular subjects (exclude header and sub-subjects)
+      for (const subj of grades) {
+        if (subj.isHeader || subj.isSubSubject) continue;
+        const val = subj[key];
+        const hasValidNum = val !== "" && val !== null && val !== undefined && Number.isFinite(Number(val)) && Number(val) > 0;
+        if (!hasValidNum) {
+          missing.push(`${subj.name} (${termLabel})`);
+        }
+      }
+
+      // 2. MAPEH (complete if either header has grade OR all sub-subjects have grades)
+      if (mapehHeader || mapehSubs.length > 0) {
+        const headerVal = mapehHeader ? mapehHeader[key] : null;
+        const hasHeaderGrade = headerVal !== "" && headerVal !== null && headerVal !== undefined && Number.isFinite(Number(headerVal)) && Number(headerVal) > 0;
+
+        if (!hasHeaderGrade) {
+          if (mapehSubs.length > 0) {
+            for (const sub of mapehSubs) {
+              const subVal = sub[key];
+              const hasSubGrade = subVal !== "" && subVal !== null && subVal !== undefined && Number.isFinite(Number(subVal)) && Number(subVal) > 0;
+              if (!hasSubGrade) {
+                missing.push(`${sub.name} (${termLabel})`);
+              }
+            }
+          } else {
+            missing.push(`MAPEH (${termLabel})`);
+          }
+        }
+      }
+    }
+
+    return {
+      isComplete: missing.length === 0,
+      missingDetails: missing,
+    };
+  }, [sf9Data, grades, currentTermInfo]);
+
+  const isGradesComplete = gradeCompleteness.isComplete;
+
   // Performance Descriptors matching the official layout
   const performanceDescriptors = [
     { scale: "90-100", desc: "Advancing", remarks: "Passed" },
     { scale: "80-89", desc: "Benchmarking", remarks: "Passed" },
     { scale: "75-79", desc: "Connecting", remarks: "Passed" },
-    { scale: "65-74", desc: "Developing", remarks: "Passed" },
-    { scale: "0-64", desc: "Emerging", remarks: "Passed" }
+    { scale: "65-74", desc: "Developing", remarks: "Failed" },
+    { scale: "0-64", desc: "Emerging", remarks: "Failed" }
   ];
 
   // Official Attendance Record Data (11 months: Jun - Apr)
@@ -147,16 +299,17 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
     };
   }, [sf9Data]);
 
-  const [toast, setToast] = useState({ message: "", variant: "success" });
+  const [toast, setToast] = useState({ message: "", variant: "success", icon: null });
 
-  const showToast = (message, variant = "success") => {
-    setToast({ message, variant });
+  const showToast = (message, variant = "success", icon = CheckCircle2) => {
+    setToast({ message, variant, icon });
     setTimeout(() => {
-      setToast({ message: "", variant: "success" });
+      setToast({ message: "", variant: "success", icon: null });
     }, 4000);
   };
 
-  const getAttendanceTotal = (arr) => arr.reduce((acc, curr) => acc + curr, 0);
+  const getAttendanceTotal = (arr) => arr.every(value => typeof value === "number" && Number.isFinite(value))
+    ? arr.reduce((acc, curr) => acc + curr, 0) : "";
 
   const getStudentLastName = () => {
     if (student?.last_name) return String(student.last_name).trim().toUpperCase().replace(/[^A-Z0-9_-]/gi, "");
@@ -176,25 +329,207 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
     return "STUDENT";
   };
 
+  const handleDownloadPDF = async () => {
+    if (loading || loadError || !sf9Data) return;
+    if (activeTab === "sf9" && !isGradesComplete) {
+      showToast(`Cannot download SF9: Learner's grades are not yet complete for ${currentTermInfo.label}.`, "error");
+      return;
+    }
+    try {
+      showToast(`Generating PDF for ${studentProfile.name || "Student"}...`, "info", CheckCircle2);
+      await exportSf9Pdf({
+        studentProfile,
+        grades,
+        performanceDescriptors,
+        attendanceData,
+        comments,
+        depedLogo,
+        gccnhsLogo,
+      });
+      showToast(`Downloaded PDF SF9 Performance Report for ${studentProfile.name}`, "success", CheckCircle2);
+    } catch (err) {
+      console.error("Failed to export SF9 PDF:", err);
+      showToast("Failed to download SF9 PDF. Please try again.", "error");
+    }
+  };
+
   const handlePrint = () => {
+    if (loading || loadError || !sf9Data) return;
+    if (activeTab === "sf9" && !isGradesComplete) {
+      showToast(`Cannot print or save as PDF: Learner's grades are not yet complete for ${currentTermInfo.label}.`, "error");
+      return;
+    }
     const originalTitle = document.title;
     const lastName = getStudentLastName();
     const fileName = `${lastName}_SF9`;
 
-    document.title = fileName;
-    window.print();
+    showToast(`Opening Print Preview for ${studentProfile.name || "Student"}...`, "info", Printer);
 
     setTimeout(() => {
+      document.title = fileName;
+      window.print();
       document.title = originalTitle;
-      showToast(`Successfully downloaded ${fileName}.pdf!`, "success");
-    }, 500);
+    }, 100);
   };
 
+  const sf10StudentProp = useMemo(() => ({
+    ...student,
+    ...studentProfile,
+    grades: grades,
+    studentId: studentProfile.studentId || student?.studentId || student?.student_id,
+    studentSectionId: studentProfile.studentSectionId || student?.studentSectionId || student?.student_section_id,
+    lrn: studentProfile.lrn || student?.lrn || student?.LRN
+  }), [student, studentProfile, grades]);
+
+  const handleDirectDownloadSF10 = async () => {
+    if (downloadingSF10) return;
+    setDownloadingSF10(true);
+    showToast("Generating Form 10 Excel (.xlsx)...", "info");
+
+    try {
+      let data = cachedSF10Data;
+      const identifier =
+        sf10StudentProp.studentId ||
+        sf10StudentProp.student_id ||
+        sf10StudentProp.studentSectionId ||
+        sf10StudentProp.lrn ||
+        sf10StudentProp.id;
+
+      if (!data && identifier) {
+        try {
+          data = await getStudentSF10Details(identifier);
+          if (data) setCachedSF10Data(data);
+        } catch (fetchErr) {
+          if (userRole === "principal") throw fetchErr;
+          console.warn("Could not fetch remote SF10 data, using client fallback:", fetchErr);
+        }
+      }
+      if (userRole === "principal" && !data) throw new Error("Official SF10 records are unavailable.");
+
+      const lastName = getStudentLastName();
+      const fileName = `${lastName}_SF10.xlsx`;
+
+      await exportSf10Excel({
+        student: sf10StudentProp,
+        sf10Data: data,
+        fileName
+      });
+      showToast(`Successfully downloaded ${fileName}!`, "success");
+    } catch (err) {
+      console.error("Direct SF10 Excel download error:", err);
+      showToast("Failed to generate Form 10 Excel file. Please try again.", "error");
+    } finally {
+      setDownloadingSF10(false);
+    }
+  };
+
+  const handleDownloadZip = async () => {
+    if (downloadingZip || loading || loadError || !sf9Data) return;
+    setDownloadingZip(true);
+    showToast("Preparing documents for ZIP export...", "info");
+
+    try {
+      let data = cachedSF10Data;
+      const identifier =
+        sf10StudentProp.studentId ||
+        sf10StudentProp.student_id ||
+        sf10StudentProp.studentSectionId ||
+        sf10StudentProp.lrn ||
+        sf10StudentProp.id;
+
+      if (!data && identifier) {
+        try {
+          data = await getStudentSF10Details(identifier);
+          if (data) setCachedSF10Data(data);
+        } catch (fetchErr) {
+          if (userRole === "principal") throw fetchErr;
+          console.warn("Could not fetch remote SF10 data, using client fallback:", fetchErr);
+        }
+      }
+      if (userRole === "principal" && !data) {
+        throw new Error("Official SF10 records are unavailable.");
+      }
+
+      const lastName = getStudentLastName();
+
+      showToast("Generating SF9 Performance Report PDF...", "info");
+      const sf9Result = await exportSf9Pdf({
+        studentProfile,
+        grades,
+        performanceDescriptors,
+        attendanceData,
+        comments,
+        depedLogo,
+        gccnhsLogo,
+        skipDownload: true,
+      });
+
+      showToast("Generating Form 10 Excel (.xlsx)...", "info");
+      const sf10FileName = `${lastName}_SF10.xlsx`;
+      const sf10Result = await exportSf10Excel({
+        student: sf10StudentProp,
+        sf10Data: data,
+        fileName: sf10FileName,
+        skipDownload: true,
+      });
+
+      showToast("Bundling documents into ZIP...", "info");
+      const zip = new JSZip();
+      const sf9FileName = sf9Result?.fileName || `${lastName}_SF9.pdf`;
+      const sf9Blob = sf9Result?.blob;
+      const sf10Blob = sf10Result?.blob || sf10Result?.buffer;
+
+      if (sf9Blob) {
+        zip.file(sf9FileName, sf9Blob);
+      }
+      if (sf10Blob) {
+        zip.file(sf10FileName, sf10Blob);
+      }
+
+      const zipBlob = await zip.generateAsync({ type: "blob" });
+      const zipFileName = `${lastName}_Documents.zip`;
+
+      if (typeof window !== "undefined" && window.document) {
+        const url = window.URL.createObjectURL(zipBlob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = zipFileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      }
+
+      showToast(`Successfully downloaded ${zipFileName}!`, "success", CheckCircle2);
+    } catch (err) {
+      console.error("Failed to export documents ZIP:", err);
+      showToast("Failed to download documents ZIP. Please try again.", "error");
+    } finally {
+      setDownloadingZip(false);
+    }
+  };
+
+  if (loading) return <StudentReportSkeleton student={student} onBack={onBack} />;
+
   return (
-    <div className="student-sf9-container">
+    <div className={`student-sf9-container ${activeTab === "sf9" && !isGradesComplete && sf9Data ? "grades-incomplete" : ""}`} aria-busy={loading}>
+      {sf9Data?.warnings?.length > 0 && <aside className="sf9-report-warnings" aria-label="Report completeness notes">
+        <strong>Review before issuing</strong>
+        <ul>{sf9Data.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>
+      </aside>}
+      {loadError && (
+        <div role="alert" className="no-print">
+          <p>Student records could not be loaded.</p>
+          <button type="button" onClick={() => {
+            setLoadError(false);
+            setLoading(true);
+            setRequestAttempt(attempt => attempt + 1);
+          }}>Try again</button>
+        </div>
+      )}
       {/* Top Navigation / Breadcrumb Area */}
       <div className="sf9-header-bar no-print">
-        <button className="back-btn" onClick={onBack} title="Back to Class List">
+        <button className="back-btn" onClick={onBack} title={userRole === "principal" ? "Back to Reports" : "Back to Class List"}>
           <img src={backIconUrl} alt="Back" width={17} height={17} />
         </button>
         <h1 className="sf9-section-title">{studentProfile.section}</h1>
@@ -218,7 +553,7 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
 
         {/* Term Grade average */}
         <div className="sf9-card term-grade-card">
-          <span className="term-grade-label">Term Grade: {studentProfile.termGrade}</span>
+          <span className="term-grade-label">{reportIdentifier ? "Final Average" : "Term Grade"}: {studentProfile.termGrade}</span>
           <span className="honor-badge">
             <Sparkles size={12} style={{ display: "inline-block", marginRight: "4px", verticalAlign: "middle" }} />
             {studentProfile.honorStatus}
@@ -251,12 +586,17 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
           <div className="sf9-tabs-outer">
             <button
               className={`sf9-tab-button ${activeTab === "sf9" ? "active" : ""}`}
+              aria-pressed={activeTab === "sf9"}
               onClick={() => setActiveTab("sf9")}
             >
               Official SF9 Form
             </button>
+            <button className={`sf9-tab-button ${activeTab === "sf10" ? "active" : ""}`}
+              aria-pressed={activeTab === "sf10"}
+              onClick={() => setActiveTab("sf10")}>Official SF10 Form</button>
             <button
               className={`sf9-tab-button ${activeTab === "personal" ? "active" : ""}`}
+              aria-pressed={activeTab === "personal"}
               onClick={() => setActiveTab("personal")}
             >
               Personal Info
@@ -271,6 +611,9 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
         )}
 
         {/* View Mode & Print Action Toolbar (Adviser SF9 view) */}
+        {activeTab === "sf10" && isAdviser && (
+          <div className="sf9-actions-toolbar" ref={setSF10ToolbarHost} />
+        )}
         {activeTab === "sf9" && isAdviser && (
           <div className="sf9-actions-toolbar">
             <div className="sf9-view-modes">
@@ -297,181 +640,209 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
               </button>
             </div>
 
-            <button className="sf9-print-btn" onClick={handlePrint} title="Print Official SF9 Document">
+            <button
+              className="sf9-print-btn"
+              onClick={handlePrint}
+              disabled={loading || loadError || !sf9Data || !isGradesComplete}
+              title={!isGradesComplete ? "Incomplete grades" : "Open browser print dialog to print or save SF9 as PDF"}
+            >
               <Printer size={16} />
-              <span>Print SF9</span>
+              <span>Print</span>
+            </button>
+            <button
+              className="sf9-download-btn"
+              onClick={handleDownloadPDF}
+              disabled={loading || loadError || !sf9Data || !isGradesComplete}
+              title={!isGradesComplete ? "Incomplete grades" : "Download SF9 PDF"}
+            >
+              <Download size={16} />
+              <span>Download PDF</span>
             </button>
           </div>
         )}
       </div>
 
+      {/* Notice Banner between Tabs and SF9 Preview */}
+      {activeTab === "sf9" && isAdviser && !loading && !loadError && sf9Data && !isGradesComplete && (
+        <div className="sf9-incomplete-banner no-print" role="alert">
+          <div className="sf9-incomplete-banner-icon">
+            <span aria-hidden="true" style={{ fontSize: "16px" }}>⚠️</span>
+          </div>
+          <div className="sf9-incomplete-banner-text">
+            <strong>Download and Print Disabled:</strong> Learner's grades are not yet complete for {currentTermInfo.label}.
+            {gradeCompleteness.missingDetails.length > 0 && (
+              <span className="sf9-incomplete-missing-subjects">
+                {" "}Missing grades in: {gradeCompleteness.missingDetails.slice(0, 4).join(", ")}{gradeCompleteness.missingDetails.length > 4 ? ` (+${gradeCompleteness.missingDetails.length - 4} more)` : ""}.
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Tab Contents */}
-      {activeTab === "sf9" ? (
+      {activeTab === "sf9" && isAdviser ? (
         /* Official SF9 Document Spread Layout */
         <div className={`sf9-document-spread ${viewMode}`}>
 
           {/* ============================================================
               FRONT PAGE (PAGE 1): LEARNER'S PERFORMANCE REPORT
              ============================================================ */}
-          {(viewMode === "spread" || viewMode === "front") && (
-            <div className="sf9-official-sheet sf9-front-sheet">
+          <div className={`sf9-official-sheet sf9-front-sheet ${viewMode === "back" ? "hide-on-screen" : ""}`}>
 
-              {/* Official Header */}
-              <div className="sf9-sheet-header">
-                <div className="sf9-header-grid">
-                  <div className="sf9-header-logo-left">
-                    <img src={depedLogo} alt="DepEd Seal" className="sf9-logo-img" />
-                  </div>
-                  <div className="sf9-header-text-center">
-                    <p className="sf9-hdr-line">Republic of the Philippines</p>
-                    <p className="sf9-hdr-line">Department of Education</p>
-                    <p className="sf9-hdr-line">Region X – Northern Mindanao</p>
-                    <p className="sf9-hdr-line font-bold">SCHOOLS DIVISION OFFICE OF GINGOOG CITY</p>
-                    <p className="sf9-hdr-line">West 1 District</p>
-                    <p className="sf9-hdr-line">Gingoog City, Misamis Oriental</p>
-                    <h3 className="sf9-school-name-title">GINGOOG CITY COMPREHENSIVE NATIONAL HIGH SCHOOL</h3>
-                    <h2 className="sf9-report-doc-title">LEARNER'S PERFORMANCE REPORT</h2>
-                    <p className="sf9-school-year-title">School Year {studentProfile.schoolYear}</p>
-                  </div>
-                  <div className="sf9-header-logo-right">
-                    <img src={gccnhsLogo} alt="GCCNS Seal" className="sf9-logo-img" />
-                  </div>
+            {/* Official Header */}
+            <div className="sf9-sheet-header">
+              <div className="sf9-header-grid">
+                <div className="sf9-header-logo-left">
+                  <img src={depedLogo} alt="DepEd Seal" className="sf9-logo-img" />
+                </div>
+                <div className="sf9-header-text-center">
+                  <p className="sf9-hdr-line">Republic of the Philippines</p>
+                  <p className="sf9-hdr-line">Department of Education</p>
+                  <p className="sf9-hdr-line">Region X – Northern Mindanao</p>
+                  <p className="sf9-hdr-line font-bold">SCHOOLS DIVISION OFFICE OF GINGOOG CITY</p>
+                  <p className="sf9-hdr-line">West 1 District</p><p className="sf9-hdr-line">Gingoog City, Misamis Oriental</p>
+                  <h3 className="sf9-school-name-title">GINGOOG CITY COMPREHENSIVE NATIONAL HIGH SCHOOL</h3>
+                  <h2 className="sf9-report-doc-title">LEARNER'S PERFORMANCE REPORT</h2>
+                  <p className="sf9-school-year-title">School Year {studentProfile.schoolYear}</p>
+                </div>
+                <div className="sf9-header-logo-right">
+                  <img src={gccnhsLogo} alt="GCCNS Seal" className="sf9-logo-img" />
+                </div>
+              </div>
+            </div>
+
+            {/* Learner Information Underlined Form Fields */}
+            <div className="sf9-student-info-section">
+              <div className="sf9-info-line-row">
+                <div className="sf9-info-field grow-name">
+                  <span className="sf9-field-label">Name:</span>
+                  <span className="sf9-field-underline uppercase-val">{studentProfile.name}</span>
+                </div>
+                <div className="sf9-info-field age-field">
+                  <span className="sf9-field-label">Age:</span>
+                  <span className="sf9-field-underline text-center">{studentProfile.age}</span>
+                </div>
+                <div className="sf9-info-field sex-field">
+                  <span className="sf9-field-label">Sex:</span>
+                  <span className="sf9-field-underline text-center">{studentProfile.sex}</span>
                 </div>
               </div>
 
-              {/* Learner Information Underlined Form Fields */}
-              <div className="sf9-student-info-section">
-                <div className="sf9-info-line-row">
-                  <div className="sf9-info-field grow-name">
-                    <span className="sf9-field-label">Name:</span>
-                    <span className="sf9-field-underline uppercase-val">{studentProfile.name}</span>
-                  </div>
-                  <div className="sf9-info-field age-field">
-                    <span className="sf9-field-label">Age:</span>
-                    <span className="sf9-field-underline text-center">{studentProfile.age}</span>
-                  </div>
-                  <div className="sf9-info-field sex-field">
-                    <span className="sf9-field-label">Sex:</span>
-                    <span className="sf9-field-underline text-center">{studentProfile.sex}</span>
-                  </div>
+              <div className="sf9-info-line-row">
+                <div className="sf9-info-field grow-name">
+                  <span className="sf9-field-label">LRN:</span>
+                  <span className="sf9-field-underline">{studentProfile.lrn}</span>
                 </div>
-
-                <div className="sf9-info-line-row">
-                  <div className="sf9-info-field grow-name">
-                    <span className="sf9-field-label">LRN:</span>
-                    <span className="sf9-field-underline">{studentProfile.lrn}</span>
-                  </div>
-                  <div className="sf9-info-field grade-field">
-                    <span className="sf9-field-label">Grade:</span>
-                    <span className="sf9-field-underline text-center">{studentProfile.grade}</span>
-                  </div>
-                  <div className="sf9-info-field section-field">
-                    <span className="sf9-field-label">Section:</span>
-                    <span className="sf9-field-underline text-center">{studentProfile.section}</span>
-                  </div>
+                <div className="sf9-info-field grade-field">
+                  <span className="sf9-field-label">Grade:</span>
+                  <span className="sf9-field-underline text-center">{studentProfile.grade}</span>
                 </div>
-
-                <div className="sf9-info-line-row">
-                  <div className="sf9-info-field full-field">
-                    <span className="sf9-field-label">Program:</span>
-                    <span className="sf9-field-underline">{studentProfile.program}</span>
-                  </div>
+                <div className="sf9-info-field section-field">
+                  <span className="sf9-field-label">Section:</span>
+                  <span className="sf9-field-underline text-center">{studentProfile.section}</span>
                 </div>
               </div>
 
-              {/* Dear Parents Note */}
-              <div className="sf9-dear-parents-block">
-                <p className="sf9-dp-salutation">Dear Parents,</p>
-                <p className="sf9-dp-body">
-                  This Performance Report shows the ability and progress your child has made in the different learning areas as well as his/her core values.
-                </p>
-                <p className="sf9-dp-body">
-                  The school welcomes you should you desire to know more about your child's progress.
-                </p>
+              <div className="sf9-info-line-row">
+                <div className="sf9-info-field full-field">
+                  <span className="sf9-field-label">Program:</span>
+                  <span className="sf9-field-underline">{studentProfile.program}</span>
+                </div>
               </div>
+            </div>
 
-              {/* Learning Progress & Achievement Table */}
-              <div className="sf9-table-heading">LEARNING PROGRESS AND ACHIEVEMENT</div>
-              <table className="sf9-official-table sf9-grades-table">
+            {/* Dear Parents Note */}
+            <div className="sf9-dear-parents-block">
+              <p className="sf9-dp-salutation">Dear Parents,</p>
+              <p className="sf9-dp-body">
+                This Performance Report shows the ability and progress your child has made in the different learning areas as well as his/her core values.
+              </p>
+              <p className="sf9-dp-body">
+                The school welcomes you should you desire to know more about your child's progress.
+              </p>
+            </div>
+
+            {/* Learning Progress & Achievement Table */}
+            <div className="sf9-table-heading">LEARNING PROGRESS AND ACHIEVEMENT</div>
+            <table className="sf9-official-table sf9-grades-table">
+              <thead>
+                <tr>
+                  <th rowSpan="2" className="col-subjects">Subjects</th>
+                  <th colSpan="3" className="col-term-head">TERM</th>
+                  <th rowSpan="2" className="col-final">Final<br />Grade</th>
+                  <th rowSpan="2" className="col-remarks">Remarks</th>
+                </tr>
+                <tr>
+                  <th className="col-subterm">1</th>
+                  <th className="col-subterm">2</th>
+                  <th className="col-subterm">3</th>
+                </tr>
+              </thead>
+              <tbody>
+                {grades.map((row, idx) => (
+                  <tr key={idx} className={row.isHeader ? "subject-header-row" : ""}>
+                    <td className={row.isSubSubject ? "subj-title-sub" : "subj-title-main"}>
+                      {row.name}
+                    </td>
+                    <td className="grade-num">{row.t1 || ""}</td>
+                    <td className="grade-num">{row.t2 || ""}</td>
+                    <td className="grade-num">{row.t3 || ""}</td>
+                    <td className="grade-num font-bold">{row.final || ""}</td>
+                    <td className="grade-remark">{row.remark || ""}</td>
+                  </tr>
+                ))}
+
+                {/* Empty spacer row matching official template */}
+                <tr className="empty-spacer-row">
+                  <td>&nbsp;</td>
+                  <td>&nbsp;</td>
+                  <td>&nbsp;</td>
+                  <td>&nbsp;</td>
+                  <td>&nbsp;</td>
+                  <td>&nbsp;</td>
+                </tr>
+
+                {/* General Average */}
+                <tr className="general-average-row">
+                  <td colSpan="4" className="general-avg-label">General Average</td>
+                  <td className="grade-num font-bold">{studentProfile.termGrade}</td>
+                  <td className="grade-remark font-bold">{studentProfile.termGrade !== "" ? (studentProfile.honorStatus || "Passed") : ""}</td>
+                </tr>
+              </tbody>
+            </table>
+
+            {/* Performance Descriptors Table */}
+            <div className="sf9-descriptors-wrapper">
+              <div className="sf9-descriptors-title">PERFORMANCE DESCRIPTORS</div>
+              <table className="sf9-descriptors-table-clean">
                 <thead>
                   <tr>
-                    <th rowSpan="2" className="col-subjects">Subjects</th>
-                    <th colSpan="3" className="col-term-head">TERM</th>
-                    <th rowSpan="2" className="col-final">Final<br />Grade</th>
-                    <th rowSpan="2" className="col-remarks">Remarks</th>
-                  </tr>
-                  <tr>
-                    <th className="col-subterm">1</th>
-                    <th className="col-subterm">2</th>
-                    <th className="col-subterm">3</th>
+                    <th style={{ width: "35%", textAlign: "center" }}>Grading Scale</th>
+                    <th style={{ width: "35%", textAlign: "center" }}>Description</th>
+                    <th style={{ width: "30%", textAlign: "center" }}>Remarks</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {grades.map((row, idx) => (
-                    <tr key={idx} className={row.isHeader ? "subject-header-row" : ""}>
-                      <td className={row.isSubSubject ? "subj-title-sub" : "subj-title-main"}>
-                        {row.name}
-                      </td>
-                      <td className="grade-num">{row.t1 || ""}</td>
-                      <td className="grade-num">{row.t2 || ""}</td>
-                      <td className="grade-num">{row.t3 || ""}</td>
-                      <td className="grade-num font-bold">{row.final || ""}</td>
-                      <td className="grade-remark">{row.remark || ""}</td>
+                  {performanceDescriptors.map((desc, idx) => (
+                    <tr key={idx}>
+                      <td style={{ textAlign: "center" }}>{desc.scale}</td>
+                      <td style={{ textAlign: "center" }}>{desc.desc}</td>
+                      <td style={{ textAlign: "center" }}>{desc.remarks}</td>
                     </tr>
                   ))}
-
-                  {/* Empty spacer row matching official template */}
-                  <tr className="empty-spacer-row">
-                    <td>&nbsp;</td>
-                    <td>&nbsp;</td>
-                    <td>&nbsp;</td>
-                    <td>&nbsp;</td>
-                    <td>&nbsp;</td>
-                    <td>&nbsp;</td>
-                  </tr>
-
-                  {/* General Average */}
-                  <tr className="general-average-row">
-                    <td colSpan="4" className="general-avg-label">General Average</td>
-                    <td className="grade-num font-bold">{studentProfile.termGrade}</td>
-                    <td className="grade-remark font-bold">{studentProfile.termGrade !== "" ? (studentProfile.honorStatus || "Passed") : ""}</td>
-                  </tr>
                 </tbody>
               </table>
-
-              {/* Performance Descriptors Table */}
-              <div className="sf9-descriptors-wrapper">
-                <div className="sf9-descriptors-title">PERFORMANCE DESCRIPTORS</div>
-                <table className="sf9-descriptors-table-clean">
-                  <thead>
-                    <tr>
-                      <th style={{ width: "35%", textAlign: "center" }}>Grading Scale</th>
-                      <th style={{ width: "35%", textAlign: "center" }}>Description</th>
-                      <th style={{ width: "30%", textAlign: "center" }}>Remarks</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {performanceDescriptors.map((desc, idx) => (
-                      <tr key={idx}>
-                        <td style={{ textAlign: "center" }}>{desc.scale}</td>
-                        <td style={{ textAlign: "center" }}>{desc.desc}</td>
-                        <td style={{ textAlign: "center" }}>{desc.remarks}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
             </div>
-          )}
+
+          </div>
 
           {/* ============================================================
-              BACK PAGE (PAGE 2): ATTENDANCE, REMARKS, & CERTIFICATE OF TRANSFER
+              BACK PAGE (PAGE 2): ATTENDANCE, REMARKS, SIGNATURES, TRANSFER & CANCELLATION
              ============================================================ */}
-          {(viewMode === "spread" || viewMode === "back") && (
-            <div className="sf9-official-sheet sf9-back-sheet">
+          <div className={`sf9-official-sheet sf9-back-sheet ${viewMode === "front" ? "hide-on-screen" : ""}`}>
 
-              {/* Section 1: Attendance Record */}
+            {/* Section 1: ATTENDANCE RECORD (Top) */}
+            <div className="sf9-section-block">
               <div className="sf9-table-heading">ATTENDANCE RECORD</div>
               <table className="sf9-official-table sf9-attendance-table-clean">
                 <thead>
@@ -507,130 +878,138 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
                   </tr>
                 </tbody>
               </table>
+            </div>
 
-              {/* Section 2: Teacher's Comments/Remarks */}
-              <div className="sf9-comments-section">
-                <div className="sf9-table-heading" style={{ marginTop: "14px" }}>TEACHER'S COMMENTS/REMARKS</div>
-                <div className="sf9-term-comments-box">
-                  <div className="sf9-comment-term-row">
-                    <span className="sf9-term-label font-bold">Term 1</span>
-                    <div className="sf9-comment-textarea-wrap">
-                      <textarea
-                        className="sf9-comment-input"
-                        rows="2"
-                        value={comments.term1}
-                        onChange={(e) => handleCommentChange("term1", e.target.value)}
-                        placeholder="Enter comments for Term 1..."
-                      />
-                    </div>
+            {/* Section 2: TEACHER'S COMMENTS/REMARKS (Full-Width Bordered Box) */}
+            <div className="sf9-section-block">
+              <div className="sf9-table-heading">TEACHER'S COMMENTS/REMARKS</div>
+              <div className="sf9-term-comments-box">
+                <div className="sf9-comment-term-row">
+                  <span className="sf9-term-label font-bold">Term 1</span>
+                  <div className="sf9-comment-textarea-wrap">
+                    <textarea
+                      className="sf9-comment-input"
+                      rows="2"
+                      value={comments.term1}
+                      readOnly={userRole === "principal"}
+                      onChange={(e) => handleCommentChange("term1", e.target.value)}
+                      placeholder="Enter comments for Term 1..."
+                    />
                   </div>
+                </div>
 
-                  <div className="sf9-comment-term-row">
-                    <span className="sf9-term-label font-bold">Term 2</span>
-                    <div className="sf9-comment-textarea-wrap">
-                      <textarea
-                        className="sf9-comment-input"
-                        rows="2"
-                        value={comments.term2}
-                        onChange={(e) => handleCommentChange("term2", e.target.value)}
-                        placeholder="Enter comments for Term 2..."
-                      />
-                    </div>
+                <div className="sf9-comment-term-row">
+                  <span className="sf9-term-label font-bold">Term 2</span>
+                  <div className="sf9-comment-textarea-wrap">
+                    <textarea
+                      className="sf9-comment-input"
+                      rows="2"
+                      value={comments.term2}
+                      readOnly={userRole === "principal"}
+                      onChange={(e) => handleCommentChange("term2", e.target.value)}
+                      placeholder="Enter comments for Term 2..."
+                    />
                   </div>
+                </div>
 
-                  <div className="sf9-comment-term-row">
-                    <span className="sf9-term-label font-bold">Term 3</span>
-                    <div className="sf9-comment-textarea-wrap">
-                      <textarea
-                        className="sf9-comment-input"
-                        rows="2"
-                        value={comments.term3}
-                        onChange={(e) => handleCommentChange("term3", e.target.value)}
-                        placeholder="Enter comments for Term 3..."
-                      />
-                    </div>
+                <div className="sf9-comment-term-row">
+                  <span className="sf9-term-label font-bold">Term 3</span>
+                  <div className="sf9-comment-textarea-wrap">
+                    <textarea
+                      className="sf9-comment-input"
+                      rows="2"
+                      value={comments.term3}
+                      readOnly={userRole === "principal"}
+                      onChange={(e) => handleCommentChange("term3", e.target.value)}
+                      placeholder="Enter comments for Term 3..."
+                    />
                   </div>
                 </div>
               </div>
+            </div>
 
-              {/* Section 3: Parents/Guardian's Signature */}
-              <div className="sf9-parent-signatures-section">
-                <div className="sf9-table-heading" style={{ marginTop: "14px" }}>PARENTS/GUARDIAN'S SIGNATURE</div>
-                <div className="sf9-parent-sig-lines">
-                  <div className="sf9-parent-sig-row">
-                    <span className="sf9-parent-sig-label font-bold">Term 1</span>
-                    <div className="sf9-parent-sig-underline"></div>
-                  </div>
-                  <div className="sf9-parent-sig-row">
-                    <span className="sf9-parent-sig-label font-bold">Term 2</span>
-                    <div className="sf9-parent-sig-underline"></div>
-                  </div>
-                  <div className="sf9-parent-sig-row">
-                    <span className="sf9-parent-sig-label font-bold">Term 3</span>
-                    <div className="sf9-parent-sig-underline"></div>
-                  </div>
+            {/* Section 3: PARENTS/GUARDIAN'S SIGNATURE (Full-Width Lined Block) */}
+            <div className="sf9-section-block sf9-parent-signatures-full">
+              <div className="sf9-table-heading">PARENTS/GUARDIAN'S SIGNATURE</div>
+              <div className="sf9-parent-sig-stack">
+                <div className="sf9-parent-sig-row">
+                  <span className="sf9-parent-sig-label font-bold">Term 1</span>
+                  <div className="sf9-parent-sig-line"></div>
+                </div>
+                <div className="sf9-parent-sig-row">
+                  <span className="sf9-parent-sig-label font-bold">Term 2</span>
+                  <div className="sf9-parent-sig-line"></div>
+                </div>
+                <div className="sf9-parent-sig-row">
+                  <span className="sf9-parent-sig-label font-bold">Term 3</span>
+                  <div className="sf9-parent-sig-line"></div>
+                </div>
+              </div>
+            </div>
+
+            {/* Section 4: CERTIFICATE OF TRANSFER */}
+            <div className="sf9-section-block sf9-certificate-section">
+              <div className="sf9-table-heading">CERTIFICATE OF TRANSFER</div>
+              <p className="sf9-cert-statement">
+                This is to certify that the above-named learner has satisfactorily completed the requirements for the grade level indicated.
+              </p>
+
+              <div className="sf9-cert-form-lines">
+                <div className="sf9-cert-line">
+                  <span className="sf9-cert-label">Admitted to Grade:</span>
+                  <span className="sf9-cert-underline">{studentProfile.admittedToGrade || ""}</span>
+                </div>
+                <div className="sf9-cert-line">
+                  <span className="sf9-cert-label">Eligible for Admission to Grade:</span>
+                  <span className="sf9-cert-underline">{studentProfile.eligibleForAdmission || ""}</span>
                 </div>
               </div>
 
-              {/* Section 4: Certificate of Transfer */}
-              <div className="sf9-certificate-section">
-                <div className="sf9-table-heading" style={{ marginTop: "16px" }}>CERTIFICATE OF TRANSFER</div>
-                <p className="sf9-cert-statement">
-                  This is to certify that the above-named learner has satisfactorily completed the requirements for the grade level indicated.
-                </p>
-
-                <div className="sf9-cert-form-lines">
-                  <div className="sf9-cert-line">
-                    <span className="sf9-cert-label">Admitted to Grade:</span>
-                    <span className="sf9-cert-underline">{studentProfile.admittedToGrade || ""}</span>
-                  </div>
-                  <div className="sf9-cert-line">
-                    <span className="sf9-cert-label">Eligible for Admission to Grade:</span>
-                    <span className="sf9-cert-underline">{studentProfile.eligibleForAdmission || ""}</span>
-                  </div>
-                </div>
-
-                <div className="sf9-approved-block">
-                  <div className="sf9-approved-title font-bold">Approved:</div>
-                  <div className="sf9-transfer-signatures-row">
-                    <div className="sf9-sig-signatory-col school-head-sig">
-                      <div className="sf9-signatory-line font-bold">{studentProfile.principalName}</div>
-                      <div className="sf9-signatory-role">School Head</div>
-                    </div>
-                    <div className="sf9-sig-signatory-col adviser-sig">
-                      <div className="sf9-signatory-line font-bold">{studentProfile.adviserName}</div>
-                      <div className="sf9-signatory-role">Adviser</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Section 5: Cancellation of Eligibility to Transfer */}
-              <div className="sf9-cancellation-section">
-                <div className="sf9-table-heading" style={{ marginTop: "16px" }}>CANCELLATION OF ELIGIBILITY TO TRANSFER</div>
-                <div className="sf9-cancel-row">
-                  <div className="sf9-cancel-field">
-                    <span className="sf9-cert-label">Admitted in:</span>
-                    <span className="sf9-cert-underline"></span>
-                  </div>
-                  <div className="sf9-cancel-field">
-                    <span className="sf9-cert-label">Date:</span>
-                    <span className="sf9-cert-underline"></span>
-                  </div>
-                </div>
-
-                <div className="sf9-cancel-signatory-row">
+              <div className="sf9-approved-block">
+                <div className="sf9-approved-title font-bold">Approved:</div>
+                <div className="sf9-transfer-signatures-row">
                   <div className="sf9-sig-signatory-col school-head-sig">
                     <div className="sf9-signatory-line font-bold">{studentProfile.principalName}</div>
                     <div className="sf9-signatory-role">School Head</div>
                   </div>
+                  <div className="sf9-sig-signatory-col adviser-sig">
+                    <div className="sf9-signatory-line font-bold">{studentProfile.adviserName}</div>
+                    <div className="sf9-signatory-role">Adviser</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Section 5: CANCELLATION OF ELIGIBILITY TO TRANSFER */}
+            <div className="sf9-section-block sf9-cancellation-section">
+              <div className="sf9-table-heading">CANCELLATION OF ELIGIBILITY TO TRANSFER</div>
+              <div className="sf9-cancel-row">
+                <div className="sf9-cancel-field cancel-admitted">
+                  <span className="sf9-cert-label">Admitted in:</span>
+                  <span className="sf9-cert-underline"></span>
+                </div>
+                <div className="sf9-cancel-field cancel-date">
+                  <span className="sf9-cert-label">Date:</span>
+                  <span className="sf9-cert-underline"></span>
                 </div>
               </div>
 
+              <div className="sf9-cancel-signatory-row">
+                <div className="sf9-sig-signatory-col school-head-sig">
+                  <div className="sf9-signatory-line font-bold">{studentProfile.principalName}</div>
+                  <div className="sf9-signatory-role">School Head</div>
+                </div>
+              </div>
             </div>
-          )}
+
+          </div>
 
         </div>
+      ) : activeTab === "sf10" && isAdviser ? (
+        <SF10PreviewModal isOpen inline student={sf10StudentProp}
+          toolbarTarget={sf10ToolbarHost}
+          initialData={cachedSF10Data} onDataLoaded={setCachedSF10Data}
+          requireOfficialData={userRole === "principal"} onClose={() => setActiveTab("sf9")} />
       ) : (
         /* Personal Info Tab Layout */
         <div className="personal-info-grid" style={!isAdviser ? { gridTemplateColumns: "1fr" } : undefined}>
@@ -638,35 +1017,35 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
           {/* Left Column: Student Profile Information Card */}
           <div className="profile-info-column" style={!isAdviser ? { gridColumn: "1 / -1" } : undefined}>
             <div className="profile-info-header">
-              <h3 className="profile-info-title">Student Profile</h3>
+              <h3 className="profile-info-title">Student Profile Information</h3>
               <p className="profile-info-subtitle">Student demographic and enrollment details</p>
             </div>
 
-            <div className="profile-info-card sf9-card">
+            <div className="profile-info-card">
               <div className="profile-fields-list">
                 <div className="profile-field-group">
                   <span className="profile-field-label">Full Name</span>
-                  <span className="profile-field-value">{studentProfile.name}</span>
+                  <span className="profile-field-value">{studentProfile.name || "—"}</span>
                 </div>
 
                 <div className="profile-field-group">
                   <span className="profile-field-label">Learner Reference Number</span>
-                  <span className="profile-field-value">{studentProfile.lrn}</span>
+                  <span className="profile-field-value">{studentProfile.lrn || "—"}</span>
                 </div>
 
                 <div className="profile-field-group">
                   <span className="profile-field-label">Sex</span>
-                  <span className="profile-field-value">{studentProfile.sex}</span>
+                  <span className="profile-field-value">{studentProfile.sex || "—"}</span>
                 </div>
 
                 <div className="profile-field-group">
                   <span className="profile-field-label">Date of Birth</span>
-                  <span className="profile-field-value">{studentProfile.dateOfBirth}</span>
+                  <span className="profile-field-value">{studentProfile.dateOfBirth || "—"}</span>
                 </div>
 
                 <div className="profile-field-group">
                   <span className="profile-field-label">Address</span>
-                  <span className="profile-field-value">{studentProfile.address}</span>
+                  <span className="profile-field-value">{studentProfile.address || "—"}</span>
                 </div>
               </div>
             </div>
@@ -675,51 +1054,48 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
           {/* Right Column: Documents Section (Adviser ONLY) */}
           {isAdviser && (
             <div className="documents-section">
-              <h3 className="documents-section-title">Documents</h3>
+              <div className="profile-info-header">
+                <h3 className="documents-section-title">Documents</h3>
+                <p className="profile-info-subtitle" style={{ visibility: "hidden" }}>&nbsp;</p>
+              </div>
 
               <div className="documents-grid">
                 {/* Form 10 Card */}
                 <div className="doc-card">
                   <div className="doc-card-top">
                     <div className="doc-icon-box">
-                      <FileText size={20} />
+                      <FileSpreadsheet size={22} />
                     </div>
                     <div className="doc-details">
                       <h4 className="doc-title">Form 10 - Permanent Record</h4>
-                      <p className="doc-subtitle">Official cumulative student record</p>
+                      <p className="doc-subtitle">Official cumulative student record (.xlsx)</p>
                       <span className="doc-status-badge">Available</span>
                       <div className="doc-actions">
-                        <button className="btn-doc-action preview" title="Preview Document">
+                        <button
+                          className="btn-doc-action preview"
+                          onClick={() => setActiveTab("sf10")}
+                          title="Preview Form 10"
+                        >
                           <Eye size={14} />
                           <span>Preview</span>
                         </button>
-                        <button className="btn-doc-action download" title="Download Document">
-                          <Download size={14} />
-                          <span>Download</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Form 9 Card */}
-                <div className="doc-card">
-                  <div className="doc-card-top">
-                    <div className="doc-icon-box">
-                      <FileSpreadsheet size={20} />
-                    </div>
-                    <div className="doc-details">
-                      <h4 className="doc-title">Form 9 - Report Card (Official)</h4>
-                      <p className="doc-subtitle">Per term performance report</p>
-                      <span className="doc-status-badge">Available</span>
-                      <div className="doc-actions">
-                        <button className="btn-doc-action preview" onClick={() => setActiveTab("sf9")} title="View Official SF9">
-                          <Eye size={14} />
-                          <span>View SF9</span>
-                        </button>
-                        <button className="btn-doc-action download" onClick={handlePrint} title="Print/Export SF9">
-                          <Download size={14} />
-                          <span>Print/PDF</span>
+                        <button
+                          className="btn-doc-action download"
+                          onClick={handleDirectDownloadSF10}
+                          disabled={downloadingSF10}
+                          title="Download Form 10 Excel (.xlsx)"
+                        >
+                          {downloadingSF10 ? (
+                            <>
+                              <Loader2 size={14} className="animate-spin" />
+                              <span>Downloading...</span>
+                            </>
+                          ) : (
+                            <>
+                              <FileSpreadsheet size={14} />
+                              <span>Download</span>
+                            </>
+                          )}
                         </button>
                       </div>
                     </div>
@@ -728,23 +1104,58 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
 
                 {/* Bulk Actions Card */}
                 <div className="doc-card">
+                  <div className="doc-details">
+                    <h4 className="doc-title">Bulk Actions</h4>
+                    <p className="doc-subtitle">Perform actions on multiple documents</p>
+                    <span className="doc-status-badge">Available</span>
+                    <div className="doc-actions">
+                      <button
+                        className="btn-doc-action zip-download"
+                        onClick={handleDownloadZip}
+                        disabled={downloadingZip || loading || loadError || !sf9Data}
+                        title="Download All Documents (ZIP)"
+                      >
+                        {downloadingZip ? (
+                          <>
+                            <Loader2 size={14} className="animate-spin" />
+                            <span>Downloading ZIP...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Download size={14} />
+                            <span>Download All Documents (ZIP)</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Form 9 Card */}
+                <div className="doc-card">
                   <div className="doc-card-top">
                     <div className="doc-icon-box">
-                      <FileText size={20} />
+                      <FileText size={22} />
                     </div>
                     <div className="doc-details">
-                      <h4 className="doc-title">Bulk Actions</h4>
-                      <p className="doc-subtitle">Perform actions on multiple documents</p>
+                      <h4 className="doc-title">Form 9 - Report Card</h4>
+                      <p className="doc-subtitle">Per term performance report</p>
                       <span className="doc-status-badge">Available</span>
                       <div className="doc-actions">
-                        <button className="btn-doc-action zip-download" title="Download All Documents (ZIP)">
+                        <button className="btn-doc-action preview" onClick={() => setActiveTab("sf9")} title="Preview SF9">
+                          <Eye size={14} />
+                          <span>Preview</span>
+                        </button>
+                        <button className="btn-doc-action download" onClick={handleDownloadPDF}
+                          disabled={loadError || !sf9Data} title="Download SF9">
                           <Download size={14} />
-                          <span>Download All Documents (ZIP)</span>
+                          <span>Download</span>
                         </button>
                       </div>
                     </div>
                   </div>
                 </div>
+
               </div>
             </div>
           )}
@@ -755,7 +1166,8 @@ export default function StudentSF9Page({ student, onBack, userRole: propUserRole
       <Toast
         message={toast.message}
         variant={toast.variant}
-        onDismiss={() => setToast({ message: "", variant: "success" })}
+        icon={toast.icon}
+        onDismiss={() => setToast({ message: "", variant: "success", icon: null })}
       />
     </div>
   );

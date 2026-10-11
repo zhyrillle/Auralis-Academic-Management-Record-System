@@ -242,6 +242,7 @@ export default function SectionDetails({
       <StudentSF9Page
         student={activeSf9Student}
         userRole={userRole}
+        currentTerm={selectedTerm}
         onBack={() => setActiveSf9Student(null)}
       />
     );

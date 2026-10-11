@@ -516,10 +516,50 @@ router.get('/student/:identifier', async (req, res) => {
     }
     studentProfile.missingActivities = missingActivities;
 
+    // 7. Resolve Current Academic Term for the section's school year
+    let currentTerm = null;
+    if (sectionInfo && sectionInfo.school_year_id) {
+      try {
+        const [termRows] = await db.execute(
+          `SELECT term_id, term_name, starts_at, ends_at, status
+           FROM ACADEMIC_TERM
+           WHERE school_year_id = ?
+           ORDER BY starts_at ASC, term_id ASC`,
+          [sectionInfo.school_year_id]
+        );
+        if (termRows.length > 0) {
+          const now = new Date();
+          const activeByDate = termRows.find(t => {
+            if (!t.starts_at || !t.ends_at) return false;
+            const s = new Date(t.starts_at);
+            const e = new Date(t.ends_at);
+            return now >= s && now <= e;
+          });
+          const activeByStatus = termRows.find(t => {
+            const st = String(t.status || '').toLowerCase();
+            return st === 'ongoing' || st === 'open';
+          });
+          const activeTermRow = activeByDate || activeByStatus || termRows[0];
+          const posMatch = String(activeTermRow.term_name || '').match(/(\d+)/);
+          const pos = posMatch ? Number(posMatch[1]) : 1;
+          currentTerm = {
+            term_id: activeTermRow.term_id,
+            term_name: activeTermRow.term_name,
+            termCode: `T${pos}`,
+            termName: activeTermRow.term_name || `Term ${pos}`,
+            position: pos,
+          };
+        }
+      } catch (tErr) {
+        console.warn("Could not resolve current academic term for SF9:", tErr.message);
+      }
+    }
+
     return res.json({
       studentProfile,
       grades: gradesList,
-      attendanceData
+      attendanceData,
+      currentTerm
     });
 
   } catch (error) {
