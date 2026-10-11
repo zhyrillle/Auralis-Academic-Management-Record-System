@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import useCachedQuery from "../../services/useCachedQuery";
+import { cacheKey } from "../../services/navigationCache";
+import { useState } from "react";
 import {
   AlertTriangle,
   BookOpenCheck,
@@ -30,41 +32,16 @@ export default function PerformanceSubjects() {
   const [term, setTerm] = useState("overall");
   const [schoolYear, setSchoolYear] = useState(DEFAULT_YEAR);
   const [gradeLevel, setGradeLevel] = useState("all");
-  const [data, setData] = useState(null);
-  const [requestMode, setRequestMode] = useState("initial");
-  const [error, setError] = useState("");
-  const [retryKey, setRetryKey] = useState(0);
-  const requestId = useRef(0);
+  const { data, loading, refreshing, error, refresh } = useCachedQuery(
+    cacheKey("performance:subjects", { term, schoolYear, gradeLevel }), () => getSubjectPerformance({ term, schoolYear, gradeLevel }),
+    { keepPreviousData: true },
+  );
 
-  useEffect(() => {
-    const currentRequest = ++requestId.current;
-    getSubjectPerformance({ term, schoolYear, gradeLevel })
-      .then((nextData) => {
-        if (currentRequest === requestId.current) setData(nextData);
-      })
-      .catch((requestError) => {
-        if (currentRequest === requestId.current)
-          setError(
-            requestError.message || "Unable to load subject performance.",
-          );
-      })
-      .finally(() => {
-        if (currentRequest === requestId.current) setRequestMode("idle");
-      });
-  }, [term, schoolYear, gradeLevel, retryKey]);
 
-  const changeFilter = (setter) => (value) => {
-    setRequestMode("filtering");
-    setError("");
-    setter(value);
-  };
-  const retry = () => {
-    setRequestMode(data ? "filtering" : "initial");
-    setError("");
-    setRetryKey((value) => value + 1);
-  };
+  const changeFilter = (setter) => (value) => setter(value);
+  const retry = refresh;
 
-  if (requestMode === "initial" && !data) return <AnalyticsSkeleton table />;
+  if (loading && !data) return <AnalyticsSkeleton table />;
   if (!data && error)
     return (
       <main className="pa-page pp-page">
@@ -83,7 +60,7 @@ export default function PerformanceSubjects() {
       </main>
     );
 
-  const isFiltering = requestMode === "filtering";
+  const isFiltering = refreshing;
   // Render the full layout whenever a payload exists; charts/tables show their own empty states.
   const hasData = Array.isArray(data.subjects);
   const schoolYearOptions = data.availableSchoolYears.map((year) => ({

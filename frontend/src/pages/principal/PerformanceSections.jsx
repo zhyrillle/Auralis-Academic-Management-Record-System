@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import useCachedQuery from "../../services/useCachedQuery";
+import { cacheKey } from "../../services/navigationCache";
+import { useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -38,53 +40,28 @@ const PERFORMANCE_BANDS = [
 const matchesSearch = (section, query) => {
   const normalizedQuery = query.trim().toLowerCase();
   if (!normalizedQuery) return true;
-  return [section.label, section.section, `grade ${section.gradeLevel}`]
-    .some((value) => String(value).toLowerCase().includes(normalizedQuery));
+  return [section.label, section.section, `grade ${section.gradeLevel}`].some(
+    (value) => String(value).toLowerCase().includes(normalizedQuery),
+  );
 };
 
 export default function PerformanceSections() {
   const [term, setTerm] = useState("overall");
   const [schoolYear, setSchoolYear] = useState(DEFAULT_YEAR);
-  const [data, setData] = useState(null);
-  const [requestMode, setRequestMode] = useState("initial");
-  const [error, setError] = useState("");
-  const [retryKey, setRetryKey] = useState(0);
+  const { data, loading, refreshing, error, refresh } = useCachedQuery(
+    cacheKey("performance:sections", { term, schoolYear }), () => getSectionPerformance({ term, schoolYear }),
+    { keepPreviousData: true },
+  );
   const [distributionQuery, setDistributionQuery] = useState("");
   const [distributionGradeLevel, setDistributionGradeLevel] = useState("all");
   const [tableQuery, setTableQuery] = useState("");
   const [tableGradeLevel, setTableGradeLevel] = useState("all");
-  const requestId = useRef(0);
 
-  useEffect(() => {
-    const currentRequest = ++requestId.current;
-    getSectionPerformance({ term, schoolYear })
-      .then((nextData) => {
-        if (currentRequest === requestId.current) setData(nextData);
-      })
-      .catch((requestError) => {
-        if (currentRequest === requestId.current)
-          setError(
-            requestError.message || "Unable to load section performance.",
-          );
-      })
-      .finally(() => {
-        if (currentRequest === requestId.current) setRequestMode("idle");
-      });
-    return () => { requestId.current += 1; };
-  }, [term, schoolYear, retryKey]);
 
-  const changeFilter = (setter) => (value) => {
-    setRequestMode("filtering");
-    setError("");
-    setter(value);
-  };
-  const retry = () => {
-    setRequestMode(data ? "filtering" : "initial");
-    setError("");
-    setRetryKey((value) => value + 1);
-  };
+  const changeFilter = (setter) => (value) => setter(value);
+  const retry = refresh;
 
-  if (requestMode === "initial" && !data) return <AnalyticsSkeleton table />;
+  if (loading && !data) return <AnalyticsSkeleton table />;
   if (!data)
     return (
       <main className="pa-page pp-page">
@@ -93,7 +70,9 @@ export default function PerformanceSections() {
             className="pa-empty-state"
             icon={AlertTriangle}
             title="Section performance is unavailable"
-            description={error || "No section performance response is available."}
+            description={
+              error || "No section performance response is available."
+            }
           />
           <button className="pa-retry-button" type="button" onClick={retry}>
             <RefreshCw size={16} />
@@ -103,7 +82,7 @@ export default function PerformanceSections() {
       </main>
     );
 
-  const isFiltering = requestMode === "filtering";
+  const isFiltering = refreshing;
   // Render the full layout whenever a payload exists; charts/tables show their own empty states.
   const hasData = Array.isArray(data.sections);
   const schoolYearOptions = data.availableSchoolYears.map((year) => ({
@@ -255,7 +234,11 @@ export default function PerformanceSections() {
                       ? "danger"
                       : band.id === "satisfactory"
                         ? "warning"
-                        : "neutral",
+                        : band.id === "very-satisfactory"
+                          ? "success"
+                          : band.id === "outstanding"
+                            ? "primary"
+                            : undefined,
                 }))}
               />
               <section className="pa-panel">

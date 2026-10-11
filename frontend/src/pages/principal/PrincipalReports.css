@@ -31,12 +31,6 @@
 
 /* Compact segmented term control matching Performance Level. */
 .pr-term-control { min-width: 0; }
-.pr-term-control .pa-term-tabs { display: inline-flex; align-items: center; gap: 4px; padding: 4px; border: 1px solid #e3eaf2; background: #f4f7fa; border-radius: 9px; }
-.pr-term-control .pa-term-tabs button { min-height: 34px; padding: 7px 15px; color: #5e6e84; background: transparent; border: 0; border-radius: 7px; box-shadow: none; font: inherit; font-size: 0.78rem; font-weight: 650; cursor: pointer; transition: background 0.16s ease, color 0.16s ease, box-shadow 0.16s ease; }
-.pr-term-control .pa-term-tabs button:hover:not(:disabled) { color: var(--pr-navy); background: rgba(255, 255, 255, 0.55); }
-.pr-term-control .pa-term-tabs button.is-active,
-.pr-term-control .pa-term-tabs button.is-active:hover:not(:disabled) { color: #fff; background: var(--pr-navy); box-shadow: 0 3px 8px rgba(18, 48, 98, 0.18); }
-.pr-term-control .pa-term-tabs button:focus-visible { outline: 3px solid rgba(37, 99, 235, 0.2); outline-offset: 2px; }
 
 .pr-table-card { display: flex; flex-direction: column; gap: 16px; min-width: 0; padding: 20px; background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; }
 .pr-card-header { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding-bottom: 12px; border-bottom: 1px solid #f1f5f9; }
@@ -46,7 +40,7 @@
 .pr-search .search-bar-container { min-width: 0; }
 .pr-search .search-input { min-width: 0; box-sizing: border-box; height: 40px; border-radius: 9px !important; }
 .pr-search .icon-container { border-radius: 8px !important; }
-.pr-table-wrap { overflow: auto; max-height: 60vh; scrollbar-width: thin; scrollbar-color: rgba(100, 116, 139, 0.3) transparent; }
+.pr-table-wrap { overflow: auto; scrollbar-gutter: stable; max-height: 60vh; scrollbar-width: thin; scrollbar-color: rgba(100, 116, 139, 0.3) transparent; }
 .pr-table-wrap:focus-visible { outline: 2px solid #7393c4; outline-offset: 2px; }
 .pr-table { width: 100%; min-width: 850px; border-collapse: collapse; }
 .pr-table th { position: sticky; top: 0; z-index: 1; text-align: left; padding: 12px 14px; font-size: 12px; font-weight: 700; color: #64748b; background: #fff; letter-spacing: 0.035em; border-bottom: 1px solid #e2e8f0; }
@@ -59,7 +53,7 @@
 .pr-forms { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .pr-form-badge { display: inline-flex; padding: 4px 8px; border-radius: 6px; font-size: 12px; font-weight: 700; }
 .pr-form-badge--sf9 { color: #fff; background: #183256; }
-.pr-form-badge--sf10 { color: #fff; background: #183256; }
+.pr-forms .pr-form-badge--sf10 { color: #fff; background: #5145b8; }
 .pr-status-pill { display: inline-flex; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
 .pr-status-pill--unavailable { color: #64748b; background: #f1f5f9; }
 .pr-action-view-btn { display: inline-flex; align-items: center; justify-content: center; padding: 6px 16px; border: 1px solid #cbd5e1; border-radius: 7px; color: var(--pr-navy); background: #fff; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
@@ -87,7 +81,7 @@
 .pr-cards-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
 .pr-doc-card { display: flex; flex-direction: column; gap: 16px; min-width: 0; padding: 20px; background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; }
 .pr-doc-card--sf9 { --pr-doc-accent: #183256; --pr-doc-tint: #edf1f7; }
-.pr-doc-card--sf10 { --pr-doc-accent: #183256; --pr-doc-tint: #edf1f7; }
+.pr-doc-card--sf10 { --pr-doc-accent: #5145b8; --pr-doc-tint: #efedfb; }
 .pr-doc-card-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .pr-doc-heading { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .pr-doc-icon { display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; flex-shrink: 0; border-radius: 9px; color: var(--pr-doc-accent); background: var(--pr-doc-tint); }
@@ -159,40 +153,31 @@
   margin-top: 4px;
 }
 
-.pr-assigned-header {
+.pr-filter-controls-right {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: flex-start;
-  gap: 12px;
-  width: 100%;
+  justify-content: flex-end;
+  gap: 10px;
+  flex: 1 1 520px;
+  min-width: 0;
+  margin-left: auto;
 }
 
-.pr-filter-controls-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: nowrap;
-  max-width: 100%;
-}
-
-.pr-filter-controls-left .pr-search {
-  width: 300px;
+.pr-filter-controls-right .pr-search {
+  width: 280px;
   max-width: 320px;
-  flex-shrink: 0;
+  flex: 0 1 280px;
+  min-width: 180px;
 }
 
-.pr-assigned-heading {
-  font-size: 1.3rem;
-  font-weight: 700;
-  color: #183256;
-  margin: 0;
+.pr-filter-controls-right .dropdown-select {
+  width: 160px;
 }
 
 .pr-assigned-layout {
-  display: grid;
-  grid-template-columns: 1fr 280px;
-  gap: 20px;
-  align-items: start;
+  width: 100%;
+  min-width: 0;
 }
 
 .pr-class-cards-container {
@@ -201,20 +186,22 @@
 
 .pr-class-cards-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
 }
 
 /* Individual Class Card matching AdviserClassCard */
 .pr-class-card {
   background: #ffffff;
-  border-radius: 14px;
-  padding: 18px 20px;
-  border: 1px solid #e2e8f0;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+  border-radius: 15px;
+  padding: 24px;
+  border: 1px solid #eef2f6;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
   display: flex;
   flex-direction: column;
   gap: 10px;
+  min-width: 0;
+  min-height: 224px;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -233,20 +220,22 @@
 .pr-class-card-title {
   font-size: 1.12rem;
   font-weight: 700;
-  color: #0f172a;
+  color: #1e293b;
+  font-family: var(--font-dm-sans, "DM Sans", sans-serif);
+  min-width: 0;
   margin: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.pr-class-status-badge {
+.pr-class-card .pr-class-grade-badge {
   font-size: 0.72rem;
   font-weight: 600;
   padding: 3px 9px;
-  border-radius: 6px;
-  background-color: #f59e0b;
-  color: #ffffff;
+  border-radius: 999px;
+  background-color: #eef1f6;
+  color: var(--pr-navy);
   flex-shrink: 0;
 }
 
@@ -272,39 +261,31 @@
   color: #64748b;
 }
 
-.pr-class-progress-wrap {
-  margin-top: 4px;
-}
-
-.pr-class-progress-label {
-  font-size: 0.8rem;
-  color: #0f172a;
-  font-weight: 600;
-  margin-bottom: 6px;
-}
-
-.pr-class-progress-bar-bg {
-  width: 100%;
-  height: 6px;
-  background-color: #e2e8f0;
-  border-radius: 9999px;
-  overflow: hidden;
-}
-
-.pr-class-progress-bar-fill {
-  height: 100%;
-  background-color: #183256;
-  border-radius: 9999px;
-  transition: width 0.6s ease;
+.pr-class-report-status {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: auto;
+  padding-top: 8px;
+  color: #64748b;
+  font-size: 12px;
 }
 
 .pr-class-cta-btn {
-  margin-top: 6px;
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
   width: 100%;
-  padding: 10px;
-  border-radius: 8px;
-  background-color: #c69a24;
+  min-height: 38px;
+  padding: 9px 16px;
+  border-radius: 999px;
+  background-color: var(--button-secondary-color, #c9a227);
   color: #ffffff;
+  font-family: inherit;
   font-size: 0.82rem;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -314,11 +295,18 @@
 }
 
 .pr-class-cta-btn:hover {
-  background-color: #b2841b;
+  background-color: var(--button-secondary-darker-color, #886c14);
+}
+
+.pr-class-cta-btn:focus-visible,
+.pr-section-back-btn:focus-visible {
+  outline: 2px solid var(--pr-navy);
+  outline-offset: 3px;
 }
 
 .pr-no-classes-card {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 12px;
   padding: 24px;
@@ -334,125 +322,56 @@
   flex-shrink: 0;
 }
 
-/* Quick Actions Card matching Adviser */
-.pr-quick-actions-card {
-  background: #ffffff;
-  border-radius: 16px;
-  padding: 20px 22px;
-  border: 1px solid #e2e8f0;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-}
-
-.pr-quick-actions-title {
-  font-size: 1.05rem;
-  font-weight: 700;
-  color: #183256;
-  margin: 0 0 4px 0;
-}
-
-.pr-quick-actions-desc {
-  font-size: 0.8rem;
-  color: #64748b;
-  margin: 0 0 16px 0;
-}
-
-.pr-quick-action-items {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-bottom: 16px;
-}
-
-.pr-doc-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 14px;
-  background-color: #edf1f7;
-  border-radius: 10px;
-  transition: background-color 0.2s ease;
-}
-
-.pr-doc-item:hover {
-  background-color: #e2e8f0;
-}
-
-.pr-doc-left {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.pr-doc-icon {
-  color: #64748b;
-}
-
-.pr-doc-name {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: #334155;
-}
-
-.pr-doc-download-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  background-color: #183256;
-  color: #ffffff;
-  border: none;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.pr-doc-download-btn:hover {
-  background-color: #0f233d;
-  transform: scale(1.05);
-}
-
-.pr-bulk-download-btn {
-  width: 100%;
-  padding: 12px;
-  border-radius: 10px;
-  background-color: #183256;
-  color: #ffffff;
-  font-size: 0.9rem;
-  font-weight: 600;
-  border: none;
-  cursor: pointer;
-  transition: background-color 0.2s ease, transform 0.1s ease;
-}
-
-.pr-bulk-download-btn:hover {
-  background-color: #0f233d;
-}
-
-/* Back button in section report */
+/* Reuse the student's back button; only add Principal-specific layout rules. */
 .pr-section-back-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  background: #ffffff;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  color: #183256;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s ease;
   flex-shrink: 0;
 }
 
-.pr-section-back-btn:hover {
-  background: #f8fafc;
-  border-color: #94a3b8;
+.pr-section-back-btn img {
+  width: 17px;
+  height: 17px;
 }
 
-@media (max-width: 1024px) {
-  .pr-assigned-layout {
+@media (max-width: 1100px) {
+  .pr-class-cards-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+  }
+  .pr-class-card {
+    padding: 20px;
+  }
+}
+
+@media (max-width: 700px) {
+  .pr-class-cards-grid {
     grid-template-columns: 1fr;
+  }
+  .pr-filter-controls-right {
+    flex: 1 1 100%;
+    width: 100%;
+    flex-wrap: wrap;
+    margin-left: 0;
+  }
+  .pr-filter-controls-right .pr-search {
+    flex: 1 1 100%;
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+  }
+  .pr-filter-controls-right .pr-dropdowns-group {
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+  }
+  .pr-class-cta-btn, .pr-section-back-btn {
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pr-class-card, .pr-class-cta-btn, .pr-section-back-btn {
+    transition: none;
+  }
+  .pr-class-card:hover, .pr-section-back-btn:hover {
+    transform: none;
   }
 }

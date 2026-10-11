@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import useCachedQuery from "../../services/useCachedQuery";
+import { cacheKey } from "../../services/navigationCache";
+import { useMemo, useState } from "react";
 import {
   AlertTriangle,
   BookOpenCheck,
@@ -38,55 +40,16 @@ export default function SubjectPerformanceTrend() {
   const [gradeLevel, setGradeLevel] = useState("all");
   const [viewMode, setViewMode] = useState("trend");
   const [rankingTerm, setRankingTerm] = useState("term-1");
-  const [data, setData] = useState(null);
-  const [requestMode, setRequestMode] = useState("initial");
-  const [error, setError] = useState("");
-  const [retryKey, setRetryKey] = useState(0);
+  const { data, loading, refreshing, error, refresh } = useCachedQuery(
+    cacheKey("analytics:subject-trend", { schoolYear, gradeLevel, term: viewMode === "trend" ? "overall" : rankingTerm }), () => getSubjectPerformanceTrend({ schoolYear, gradeLevel, term: viewMode === "trend" ? "overall" : rankingTerm }),
+    { keepPreviousData: true },
+  );
   const [selectedSubjectIds, setSelectedSubjectIds] = useState(null);
-  const requestId = useRef(0);
 
-  useEffect(() => {
-    const currentRequest = ++requestId.current;
 
-    getSubjectPerformanceTrend({
-      schoolYear,
-      gradeLevel,
-      term: viewMode === "trend" ? "overall" : rankingTerm,
-    })
-      .then((nextData) => {
-        if (currentRequest !== requestId.current) return;
-        setData(nextData);
-        setSelectedSubjectIds((current) =>
-          current === null
-            ? nextData.subjects.map((subject) => subject.id)
-            : current.filter((id) =>
-                nextData.subjects.some((subject) => subject.id === id),
-              ),
-        );
-      })
-      .catch((requestError) => {
-        if (currentRequest !== requestId.current) return;
-        setError(
-          requestError.message ||
-            "Unable to load subject performance analytics.",
-        );
-      })
-      .finally(() => {
-        if (currentRequest === requestId.current) setRequestMode("idle");
-      });
-  }, [schoolYear, gradeLevel, viewMode, rankingTerm, retryKey]);
+  const changeFilter = (setter) => (value) => setter(value);
 
-  const changeFilter = (setter) => (nextValue) => {
-    setRequestMode("filtering");
-    setError("");
-    setter(nextValue);
-  };
-
-  const handleRetry = () => {
-    setRequestMode(data ? "filtering" : "initial");
-    setError("");
-    setRetryKey((key) => key + 1);
-  };
+  const handleRetry = refresh;
 
   const statistics = useMemo(() => {
     if (!data?.subjects.length) return [];
@@ -164,7 +127,7 @@ export default function SubjectPerformanceTrend() {
     ];
   }, [data]);
 
-  if (requestMode === "initial" && !data) return <AnalyticsSkeleton />;
+  if (loading && !data) return <AnalyticsSkeleton />;
 
   if (!data && error) {
     return (
@@ -190,7 +153,7 @@ export default function SubjectPerformanceTrend() {
   }
 
   const selectedSubjects = data.subjects.filter((subject) =>
-    selectedSubjectIds?.includes(subject.id),
+    (selectedSubjectIds === null || selectedSubjectIds.includes(subject.id)),
   );
   const schoolYearOptions = Array.isArray(data.availableSchoolYears)
     ? data.availableSchoolYears.map((year) => ({
@@ -223,7 +186,7 @@ export default function SubjectPerformanceTrend() {
         };
       }),
   ];
-  const isFiltering = requestMode === "filtering";
+  const isFiltering = refreshing;
   const displayedTerm = data.term;
 
   return (
@@ -357,13 +320,14 @@ export default function SubjectPerformanceTrend() {
                   </div>
                   <SubjectLegend
                     subjects={data.subjects}
-                    selectedIds={selectedSubjectIds || []}
+                    selectedIds={selectedSubjectIds ?? data.subjects.map(subject => subject.id)}
                     onToggle={(id) =>
-                      setSelectedSubjectIds((current) =>
-                        current.includes(id)
-                          ? current.filter((subjectId) => subjectId !== id)
-                          : [...current, id],
-                      )
+                      setSelectedSubjectIds((current) => {
+                        const selected = current ?? data.subjects.map(subject => subject.id);
+                        return selected.includes(id)
+                          ? selected.filter(subjectId => subjectId !== id)
+                          : [...selected, id];
+                      })
                     }
                     onAll={() =>
                       setSelectedSubjectIds(

@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import useCachedQuery from "../../services/useCachedQuery";
+import { cacheKey } from "../../services/navigationCache";
+import { useMemo, useState } from "react";
 import {
   AlertTriangle,
   ChartNoAxesCombined,
@@ -42,42 +44,15 @@ export default function HistoricalComparison() {
   const [primarySchoolYear, setPrimarySchoolYear] = useState("2026-2027");
   const [comparisonSchoolYear, setComparisonSchoolYear] = useState("2025-2026");
   const [term, setTerm] = useState("overall");
-  const [data, setData] = useState(null);
-  const [requestMode, setRequestMode] = useState("initial");
-  const [error, setError] = useState("");
-  const [retryKey, setRetryKey] = useState(0);
-  const requestId = useRef(0);
+  const { data, loading, refreshing, error, refresh } = useCachedQuery(
+    cacheKey("analytics:historical", { primarySchoolYear, comparisonSchoolYear, term }), () => getHistoricalComparison({ primarySchoolYear, comparisonSchoolYear, term }),
+    { keepPreviousData: true },
+  );
 
-  useEffect(() => {
-    const currentRequest = ++requestId.current;
 
-    getHistoricalComparison({ primarySchoolYear, comparisonSchoolYear, term })
-      .then((nextData) => {
-        if (currentRequest === requestId.current) setData(nextData);
-      })
-      .catch((requestError) => {
-        if (currentRequest === requestId.current)
-          setError(
-            requestError.message || "Unable to load historical analytics.",
-          );
-      })
-      .finally(() => {
-        if (currentRequest === requestId.current) setRequestMode("idle");
-      });
-    return () => { requestId.current += 1; };
-  }, [primarySchoolYear, comparisonSchoolYear, term, retryKey]);
+  const changeFilter = (setter) => (value) => setter(value);
 
-  const changeFilter = (setter) => (nextValue) => {
-    setRequestMode("filtering");
-    setError("");
-    setter(nextValue);
-  };
-
-  const handleRetry = () => {
-    setRequestMode(data ? "filtering" : "initial");
-    setError("");
-    setRetryKey((key) => key + 1);
-  };
+  const handleRetry = refresh;
 
   const rows = useMemo(() => {
     if (!data?.subjects?.length) return [];
@@ -158,7 +133,7 @@ export default function HistoricalComparison() {
     ];
   }, [data, rows]);
 
-  if (requestMode === "initial" && !data) return <AnalyticsSkeleton table />;
+  if (loading && !data) return <AnalyticsSkeleton table />;
 
   if (!data) {
     return (
@@ -192,7 +167,7 @@ export default function HistoricalComparison() {
   const comparisonOptions = allYears
     .filter((year) => year.value !== primarySchoolYear)
     .map((year) => ({ value: year.value, label: year.label }));
-  const isFiltering = requestMode === "filtering";
+  const isFiltering = refreshing;
   const displayedTerm = data.term;
   const selectedTermIndex =
     displayedTerm === "overall" ? null : termIndex(displayedTerm);
