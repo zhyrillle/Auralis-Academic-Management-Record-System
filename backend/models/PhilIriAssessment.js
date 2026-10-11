@@ -1,7 +1,7 @@
 const db = require('../config/db');
 
 class PhilIriAssessment {
-  static async findBySection(sectionId, testType, subjectOfferingId = null) {
+  static async findBySection(sectionId, testType, subjectOfferingId = null, schoolYearId = null) {
     let sql = `
       SELECT 
         pia.*,
@@ -18,6 +18,11 @@ class PhilIriAssessment {
       WHERE ss.section_id = ? AND pia.test_type = ?
     `;
     const params = [sectionId, testType];
+
+    if (schoolYearId) {
+      sql += ` AND ss.school_year_id = ?`;
+      params.push(schoolYearId);
+    }
 
     if (subjectOfferingId) {
       sql += ` AND (pia.subject_offering_id = ? OR pia.subject_offering_id IS NULL)`;

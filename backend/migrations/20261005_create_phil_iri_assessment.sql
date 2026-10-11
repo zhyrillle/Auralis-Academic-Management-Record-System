@@ -13,10 +13,10 @@ CREATE TABLE IF NOT EXISTS PHIL_IRI_ASSESSMENT (
     comp_score_percent DECIMAL(5,2) DEFAULT 0.00,
     comp_reading_level ENUM('FRUSTRATION', 'INSTRUCTIONAL', 'INDEPENDENT') DEFAULT 'FRUSTRATION',
     overall_reading_level ENUM('FRUSTRATION', 'INSTRUCTIONAL', 'INDEPENDENT') DEFAULT 'FRUSTRATION',
-    recorded_by BIGINT NULL,
+    user_id BIGINT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uq_student_section_test (student_section_id, test_type),
     CONSTRAINT fk_phil_iri_student_section FOREIGN KEY (student_section_id) REFERENCES STUDENT_SECTION(student_section_id) ON DELETE CASCADE,
-    CONSTRAINT fk_phil_iri_recorded_by FOREIGN KEY (recorded_by) REFERENCES USER(user_id) ON DELETE SET NULL
+    CONSTRAINT fk_phil_iri_user FOREIGN KEY (user_id) REFERENCES USER(user_id) ON DELETE SET NULL
 );
