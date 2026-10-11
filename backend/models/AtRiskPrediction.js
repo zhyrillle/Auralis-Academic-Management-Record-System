@@ -1,543 +1,83 @@
 const db = require('../config/db');
-
-const toYear = (value) => {
-  if (value === null || value === undefined || value === '') return null;
-  if (typeof value === 'number') return value > 1000 && value < 10000 ? value : null;
-  const str = String(value).trim();
-  if (/^\d{4}$/.test(str)) return Number(str);
-  const year = new Date(value).getFullYear();
-  return Number.isFinite(year) ? year : null;
-};
-
-const normalizeTermCode = (term) => {
-  const str = String(term || 'overall').toLowerCase().trim();
-  if (str === 'overall' || str === 'all' || str === '') return null;
-  if (str.includes('1') || str.includes('t1') || str.includes('first')) return 'T1';
-  if (str.includes('2') || str.includes('t2') || str.includes('second')) return 'T2';
-  if (str.includes('3') || str.includes('t3') || str.includes('third')) return 'T3';
-  return null;
-};
-
-const safeQuery = async (sql, params = [], label = 'query') => {
-  try {
-    const [rows] = await db.execute(sql, params);
-    return rows;
-  } catch (err) {
-    console.warn(`[AtRiskPrediction] ${label} failed:`, err.message);
-    return [];
-  }
-};
-
-const DEFAULT_BASELINE_STUDENTS = [
-  {
-    id: "s-1",
-    studentId: 1,
-    lrn: "100000000001",
-    name: "Juan Abad",
-    grade: 7,
-    section: "Grade 7 - Diamond",
-    adviser: "Ms. Bautista",
-    schoolYear: "2026-2027",
-    term: "Overall",
-    riskScore: 88,
-    riskLevel: "high",
-    flags: [
-      { icon: "trending-down", label: "Failing average (72.5%)" },
-      { icon: "calendar", label: "3 absences recorded" },
-      { icon: "document", label: "2 missing submissions" },
-    ],
-    avgGpa: 72.5,
-    absences: 3,
-    missingSubmissions: 2,
-  },
-  {
-    id: "s-2",
-    studentId: 2,
-    lrn: "100000000002",
-    name: "Pedro Alcantara",
-    grade: 7,
-    section: "Grade 7 - Diamond",
-    adviser: "Ms. Bautista",
-    schoolYear: "2026-2027",
-    term: "Overall",
-    riskScore: 68,
-    riskLevel: "medium",
-    flags: [
-      { icon: "trending-down", label: "Borderline GPA (78.2%)" },
-      { icon: "calendar", label: "2 absences recorded" },
-    ],
-    avgGpa: 78.2,
-    absences: 2,
-    missingSubmissions: 1,
-  },
-  {
-    id: "s-3",
-    studentId: 3,
-    lrn: "100000000003",
-    name: "Benigno Aquino",
-    grade: 8,
-    section: "Grade 8 - Emerald",
-    adviser: "Mr. Santos",
-    schoolYear: "2026-2027",
-    term: "Overall",
-    riskScore: 72,
-    riskLevel: "medium",
-    flags: [
-      { icon: "trending-down", label: "Declining trend (77.8%)" },
-      { icon: "document", label: "1 missing submission" },
-    ],
-    avgGpa: 77.8,
-    absences: 1,
-    missingSubmissions: 1,
-  },
-  {
-    id: "s-4",
-    studentId: 4,
-    lrn: "100000000004",
-    name: "Jose Bautista",
-    grade: 8,
-    section: "Grade 8 - Emerald",
-    adviser: "Mr. Santos",
-    schoolYear: "2026-2027",
-    term: "Overall",
-    riskScore: 48,
-    riskLevel: "low",
-    flags: [
-      { icon: "trending-down", label: "Passing GPA (81.4%)" },
-      { icon: "calendar", label: "Regular attendance" },
-    ],
-    avgGpa: 81.4,
-    absences: 0,
-    missingSubmissions: 0,
-  },
-  {
-    id: "s-5",
-    studentId: 5,
-    lrn: "100000000005",
-    name: "Andres Bonifacio",
-    grade: 9,
-    section: "Grade 9 - Ruby",
-    adviser: "Ms. Garcia",
-    schoolYear: "2026-2027",
-    term: "Overall",
-    riskScore: 65,
-    riskLevel: "medium",
-    flags: [
-      { icon: "trending-down", label: "Borderline GPA (79.0%)" },
-      { icon: "calendar", label: "1 late arrival" },
-    ],
-    avgGpa: 79.0,
-    absences: 1,
-    missingSubmissions: 1,
-  },
-  {
-    id: "s-6",
-    studentId: 6,
-    lrn: "100000000006",
-    name: "Juan Dela Cruz",
-    grade: 9,
-    section: "Grade 9 - Ruby",
-    adviser: "Ms. Garcia",
-    schoolYear: "2026-2027",
-    term: "Overall",
-    riskScore: 82,
-    riskLevel: "high",
-    flags: [
-      { icon: "trending-down", label: "Failing average (73.0%)" },
-      { icon: "document", label: "2 missing submissions" },
-    ],
-    avgGpa: 73.0,
-    absences: 2,
-    missingSubmissions: 2,
-  },
-  {
-    id: "s-7",
-    studentId: 7,
-    lrn: "100000000007",
-    name: "Emilio Dela Cruz",
-    grade: 10,
-    section: "Grade 10 - Sapphire",
-    adviser: "Mr. Ramos",
-    schoolYear: "2026-2027",
-    term: "Overall",
-    riskScore: 52,
-    riskLevel: "low",
-    flags: [
-      { icon: "trending-down", label: "Passing GPA (80.5%)" },
-      { icon: "calendar", label: "1 absence recorded" },
-    ],
-    avgGpa: 80.5,
-    absences: 1,
-    missingSubmissions: 0,
-  },
-  {
-    id: "s-8",
-    studentId: 8,
-    lrn: "100000000008",
-    name: "Marcelo Del Pilar",
-    grade: 10,
-    section: "Grade 10 - Sapphire",
-    adviser: "Mr. Ramos",
-    schoolYear: "2026-2027",
-    term: "Overall",
-    riskScore: 64,
-    riskLevel: "medium",
-    flags: [
-      { icon: "trending-down", label: "Borderline GPA (78.8%)" },
-      { icon: "document", label: "1 missing submission" },
-    ],
-    avgGpa: 78.8,
-    absences: 1,
-    missingSubmissions: 1,
-  },
-];
+const { loadInputs, schoolYearRange } = require('../services/EnglishRiskFeatures');
+const model = require('../services/EnglishRiskModel');
 
 class AtRiskPrediction {
-  /**
-   * Helper to fetch options (school years, grade levels)
-   */
   static async getOptions() {
-    const [yearRows, gradeRows] = await Promise.all([
-      safeQuery(`SELECT starts_on, ends_on FROM SCHOOL_YEAR ORDER BY starts_on DESC`, [], 'school years'),
-      safeQuery(`SELECT grade_level_id, grade_level_name FROM GRADE_LEVEL ORDER BY grade_level_id ASC`, [], 'grade levels'),
-    ]);
+    const [years] = await db.execute(`SELECT school_year_id, starts_on, ends_on, status
+      FROM SCHOOL_YEAR ORDER BY CASE WHEN LOWER(status) IN ('ongoing', 'active') THEN 0 ELSE 1 END, starts_on DESC`);
+    const [grades] = await db.execute('SELECT grade_level_name FROM GRADE_LEVEL ORDER BY grade_level_id');
+    return {
+      schoolYears: years.map(row => ({ value: schoolYearRange(row), label: `SY ${schoolYearRange(row)?.replace('-', '–')}` })).filter(row => row.value),
+      gradeLevels: [{ value: 'all', label: 'All Grade Levels' }, ...grades.map(row => ({
+        value: String(row.grade_level_name).match(/\d+/)?.[0], label: row.grade_level_name,
+      })).filter(row => row.value)],
+    };
+  }
 
-    const seen = new Set();
-    const schoolYears = [];
-    yearRows.forEach((row) => {
-      const start = toYear(row.starts_on);
-      const end = toYear(row.ends_on);
-      if (!start || !end) return;
-      const value = `${start}-${end}`;
-      if (seen.has(value)) return;
-      seen.add(value);
-      schoolYears.push({ id: `sy-${value}`, label: `SY ${start}–${end}`, value });
-    });
-
-    const finalYears = schoolYears.length
-      ? schoolYears
-      : [
-          { id: 'sy-2026-2027', label: 'SY 2026–2027', value: '2026-2027' },
-          { id: 'sy-2025-2026', label: 'SY 2025–2026', value: '2025-2026' },
-        ];
-
-    const gradeLevels = (gradeRows.length ? gradeRows : [
-      { grade_level_id: 7, grade_level_name: 'Grade 7' },
-      { grade_level_id: 8, grade_level_name: 'Grade 8' },
-      { grade_level_id: 9, grade_level_name: 'Grade 9' },
-      { grade_level_id: 10, grade_level_name: 'Grade 10' },
-    ]).map((gl) => {
-      const match = String(gl.grade_level_name || '').match(/\d+/);
-      const num = match ? Number(match[0]) : gl.grade_level_id;
+  static async getPreview(filters, { database = db, scope = {}, now = new Date() } = {}) {
+    const input = await loadInputs(database, filters, now, scope);
+    // An empty batch still checks the trusted model and matching runtime.
+    const result = await model.predict(input.eligible.map(row => row.features));
+    const students = input.eligible.map((row, index) => {
+      const prediction = result.predictions[index];
       return {
-        id: `g-${num}`,
-        label: `Grade ${num}`,
-        value: String(num),
+        ...row.profile, riskScore: Number((prediction.score * 100).toFixed(1)),
+        score: prediction.score, riskLevel: prediction.riskLevel,
+        predictedAtRisk: prediction.predictedAtRisk, modelVersion: result.modelVersion,
+        // Null remains null: a training substitute is not a recorded learner value.
+        modelInputs: { ...row.features },
+        missingInputs: Object.entries(row.features).filter(([, value]) => value == null).map(([key]) => key),
+        flags: [
+          { icon: 'trending-down', label: `Previous English grade: ${row.features.previous_final_grade}` },
+          { icon: 'document', label: row.features.phil_iri_unavailable
+            ? `${row.profile.screeningReason || 'Screening sub-scores unavailable.'} Training medians used.`
+            : `Screening sub-scores recorded (${row.profile.screeningAssessmentDate}).` },
+          { icon: 'calendar', label: row.features.absence_rate == null
+            ? 'Attendance: source-term records are incomplete or need review.'
+            : `Attendance: ${row.profile.attendanceSummary.absentDays} absent day${row.profile.attendanceSummary.absentDays === 1 ? '' : 's'} across ${row.profile.attendanceSummary.classDays} recorded class days.` },
+        ],
       };
     });
-
+    const summary = { lowRisk: 0, mediumRisk: 0, highRisk: 0, total: students.length };
+    const gradeMap = new Map();
+    for (const student of students) {
+      summary[`${student.riskLevel}Risk`]++;
+      if (!gradeMap.has(student.grade)) gradeMap.set(student.grade, { grade: `Grade ${student.grade}`, low: 0, medium: 0, high: 0 });
+      gradeMap.get(student.grade)[student.riskLevel]++;
+    }
     return {
-      schoolYears: finalYears,
-      gradeLevels: [
-        { id: 'g-all', label: 'All Grade Levels', value: 'all' },
-        ...gradeLevels,
+      mode: 'preview', subject: 'English', modelVersion: result.modelVersion,
+      threshold: result.threshold, sourceTerm: input.sourceTerm, targetTerm: input.targetTerm,
+      generatedAt: new Date().toISOString(), schoolYear: input.schoolYear,
+      automaticAlertsEnabled: false, termTransferValidated: false,
+      warnings: [
+        'Research preview only. This quarterly-trained model has not been validated on three-term outcomes.',
+        'Complete, dated screening sub-scores from the enrollment year are used when assessed before the target term. Missing, incomplete or out-of-period results use training medians and the unavailable flag.',
+        'Complete previous-term section attendance supplies the recorded absence rate. Weekdays marked Holiday or Suspension are excluded; blanks, conflicting entries or unverified periods use the training median. Late marks are not converted into absences for the model.',
+        'Scores are not calibrated probabilities. The current deployment and its missing-input patterns have not been validated in the study.',
       ],
-    };
-  }
-
-  /**
-   * Helper to query live at-risk student records directly from MySQL with predictive scoring.
-   */
-  static async getAllStudentRiskProfiles({ schoolYear = '2026-2027', term, gradeLevel } = {}) {
-    const termCode = normalizeTermCode(term);
-
-    const query = `
-      SELECT 
-        s.student_id,
-        s.LRN,
-        CONCAT(s.first_name, ' ', COALESCE(CONCAT(s.middle_name, ' '), ''), s.last_name) AS full_name,
-        s.first_name,
-        s.last_name,
-        COALESCE(sec.section_name, 'Section 1') AS section_name,
-        COALESCE(gl.grade_level_name, 'Grade 7') AS grade_level_name,
-        COALESCE(u.adv_name, 'Ms. Bautista') AS adviser_name,
-        sy.starts_on,
-        COALESCE(att.absences, 0) AS total_absences,
-        COALESCE(att.lates, 0) AS total_lates,
-        COALESCE(sc.missing_count, 0) AS missing_submissions,
-        gr.avg_gpa,
-        COALESCE(gr.failing_count, 0) AS failing_count,
-        gr.min_grade,
-        gr.t1_avg,
-        gr.t2_avg,
-        gr.t3_avg
-      FROM STUDENT s
-      LEFT JOIN (
-        SELECT student_id, MIN(section_id) AS section_id, MIN(student_section_id) AS student_section_id, MIN(school_year_id) as school_year_id
-        FROM STUDENT_SECTION
-        GROUP BY student_id
-      ) ss_min ON s.student_id = ss_min.student_id
-      LEFT JOIN SECTION sec ON ss_min.section_id = sec.section_id
-      LEFT JOIN GRADE_LEVEL gl ON sec.grade_level_id = gl.grade_level_id
-      LEFT JOIN SCHOOL_YEAR sy ON ss_min.school_year_id = sy.school_year_id
-      LEFT JOIN (
-        SELECT saa.section_id, MAX(CONCAT(COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, ''))) AS adv_name
-        FROM SECTION_ADVISER_ASSIGNMENT saa
-        INNER JOIN USER u ON saa.user_id = u.user_id
-        GROUP BY saa.section_id
-      ) u ON sec.section_id = u.section_id
-      LEFT JOIN (
-        SELECT ss.student_id,
-               SUM(CASE WHEN a.status = 'A' THEN 1 ELSE 0 END) AS absences,
-               SUM(CASE WHEN a.status = 'L' THEN 1 ELSE 0 END) AS lates
-        FROM ATTENDANCE a
-        INNER JOIN STUDENT_SECTION ss ON a.student_section_id = ss.student_section_id
-        GROUP BY ss.student_id
-      ) att ON s.student_id = att.student_id
-      LEFT JOIN (
-        SELECT COALESCE(sc.student_id, ss.student_id) AS student_id,
-               COUNT(*) AS missing_count
-        FROM SCORE sc
-        LEFT JOIN STUDENT_SECTION ss ON sc.student_section_id = ss.student_section_id
-        WHERE sc.score_status = 'MISSING'
-        GROUP BY COALESCE(sc.student_id, ss.student_id)
-      ) sc ON s.student_id = sc.student_id
-      LEFT JOIN (
-        SELECT student_id,
-               AVG(COALESCE(quarterly_grade, initial_grade)) AS avg_gpa,
-               MIN(COALESCE(quarterly_grade, initial_grade)) AS min_grade,
-               SUM(CASE WHEN COALESCE(quarterly_grade, initial_grade) < 75 THEN 1 ELSE 0 END) AS failing_count,
-               AVG(CASE WHEN term IN ('T1', '1st') THEN COALESCE(quarterly_grade, initial_grade) END) AS t1_avg,
-               AVG(CASE WHEN term IN ('T2', '2nd') THEN COALESCE(quarterly_grade, initial_grade) END) AS t2_avg,
-               AVG(CASE WHEN term IN ('T3', '3rd') THEN COALESCE(quarterly_grade, initial_grade) END) AS t3_avg
-        FROM STUDENT_GRADE
-        ${termCode ? `WHERE term = '${termCode}'` : ''}
-        GROUP BY student_id
-      ) gr ON s.student_id = gr.student_id
-      WHERE 1=1
-      ORDER BY s.student_id ASC
-    `;
-
-    const rows = await safeQuery(query, [], 'student risk profiles');
-
-    // Parse grade level filter
-    let glFilter = null;
-    if (gradeLevel && gradeLevel !== 'all' && gradeLevel !== 'Overall' && gradeLevel !== '') {
-      const cleanG = String(gradeLevel).replace(/\D/g, '');
-      if (cleanG) glFilter = Number(cleanG);
-    }
-
-    // Process unique real student rows into formatted risk profiles
-    const studentList = rows
-      .filter((r) => {
-        const gNum = parseInt(String(r.grade_level_name || '7').replace(/\D/g, ''), 10) || 7;
-        if (glFilter !== null && gNum !== glFilter) return false;
-        return true;
-      })
-      .map((r) => {
-        const gNum = parseInt(String(r.grade_level_name || '7').replace(/\D/g, ''), 10) || 7;
-        const absences = parseInt(r.total_absences || 0, 10);
-        const lates = parseInt(r.total_lates || 0, 10);
-        const missing = parseInt(r.missing_submissions || 0, 10);
-        const failing = parseInt(r.failing_count || 0, 10);
-        const gpa = r.avg_gpa !== null ? parseFloat(r.avg_gpa) : null;
-        const t1 = r.t1_avg !== null ? parseFloat(r.t1_avg) : null;
-        const t2 = r.t2_avg !== null ? parseFloat(r.t2_avg) : null;
-        const t3 = r.t3_avg !== null ? parseFloat(r.t3_avg) : null;
-
-        // Predictive risk score calculation
-        let calculatedScore = 40; // baseline
-        let hasGradeDrop = false;
-
-        if (gpa !== null) {
-          if (gpa < 75) {
-            calculatedScore += 30 + (75 - gpa) * 1.5;
-          } else if (gpa < 80) {
-            calculatedScore += 15 + (80 - gpa) * 2;
-          } else if (gpa >= 85) {
-            calculatedScore -= Math.min(10, (gpa - 85) * 1.0);
-          }
-        }
-
-        // Multi-term trend momentum prediction
-        if (t1 !== null && t2 !== null && t2 < t1 - 1.5) {
-          calculatedScore += 8;
-          hasGradeDrop = true;
-        }
-        if (t2 !== null && t3 !== null && t3 < t2 - 1.5) {
-          calculatedScore += 10;
-          hasGradeDrop = true;
-        }
-
-        calculatedScore += failing * 10;
-        calculatedScore += absences * 6;
-        calculatedScore += lates * 2;
-        calculatedScore += missing * 5;
-
-        const clampedScore = Math.min(98, Math.max(30, Math.round(calculatedScore)));
-
-        let riskLevel = 'low';
-        if (clampedScore >= 80 || failing >= 2 || (gpa !== null && gpa < 75)) {
-          riskLevel = 'high';
-        } else if (clampedScore >= 60 || absences >= 2 || missing >= 2 || (gpa !== null && gpa < 79) || hasGradeDrop) {
-          riskLevel = 'medium';
-        }
-
-        // Generate indicator flags
-        const flags = [];
-
-        // 1. Absences / Attendance flag
-        if (absences > 0) {
-          flags.push({ icon: 'calendar', label: `${absences} absence${absences > 1 ? 's' : ''} recorded` });
-        } else if (lates > 0) {
-          flags.push({ icon: 'calendar', label: `${lates} late arrival${lates > 1 ? 's' : ''}` });
-        } else {
-          flags.push({ icon: 'calendar', label: 'Regular attendance' });
-        }
-
-        // 2. Academic / GPA flag
-        if (gpa !== null) {
-          if (gpa < 75 || failing > 0) {
-            flags.push({ icon: 'trending-down', label: `Failing average (${gpa.toFixed(1)}%)` });
-          } else if (hasGradeDrop) {
-            flags.push({ icon: 'trending-down', label: `Declining trend (${gpa.toFixed(1)}%)` });
-          } else if (gpa < 80) {
-            flags.push({ icon: 'trending-down', label: `Borderline GPA (${gpa.toFixed(1)}%)` });
-          } else {
-            flags.push({ icon: 'trending-down', label: `Passing GPA (${gpa.toFixed(1)}%)` });
-          }
-        } else {
-          flags.push({ icon: 'trending-down', label: 'No recorded grades yet' });
-        }
-
-        // 3. Submissions flag
-        if (missing > 0) {
-          flags.push({ icon: 'document', label: `${missing} missing submission${missing > 1 ? 's' : ''}` });
-        } else {
-          flags.push({ icon: 'document', label: 'Submissions up to date' });
-        }
-
-        return {
-          id: `s-${r.student_id}`,
-          studentId: r.student_id,
-          lrn: r.LRN,
-          name: r.full_name,
-          grade: gNum,
-          section: r.section_name || 'Section 1',
-          adviser: r.adviser_name || 'Ms. Bautista',
-          schoolYear: schoolYear || '2026-2027',
-          term: term || 'Overall',
-          riskScore: clampedScore,
-          riskLevel,
-          flags,
-          avgGpa: gpa,
-          absences,
-          missingSubmissions: missing,
-        };
-      });
-
-    if (studentList.length === 0) {
-      const fallbackList = DEFAULT_BASELINE_STUDENTS.map((s) => ({
-        ...s,
-        schoolYear: schoolYear || '2026-2027',
-        term: term || 'Overall',
-      }));
-
-      if (glFilter !== null) {
-        return fallbackList.filter((s) => s.grade === glFilter);
-      }
-      return fallbackList;
-    }
-
-    return studentList;
-  }
-
-  /**
-   * Get At-Risk Summary Counts
-   */
-  static async getSummary({ schoolYear, term, gradeLevel } = {}) {
-    const students = await this.getAllStudentRiskProfiles({ schoolYear, term, gradeLevel });
-
-    let lowRisk = 0;
-    let mediumRisk = 0;
-    let highRisk = 0;
-
-    students.forEach((s) => {
-      if (s.riskLevel === 'high') highRisk++;
-      else if (s.riskLevel === 'medium') mediumRisk++;
-      else if (s.riskLevel === 'low') lowRisk++;
-    });
-
-    return {
-      lowRisk,
-      mediumRisk,
-      highRisk,
-      total: lowRisk + mediumRisk + highRisk,
-    };
-  }
-
-  /**
-   * Get Students by Risk Level
-   */
-  static async getStudentsByRiskLevel({ schoolYear, term, gradeLevel, riskLevel, limit } = {}) {
-    const students = await this.getAllStudentRiskProfiles({ schoolYear, term, gradeLevel });
-    const filtered = riskLevel ? students.filter((s) => s.riskLevel === riskLevel) : students;
-
-    const totalCount = filtered.length;
-    const parsedLimit = limit ? parseInt(limit, 10) : undefined;
-    const resultStudents = parsedLimit ? filtered.slice(0, parsedLimit) : filtered;
-
-    return {
-      totalCount,
-      students: resultStudents,
-    };
-  }
-
-  /**
-   * Get Breakdown analytics for Principal At-Risk Breakdown page
-   */
-  static async getBreakdownData({ schoolYear, term } = {}) {
-    const students = await this.getAllStudentRiskProfiles({ schoolYear, term });
-
-    let lowCount = 0;
-    let medCount = 0;
-    let highCount = 0;
-
-    const gradeMap = {
-      7: { grade: 'Grade 7', high: 0, medium: 0, low: 0 },
-      8: { grade: 'Grade 8', high: 0, medium: 0, low: 0 },
-      9: { grade: 'Grade 9', high: 0, medium: 0, low: 0 },
-      10: { grade: 'Grade 10', high: 0, medium: 0, low: 0 },
-    };
-
-    students.forEach((s) => {
-      if (s.riskLevel === 'high') highCount++;
-      if (s.riskLevel === 'medium') medCount++;
-      if (s.riskLevel === 'low') lowCount++;
-
-      if (gradeMap[s.grade]) {
-        gradeMap[s.grade][s.riskLevel]++;
-      }
-    });
-
-    const totalFlagged = lowCount + medCount + highCount;
-
-    return {
-      summary: {
-        lowRisk: lowCount,
-        mediumRisk: medCount,
-        highRisk: highCount,
-        total: totalFlagged,
-      },
+      summary: { ...summary, unavailable: input.unavailable.length, eligible: students.length,
+        totalEnglish: students.length + input.unavailable.length },
+      students, unavailable: input.unavailable,
       distribution: {
-        high: { count: highCount, percent: totalFlagged ? Math.round((highCount / totalFlagged) * 100) : 0 },
-        medium: { count: medCount, percent: totalFlagged ? Math.round((medCount / totalFlagged) * 100) : 0 },
-        low: { count: lowCount, percent: totalFlagged ? Math.round((lowCount / totalFlagged) * 100) : 0 },
-        totalFlagged,
+        ...Object.fromEntries(['low', 'medium', 'high'].map(level => {
+          const count = students.filter(row => row.riskLevel === level).length;
+          return [level, { count, percent: students.length ? Math.round(count / students.length * 100) : 0 }];
+        })), totalFlagged: students.length,
       },
-      gradeBreakdown: Object.values(gradeMap),
+      gradeBreakdown: [...gradeMap.values()].sort((a, b) => a.grade.localeCompare(b.grade)),
     };
   }
+
+  static async getSummary(filters) { return (await this.getPreview(filters)).summary; }
+  static async getStudentsByRiskLevel(filters) {
+    const data = await this.getPreview(filters);
+    const students = data.students.filter(row => !filters.riskLevel || row.riskLevel === filters.riskLevel);
+    return { students: filters.limit ? students.slice(0, Number(filters.limit)) : students, totalCount: students.length,
+      mode: data.mode, modelVersion: data.modelVersion };
+  }
+  static async getBreakdownData(filters) { return this.getPreview(filters); }
 }
 
 module.exports = AtRiskPrediction;

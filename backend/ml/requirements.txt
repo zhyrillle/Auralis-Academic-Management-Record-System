@@ -1,0 +1,5 @@
+# Use Python 3.14.3, matching the notebook export. No training is performed here.
+scikit-learn==1.8.0
+pandas==3.0.2
+numpy==2.4.4
+joblib==1.5.3

@@ -1,0 +1,10 @@
+{
+  "version": "english-rf-9-inputs-2026-10-05",
+  "python_version": "3.14.3",
+  "scikit_learn_version": "1.8.0",
+  "pandas_version": "3.0.2",
+  "numpy_version": "2.4.4",
+  "joblib_version": "1.5.3",
+  "threshold": 0.35,
+  "features": ["ww_pct", "pt_pct", "qa_pct", "previous_final_grade", "phil_iri_literal_pct", "phil_iri_inferential_pct", "phil_iri_critical_pct", "phil_iri_unavailable", "absence_rate"]
+}

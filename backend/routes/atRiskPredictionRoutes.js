@@ -1,72 +1,41 @@
 const express = require('express');
 const router = express.Router();
 const AtRiskPrediction = require('../models/AtRiskPrediction');
+const { resolveCurrentUser } = require('../middleware/resolveCurrentUser');
 
-/**
- * GET /api/principal/at-risk-prediction/options
- */
-router.get('/options', async (req, res) => {
-  try {
-    const options = await AtRiskPrediction.getOptions();
-    res.json(options);
-  } catch (err) {
-    console.error("Error in /api/principal/at-risk-prediction/options:", err);
-    res.status(500).json({ error: err.message });
+// The existing temporary identity boundary is not a substitute for production session authentication.
+router.use(resolveCurrentUser);
+router.use((req, res, next) => {
+  if (!['principal', 'system_admin'].includes(req.currentUser?.normalized_role)) {
+    return res.status(403).json({ code: 'PRINCIPAL_REQUIRED', message: 'Only the Principal or System Administrator can view this research preview.' });
   }
+  next();
 });
 
-/**
- * GET /api/principal/at-risk-prediction/summary
- * Query params: schoolYear, term, gradeLevel
- */
-router.get('/summary', async (req, res) => {
-  try {
-    const { schoolYear, term, gradeLevel } = req.query;
-    const summary = await AtRiskPrediction.getSummary({ schoolYear, term, gradeLevel });
-    res.json(summary);
-  } catch (err) {
-    console.error("Error in /api/principal/at-risk-prediction/summary:", err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-/**
- * GET /api/principal/at-risk-prediction/students
- * Query params: schoolYear, term, gradeLevel, riskLevel, limit
- */
-router.get('/students', async (req, res) => {
-  try {
-    const { schoolYear, term, gradeLevel, riskLevel, limit } = req.query;
-    if (!riskLevel) {
-      return res.status(400).json({ error: "riskLevel is required (e.g. 'high', 'medium', 'low')" });
+function handle(action) {
+  return async (req, res) => {
+    try {
+      res.set('Cache-Control', 'no-store');
+      res.json(await action(req.query));
+    } catch (error) {
+      res.status(error.status || 503).json({ code: error.code || 'PREDICTION_UNAVAILABLE',
+        message: error.status ? error.message : 'Prediction unavailable. The English source records could not be loaded. Check the database connection and schema.' });
     }
-    const result = await AtRiskPrediction.getStudentsByRiskLevel({
-      schoolYear,
-      term,
-      gradeLevel,
-      riskLevel: riskLevel.toLowerCase(),
-      limit,
-    });
-    res.json(result);
-  } catch (err) {
-    console.error("Error in /api/principal/at-risk-prediction/students:", err);
-    res.status(500).json({ error: err.message });
-  }
-});
+  };
+}
 
-/**
- * GET /api/principal/at-risk-prediction/breakdown
- * Query params: schoolYear, term
- */
-router.get('/breakdown', async (req, res) => {
-  try {
-    const { schoolYear, term } = req.query;
-    const data = await AtRiskPrediction.getBreakdownData({ schoolYear, term });
-    res.json(data);
-  } catch (err) {
-    console.error("Error in /api/principal/at-risk-prediction/breakdown:", err);
-    res.status(500).json({ error: err.message });
+router.get('/options', handle(() => AtRiskPrediction.getOptions()));
+router.get('/preview', handle(query => AtRiskPrediction.getPreview(query)));
+router.get('/summary', handle(query => AtRiskPrediction.getSummary(query)));
+router.get('/students', handle(query => {
+  if (query.riskLevel && !['low', 'medium', 'high'].includes(query.riskLevel)) {
+    throw Object.assign(new Error('Choose a valid risk band.'), { status: 400, code: 'INVALID_RISK_BAND' });
   }
-});
+  if (query.limit && !/^[1-9]\d{0,3}$/.test(query.limit)) {
+    throw Object.assign(new Error('Choose a valid learner limit.'), { status: 400, code: 'INVALID_LIMIT' });
+  }
+  return AtRiskPrediction.getStudentsByRiskLevel(query);
+}));
+router.get('/breakdown', handle(query => AtRiskPrediction.getBreakdownData(query)));
 
 module.exports = router;
