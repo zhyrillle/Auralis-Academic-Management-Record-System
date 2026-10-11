@@ -1,3 +1,4 @@
+import { clearNavigationCache } from "../services/navigationCache";
 // Normalize role string from backend or user object to a standard canonical role key
 export const normalizeRole = (role, userObj) => {
   let targetUser = userObj;
@@ -147,7 +148,11 @@ export const getStoredUser = () => {
 // Save user to localStorage
 export const setStoredUser = (userObj) => {
   try {
+    const previous = getStoredUser();
+    const scope = user => JSON.stringify([user?.user_id ?? user?.id ?? null, user?.role ?? null,
+      user?.is_adviser ?? user?.isAdviser ?? null]);
     localStorage.setItem("user", JSON.stringify(userObj));
+    if (scope(previous) !== scope(userObj)) clearNavigationCache();
   } catch (e) {
     console.error("Error saving user to localStorage:", e);
   }
@@ -157,6 +162,7 @@ export const setStoredUser = (userObj) => {
 export const removeStoredUser = () => {
   try {
     localStorage.removeItem("user");
+    clearNavigationCache();
   } catch (e) {
     console.error("Error clearing user from localStorage:", e);
   }

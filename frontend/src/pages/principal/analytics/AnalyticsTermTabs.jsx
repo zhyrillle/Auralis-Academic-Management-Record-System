@@ -1,3 +1,5 @@
+import '../../../styles/analyticsTermTabs.css';
+
 export default function AnalyticsTermTabs({
   options,
   value,

@@ -627,6 +627,7 @@
   overflow-x: hidden;
   overflow-y: auto;
   background-color: #f8fafc;
+  scrollbar-gutter: stable;
 }
 
 /* Responsive Styles for Mobile/Tablets */

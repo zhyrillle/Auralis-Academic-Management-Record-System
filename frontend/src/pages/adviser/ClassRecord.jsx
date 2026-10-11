@@ -1,3 +1,4 @@
+import { apiFetch as fetch } from "../../services/navigationCache";
 import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import {
