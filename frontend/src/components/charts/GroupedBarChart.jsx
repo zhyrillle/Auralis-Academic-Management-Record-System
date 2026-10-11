@@ -12,6 +12,7 @@ export default function GroupedBarChart({
   ticks = [70, 75, 80, 85, 90, 95, 100],
   benchmark = 75,
   suffix = "",
+  showZeroValues = true,
 }) {
   const [activeBar, setActiveBar] = useState(null);
   const chartWidth = WIDTH - PADDING.left - PADDING.right;
@@ -99,14 +100,14 @@ export default function GroupedBarChart({
                       onFocus={() => setActiveBar(detail)}
                       onBlur={() => setActiveBar(null)}
                     />
-                    <text
+                    {(showZeroValues || bar.value !== 0) && <text
                       className={`grouped-bar-chart__value${isActive ? " is-active" : activeBar ? " is-muted" : ""}`}
                       x={x + barWidth / 2}
                       y={y - 8}
                       textAnchor="middle"
                     >
                       {bar.value}
-                    </text>
+                    </text>}
                   </g>
                 );
               })}

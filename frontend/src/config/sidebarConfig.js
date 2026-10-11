@@ -96,16 +96,6 @@ export const sidebarConfig = {
       title: "At-Risk Students",
       path: "/principal/at-risk-students",
       icon: AlertTriangle,
-      submenu: [
-        {
-          title: "Prediction",
-          path: "/principal/at-risk-students/prediction",
-        },
-        {
-          title: "Breakdown",
-          path: "/principal/at-risk-students/breakdown",
-        },
-      ],
     },
     {
       title: "Performance Level",

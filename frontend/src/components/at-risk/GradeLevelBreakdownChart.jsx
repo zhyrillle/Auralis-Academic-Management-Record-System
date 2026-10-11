@@ -1,114 +1,35 @@
-import React from "react";
+import GroupedBarChart from '../charts/GroupedBarChart';
+import { RISK_BANDS, learnerCountScale } from '../../utils/riskPresentation';
 
-const BAR_COLORS = {
-  high: "#dc2626",   // Red
-  medium: "#d97706", // Amber
-  low: "#16A34A",    // Green
-};
-
-// Default baseline data matching mockup if newly initialized
-const DEFAULT_GRADE_DATA = [
-  { grade: "G7", medium: 0, low: 0, high: 0 },
-  { grade: "G8", medium: 0, low: 0, high: 0 },
-  { grade: "G9", medium: 0, low: 0, high: 0 },
-  { grade: "G10", medium: 0, low: 0, high: 0 },
-];
-
-export default function GradeLevelBreakdownChart({ data, loading }) {
-  if (loading) {
-    return (
-      <div className="ar-chart-card">
-        <div className="ar-chart-header-vertical">
-          <h2 className="ar-chart-title">Breakdown by Grade Level</h2>
-          <p className="ar-chart-subtitle">Grade level fail rate distribution</p>
-        </div>
-        <div className="ar-skeleton-bars" />
-      </div>
-    );
-  }
-
-  // Format data
-  let displayRows = DEFAULT_GRADE_DATA;
-  if (data && data.length > 0) {
-    displayRows = data.map((d, i) => {
-      const gLabel = d.grade.replace(/Grade\s*/i, "G") || `G${i + 7}`;
-      return {
-        grade: gLabel,
-        medium: typeof d.medium === "number" ? d.medium : 0,
-        low: typeof d.low === "number" ? d.low : 0,
-        high: typeof d.high === "number" ? d.high : 0,
-      };
-    });
-  }
-
-  const Y_MAX = 20;
-  const Y_TICKS = [20, 15, 10, 5, 0];
-
-  return (
-    <div className="ar-chart-card">
-      <div className="ar-chart-header-vertical">
-        <h2 className="ar-chart-title">Breakdown by Grade Level</h2>
-        <p className="ar-chart-subtitle">Grade level fail rate distribution</p>
-      </div>
-
-      <div className="ar-bar-chart-wrapper">
-        {/* Y Axis Labels */}
-        <div className="ar-bar-y-axis">
-          {Y_TICKS.map((tick) => (
-            <span key={tick} className="ar-bar-y-tick">
-              {tick}
-            </span>
-          ))}
-        </div>
-
-        {/* Chart Canvas */}
-        <div className="ar-bar-canvas">
-          {/* Horizontal Grid lines */}
-          <div className="ar-bar-grid-lines">
-            {Y_TICKS.map((tick) => (
-              <div
-                key={tick}
-                className="ar-bar-grid-line"
-                style={{ bottom: `${(tick / Y_MAX) * 100}%` }}
-              />
-            ))}
-          </div>
-
-          {/* Groups of Bars */}
-          <div className="ar-bar-groups-container">
-            {displayRows.map((row, idx) => {
-              // Note the specific color order per grade as in the visual
-              const bars = [
-                { key: "medium", value: row.medium, color: BAR_COLORS.medium },
-                { key: "low", value: row.low, color: BAR_COLORS.low },
-                { key: "high", value: row.high, color: BAR_COLORS.high },
-              ];
-
-              return (
-                <div key={idx} className="ar-grade-bar-group">
-                  <div className="ar-grade-bars-row">
-                    {bars.map((bar, bIdx) => {
-                      const barHeightPct = Math.min(100, Math.max(4, (bar.value / Y_MAX) * 100));
-                      return (
-                        <div
-                          key={bIdx}
-                          className="ar-single-bar"
-                          style={{
-                            height: `${barHeightPct}%`,
-                            backgroundColor: bar.color,
-                          }}
-                          title={`${row.grade} ${bar.key}: ${bar.value}`}
-                        />
-                      );
-                    })}
-                  </div>
-                  <span className="ar-grade-label">{row.grade}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
+export default function GradeLevelBreakdownChart({ data = [], gradeLevels = [], loading }) {
+  const grades = [...new Set([
+    ...gradeLevels.filter(option => option.value !== 'all').map(option => Number(option.value)),
+    ...data.map(row => Number(String(row.grade).match(/\d+/)?.[0])),
+  ])].filter(Number.isFinite).sort((a, b) => a - b);
+  const displayGrades = grades.length ? grades : [7, 8, 9, 10];
+  const groups = displayGrades.map(grade => {
+    const row = data.find(item => Number(String(item.grade).match(/\d+/)?.[0]) === grade);
+    return {
+      id: String(grade), label: `Grade ${grade}`, shortLabel: `G${grade}`,
+      values: RISK_BANDS.map(band => ({
+        id: `${grade}-${band.level}`, label: band.label, color: band.color, value: row?.[band.level] ?? 0,
+      })),
+    };
+  });
+  const highestCount = Math.max(0, ...groups.flatMap(group => group.values.map(bar => bar.value)));
+  const { maximum, ticks } = learnerCountScale(highestCount);
+  return <div className="ar-chart-card ar-grade-chart">
+    <div className="ar-chart-header-vertical">
+      <h2 className="ar-chart-title">Breakdown by Grade Level</h2>
+      <p className="ar-chart-subtitle">English learners with predictions · Learners awaiting records excluded</p>
     </div>
-  );
+    {loading ? <div className="ar-skeleton-bars" /> : <>
+      <div className="ar-grade-chart-legend">{RISK_BANDS.map(band => <span key={band.level}>
+        <i style={{ backgroundColor: band.color }} aria-hidden="true" />{band.label}
+      </span>)}</div>
+      <p className="ar-chart-subtitle">Number of learners</p>
+      <GroupedBarChart groups={groups} ariaLabel="English learner risk counts by grade level"
+        minimum={0} maximum={maximum} ticks={ticks} benchmark={null} showZeroValues={false} />
+    </>}
+  </div>;
 }

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 
 const SEGMENT_COLORS = {
   high: "#dc2626",    // Red
@@ -181,7 +181,7 @@ export default function OverallDistributionChart({ data, loading }) {
           ) : (
             <>
               <span className="ar-donut-center-num">{total}</span>
-              <span className="ar-donut-center-sub">flagged</span>
+              <span className="ar-donut-center-sub">learners</span>
             </>
           )}
         </div>
