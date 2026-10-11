@@ -1,5 +1,33 @@
 /* src/styles/attendanceSheet.css - Learner Attendance Conversion Tool (DepEd SF2 Layout) */
 
+.att-day-button { display: inline-flex; align-items: center; gap: 7px; min-height: 36px; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 9px; background: #fff; color: #334155; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.att-day-button.is-marked { background: #f1f5f9; }
+.att-day-button:disabled { opacity: .55; cursor: not-allowed; }
+.att-day-dialog { box-sizing: border-box; width: min(480px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: visible; border: 1px solid #e2e8f0; border-radius: 16px; padding: 24px; color: #0f172a; box-shadow: 0 24px 80px #0f172a30; }
+.att-day-dialog::backdrop { background: #0f172a66; }
+.att-day-dialog-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.att-day-dialog h2 { margin: 0; font-size: 18px; }
+.att-day-dialog p { color: #64748b; font-size: 13px; line-height: 1.6; }
+.att-day-dialog-header button { display: grid; place-items: center; border: 0; background: transparent; padding: 4px; cursor: pointer; color: #64748b; }
+.att-day-dialog .dropdown-select { width: 100%; }
+.att-day-dialog .att-day-preservation { background: #f8fafc; border-radius: 8px; padding: 12px; }
+.att-day-dialog .att-day-error { color: #b91c1c; }
+.app-toast.att-toast { position: static; }
+.att-day-dialog-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 20px; }
+.att-day-dialog-actions button { min-height: 36px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px 12px; font: inherit; font-size: 13px; cursor: pointer; }
+.att-day-dialog-actions .att-day-remove { margin-right: auto; color: #475569; background: #fff; }
+.att-day-dialog-actions button:disabled { opacity: .55; cursor: not-allowed; }
+.att-no-class-notice { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; color: #475569; font-size: 13px; line-height: 1.5; }
+.att-no-class-notice svg { flex-shrink: 0; }
+.sf2-table td.sf2-no-class-day, .sf2-table th.sf2-no-class-day { background: #f1f5f9 !important; color: #64748b !important; cursor: default; outline: none; }
+.att-mode-badge.no-classes { background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
+.sf2-no-class-day svg { display: block; margin: 2px auto 0; }
+.legend-badge-box.no-classes { background: #f1f5f9; border: 1px solid #cbd5e1; color: #64748b; }
+.sf2-remarks-input:disabled { background: #f8fafc; color: #64748b; cursor: not-allowed; }
+.att-class-days-note { margin: 0 0 12px; color: #64748b; font-size: 12px; line-height: 1.5; }
+
+@media (max-width: 540px) { .att-day-dialog { padding: 18px; } }
+
 .attendance-sheet-container {
   box-sizing: border-box;
   width: calc(100% - 32px);

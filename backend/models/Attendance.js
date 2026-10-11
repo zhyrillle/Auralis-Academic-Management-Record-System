@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const { withWritableSheet } = require('../services/AttendanceDayService');
 
 class Attendance {
   static async findAll() {
@@ -35,7 +36,7 @@ class Attendance {
   }
 
   // Get all attendance records for a section
-  static async findBySectionId(sectionId) {
+  static async findBySectionId(sectionId, schoolYearId = null) {
     const [rows] = await db.execute(
       `SELECT
         a.attendance_id,
@@ -53,8 +54,9 @@ class Attendance {
       INNER JOIN STUDENT_SECTION ss ON ss.student_section_id = a.student_section_id
       INNER JOIN STUDENT st ON st.student_id = ss.student_id
       WHERE ss.section_id = ?
+        ${schoolYearId ? 'AND ss.school_year_id = ?' : ''}
       ORDER BY ash.attendance_date ASC, st.last_name ASC, st.first_name ASC`,
-      [sectionId]
+      schoolYearId ? [sectionId, schoolYearId] : [sectionId]
     );
     return rows;
   }
@@ -75,7 +77,7 @@ class Attendance {
 
     // Check if rawId is a student_id linked to this sheet's section
     const [bySheetSec] = await db.execute(
-      `SELECT ss.student_section_id 
+      `SELECT ss.student_section_id
        FROM STUDENT_SECTION ss
        LEFT JOIN SECTION_ADVISER_ASSIGNMENT saa ON saa.section_id = ss.section_id
        LEFT JOIN ATTENDANCE_SHEET ash ON ash.adviser_assignment_id = saa.adviser_assignment_id
@@ -105,50 +107,52 @@ class Attendance {
       throw new Error(`Could not resolve student_section_id for ${rawStudentSectionId}`);
     }
 
-    const cleanRemarks = remarks !== undefined && remarks !== null ? String(remarks).trim() || null : null;
+    return withWritableSheet(sheetId, async (connection) => {
+      const cleanRemarks = remarks !== undefined && remarks !== null ? String(remarks).trim() || null : null;
 
-    if (!status || status === 'BLANK' || status === 'NONE') {
-      if (cleanRemarks) {
-        const [existing] = await db.execute(
-          `SELECT attendance_id FROM ATTENDANCE WHERE attendance_sheet_id = ? AND student_section_id = ?`,
-          [sheetId, studentSectionId]
-        );
-        if (existing.length > 0) {
-          await db.execute(
-            `UPDATE ATTENDANCE SET remarks = ? WHERE attendance_id = ?`,
-            [cleanRemarks, existing[0].attendance_id]
+      if (!status || status === 'BLANK' || status === 'NONE') {
+        if (cleanRemarks) {
+          const [existing] = await connection.execute(
+            `SELECT attendance_id FROM ATTENDANCE WHERE attendance_sheet_id = ? AND student_section_id = ?`,
+            [sheetId, studentSectionId]
           );
-          return existing[0].attendance_id;
+          if (existing.length > 0) {
+            await connection.execute(
+              `UPDATE ATTENDANCE SET remarks = ? WHERE attendance_id = ?`,
+              [cleanRemarks, existing[0].attendance_id]
+            );
+            return existing[0].attendance_id;
+          } else {
+            const [insResult] = await connection.execute(
+              `INSERT INTO ATTENDANCE (attendance_sheet_id, student_section_id, status, remarks)
+               VALUES (?, ?, 'P', ?)`,
+              [sheetId, studentSectionId, cleanRemarks]
+            );
+            return insResult.insertId;
+          }
         } else {
-          const [insResult] = await db.execute(
-            `INSERT INTO ATTENDANCE (attendance_sheet_id, student_section_id, status, remarks)
-             VALUES (?, ?, 'P', ?)`,
-            [sheetId, studentSectionId, cleanRemarks]
+          await connection.execute(
+            `DELETE FROM ATTENDANCE WHERE attendance_sheet_id = ? AND student_section_id = ?`,
+            [sheetId, studentSectionId]
           );
-          return insResult.insertId;
+          return null;
         }
-      } else {
-        await db.execute(
-          `DELETE FROM ATTENDANCE WHERE attendance_sheet_id = ? AND student_section_id = ?`,
-          [sheetId, studentSectionId]
-        );
-        return null;
       }
-    }
 
-    const normalizedStatus = ['P', 'A', 'L'].includes(status) ? status : 'P';
-    const [result] = await db.execute(
-      `INSERT INTO ATTENDANCE (attendance_sheet_id, student_section_id, status, remarks)
-       VALUES (?, ?, ?, ?)
-       ON DUPLICATE KEY UPDATE status = VALUES(status), remarks = VALUES(remarks)`,
-      [sheetId, studentSectionId, normalizedStatus, cleanRemarks]
-    );
-    if (result.insertId) return result.insertId;
-    const [row] = await db.execute(
-      `SELECT attendance_id FROM ATTENDANCE WHERE attendance_sheet_id = ? AND student_section_id = ?`,
-      [sheetId, studentSectionId]
-    );
-    return row[0]?.attendance_id;
+      const normalizedStatus = ['P', 'A', 'L'].includes(status) ? status : 'P';
+      const [result] = await connection.execute(
+        `INSERT INTO ATTENDANCE (attendance_sheet_id, student_section_id, status, remarks)
+         VALUES (?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE status = VALUES(status), remarks = VALUES(remarks)`,
+        [sheetId, studentSectionId, normalizedStatus, cleanRemarks]
+      );
+      if (result.insertId) return result.insertId;
+      const [row] = await connection.execute(
+        `SELECT attendance_id FROM ATTENDANCE WHERE attendance_sheet_id = ? AND student_section_id = ?`,
+        [sheetId, studentSectionId]
+      );
+      return row[0]?.attendance_id;
+    });
   }
 
   // Save/update remarks directly for a student's attendance record
@@ -161,29 +165,31 @@ class Attendance {
       throw new Error(`Could not resolve student_section_id for ${rawStudentSectionId}`);
     }
 
-    const cleanRemarks = remarks !== undefined && remarks !== null ? String(remarks).trim() || null : null;
+    return withWritableSheet(sheetId, async (connection) => {
+      const cleanRemarks = remarks !== undefined && remarks !== null ? String(remarks).trim() || null : null;
 
-    const [existing] = await db.execute(
-      `SELECT attendance_id, status FROM ATTENDANCE WHERE attendance_sheet_id = ? AND student_section_id = ?`,
-      [sheetId, studentSectionId]
-    );
+      const [existing] = await connection.execute(
+        `SELECT attendance_id, status FROM ATTENDANCE WHERE attendance_sheet_id = ? AND student_section_id = ?`,
+        [sheetId, studentSectionId]
+      );
 
-    if (existing.length > 0) {
-      await db.execute(
-        `UPDATE ATTENDANCE SET remarks = ? WHERE attendance_id = ?`,
-        [cleanRemarks, existing[0].attendance_id]
-      );
-      return existing[0].attendance_id;
-    } else {
-      const statusToUse = ['P', 'A', 'L'].includes(defaultStatus) ? defaultStatus : 'P';
-      const [result] = await db.execute(
-        `INSERT INTO ATTENDANCE (attendance_sheet_id, student_section_id, status, remarks)
-         VALUES (?, ?, ?, ?)
-         ON DUPLICATE KEY UPDATE remarks = VALUES(remarks)`,
-        [sheetId, studentSectionId, statusToUse, cleanRemarks]
-      );
-      return result.insertId;
-    }
+      if (existing.length > 0) {
+        await connection.execute(
+          `UPDATE ATTENDANCE SET remarks = ? WHERE attendance_id = ?`,
+          [cleanRemarks, existing[0].attendance_id]
+        );
+        return existing[0].attendance_id;
+      } else {
+        const statusToUse = ['P', 'A', 'L'].includes(defaultStatus) ? defaultStatus : 'P';
+        const [result] = await connection.execute(
+          `INSERT INTO ATTENDANCE (attendance_sheet_id, student_section_id, status, remarks)
+           VALUES (?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE remarks = VALUES(remarks)`,
+          [sheetId, studentSectionId, statusToUse, cleanRemarks]
+        );
+        return result.insertId;
+      }
+    });
   }
 
   // Bulk save multiple attendance records
@@ -210,15 +216,27 @@ class Attendance {
   }
 
   static async update(id, data) {
+    const record = await this.findById(id);
+    if (!record) return null;
     const keys = Object.keys(data);
+    if (!keys.length || keys.some(key => !['status', 'remarks'].includes(key))) {
+      throw Object.assign(new Error('Only attendance status and remarks can be updated.'), { statusCode: 400 });
+    }
+    if (data.status !== undefined && !['P', 'A', 'L'].includes(data.status)) {
+      throw Object.assign(new Error('Attendance status must be P, A or L.'), { statusCode: 400 });
+    }
     const values = Object.values(data);
     const setClause = keys.map(key => `${key} = ?`).join(', ');
-    await db.execute(`UPDATE ATTENDANCE SET ${setClause} WHERE attendance_id = ?`, [...values, id]);
+    await withWritableSheet(record.attendance_sheet_id, connection =>
+      connection.execute(`UPDATE ATTENDANCE SET ${setClause} WHERE attendance_id = ?`, [...values, id]));
     return this.findById(id);
   }
 
   static async delete(id) {
-    const [result] = await db.execute('DELETE FROM ATTENDANCE WHERE attendance_id = ?', [id]);
+    const record = await this.findById(id);
+    if (!record) return false;
+    const [result] = await withWritableSheet(record.attendance_sheet_id, connection =>
+      connection.execute('DELETE FROM ATTENDANCE WHERE attendance_id = ?', [id]));
     return result.affectedRows > 0;
   }
 }

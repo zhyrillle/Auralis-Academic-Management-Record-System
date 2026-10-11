@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const { withWritableSheet } = require('../services/AttendanceDayService');
 
 class AttendanceSheet {
   static async findAll() {
@@ -55,7 +56,7 @@ class AttendanceSheet {
     if (section_id) {
       // First check if an attendance sheet already exists for this section on this date
       const [existingBySec] = await db.execute(
-        `SELECT ash.attendance_sheet_id 
+        `SELECT ash.attendance_sheet_id
          FROM ATTENDANCE_SHEET ash
          LEFT JOIN SECTION_ADVISER_ASSIGNMENT saa ON saa.adviser_assignment_id = ash.adviser_assignment_id
          LEFT JOIN TEACHER_ASSIGNMENT ta ON ta.teacher_assignment_id = ash.teacher_assignment_id
@@ -124,7 +125,7 @@ class AttendanceSheet {
   }
 
   // Get all attendance sheets for a section
-  static async findBySectionId(sectionId) {
+  static async findBySectionId(sectionId, schoolYearId = null) {
     const [rows] = await db.execute(
       `SELECT DISTINCT ash.*
        FROM ATTENDANCE_SHEET ash
@@ -132,8 +133,9 @@ class AttendanceSheet {
        LEFT JOIN TEACHER_ASSIGNMENT ta ON ta.teacher_assignment_id = ash.teacher_assignment_id
        LEFT JOIN SUBJECT_OFFERING so ON so.subject_offering_id = ta.subject_offering_id
        WHERE (saa.section_id = ? OR so.section_id = ?) AND ash.attendance_scope = 'SECTION'
+         ${schoolYearId ? 'AND COALESCE(saa.school_year_id, so.school_year_id) = ?' : ''}
        ORDER BY ash.attendance_date ASC`,
-      [sectionId, sectionId]
+      schoolYearId ? [sectionId, sectionId, schoolYearId] : [sectionId, sectionId]
     );
     return rows;
   }
@@ -141,7 +143,7 @@ class AttendanceSheet {
   static async create(data) {
     const { teacher_assignment_id, adviser_assignment_id, attendance_scope, attendance_date } = data;
     const [result] = await db.execute(
-      `INSERT INTO ATTENDANCE_SHEET (teacher_assignment_id, adviser_assignment_id, attendance_scope, attendance_date) 
+      `INSERT INTO ATTENDANCE_SHEET (teacher_assignment_id, adviser_assignment_id, attendance_scope, attendance_date)
        VALUES (?, ?, ?, ?)`,
       [teacher_assignment_id, adviser_assignment_id, attendance_scope, attendance_date]
     );
@@ -150,14 +152,19 @@ class AttendanceSheet {
 
   static async update(id, data) {
     const keys = Object.keys(data);
+    if (!keys.length || keys.some(key => !['teacher_assignment_id', 'adviser_assignment_id', 'attendance_scope', 'attendance_date'].includes(key))) {
+      throw Object.assign(new Error('Use the day-marker action to change no-class days.'), { statusCode: 400 });
+    }
     const values = Object.values(data);
     const setClause = keys.map(key => `${key} = ?`).join(', ');
-    await db.execute(`UPDATE ATTENDANCE_SHEET SET ${setClause} WHERE attendance_sheet_id = ?`, [...values, id]);
+    await withWritableSheet(id, connection =>
+      connection.execute(`UPDATE ATTENDANCE_SHEET SET ${setClause} WHERE attendance_sheet_id = ?`, [...values, id]));
     return this.findById(id);
   }
 
   static async delete(id) {
-    const [result] = await db.execute('DELETE FROM ATTENDANCE_SHEET WHERE attendance_sheet_id = ?', [id]);
+    const [result] = await withWritableSheet(id, connection =>
+      connection.execute('DELETE FROM ATTENDANCE_SHEET WHERE attendance_sheet_id = ?', [id]));
     return result.affectedRows > 0;
   }
 }

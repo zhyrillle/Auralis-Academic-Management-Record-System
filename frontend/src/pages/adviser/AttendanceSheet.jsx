@@ -1,9 +1,14 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { Calendar, CheckCircle, AlertTriangle, Info, X, Save, ChevronLeft, ChevronRight } from "lucide-react";
+import { Calendar, CalendarOff, CheckCircle, AlertTriangle, Info, Save, ChevronLeft, ChevronRight } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import "../../styles/attendanceSheet.css";
 import backIconUrl from "../../assets/backButton.svg";
 import { getStoredUser } from "../../utils/auth";
+import { apiFetch } from "../../services/navigationCache.js";
+import Toast from "../../components/common/Toast.jsx";
+import EmptyState from "../../components/common/EmptyState.jsx";
+import AttendanceDayControl from "../../components/adviser/AttendanceDayControl.jsx";
+import { NO_CLASS_LABELS, noClassDaysFromSheets, classDaysForMonth } from "../../utils/attendanceDays.js";
 
 const BASE_URL = "http://localhost:5000/api";
 
@@ -97,9 +102,11 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
   const [adviserAssignment, setAdviserAssignment] = useState(null);
   const [students, setStudents] = useState([]); // { student_id, student_section_id, first_name, last_name, middle_name, sex }
   const [sheetsByDate, setSheetsByDate] = useState({}); // { "YYYY-MM-DD": attendance_sheet_id }
+  const [noClassDays, setNoClassDays] = useState({});
   const [attendanceMap, setAttendanceMap] = useState({}); // { "student_section_id-dateStr": status }
   const [remarksMap, setRemarksMap] = useState({}); // { "student_section_id": remarks }
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [saving, setSaving] = useState(false);
   const [toasts, setToasts] = useState([]);
 
@@ -113,6 +120,7 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
   useEffect(() => {
     setStudents([]);
     setSheetsByDate({});
+    setNoClassDays({});
     setAttendanceMap({});
     setRemarksMap({});
     setAdviserAssignment(null);
@@ -121,6 +129,7 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
 
   const loadAll = async () => {
     setLoading(true);
+    setLoadError('');
     try {
       const userId = currentUser?.user_id || currentUser?.id;
       const sectionId = targetSectionId;
@@ -140,7 +149,13 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
         const assignRes = await fetch(`${BASE_URL}/section-adviser-assignments/section/${sectionId}`);
         const assignments = assignRes.ok ? await assignRes.json() : [];
         if (Array.isArray(assignments) && assignments.length > 0) {
-          assignment = assignments[0];
+          const requestedId = activeClass?.adviser_assignment_id || activeClass?.assignmentId;
+          const requestedYear = activeClass?.school_year_id || activeClass?.schoolYearId;
+          assignment = assignments.find(item => requestedId && Number(item.adviser_assignment_id) === Number(requestedId))
+            || assignments.filter(item => Number(item.user_id) === Number(userId)
+              && (!requestedYear || Number(item.school_year_id) === Number(requestedYear)))
+              .sort((left, right) => Number(right.adviser_assignment_id) - Number(left.adviser_assignment_id))[0]
+            || assignments[0];
         } else if (assignments && assignments.adviser_assignment_id) {
           assignment = assignments;
         }
@@ -156,6 +171,7 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
       setAdviserAssignment({
         section_id: Number(sectionId),
         adviser_assignment_id: assignment?.adviser_assignment_id || null,
+        school_year_id: assignment?.school_year_id || null,
         section_name: sectionName,
         grade_level_name: gradeLevelName,
       });
@@ -206,18 +222,22 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
       setStudents(enrichedStudents);
 
       // 3. Load all sheets for this section
-      const sheetsRes = await fetch(`${BASE_URL}/attendance-sheets/section/${sectionId}`);
-      const sheets = sheetsRes.ok ? await sheetsRes.json() : [];
+      const yearQuery = assignment?.school_year_id ? `?schoolYearId=${assignment.school_year_id}` : '';
+      const sheetsRes = await fetch(`${BASE_URL}/attendance-sheets/section/${sectionId}${yearQuery}`);
+      if (!sheetsRes.ok) throw new Error('Attendance day markers could not be loaded.');
+      const sheets = await sheetsRes.json();
       const byDate = {};
       sheets.forEach(sh => {
         const d = sh.attendance_date?.split("T")[0] || sh.attendance_date;
         byDate[d] = sh.attendance_sheet_id;
       });
       setSheetsByDate(byDate);
+      setNoClassDays(noClassDaysFromSheets(sheets));
 
       // 4. Load attendance records for this section
-      const attRes = await fetch(`${BASE_URL}/attendance/section/${sectionId}`);
-      const attRows = attRes.ok ? await attRes.json() : [];
+      const attRes = await fetch(`${BASE_URL}/attendance/section/${sectionId}${yearQuery}`);
+      if (!attRes.ok) throw new Error('Attendance records could not be loaded.');
+      const attRows = await attRes.json();
       const attMap = {};
       const remMap = {};
       attRows.forEach(row => {
@@ -237,6 +257,7 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
 
     } catch (err) {
       console.error("Error loading attendance data:", err);
+      setLoadError(err.message || 'Attendance could not be loaded.');
       triggerToast("Failed to load attendance data.", "error");
     } finally {
       setLoading(false);
@@ -253,6 +274,38 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
   }, [schoolDays, selectedDate]);
 
   const isEditableDate = selectedDate === TODAY;
+  const selectedNoClassReason = noClassDays[selectedDate] || null;
+  const classDays = useMemo(() => classDaysForMonth(schoolDays, noClassDays), [schoolDays, noClassDays]);
+
+  const handleDayMarkerSave = async reason => {
+    if (!isEditableDate || saving || !targetSectionId) return false;
+    const date = selectedDate;
+    try {
+      setSaving(true);
+      const sheetId = await ensureSheetForDate(date);
+      const response = await apiFetch(`${BASE_URL}/attendance-sheets/${sheetId}/no-classes`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'X-Auralis-User-Id': String(currentUser?.user_id || currentUser?.id) },
+        body: JSON.stringify({ reason, confirmExistingRecords: true }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'The day marker could not be saved.');
+      setNoClassDays(previous => {
+        const next = { ...previous };
+        if (result.no_class_reason) next[date] = result.no_class_reason;
+        else delete next[date];
+        return next;
+      });
+      triggerToast(reason ? 'No-class day saved. Existing attendance is preserved and excluded from totals.'
+        : 'Marker removed. Preserved attendance is included in totals again.', 'success');
+      return true;
+    } catch (failure) {
+      triggerToast(failure.message, 'error');
+      return failure.message;
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const currentMonthName = useMemo(() => {
     const parts = (selectedDate || TODAY).split("-");
@@ -263,7 +316,7 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
   // ── Helper to find or create attendance sheet for a date ──
   const ensureSheetForDate = async (dateStr) => {
     if (sheetsByDate[dateStr]) return sheetsByDate[dateStr];
-    const sheetRes = await fetch(`${BASE_URL}/attendance-sheets/find-or-create`, {
+    const sheetRes = await apiFetch(`${BASE_URL}/attendance-sheets/find-or-create`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -286,6 +339,7 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
 
   // ── Handle cell click: toggle Blank → P → L → A → Blank ──
   const handleCellClick = async (studentSectionId, dateStr, colIdx, studentId = null) => {
+    if (saving || noClassDays[dateStr]) return;
     if (colIdx !== activeColIndex) {
       triggerToast("You can only edit attendance for the selected date on the calendar.");
       return;
@@ -302,7 +356,7 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
     const key = `${studentSectionId}-${dateStr}`;
     const altKey = studentId ? `${studentId}-${dateStr}` : null;
     const oldStatus = attendanceMap[key] || (altKey ? attendanceMap[altKey] : null) || null;
-    
+
     let newStatus = null;
     if (!oldStatus) newStatus = "P";
     else if (oldStatus === "P") newStatus = "L";
@@ -327,7 +381,7 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
       setSaving(true);
       const sheetId = await ensureSheetForDate(dateStr);
 
-      const saveRes = await fetch(`${BASE_URL}/attendance/bulk-save`, {
+      const saveRes = await apiFetch(`${BASE_URL}/attendance/bulk-save`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -367,7 +421,7 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
 
   // ── Quick action: Mark all students as Present for Today ──
   const handleMarkAllPresent = async () => {
-    if (!isEditableDate || !targetSectionId || students.length === 0) return;
+    if (!isEditableDate || saving || selectedNoClassReason || !targetSectionId || students.length === 0) return;
     try {
       setSaving(true);
       const sheetId = await ensureSheetForDate(TODAY);
@@ -390,7 +444,7 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
 
       setAttendanceMap(prev => ({ ...prev, ...newMapUpdates }));
 
-      const saveRes = await fetch(`${BASE_URL}/attendance/bulk-save`, {
+      const saveRes = await apiFetch(`${BASE_URL}/attendance/bulk-save`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ records }),
@@ -412,7 +466,7 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
 
   // ── Save all today's attendance at once ──
   const handleSaveAll = async () => {
-    if (!isEditableDate || !targetSectionId) return;
+    if (!isEditableDate || saving || selectedNoClassReason || !targetSectionId) return;
     try {
       setSaving(true);
       const sheetId = await ensureSheetForDate(TODAY);
@@ -430,7 +484,7 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
         };
       });
 
-      const saveRes = await fetch(`${BASE_URL}/attendance/bulk-save`, {
+      const saveRes = await apiFetch(`${BASE_URL}/attendance/bulk-save`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ records }),
@@ -461,15 +515,15 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
 
   // ── Save remarks on blur or Enter ──
   const handleRemarksBlur = async (studentSectionId, val, studentId = null) => {
-    if (!targetSectionId) return;
+    if (!targetSectionId || noClassDays[selectedDate]) return;
     try {
       const targetDate = selectedDate || TODAY;
       const sheetId = await ensureSheetForDate(targetDate);
-      const currentStatus = attendanceMap[`${studentSectionId}-${targetDate}`] || 
-                            (studentId ? attendanceMap[`${studentId}-${targetDate}`] : null) || 
+      const currentStatus = attendanceMap[`${studentSectionId}-${targetDate}`] ||
+                            (studentId ? attendanceMap[`${studentId}-${targetDate}`] : null) ||
                             null;
 
-      const saveRes = await fetch(`${BASE_URL}/attendance/bulk-save`, {
+      const saveRes = await apiFetch(`${BASE_URL}/attendance/bulk-save`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -510,7 +564,7 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
       const sId = stu.student_section_id || stu.student_id || stu.id;
       let absents = 0;
       let tardy = 0;
-      schoolDays.forEach(sd => {
+      classDays.forEach(sd => {
         const key = `${sId}-${sd.dateStr}`;
         const altKey1 = `${stu.student_section_id}-${sd.dateStr}`;
         const altKey2 = `${stu.student_id}-${sd.dateStr}`;
@@ -524,12 +578,12 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
       if (stu.student_id) stats[stu.student_id] = res;
     });
     return stats;
-  }, [students, attendanceMap, schoolDays]);
+  }, [students, attendanceMap, classDays]);
 
   // ── Daily totals calculation (Attendees recorded as Present 'P' or Late 'L' on each day) ──
   const dailyMaleTotals = useMemo(() => {
     const totals = {};
-    schoolDays.forEach(sd => {
+    classDays.forEach(sd => {
       let count = 0;
       maleStudents.forEach(stu => {
         const key = `${stu.student_section_id || stu.student_id}-${sd.dateStr}`;
@@ -539,7 +593,7 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
       totals[sd.dateStr] = count;
     });
     return totals;
-  }, [maleStudents, schoolDays, attendanceMap]);
+  }, [maleStudents, classDays, attendanceMap]);
 
   const totalMaleMonthAttendance = useMemo(() => {
     return Object.values(dailyMaleTotals).reduce((sum, c) => sum + c, 0);
@@ -547,7 +601,7 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
 
   const dailyFemaleTotals = useMemo(() => {
     const totals = {};
-    schoolDays.forEach(sd => {
+    classDays.forEach(sd => {
       let count = 0;
       femaleStudents.forEach(stu => {
         const key = `${stu.student_section_id || stu.student_id}-${sd.dateStr}`;
@@ -557,7 +611,7 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
       totals[sd.dateStr] = count;
     });
     return totals;
-  }, [femaleStudents, schoolDays, attendanceMap]);
+  }, [femaleStudents, classDays, attendanceMap]);
 
   const totalFemaleMonthAttendance = useMemo(() => {
     return Object.values(dailyFemaleTotals).reduce((sum, c) => sum + c, 0);
@@ -618,38 +672,19 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
     );
   }
 
+  if (loadError) return <div className="attendance-sheet-container">
+    <EmptyState icon={AlertTriangle} title="Attendance could not be loaded" description={loadError} />
+    <button type="button" className="att-save-btn" onClick={loadAll}>Retry</button>
+  </div>;
+
   return (
     <div className="attendance-sheet-container">
       {/* Toast Notifications */}
       <div style={{ position: "fixed", top: "24px", right: "24px", zIndex: 9999, display: "flex", flexDirection: "column", gap: "10px" }}>
         {toasts.map(t => (
-          <div
-            key={t.id}
-            style={{
-              backgroundColor: t.type === "success" ? "#dcfce7" : "#fee2e2",
-              border: `1px solid ${t.type === "success" ? "#bbf7d0" : "#fecaca"}`,
-              borderRadius: "10px",
-              padding: "12px 18px",
-              color: t.type === "success" ? "#166534" : "#991b1b",
-              boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1)",
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              fontFamily: "var(--font-dm-sans)",
-              fontSize: "13px",
-              fontWeight: "600",
-              animation: "fadeIn 0.2s ease-out",
-            }}
-          >
-            <AlertTriangle size={16} />
-            <span>{t.message}</span>
-            <button
-              onClick={() => setToasts(prev => prev.filter(x => x.id !== t.id))}
-              style={{ background: "transparent", border: "none", color: "inherit", cursor: "pointer", marginLeft: "8px", display: "flex", padding: 0 }}
-            >
-              <X size={14} />
-            </button>
-          </div>
+          <Toast key={t.id} message={t.message} variant={t.type} persistent className="att-toast"
+            icon={t.type === 'error' ? AlertTriangle : CheckCircle}
+            onDismiss={() => setToasts(prev => prev.filter(item => item.id !== t.id))} />
         ))}
       </div>
 
@@ -666,12 +701,15 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+          <AttendanceDayControl date={selectedDate} reason={selectedNoClassReason}
+            disabled={!isEditableDate || activeColIndex < 0 || !adviserAssignment?.adviser_assignment_id}
+            saving={saving} onSave={handleDayMarkerSave} />
           {/* Quick Mark All Present button */}
           {isEditableDate && students.length > 0 && (
             <button
               type="button"
               onClick={handleMarkAllPresent}
-              disabled={saving}
+              disabled={saving || Boolean(selectedNoClassReason)}
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -699,7 +737,7 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
             <button
               type="button"
               onClick={handleSaveAll}
-              disabled={saving}
+              disabled={saving || Boolean(selectedNoClassReason)}
               className="att-save-btn"
             >
               <Save size={15} />
@@ -752,7 +790,9 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
           </span>
         </div>
 
-        {isEditableDate ? (
+        {selectedNoClassReason ? (
+          <span className="att-mode-badge no-classes"><CalendarOff size={14} /><span>No classes · {NO_CLASS_LABELS[selectedNoClassReason]}</span></span>
+        ) : isEditableDate ? (
           <span className="att-mode-badge editable">
             <CheckCircle size={14} />
             <span>Editable Mode (Today's Date: {TODAY})</span>
@@ -764,6 +804,11 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
           </span>
         )}
       </div>
+
+      {selectedNoClassReason && <div className="att-no-class-notice" role="status">
+        <CalendarOff size={18} aria-hidden="true" />
+        <span><strong>{NO_CLASS_LABELS[selectedNoClassReason]} · {selectedDate}</strong> — This day is excluded from attendance totals. Existing entries and remarks are preserved.</span>
+      </div>}
 
       {/* Main SF2 Conversion Tool Table */}
       {students.length === 0 ? (
@@ -814,6 +859,7 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
                       {week.days.map((sd, dIdx) => (
                         <th
                           key={`dow-${sd.dateStr}`}
+                          className={noClassDays[sd.dateStr] ? 'sf2-no-class-day' : ''}
                           style={{
                             backgroundColor: colorObj.bg,
                             color: colorObj.text,
@@ -849,7 +895,7 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
                         return (
                           <th
                             key={`num-${sd.dateStr}`}
-                            className={`sf2-date-num-th ${isActive ? "active-date-th" : ""}`}
+                            className={`sf2-date-num-th ${isActive ? "active-date-th" : ""} ${noClassDays[sd.dateStr] ? 'sf2-no-class-day' : ''}`}
                             style={{
                               backgroundColor: isActive ? "#fef08a" : colorObj.bg,
                               color: isActive ? "#854d0e" : colorObj.text,
@@ -858,9 +904,10 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
                               fontWeight: "700",
                               padding: "4px 2px",
                             }}
-                            title={sd.fullDate}
+                            title={noClassDays[sd.dateStr] ? `${sd.fullDate} · ${NO_CLASS_LABELS[noClassDays[sd.dateStr]]} · No classes` : sd.fullDate}
                           >
                             {sd.dayNumber}
+                            {noClassDays[sd.dateStr] && <CalendarOff size={10} aria-hidden="true" />}
                           </th>
                         );
                       })}
@@ -889,15 +936,16 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
                       const altKey2 = `${stu.student_id}-${sd.dateStr}`;
                       const status = attendanceMap[key] || attendanceMap[altKey1] || attendanceMap[altKey2] || null;
                       const isActive = colIdx === activeColIndex;
+                      const noClassReason = noClassDays[sd.dateStr];
 
                       return (
                         <td
                           key={`cell-${sId}-${sd.dateStr}`}
-                          className={`sf2-td-att-cell ${isActive ? "sf2-active-col-cell" : ""} ${isActive && isEditableDate ? "sf2-editable-cell" : ""}`}
+                          className={`sf2-td-att-cell ${isActive ? "sf2-active-col-cell" : ""} ${isActive && isEditableDate && !noClassReason && !saving ? "sf2-editable-cell" : ""} ${noClassReason ? 'sf2-no-class-day' : ''}`}
                           onClick={() => handleCellClick(sId, sd.dateStr, colIdx, stu.student_id)}
-                          title={`${stu.last_name}, ${stu.first_name} - ${sd.fullDate} (${status === "P" ? "Present" : status === "L" ? "Late" : status === "A" ? "Absent" : "Unrecorded"})`}
+                          title={noClassReason ? `${NO_CLASS_LABELS[noClassReason]} · No classes. Any saved entry is preserved.` : `${stu.last_name}, ${stu.first_name} - ${sd.fullDate} (${status === "P" ? "Present" : status === "L" ? "Late" : status === "A" ? "Absent" : "Unrecorded"})`}
                         >
-                          {status ? (
+                          {noClassReason ? <span aria-label="No classes">—</span> : status ? (
                             <span className={`sf2-badge ${status.toLowerCase()}`}>
                               {status}
                             </span>
@@ -913,6 +961,7 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
                         type="text"
                         className="sf2-remarks-input"
                         value={remarksVal}
+                        disabled={Boolean(selectedNoClassReason)}
                         onChange={(e) => handleRemarksChange(sId, e.target.value, stu.student_id)}
                         onBlur={(e) => handleRemarksBlur(sId, e.target.value, stu.student_id)}
                         onKeyDown={handleRemarksKeyDown}
@@ -930,8 +979,8 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
                   MALE | Total Per Day ➡
                 </td>
                 {schoolDays.map((sd) => (
-                  <td key={`male-tot-${sd.dateStr}`} className="sf2-subtotal-cell">
-                    {dailyMaleTotals[sd.dateStr] || 0}
+                  <td key={`male-tot-${sd.dateStr}`} className={`sf2-subtotal-cell ${noClassDays[sd.dateStr] ? 'sf2-no-class-day' : ''}`}>
+                    {noClassDays[sd.dateStr] ? '—' : dailyMaleTotals[sd.dateStr] || 0}
                   </td>
                 ))}
                 <td colSpan={2} className="sf2-subtotal-sum">
@@ -958,15 +1007,16 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
                       const altKey2 = `${stu.student_id}-${sd.dateStr}`;
                       const status = attendanceMap[key] || attendanceMap[altKey1] || attendanceMap[altKey2] || null;
                       const isActive = colIdx === activeColIndex;
+                      const noClassReason = noClassDays[sd.dateStr];
 
                       return (
                         <td
                           key={`cell-${sId}-${sd.dateStr}`}
-                          className={`sf2-td-att-cell ${isActive ? "sf2-active-col-cell" : ""} ${isActive && isEditableDate ? "sf2-editable-cell" : ""}`}
+                          className={`sf2-td-att-cell ${isActive ? "sf2-active-col-cell" : ""} ${isActive && isEditableDate && !noClassReason && !saving ? "sf2-editable-cell" : ""} ${noClassReason ? 'sf2-no-class-day' : ''}`}
                           onClick={() => handleCellClick(sId, sd.dateStr, colIdx, stu.student_id)}
-                          title={`${stu.last_name}, ${stu.first_name} - ${sd.fullDate} (${status === "P" ? "Present" : status === "L" ? "Late" : status === "A" ? "Absent" : "Unrecorded"})`}
+                          title={noClassReason ? `${NO_CLASS_LABELS[noClassReason]} · No classes. Any saved entry is preserved.` : `${stu.last_name}, ${stu.first_name} - ${sd.fullDate} (${status === "P" ? "Present" : status === "L" ? "Late" : status === "A" ? "Absent" : "Unrecorded"})`}
                         >
-                          {status ? (
+                          {noClassReason ? <span aria-label="No classes">—</span> : status ? (
                             <span className={`sf2-badge ${status.toLowerCase()}`}>
                               {status}
                             </span>
@@ -982,6 +1032,7 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
                         type="text"
                         className="sf2-remarks-input"
                         value={remarksVal}
+                        disabled={Boolean(selectedNoClassReason)}
                         onChange={(e) => handleRemarksChange(sId, e.target.value, stu.student_id)}
                         onBlur={(e) => handleRemarksBlur(sId, e.target.value, stu.student_id)}
                         onKeyDown={handleRemarksKeyDown}
@@ -999,8 +1050,8 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
                   FEMALE | Total Per Day ➡
                 </td>
                 {schoolDays.map((sd) => (
-                  <td key={`female-tot-${sd.dateStr}`} className="sf2-subtotal-cell">
-                    {dailyFemaleTotals[sd.dateStr] || 0}
+                  <td key={`female-tot-${sd.dateStr}`} className={`sf2-subtotal-cell ${noClassDays[sd.dateStr] ? 'sf2-no-class-day' : ''}`}>
+                    {noClassDays[sd.dateStr] ? '—' : dailyFemaleTotals[sd.dateStr] || 0}
                   </td>
                 ))}
                 <td colSpan={2} className="sf2-subtotal-sum">
@@ -1015,8 +1066,8 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
                   COMBINED | Total Per Day ➡
                 </td>
                 {schoolDays.map((sd) => (
-                  <td key={`comb-tot-${sd.dateStr}`} className="sf2-subtotal-cell combined">
-                    {dailyCombinedTotals[sd.dateStr] || 0}
+                  <td key={`comb-tot-${sd.dateStr}`} className={`sf2-subtotal-cell combined ${noClassDays[sd.dateStr] ? 'sf2-no-class-day' : ''}`}>
+                    {noClassDays[sd.dateStr] ? '—' : dailyCombinedTotals[sd.dateStr] || 0}
                   </td>
                 ))}
                 <td colSpan={2} className="sf2-subtotal-sum combined">
@@ -1034,6 +1085,7 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
         {/* Attendance Summary */}
         <div className="att-summary-card">
           <h3 className="att-card-header">Monthly Attendance Summary</h3>
+          <p className="att-class-days-note">Class days exclude marked holidays and suspensions. Blank attendance remains unrecorded.</p>
           <table className="att-summary-table">
             <thead>
               <tr>
@@ -1047,7 +1099,7 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
             <tbody>
               <tr>
                 <td className="row-month" style={{ textAlign: "left", fontWeight: 700 }}>{currentMonthName}</td>
-                <td>{schoolDays.length}</td>
+                <td>{classDays.length}</td>
                 <td>{maleStudents.length}</td>
                 <td>{femaleStudents.length}</td>
                 <td style={{ color: "#112d61", fontWeight: 800 }}>{students.length}</td>
@@ -1075,6 +1127,10 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
             <div className="att-legend-item">
               <span className="legend-badge-box blank"></span>
               <span className="att-legend-text"><strong>Blank</strong> = Unrecorded</span>
+            </div>
+            <div className="att-legend-item">
+              <span className="legend-badge-box no-classes"><CalendarOff size={13} /></span>
+              <span className="att-legend-text"><strong>No classes</strong> = Holiday / Suspension; excluded from totals</span>
             </div>
           </div>
           <p style={{ fontSize: "12px", color: "#64748b", marginTop: "12px", fontStyle: "italic", lineHeight: 1.4 }}>

@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
 const MasterSheetService = require('../services/MasterSheetService');
+const { excludedDates, monthlyNoClassCounts } = require('../services/AttendanceSummaryService');
 
 const MONTH_NAMES = ["Jun", "Jul", "Aug", "Sept", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr"];
 const MONTH_INDEX_MAP = {
@@ -147,9 +148,9 @@ router.get('/student/:identifier', async (req, res) => {
       student = stRows[0];
     } else {
       const [ssCheck] = await db.execute(
-        `SELECT st.*, p.program_code, p.program_name, COALESCE(p.is_specialized, 0) AS is_specialized, ss.student_section_id 
-         FROM STUDENT_SECTION ss 
-         JOIN STUDENT st ON ss.student_id = st.student_id 
+        `SELECT st.*, p.program_code, p.program_name, COALESCE(p.is_specialized, 0) AS is_specialized, ss.student_section_id
+         FROM STUDENT_SECTION ss
+         JOIN STUDENT st ON ss.student_id = st.student_id
          LEFT JOIN PROGRAM p ON p.program_id = st.program_id
          WHERE ss.student_section_id = ? LIMIT 1`,
         [cleanId]
@@ -458,20 +459,25 @@ router.get('/student/:identifier', async (req, res) => {
 
     if (sectionInfo && studentSectionId) {
       const [sheetRows] = await db.execute(
-        `SELECT ash.attendance_sheet_id, ash.attendance_date 
-         FROM ATTENDANCE_SHEET ash 
+        `SELECT ash.attendance_sheet_id, ash.attendance_date, ash.no_class_reason
+         FROM ATTENDANCE_SHEET ash
          LEFT JOIN SECTION_ADVISER_ASSIGNMENT saa ON ash.adviser_assignment_id = saa.adviser_assignment_id
-         WHERE (saa.section_id = ? OR ash.adviser_assignment_id = ?)`,
-        [sectionInfo.section_id, adviserAssignmentId || 0]
+         WHERE saa.section_id = ? AND saa.school_year_id = ? AND ash.attendance_scope = 'SECTION'`,
+        [sectionInfo.section_id, sectionInfo.school_year_id]
       );
 
-      if (sheetRows.length > 0) {
-        const sheetIds = sheetRows.map(s => s.attendance_sheet_id);
-        const sheetDateMap = new Map(sheetRows.map(s => [s.attendance_sheet_id, s.attendance_date]));
+      const noClassDates = excludedDates(sheetRows);
+      const exclusionsByMonth = monthlyNoClassCounts(sheetRows, sectionInfo.starts_on, sectionInfo.ends_on);
+      exclusionsByMonth.forEach((count, index) => { monthlyClassDays[index] = Math.max(0, monthlyClassDays[index] - count); });
+      const classSheets = sheetRows.filter(sheet => !noClassDates.has(String(sheet.attendance_date instanceof Date
+        ? sheet.attendance_date.toISOString() : sheet.attendance_date).slice(0, 10)));
+      if (classSheets.length > 0) {
+        const sheetIds = classSheets.map(s => s.attendance_sheet_id);
+        const sheetDateMap = new Map(classSheets.map(s => [s.attendance_sheet_id, s.attendance_date]));
 
         const ph = sheetIds.map(() => '?').join(',');
         const [attRows] = await db.execute(
-          `SELECT attendance_sheet_id, status FROM ATTENDANCE 
+          `SELECT attendance_sheet_id, status FROM ATTENDANCE
            WHERE attendance_sheet_id IN (${ph}) AND student_section_id = ?`,
           [...sheetIds, studentSectionId]
         );
