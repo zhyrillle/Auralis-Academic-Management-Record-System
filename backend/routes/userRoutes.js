@@ -589,17 +589,14 @@ router.get("/management-options", async (req, res) => {
         sec.section_id, 
         sec.section_name, 
         sec.grade_level_id,
-        COALESCE(
-          (
-            SELECT saa.user_id
-            FROM SECTION_ADVISER_ASSIGNMENT saa
-            LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = saa.school_year_id
-            WHERE saa.section_id = sec.section_id
-              AND (sy.status IS NULL OR LOWER(sy.status) IN ('active', 'ongoing'))
-            ORDER BY saa.adviser_assignment_id DESC
-            LIMIT 1
-          ),
-          sec.user_id
+        (
+          SELECT saa.user_id
+          FROM SECTION_ADVISER_ASSIGNMENT saa
+          LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = saa.school_year_id
+          WHERE saa.section_id = sec.section_id
+            AND (sy.status IS NULL OR LOWER(sy.status) IN ('active', 'ongoing'))
+          ORDER BY saa.adviser_assignment_id DESC
+          LIMIT 1
         ) AS adviser_user_id
       FROM SECTION sec 
       ORDER BY sec.section_name ASC
