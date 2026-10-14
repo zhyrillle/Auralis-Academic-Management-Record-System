@@ -1,5 +1,7 @@
 {
   "scripts": {
+    "start": "node server.js",
+    "db:pull-aiven": "node scripts/sync-aiven-to-local.js",
     "test": "node --test test/GradeComputationService.test.js test/MasterSheetWorkbookService.test.js test/MasterSheetService.test.js test/SectionDetailsService.test.js test/GradingPeriodService.test.js test/sf10Report.test.js test/studentSf9Routes.test.js test/EnglishRiskFeatures.test.js test/atRiskPredictionRoutes.test.js test/PhilIriScreening.test.js test/PhilIriAssessment.test.js test/AtRiskPrediction.test.js test/AttendanceDayService.test.js test/AttendanceRiskFeatures.test.js test/userManagementOptionsRoutes.test.js"
   },
   "dependencies": {
