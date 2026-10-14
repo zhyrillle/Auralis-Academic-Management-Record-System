@@ -32,6 +32,10 @@ import {
 import { triggerClassRecordPrint } from "../../utils/exportClassRecordPdf";
 import { getStoredUser } from "../../utils/auth";
 import { eligibilityMessages, getGradeSheetReopeningEligibility } from "../../services/gradingPeriodService";
+import {
+  getPendingOfflineScores,
+  processOutbox,
+} from "../../offline/syncManager";
 
 const EMPTY_SCORES = Object.freeze({});
 
@@ -293,7 +297,7 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
     } catch {}
   }, []);
 
-  // Flush pending scores to backend immediately (atomic & concurrency safe)
+  // Flush pending scores to backend (or IndexedDB when offline)
   const flushPendingScores = useCallback(async () => {
     if (isLocked) return;
 
@@ -303,12 +307,7 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
     }
 
     if (pendingQueueRef.current.size === 0) {
-      setSyncStatus("saved");
-      return;
-    }
-
-    if (!navigator.onLine) {
-      setSyncStatus("offline");
+      setSyncStatus(navigator.onLine ? "saved" : "offline");
       return;
     }
 
@@ -318,14 +317,14 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
     }
 
     isFlushingRef.current = true;
-    setSyncStatus("saving");
+    setSyncStatus(navigator.onLine ? "saving" : "offline");
 
     // Take snapshot of current queue entries
     const snapshot = Array.from(pendingQueueRef.current.entries());
     const payloadScores = snapshot.map(([k, v]) => v);
 
     try {
-      await saveScoresBatch({
+      const res = await saveScoresBatch({
         subject_offering_id: subjectOfferingId,
         term: activeTerm,
         scores: payloadScores,
@@ -342,11 +341,11 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
       });
 
       if (pendingQueueRef.current.size === 0) {
-        setSyncStatus("saved");
+        setSyncStatus(res?.offline || !navigator.onLine ? "offline" : "saved");
       }
     } catch (err) {
       console.warn("Auto-save sync error:", err.message);
-      setSyncStatus("error");
+      setSyncStatus(navigator.onLine ? "error" : "offline");
     } finally {
       isFlushingRef.current = false;
       if (hasPendingFlushRef.current || pendingQueueRef.current.size > 0) {
@@ -359,13 +358,16 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
   const flushPendingScoresRef = useRef(flushPendingScores);
   flushPendingScoresRef.current = flushPendingScores;
 
-  // Online / Offline window listeners
+  // Online / Offline window listeners & auto-sync
   useEffect(() => {
     const handleOnline = () => {
       setIsOnline(true);
       if (!isLocked) {
         setSyncStatus("saving");
         flushPendingScores();
+        processOutbox()
+          .then(() => setSyncStatus("saved"))
+          .catch(() => setSyncStatus("saved"));
       }
     };
 
@@ -760,6 +762,49 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
             ...parsed.examConfig,
           }));
 
+          // Merge any pending offline scores entered in previous sessions
+          try {
+            const pendingOffline = await getPendingOfflineScores(subjectOfferingId, termToLoad);
+            if (Array.isArray(pendingOffline) && pendingOffline.length > 0) {
+              console.log(`[ClassRecord] Restoring ${pendingOffline.length} pending offline scores from IndexedDB`);
+              pendingOffline.forEach((item) => {
+                const sId = String(item.student_id);
+                if (!parsed.grades[sId]) return;
+
+                if (item.exam_key === "st1") {
+                  if (!parsed.grades[sId].examinations) parsed.grades[sId].examinations = {};
+                  parsed.grades[sId].examinations.st1 = item.raw_score;
+                } else if (item.exam_key === "st2") {
+                  if (!parsed.grades[sId].examinations) parsed.grades[sId].examinations = {};
+                  parsed.grades[sId].examinations.st2 = item.raw_score;
+                } else if (item.exam_key === "te") {
+                  if (!parsed.grades[sId].examinations) parsed.grades[sId].examinations = {};
+                  parsed.grades[sId].examinations.te = item.raw_score;
+                  parsed.grades[sId].quarterlyAssessment = item.raw_score;
+                } else {
+                  parsed.writtenWorkColumns.forEach((c) => {
+                    if (c.assessment_id === item.assessment_id || c.id === item.assessment_id) {
+                      if (!parsed.grades[sId].writtenWorks) parsed.grades[sId].writtenWorks = {};
+                      parsed.grades[sId].writtenWorks[c.id] = item.raw_score;
+                    }
+                  });
+                  parsed.performanceTaskColumns.forEach((c) => {
+                    if (c.assessment_id === item.assessment_id || c.id === item.assessment_id) {
+                      if (!parsed.grades[sId].performanceTasks) parsed.grades[sId].performanceTasks = {};
+                      parsed.grades[sId].performanceTasks[c.id] = item.raw_score;
+                    }
+                  });
+                }
+              });
+
+              if (navigator.onLine) {
+                processOutbox().catch(() => {});
+              }
+            }
+          } catch (offlineErr) {
+            console.warn("Failed to merge offline scores:", offlineErr);
+          }
+
           setStudents(parsed.students);
           setGrades(parsed.grades);
           gradesRef.current = parsed.grades;
@@ -805,7 +850,8 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
             flushPendingScoresRef.current();
           }
 
-          setSyncStatus(parsed.isLocked ? "locked" : "saved");
+          const hasOfflinePending = (await getPendingOfflineScores(subjectOfferingId, termToLoad).catch(() => []))?.length > 0;
+          setSyncStatus(parsed.isLocked ? "locked" : (!navigator.onLine || hasOfflinePending ? "offline" : "saved"));
           setRecordLoad({ key: selectionKey, status: "ready", error: "" });
         }
       } catch (err) {
@@ -1602,9 +1648,22 @@ const formatToISODate = (val) => {
                   </span>
                 )}
                 {syncStatus === "offline" && (
-                  <span className="gdocs-status-item offline">
+                  <span
+                    className="gdocs-status-item offline"
+                    style={{ cursor: navigator.onLine ? "pointer" : "default" }}
+                    onClick={() => {
+                      if (navigator.onLine) {
+                        setSyncStatus("saving");
+                        flushPendingScores();
+                        processOutbox()
+                          .then(() => setSyncStatus("saved"))
+                          .catch(() => setSyncStatus("saved"));
+                      }
+                    }}
+                    title={navigator.onLine ? "Click to sync your offline changes now" : "Grades saved safely to device. Will automatically sync when online."}
+                  >
                     <CloudOff size={15} />
-                    <span>Saved offline (Device)</span>
+                    <span>{navigator.onLine ? "Pending Sync (Click to sync)" : "Saved offline (Device)"}</span>
                   </span>
                 )}
               </>

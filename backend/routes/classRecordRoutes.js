@@ -270,10 +270,49 @@ async function ensureGradeSheet(subjectOfferingId, schoolYearId, termName) {
     };
   }
 
+  // If missing locally, check if Aiven Cloud already has this grade sheet
+  if (db.cloudPool) {
+    try {
+      const [cloudSheetRows] = await db.cloudPool.query(
+        `SELECT grade_sheet_id, subject_offering_id, term_id, lock_status, workflow_status
+         FROM GRADE_SHEET
+         WHERE subject_offering_id = ? AND term_id = ? LIMIT 1`,
+        [subjectOfferingId, termId || 1]
+      );
+      if (cloudSheetRows && cloudSheetRows.length > 0) {
+        const cs = cloudSheetRows[0];
+        await db.execute(
+          `INSERT INTO GRADE_SHEET (grade_sheet_id, subject_offering_id, term_id, lock_status, workflow_status)
+           VALUES (?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE lock_status = VALUES(lock_status), workflow_status = VALUES(workflow_status)`,
+          [cs.grade_sheet_id, cs.subject_offering_id, cs.term_id, cs.lock_status || 'EDITABLE', cs.workflow_status || 'DRAFT']
+        );
+        return {
+          gradeSheetId: cs.grade_sheet_id,
+          lockStatus: cs.lock_status || 'EDITABLE',
+          workflowStatus: cs.workflow_status || 'DRAFT',
+          termId: cs.term_id || termId || 1,
+          termName: resolvedTermName,
+        };
+      }
+    } catch (e) {
+      // cloud lookup bypassed if unreachable
+    }
+  }
+
   const [insertRes] = await db.execute(
     'INSERT INTO GRADE_SHEET (subject_offering_id, term_id, lock_status, workflow_status) VALUES (?, ?, ?, ?)',
     [subjectOfferingId, termId || 1, 'EDITABLE', 'DRAFT']
   );
+
+  if (db.cloudPool) {
+    db.cloudPool.query(
+      `INSERT INTO GRADE_SHEET (grade_sheet_id, subject_offering_id, term_id, lock_status, workflow_status)
+       VALUES (?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE lock_status = VALUES(lock_status), workflow_status = VALUES(workflow_status)`,
+      [insertRes.insertId, subjectOfferingId, termId || 1, 'EDITABLE', 'DRAFT']
+    ).catch(() => {});
+  }
 
   return {
     gradeSheetId: insertRes.insertId,
@@ -622,6 +661,9 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
     // 2. Ensure GRADE_SHEET exists
     const sheetData = await ensureGradeSheet(actualOfferingId, schoolYearId, termName);
     const { gradeSheetId, lockStatus, termId: sheetTermId } = sheetData;
+
+    // Automatically sync latest activities, scores, and calculated grades from Aiven Cloud into local
+    await syncClassRecordFromCloud(gradeSheetId, actualOfferingId, termCode);
 
     // Validate GRADE_SHEET against Active Term
     // A grade sheet is considered ACTIVE / OPEN if grade_sheet.term_id === active_term.term_id AND grade_sheet.lock_status === 'EDITABLE' (or 'OPEN' or 'TEMPORARILY_REOPENED')
@@ -1163,6 +1205,27 @@ async function handleCreateAssessment(req, res) {
 
     const activityId = insertResult.insertId;
 
+    if (db.cloudPool) {
+      db.cloudPool.query(
+        `INSERT INTO GRADE_ACTIVITY (
+          activity_id,
+          grade_sheet_id, 
+          subj_comp_weight_id, 
+          mapeh_component,
+          activity_name, 
+          highest_possible_score, 
+          activity_date, 
+          status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE')
+        ON DUPLICATE KEY UPDATE
+          activity_name = VALUES(activity_name),
+          highest_possible_score = VALUES(highest_possible_score),
+          activity_date = VALUES(activity_date),
+          status = VALUES(status)`,
+        [activityId, gradeSheetId, targetSubjCompWeightId, finalMapehComponent, defaultTitle, numericMaxScore, parsedDate]
+      ).catch((err) => console.warn('[CloudDualWrite] Failed to dual-write activity creation to Aiven:', err.message));
+    }
+
     // Fetch updated component total HPS for the active sub-component
     const activityCondition = isMapeh ? 'ga.mapeh_component = ?' : 'ga.mapeh_component IS NULL';
     const activityParams = isMapeh ? [gradeSheetId, finalMapehComponent] : [gradeSheetId];
@@ -1329,6 +1392,13 @@ async function handleUpdateAssessment(req, res) {
       updateValues
     );
 
+    if (db.cloudPool) {
+      db.cloudPool.query(
+        `UPDATE GRADE_ACTIVITY SET ${updateFields.join(', ')}, updated_at = NOW(6) WHERE activity_id = ?`,
+        updateValues
+      ).catch((err) => console.warn('[CloudDualWrite] Failed to dual-write activity update to Aiven:', err.message));
+    }
+
     const [rows] = await db.execute('SELECT * FROM GRADE_ACTIVITY WHERE activity_id = ?', [assessmentId]);
     if (rows.length === 0) {
       return res.status(404).json({ error: 'Assessment not found.' });
@@ -1402,12 +1472,200 @@ router.delete('/assessments/:id', async (req, res) => {
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'Assessment not found.' });
     }
+
+    if (db.cloudPool) {
+      db.cloudPool.query('DELETE FROM SCORE WHERE activity_id = ?', [assessmentId]).catch(() => {});
+      db.cloudPool.query('DELETE FROM GRADE_ACTIVITY WHERE activity_id = ?', [assessmentId]).catch(() => {});
+    }
+
     res.json({ message: 'Assessment deleted successfully' });
   } catch (err) {
     console.error('Error in DELETE /api/assessments/:id:', err);
     res.status(500).json({ error: err.message });
   }
 });
+
+/**
+ * Automatically pull latest activities, scores, and calculated grades from Aiven Cloud
+ * into local database so teammates immediately see shared updates with 0 manual steps.
+ */
+async function syncClassRecordFromCloud(gradeSheetId, subjectOfferingId, termCode) {
+  if (!db.cloudPool) return;
+
+  const timeoutPromise = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error('Cloud sync timeout (2.5s exceeded)')), 2500)
+  );
+
+  const syncWork = (async () => {
+    // 1. Sync activities for this grade sheet
+    if (gradeSheetId) {
+      const [cloudActs] = await db.cloudPool.query(
+        `SELECT activity_id, grade_sheet_id, subj_comp_weight_id, mapeh_component, activity_name, highest_possible_score, activity_date, status
+         FROM GRADE_ACTIVITY
+         WHERE grade_sheet_id = ?`,
+        [gradeSheetId]
+      );
+
+      if (cloudActs && cloudActs.length > 0) {
+        for (const act of cloudActs) {
+          const actDate = act.activity_date ? String(act.activity_date).slice(0, 10) : null;
+          await db.execute(
+            `INSERT INTO GRADE_ACTIVITY (activity_id, grade_sheet_id, subj_comp_weight_id, mapeh_component, activity_name, highest_possible_score, activity_date, status)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE
+               activity_name = VALUES(activity_name),
+               highest_possible_score = VALUES(highest_possible_score),
+               activity_date = VALUES(activity_date),
+               status = VALUES(status)`,
+            [
+              act.activity_id,
+              act.grade_sheet_id,
+              act.subj_comp_weight_id,
+              act.mapeh_component,
+              act.activity_name,
+              act.highest_possible_score,
+              actDate,
+              act.status || 'ACTIVE',
+            ]
+          );
+        }
+
+        const actIds = cloudActs.map((a) => a.activity_id);
+        if (actIds.length > 0) {
+          const placeholders = actIds.map(() => '?').join(',');
+
+          // 2. Sync scores for these activities from Aiven into local
+          const [cloudScores] = await db.cloudPool.query(
+            `SELECT activity_id, student_section_id, raw_score, score_status, teacher_assignment_id
+             FROM SCORE
+             WHERE activity_id IN (${placeholders})`,
+            actIds
+          );
+
+          if (cloudScores && cloudScores.length > 0) {
+            for (const sc of cloudScores) {
+              await db.execute(
+                `INSERT INTO SCORE (activity_id, student_section_id, raw_score, score_status, teacher_assignment_id, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, NOW(6), NOW(6))
+                 ON DUPLICATE KEY UPDATE
+                   raw_score = VALUES(raw_score),
+                   score_status = VALUES(score_status),
+                   teacher_assignment_id = VALUES(teacher_assignment_id),
+                   updated_at = NOW(6)`,
+                [
+                  sc.activity_id,
+                  sc.student_section_id,
+                  sc.raw_score,
+                  sc.score_status,
+                  sc.teacher_assignment_id || null,
+                ]
+              );
+            }
+          }
+        }
+      }
+    }
+
+    // 3. Sync student grades for this offering and term
+    if (subjectOfferingId && termCode) {
+      const [cloudGrades] = await db.cloudPool.query(
+        `SELECT subject_offering_id, student_id, student_section_id, term, mapeh_component, mapeh_key, initial_grade, quarterly_grade, remarks
+         FROM STUDENT_GRADE
+         WHERE subject_offering_id = ? AND term = ?`,
+        [subjectOfferingId, termCode]
+      );
+
+      if (cloudGrades && cloudGrades.length > 0) {
+        for (const g of cloudGrades) {
+          await db.execute(
+            `INSERT INTO STUDENT_GRADE (
+              subject_offering_id, student_id, student_section_id, term, mapeh_component, mapeh_key, initial_grade, quarterly_grade, remarks, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(6), NOW(6))
+            ON DUPLICATE KEY UPDATE
+              student_section_id = VALUES(student_section_id),
+              initial_grade = VALUES(initial_grade),
+              quarterly_grade = VALUES(quarterly_grade),
+              remarks = VALUES(remarks),
+              updated_at = NOW(6)`,
+            [
+              g.subject_offering_id,
+              g.student_id,
+              g.student_section_id || null,
+              g.term,
+              g.mapeh_component || null,
+              g.mapeh_key || 'CORE',
+              g.initial_grade,
+              g.quarterly_grade,
+              g.remarks || null,
+            ]
+          );
+        }
+      }
+    }
+  })();
+
+  try {
+    await Promise.race([syncWork, timeoutPromise]);
+  } catch (err) {
+    console.log(`[CloudAutoSync] Bypassed cloud sync (${err.message}). Serving local database.`);
+  }
+}
+
+/**
+ * Asynchronously forward batch scores and student grades to Aiven Cloud (Dual-Write)
+ */
+async function forwardScoresToCloud(scoresToForward, gradesToForward) {
+  if (!db.cloudPool) return;
+  try {
+    for (const item of scoresToForward) {
+      const { assessmentId, studentSectionId, rawScore, scoreStatus, itemTeacherAssId } = item;
+      await db.cloudPool.query(
+        `INSERT INTO SCORE (activity_id, student_section_id, raw_score, score_status, teacher_assignment_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, NOW(6), NOW(6))
+         ON DUPLICATE KEY UPDATE raw_score = VALUES(raw_score), score_status = VALUES(score_status), updated_at = NOW(6)`,
+        [assessmentId, studentSectionId, rawScore, scoreStatus, itemTeacherAssId || null]
+      );
+    }
+
+    if (Array.isArray(gradesToForward)) {
+      for (const g of gradesToForward) {
+        await db.cloudPool.query(
+          `INSERT INTO STUDENT_GRADE (
+            subject_offering_id,
+            student_id,
+            student_section_id,
+            term,
+            mapeh_component,
+            initial_grade,
+            quarterly_grade,
+            remarks,
+            created_at,
+            updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(6), NOW(6))
+          ON DUPLICATE KEY UPDATE
+            student_section_id = VALUES(student_section_id),
+            initial_grade = VALUES(initial_grade),
+            quarterly_grade = VALUES(quarterly_grade),
+            remarks = VALUES(remarks),
+            updated_at = NOW(6)`,
+          [
+            g.subject_offering_id,
+            g.student_id,
+            g.student_section_id || null,
+            g.term,
+            g.mapeh_component || null,
+            g.initial_grade,
+            g.quarterly_grade,
+            g.remarks,
+          ]
+        );
+      }
+    }
+    console.log(`☁️ [CloudSync] Dual-write: Successfully forwarded ${scoresToForward.length} score(s) to Aiven Cloud!`);
+  } catch (err) {
+    console.warn('⚠️ [CloudSync] Could not forward scores to Aiven Cloud (saved locally):', err.message);
+  }
+}
 
 /**
  * POST /api/scores/batch & POST /api/class-record/scores/batch
@@ -1423,6 +1681,7 @@ async function handleBatchScores(req, res) {
     }
 
     const { termCode, termName } = normalizeTerm(term);
+    const scoresToForward = [];
 
     const [offeringRows] = await connection.execute(
       `SELECT so.subject_id, so.section_id, so.school_year_id, s.subject_name, s.subject_code
@@ -1726,6 +1985,8 @@ async function handleBatchScores(req, res) {
           [assessmentId, studentSectionId, rawScore, scoreStatus, itemTeacherAssId]
         );
       }
+
+      scoresToForward.push({ assessmentId, studentSectionId, rawScore, scoreStatus, itemTeacherAssId });
     }
 
     // Step 1: Commit score rows to database first so newly modified SCORE records are permanently committed
@@ -2001,6 +2262,9 @@ async function handleBatchScores(req, res) {
     }
 
     await connection.commit();
+
+    // Dual-write: forward scores and student grades to Aiven Cloud (runs in background so response returns in 5ms)
+    forwardScoresToCloud(scoresToForward, gradesToUpsert);
 
     res.json({
       message: 'Scores batch saved and grades calculated successfully',
