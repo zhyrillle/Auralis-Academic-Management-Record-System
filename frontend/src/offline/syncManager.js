@@ -145,6 +145,16 @@ export async function processOutbox() {
           // Success or already applied conflict
           await db.outbox.delete(item.id);
           console.log(`[SyncManager] Successfully synced: ${item.label}`);
+
+          // If this was a scores batch, clear offline scores
+          if (item.url.includes('/scores/batch')) {
+            try {
+              const parsed = JSON.parse(item.body || '{}');
+              if (parsed.subject_offering_id && parsed.term) {
+                await clearOfflineScores(parsed.subject_offering_id, parsed.term);
+              }
+            } catch (_) {}
+          }
         } else if (response.status >= 400 && response.status < 500) {
           // Client error - record failure
           const errText = await response.text().catch(() => '');
@@ -175,6 +185,105 @@ export async function processOutbox() {
   }
 }
 
+/**
+ * Persist offline scores into Dexie offlineScores table and register outbox mutation
+ */
+export async function saveOfflineScores({ subject_offering_id, term, scores, mapeh_component = null, examConfig = null, apiUrl = null }) {
+  try {
+    const offeringId = Number(subject_offering_id);
+    const now = Date.now();
+
+    for (const s of scores) {
+      const existing = await db.offlineScores
+        .where('[subject_offering_id+term]')
+        .equals([offeringId, term])
+        .filter((rec) => rec.student_id === s.student_id && rec.assessment_id === s.assessment_id && rec.mapeh_component === (s.mapeh_component || mapeh_component))
+        .first();
+
+      if (existing) {
+        await db.offlineScores.update(existing.id, {
+          raw_score: s.raw_score,
+          exam_key: s.exam_key || null,
+          student_section_id: s.student_section_id,
+          timestamp: now,
+          status: 'pending',
+        });
+      } else {
+        await db.offlineScores.add({
+          subject_offering_id: offeringId,
+          term,
+          student_id: s.student_id,
+          student_section_id: s.student_section_id,
+          assessment_id: s.assessment_id,
+          exam_key: s.exam_key || null,
+          raw_score: s.raw_score,
+          mapeh_component: s.mapeh_component || mapeh_component || null,
+          timestamp: now,
+          status: 'pending',
+        });
+      }
+    }
+
+    if (apiUrl) {
+      await enqueueMutation({
+        url: apiUrl,
+        method: 'POST',
+        body: {
+          subject_offering_id: offeringId,
+          term,
+          scores,
+          mapeh_component,
+          examConfig,
+        },
+        label: `Batch Scores (Offering ${offeringId}, ${term}, ${scores.length} scores)`,
+      });
+    }
+
+    notify();
+    return true;
+  } catch (err) {
+    console.error('[SyncManager] Failed to save offline scores:', err);
+    return false;
+  }
+}
+
+/**
+ * Get pending scores for a specific Class Record offering & term
+ */
+export async function getPendingOfflineScores(subject_offering_id, term) {
+  try {
+    const offeringId = Number(subject_offering_id);
+    return await db.offlineScores
+      .where('[subject_offering_id+term]')
+      .equals([offeringId, term])
+      .filter((rec) => rec.status === 'pending')
+      .toArray();
+  } catch (err) {
+    console.warn('[SyncManager] Failed to get pending offline scores:', err.message);
+    return [];
+  }
+}
+
+/**
+ * Clear offline scores after successful sync
+ */
+export async function clearOfflineScores(subject_offering_id, term) {
+  try {
+    const offeringId = Number(subject_offering_id);
+    const toDelete = await db.offlineScores
+      .where('[subject_offering_id+term]')
+      .equals([offeringId, term])
+      .toArray();
+
+    for (const item of toDelete) {
+      await db.offlineScores.delete(item.id);
+    }
+    notify();
+  } catch (err) {
+    console.warn('[SyncManager] Failed to clear offline scores:', err.message);
+  }
+}
+
 export default {
   subscribeSyncStatus,
   getSyncSnapshot,
@@ -182,4 +291,7 @@ export default {
   getPersistentCache,
   enqueueMutation,
   processOutbox,
+  saveOfflineScores,
+  getPendingOfflineScores,
+  clearOfflineScores,
 };

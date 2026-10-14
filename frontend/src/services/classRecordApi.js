@@ -1,4 +1,10 @@
 import { apiFetch as fetch } from "./navigationCache";
+import {
+  getPersistentCache,
+  setPersistentCache,
+  saveOfflineScores,
+} from "../offline/syncManager";
+
 export const API_BASE_URL = (
   import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api"
 ).replace(/\/$/, "");
@@ -28,8 +34,24 @@ export const getClassRecord = async (
   if (subjectId) {
     url += `&subject_id=${encodeURIComponent(subjectId)}`;
   }
-  const res = await fetch(url);
-  return parseResponse(res);
+
+  const cacheKey = `classRecord_${subjectOfferingId}_${term}_${sectionId || ""}_${mapehComponent || ""}_${subjectId || ""}`;
+
+  try {
+    const res = await fetch(url);
+    const data = await parseResponse(res);
+    // Persist full class record to IndexedDB for offline access
+    setPersistentCache(cacheKey, data).catch(() => {});
+    return data;
+  } catch (err) {
+    // If offline or network fails, try to load from persistent cache
+    const cached = await getPersistentCache(cacheKey);
+    if (cached) {
+      console.log(`[ClassRecordApi] Serving offline cached record for ${cacheKey}`);
+      return cached;
+    }
+    throw err;
+  }
 };
 
 export const createAssessment = async (payload) => {
@@ -69,12 +91,52 @@ export const saveScoresBatch = async ({ subject_offering_id, term = "T1", scores
   if (examConfig) {
     payload.examConfig = examConfig;
   }
-  const res = await fetch(`${API_BASE_URL}/scores/batch`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  return parseResponse(res);
+
+  const url = `${API_BASE_URL}/scores/batch`;
+
+  // If currently offline, directly persist to IndexedDB offlineScores and outbox queue
+  if (typeof navigator !== "undefined" && !navigator.onLine) {
+    await saveOfflineScores({
+      subject_offering_id,
+      term,
+      scores,
+      mapeh_component,
+      examConfig,
+      apiUrl: url,
+    });
+    return {
+      success: true,
+      offline: true,
+      message: "Scores saved locally. Will sync when back online.",
+      students: {},
+    };
+  }
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    return await parseResponse(res);
+  } catch (err) {
+    // Network failed while trying to save - fallback to offline storage
+    console.warn("[ClassRecordApi] Network error during batch save, storing offline:", err.message);
+    await saveOfflineScores({
+      subject_offering_id,
+      term,
+      scores,
+      mapeh_component,
+      examConfig,
+      apiUrl: url,
+    });
+    return {
+      success: true,
+      offline: true,
+      message: "Scores saved locally (offline fallback). Will sync when online.",
+      students: {},
+    };
+  }
 };
 
 export const calculateAndSaveGrades = async (subject_offering_id, term = "T1", mapeh_component = null) => {
