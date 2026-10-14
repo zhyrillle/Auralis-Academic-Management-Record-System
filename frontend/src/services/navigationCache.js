@@ -1,4 +1,6 @@
-// Session-memory only: no learner records are persisted in browser storage.
+import { getPersistentCache, setPersistentCache, enqueueMutation } from '../offline/syncManager';
+
+// Session-memory + Persistent IndexedDB for full offline functionality.
 const entries = new Map();
 const listeners = new Set();
 const FRESH_FOR_MS = 120_000;
@@ -57,16 +59,42 @@ export function loadCached(key, loader, { force = false } = {}) {
   const startedGeneration = generation;
   const startedIdentity = identity;
   const entry = { ...previous, error: '', pending: null };
-  const pending = Promise.resolve().then(loader).then(data => {
-    checkIdentity();
-    if (startedIdentity !== identity) throw new Error('The signed-in user changed. Please reload this view.');
-    // A successful save happened while this read was running: read current records instead.
-    if (startedGeneration !== generation) return loadCached(key, loader);
-    if (entries.get(key) === entry) {
-      entries.set(key, { data, updatedAt: Date.now(), error: '', pending: null });
-      notify();
+
+  const pending = Promise.resolve().then(async () => {
+    // If memory is empty, check IndexedDB persistent storage first for 0ms initial load
+    if (!previous?.data) {
+      const persisted = await getPersistentCache(key);
+      if (persisted !== undefined && entries.get(key) === entry) {
+        entries.set(key, { data: persisted, updatedAt: Date.now(), error: '', pending: entry.pending });
+        notify();
+      }
     }
-    return data;
+
+    try {
+      const data = await loader();
+      checkIdentity();
+      if (startedIdentity !== identity) throw new Error('The signed-in user changed. Please reload this view.');
+      if (startedGeneration !== generation) return loadCached(key, loader);
+
+      if (entries.get(key) === entry) {
+        entries.set(key, { data, updatedAt: Date.now(), error: '', pending: null });
+        notify();
+      }
+      // Persist to IndexedDB for offline capability
+      setPersistentCache(key, data).catch(() => {});
+      return data;
+    } catch (networkError) {
+      // If network fails (e.g. offline), try to serve cached data from IndexedDB
+      const persisted = await getPersistentCache(key);
+      if (persisted !== undefined) {
+        if (entries.get(key) === entry) {
+          entries.set(key, { data: persisted, updatedAt: Date.now(), error: '', pending: null });
+          notify();
+        }
+        return persisted;
+      }
+      throw networkError;
+    }
   }).catch(error => {
     if (entries.get(key) === entry) {
       entries.set(key, { ...previous, error: error.message || 'Unable to load this view.', pending: null });
@@ -74,6 +102,7 @@ export function loadCached(key, loader, { force = false } = {}) {
     }
     throw error;
   });
+
   entry.pending = pending;
   entries.set(key, entry);
   if (entries.size > MAX_ENTRIES) {
@@ -84,12 +113,43 @@ export function loadCached(key, loader, { force = false } = {}) {
   return pending;
 }
 
-// Preserve normal fetch behavior; successful writes invalidate all dependent views.
+// Preserve normal fetch behavior with automatic offline outbox queueing for mutations
 export async function apiFetch(input, init) {
-  const response = await fetch(input, init);
   const method = String(init?.method || (typeof input === 'object' && input?.method) || 'GET').toUpperCase();
-  if (response.ok && !['GET', 'HEAD', 'OPTIONS'].includes(method)) clearNavigationCache();
-  return response;
+  const url = typeof input === 'string' ? input : input?.url || '';
+
+  try {
+    const response = await fetch(input, init);
+    if (response.ok && !['GET', 'HEAD', 'OPTIONS'].includes(method)) clearNavigationCache();
+    return response;
+  } catch (fetchError) {
+    // If offline or fetch failed on a mutation (POST, PUT, PATCH, DELETE), queue in Outbox
+    if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+      console.warn(`[Offline Queue] Intercepted failed ${method} to ${url}, queueing for sync:`, fetchError.message);
+      await enqueueMutation({
+        url,
+        method,
+        headers: init?.headers,
+        body: init?.body,
+      });
+
+      clearNavigationCache();
+
+      // Return synthetic ok response so UI components can proceed smoothly
+      return new Response(
+        JSON.stringify({
+          success: true,
+          offline: true,
+          message: 'Saved locally. Your changes will sync automatically when back online.',
+        }),
+        {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }
+      );
+    }
+    throw fetchError;
+  }
 }
 
 if (typeof window !== 'undefined') {

@@ -1,6 +1,7 @@
 import { useLocation, useNavigate } from "react-router-dom";
 import { Menu, ChevronRight, Bell } from "lucide-react";
 import { normalizeRole } from "../../utils/auth";
+import SyncStatusBadge from "../SyncStatusBadge";
 
 export default function Navbar({
   user,
@@ -133,29 +134,32 @@ export default function Navbar({
         </div>
       </div>
 
-      {/* Right side: Notifications */}
-      {showNotifications && <div className="navbar-right">
-        <button
-          type="button"
-          className="toggle-sidebar-btn notification-button"
-          aria-label="Notifications"
-          onClick={() => {
-            if (location.pathname.startsWith("/department-head")) {
-              navigate("/department-head/notifications");
-            } else if (location.pathname.startsWith("/teacher")) {
-              navigate("/teacher/notifications");
-            } else {
-              navigate("/adviser/notifications");
-            }
-          }}
-        >
-          <Bell size={20} />
-          <span
-            className="notification-indicator"
-            aria-hidden="true"
-          />
-        </button>
-      </div>}
+      {/* Right side: Sync Status & Notifications */}
+      <div className="navbar-right">
+        <SyncStatusBadge />
+        {showNotifications && (
+          <button
+            type="button"
+            className="toggle-sidebar-btn notification-button"
+            aria-label="Notifications"
+            onClick={() => {
+              if (location.pathname.startsWith("/department-head")) {
+                navigate("/department-head/notifications");
+              } else if (location.pathname.startsWith("/teacher")) {
+                navigate("/teacher/notifications");
+              } else {
+                navigate("/adviser/notifications");
+              }
+            }}
+          >
+            <Bell size={20} />
+            <span
+              className="notification-indicator"
+              aria-hidden="true"
+            />
+          </button>
+        )}
+      </div>
     </header>
   );
 }
