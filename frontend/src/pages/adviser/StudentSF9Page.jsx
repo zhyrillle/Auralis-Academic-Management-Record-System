@@ -19,7 +19,7 @@ export default function StudentSF9Page(props) {
   const identity = student?.student_id || student?.studentId || student?.student_section_id || student?.studentSectionId || student?.lrn || student?.id || "default";
   const schoolYear = student?.schoolYearId || student?.schoolYear || "";
   // Remount learner-specific state before showing another learner's report.
-  return <StudentSF9Details key={`${identity}:${schoolYear}:${props.reportIdentifier || ""}:${props.currentTerm || ""}`} {...props} />;
+  return <StudentSF9Details key={`${identity}:${schoolYear}:${props.reportIdentifier || ""}`} {...props} />;
 }
 
 function StudentReportSkeleton({ student, onBack }) {
@@ -48,7 +48,7 @@ function StudentReportSkeleton({ student, onBack }) {
   </div>;
 }
 
-function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab, isAdviser: propIsAdviser, reportIdentifier, currentTerm: propCurrentTerm, loadReport = getStudentSF9Details }) {
+function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab, isAdviser: propIsAdviser, reportIdentifier, loadReport = getStudentSF9Details }) {
   const storedUser = useMemo(() => getStoredUser(), []);
   const normRole = useMemo(() => normalizeRole(storedUser?.role, storedUser), [storedUser]);
   const userRole = propUserRole || (normRole === "adviser" ? "adviser" : normRole === "principal" ? "principal" : "teacher");
@@ -175,108 +175,6 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
     ];
   }, [sf9Data]);
 
-  const currentTermInfo = useMemo(() => {
-    // 1. Check explicit prop or student object
-    const rawProp = propCurrentTerm || student?.currentTerm || student?.activeTerm || student?.selectedTerm || student?.term;
-    let code = null;
-    let label = null;
-
-    if (rawProp) {
-      if (typeof rawProp === "string") {
-        const match = rawProp.match(/(\d+)/);
-        if (match) {
-          code = `T${match[1]}`;
-          label = `Term ${match[1]}`;
-        }
-      } else if (rawProp.termCode) {
-        code = rawProp.termCode;
-        label = rawProp.termName || `Term ${rawProp.position || rawProp.termCode.replace("T", "")}`;
-      } else if (rawProp.position) {
-        code = `T${rawProp.position}`;
-        label = `Term ${rawProp.position}`;
-      }
-    }
-
-    // 2. Check sf9Data.currentTerm from API
-    if (!code && sf9Data?.currentTerm) {
-      if (sf9Data.currentTerm.termCode) {
-        code = sf9Data.currentTerm.termCode;
-        label = sf9Data.currentTerm.termName || `Term ${sf9Data.currentTerm.position || code.replace("T", "")}`;
-      } else if (sf9Data.currentTerm.position) {
-        code = `T${sf9Data.currentTerm.position}`;
-        label = `Term ${sf9Data.currentTerm.position}`;
-      }
-    }
-
-    // Fallback: Default to T1
-    code = code || "T1";
-    label = label || "Term 1";
-
-    const position = code === "T3" ? 3 : code === "T2" ? 2 : 1;
-    const requiredKeys = position === 3 ? ["t1", "t2", "t3"] : position === 2 ? ["t1", "t2"] : ["t1"];
-
-    return {
-      code,
-      label,
-      position,
-      requiredKeys,
-    };
-  }, [propCurrentTerm, student, sf9Data?.currentTerm]);
-
-  const gradeCompleteness = useMemo(() => {
-    if (!sf9Data || !grades || grades.length === 0) {
-      return { isComplete: false, missingDetails: ["Grades data not loaded"] };
-    }
-
-    const missing = [];
-    const { requiredKeys } = currentTermInfo;
-
-    const mapehHeader = grades.find((g) => g.code === "mapeh" || g.isHeader);
-    const mapehSubs = grades.filter((g) => g.isSubSubject);
-
-    for (const key of requiredKeys) {
-      const termNum = key.replace("t", "");
-      const termLabel = `Term ${termNum}`;
-
-      // 1. Regular subjects (exclude header and sub-subjects)
-      for (const subj of grades) {
-        if (subj.isHeader || subj.isSubSubject) continue;
-        const val = subj[key];
-        const hasValidNum = val !== "" && val !== null && val !== undefined && Number.isFinite(Number(val)) && Number(val) > 0;
-        if (!hasValidNum) {
-          missing.push(`${subj.name} (${termLabel})`);
-        }
-      }
-
-      // 2. MAPEH (complete if either header has grade OR all sub-subjects have grades)
-      if (mapehHeader || mapehSubs.length > 0) {
-        const headerVal = mapehHeader ? mapehHeader[key] : null;
-        const hasHeaderGrade = headerVal !== "" && headerVal !== null && headerVal !== undefined && Number.isFinite(Number(headerVal)) && Number(headerVal) > 0;
-
-        if (!hasHeaderGrade) {
-          if (mapehSubs.length > 0) {
-            for (const sub of mapehSubs) {
-              const subVal = sub[key];
-              const hasSubGrade = subVal !== "" && subVal !== null && subVal !== undefined && Number.isFinite(Number(subVal)) && Number(subVal) > 0;
-              if (!hasSubGrade) {
-                missing.push(`${sub.name} (${termLabel})`);
-              }
-            }
-          } else {
-            missing.push(`MAPEH (${termLabel})`);
-          }
-        }
-      }
-    }
-
-    return {
-      isComplete: missing.length === 0,
-      missingDetails: missing,
-    };
-  }, [sf9Data, grades, currentTermInfo]);
-
-  const isGradesComplete = gradeCompleteness.isComplete;
-
   // Performance Descriptors matching the official layout
   const performanceDescriptors = [
     { scale: "90-100", desc: "Advancing", remarks: "Passed" },
@@ -331,10 +229,6 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
 
   const handleDownloadPDF = async () => {
     if (loading || loadError || !sf9Data) return;
-    if (activeTab === "sf9" && !isGradesComplete) {
-      showToast(`Cannot download SF9: Learner's grades are not yet complete for ${currentTermInfo.label}.`, "error");
-      return;
-    }
     try {
       showToast(`Generating PDF for ${studentProfile.name || "Student"}...`, "info", CheckCircle2);
       await exportSf9Pdf({
@@ -355,10 +249,6 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
 
   const handlePrint = () => {
     if (loading || loadError || !sf9Data) return;
-    if (activeTab === "sf9" && !isGradesComplete) {
-      showToast(`Cannot print or save as PDF: Learner's grades are not yet complete for ${currentTermInfo.label}.`, "error");
-      return;
-    }
     const originalTitle = document.title;
     const lastName = getStudentLastName();
     const fileName = `${lastName}_SF9`;
@@ -512,7 +402,7 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
   if (loading) return <StudentReportSkeleton student={student} onBack={onBack} />;
 
   return (
-    <div className={`student-sf9-container ${activeTab === "sf9" && !isGradesComplete && sf9Data ? "grades-incomplete" : ""}`} aria-busy={loading}>
+    <div className="student-sf9-container" aria-busy={loading}>
       {sf9Data?.warnings?.length > 0 && <aside className="sf9-report-warnings" aria-label="Report completeness notes">
         <strong>Review before issuing</strong>
         <ul>{sf9Data.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>
@@ -643,8 +533,8 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
             <button
               className="sf9-print-btn"
               onClick={handlePrint}
-              disabled={loading || loadError || !sf9Data || !isGradesComplete}
-              title={!isGradesComplete ? "Incomplete grades" : "Open browser print dialog to print or save SF9 as PDF"}
+              disabled={loading || loadError || !sf9Data}
+              title="Open browser print dialog to print or save SF9 as PDF"
             >
               <Printer size={16} />
               <span>Print</span>
@@ -652,8 +542,8 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
             <button
               className="sf9-download-btn"
               onClick={handleDownloadPDF}
-              disabled={loading || loadError || !sf9Data || !isGradesComplete}
-              title={!isGradesComplete ? "Incomplete grades" : "Download SF9 PDF"}
+              disabled={loading || loadError || !sf9Data}
+              title="Download SF9 PDF"
             >
               <Download size={16} />
               <span>Download PDF</span>
@@ -661,23 +551,6 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
           </div>
         )}
       </div>
-
-      {/* Notice Banner between Tabs and SF9 Preview */}
-      {activeTab === "sf9" && isAdviser && !loading && !loadError && sf9Data && !isGradesComplete && (
-        <div className="sf9-incomplete-banner no-print" role="alert">
-          <div className="sf9-incomplete-banner-icon">
-            <span aria-hidden="true" style={{ fontSize: "16px" }}>⚠️</span>
-          </div>
-          <div className="sf9-incomplete-banner-text">
-            <strong>Download and Print Disabled:</strong> Learner's grades are not yet complete for {currentTermInfo.label}.
-            {gradeCompleteness.missingDetails.length > 0 && (
-              <span className="sf9-incomplete-missing-subjects">
-                {" "}Missing grades in: {gradeCompleteness.missingDetails.slice(0, 4).join(", ")}{gradeCompleteness.missingDetails.length > 4 ? ` (+${gradeCompleteness.missingDetails.length - 4} more)` : ""}.
-              </span>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* Tab Contents */}
       {activeTab === "sf9" && isAdviser ? (
@@ -698,7 +571,7 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
                   <div className="sf9-header-text-center">
                     <p className="sf9-hdr-line">Republic of the Philippines</p>
                     <p className="sf9-hdr-line">Department of Education</p>
-                    <p className="sf9-hdr-line">Region X – Northern Mindanao</p>
+                    <p className="sf9-hdr-line">Region X â€“ Northern Mindanao</p>
                     <p className="sf9-hdr-line font-bold">SCHOOLS DIVISION OFFICE OF GINGOOG CITY</p>
                     <p className="sf9-hdr-line">West 1 District</p><p className="sf9-hdr-line">Gingoog City, Misamis Oriental</p>
                     <h3 className="sf9-school-name-title">GINGOOG CITY COMPREHENSIVE NATIONAL HIGH SCHOOL</h3>
@@ -1025,27 +898,27 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
               <div className="profile-fields-list">
                 <div className="profile-field-group">
                   <span className="profile-field-label">Full Name</span>
-                  <span className="profile-field-value">{studentProfile.name || "—"}</span>
+                  <span className="profile-field-value">{studentProfile.name || "â€”"}</span>
                 </div>
 
                 <div className="profile-field-group">
                   <span className="profile-field-label">Learner Reference Number</span>
-                  <span className="profile-field-value">{studentProfile.lrn || "—"}</span>
+                  <span className="profile-field-value">{studentProfile.lrn || "â€”"}</span>
                 </div>
 
                 <div className="profile-field-group">
                   <span className="profile-field-label">Sex</span>
-                  <span className="profile-field-value">{studentProfile.sex || "—"}</span>
+                  <span className="profile-field-value">{studentProfile.sex || "â€”"}</span>
                 </div>
 
                 <div className="profile-field-group">
                   <span className="profile-field-label">Date of Birth</span>
-                  <span className="profile-field-value">{studentProfile.dateOfBirth || "—"}</span>
+                  <span className="profile-field-value">{studentProfile.dateOfBirth || "â€”"}</span>
                 </div>
 
                 <div className="profile-field-group">
                   <span className="profile-field-label">Address</span>
-                  <span className="profile-field-value">{studentProfile.address || "—"}</span>
+                  <span className="profile-field-value">{studentProfile.address || "â€”"}</span>
                 </div>
               </div>
             </div>
