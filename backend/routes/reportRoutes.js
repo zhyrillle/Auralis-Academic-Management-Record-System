@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const db = require('../config/db');
 const MasterSheetService = require('../services/MasterSheetService');
+const { decryptLrn, hashLrn } = require('../utils/encryption');
 
 // DepEd Subject Template Definition
 const DEPED_SUBJECT_TEMPLATE = [
@@ -86,12 +86,13 @@ router.get('/sf10/:studentId', async (req, res) => {
 
     // 1. Fetch Student Demographics
     let student = null;
+    const lrnHash = hashLrn(cleanId);
     const [stRows] = await db.execute(
       `SELECT st.*, p.program_code, p.program_name, COALESCE(p.is_specialized, 0) AS is_specialized
        FROM STUDENT st
        LEFT JOIN PROGRAM p ON p.program_id = st.program_id
-       WHERE st.student_id = ? OR st.LRN = ? LIMIT 1`,
-      [cleanId, cleanId]
+       WHERE st.student_id = ? OR st.LRN = ? OR st.lrn_hash = ? LIMIT 1`,
+      [cleanId, cleanId, lrnHash]
     );
 
     if (stRows.length > 0) {
@@ -114,6 +115,10 @@ router.get('/sf10/:studentId', async (req, res) => {
     if (!student) {
       return res.status(404).json({ error: "Student record not found" });
     }
+
+    // Decrypt LRN for official DepEd SF10 report
+    student.LRN = decryptLrn(student.LRN);
+    student.lrn = student.LRN;
 
     // 2. Fetch School Information
     const [schoolRows] = await db.execute(`SELECT * FROM SCHOOL LIMIT 1`);

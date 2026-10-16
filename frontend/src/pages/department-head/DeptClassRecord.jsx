@@ -23,6 +23,7 @@ import {
   calculateStudentGrades,
   DEFAULT_JHS_WEIGHTS,
 } from "../../utils/depedTransmutation.js";
+import { maskLrn } from "../../utils/lrnHelper.js";
 import { getStoredUser } from "../../utils/auth.js";
 import "../../styles/ClassRecord.css";
 import "../../styles/masterSheet.css";
@@ -1276,7 +1277,7 @@ export default function DeptClassRecord() {
                             <td className="cr-student-num">{index + 1}</td>
                             <td
                               className="cr-student-name"
-                              title={`LRN: ${student.lrn || "N/A"}`}
+                              title={`LRN: ${maskLrn(student.lrn)}`}
                             >
                               {student.displayName || `${student.lastName}, ${student.firstName}`}
                             </td>

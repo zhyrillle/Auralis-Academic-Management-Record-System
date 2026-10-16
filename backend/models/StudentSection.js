@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const { decryptLrn, maskLrn } = require('../utils/encryption');
 
 class StudentSection {
   static async getActiveSchoolYearId() {
@@ -69,7 +70,15 @@ class StudentSection {
 
     query += ` ORDER BY s.last_name ASC, s.first_name ASC`;
     const [rows] = await db.execute(query, params);
-    return rows;
+    return rows.map((r) => {
+      const plainLrn = decryptLrn(r.LRN);
+      return {
+        ...r,
+        LRN: plainLrn,
+        lrn: plainLrn,
+        masked_lrn: maskLrn(plainLrn),
+      };
+    });
   }
 
   static async assign(studentId, sectionId, schoolYearId) {

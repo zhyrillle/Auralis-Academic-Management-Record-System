@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const { decryptLrn } = require('../utils/encryption');
 
 class PhilIriAssessment {
   static async findBySection(sectionId, testType, subjectOfferingId = null, schoolYearId = null) {
@@ -32,7 +33,11 @@ class PhilIriAssessment {
     sql += ` ORDER BY st.sex ASC, st.last_name ASC, st.first_name ASC`;
 
     const [rows] = await db.execute(sql, params);
-    return rows;
+    return rows.map((r) => ({
+      ...r,
+      lrn: decryptLrn(r.lrn),
+      LRN: decryptLrn(r.lrn),
+    }));
   }
 
   static async upsertBatch(records) {

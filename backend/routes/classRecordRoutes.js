@@ -4,6 +4,7 @@ const db                  = require('../config/db');
 const StudentGrade        = require('../models/StudentGrade');
 const AuditEvent          = require('../models/AuditEvent');
 const NotificationService = require('../services/NotificationService');
+const { decryptLrn }      = require('../utils/encryption');
 const {
   DEFAULT_JHS_WEIGHTS,
   weightsFromRows,
@@ -947,10 +948,12 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
         }
       }
 
+      const plainLrn = decryptLrn(student.LRN);
       return {
         student_id: student.student_id,
         student_section_id: student.student_section_id,
-        LRN: student.LRN,
+        LRN: plainLrn,
+        lrn: plainLrn,
         first_name: student.first_name,
         middle_name: student.middle_name,
         last_name: student.last_name,

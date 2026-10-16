@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const { decryptLrn } = require('../utils/encryption');
 
 class Section {
   static async resolveGradeLevelId(gradeLevelId, level) {
@@ -447,6 +448,8 @@ class Section {
     );
     return rows.map((r) => ({
       ...r,
+      lrn: decryptLrn(r.lrn),
+      LRN: decryptLrn(r.lrn),
       term1: r.term1 !== null && r.term1 !== undefined ? Number(r.term1) : "",
       term2: r.term2 !== null && r.term2 !== undefined ? Number(r.term2) : "",
       term3: r.term3 !== null && r.term3 !== undefined ? Number(r.term3) : "",
