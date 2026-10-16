@@ -116,7 +116,6 @@ export default function SectionDetails({
   const termLabel = data?.context?.selectedTerm?.label || `Term ${selectedTerm.slice(1)}`;
   const sortOptions = [
     { label: "Student Name", value: "name" },
-    { label: "LRN", value: "lrn" },
     { label: `${termLabel} Grade`, value: "termGrade" },
   ];
   const tableMode = isSectionAdviser ? "advisory" : showEnglishRisk ? "english" : "teaching";
@@ -191,7 +190,6 @@ export default function SectionDetails({
     const result = (data?.learners || []).filter((learner) => {
       const matchesSearch = !query
         || learner.name.toLowerCase().includes(query)
-        || String(learner.lrn || "").toLowerCase().includes(query);
       const matchesHonor = !selectedHonor || learner.honorStatus === selectedHonor;
       const matchesRisk = !selectedRisk || (learner.riskAssessment?.status === "available"
         && learner.riskAssessment.riskLevel === selectedRisk);
@@ -233,7 +231,6 @@ export default function SectionDetails({
     else setActiveSf9Student({
       studentId: learner.studentId,
       studentSectionId: learner.studentSectionId,
-      lrn: learner.lrn,
       name: learner.name,
       schoolYearId: data.context.schoolYear.id,
       schoolYear: data.context.schoolYear.label,
@@ -359,7 +356,7 @@ export default function SectionDetails({
 
       <div className="toolbar-row">
         <div className="section-details-search">
-          <SearchBar query={searchQuery} setQuery={setSearchQuery} placeholder="Search student or LRN..." />
+          <SearchBar query={searchQuery} setQuery={setSearchQuery} placeholder="Search student..." />
         </div>
 
         <div className="toolbar-right">
@@ -378,20 +375,20 @@ export default function SectionDetails({
 
           {isSectionAdviser && (
             <div className="section-filter-block">
-            <span className="section-filter-label">Honor standing · {data?.context?.selectedTerm?.label}</span>
-            <div className="filter-segmented-group" aria-label="Honor standing filter">
-              {HONOR_FILTERS.map(({ key, label }) => (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => handleHonorToggle(key)}
-                  className={`filter-rect-btn ${selectedHonor === key ? "active" : ""}`}
-                  aria-pressed={selectedHonor === key}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+              <span className="section-filter-label">Honor standing · {data?.context?.selectedTerm?.label}</span>
+              <div className="filter-segmented-group" aria-label="Honor standing filter">
+                {HONOR_FILTERS.map(({ key, label }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => handleHonorToggle(key)}
+                    className={`filter-rect-btn ${selectedHonor === key ? "active" : ""}`}
+                    aria-pressed={selectedHonor === key}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -456,7 +453,6 @@ export default function SectionDetails({
               <thead>
                 <tr>
                   <th className="text-center section-number-column">No.</th>
-                  <th className="text-left section-lrn-column">LRN</th>
                   <th className="text-left section-name-column">Student Name</th>
                   {showEnglishRisk && <th className="text-center section-risk-column">At-risk Status<span className="section-status-detail">English{data?.riskContext?.targetTerm ? ` · Term ${data.riskContext.targetTerm.slice(1)}` : ""}</span></th>}
                   <th className="text-center section-grade-column">{termLabel} Grade</th>
@@ -468,7 +464,6 @@ export default function SectionDetails({
                 {filteredLearners.length > 0 ? filteredLearners.map((learner, index) => (
                   <tr key={learner.studentSectionId}>
                     <td className="text-center">{index + 1}</td>
-                    <td className="text-left section-learner-lrn">{learner.lrn || "—"}</td>
                     <td className="text-left section-learner-name">{learner.name}</td>
                     {showEnglishRisk && <td className="text-center" title={learner.riskAssessment?.reason || "Preliminary next-term English risk; not an official grade."}>
                       <Badge className={`badge-rect ${learner.riskAssessment?.status === "available"
