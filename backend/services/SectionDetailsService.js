@@ -1,5 +1,6 @@
 const db = require('../config/db');
 const AtRiskPrediction = require('../models/AtRiskPrediction');
+const { decryptLrn } = require('../utils/encryption');
 const { SUBJECT_DEFINITIONS, resolveSubjectDefinition, getTermPosition } = require('./MasterSheetService');
 const { schoolYearRange } = require('./EnglishRiskFeatures');
 
@@ -209,7 +210,7 @@ class SectionDetailsService {
       const termGrade = complete ? (isAdvisory ? Math.round(subjectGrades.reduce((sum, grade) => sum + grade, 0) / subjectGrades.length) : subjectGrades[0]) : null;
       return {
         studentSectionId: Number(student.student_section_id), studentId: Number(student.student_id),
-        lrn: student.lrn || '', name: buildLearnerName(student), termGrade,
+        lrn: decryptLrn(student.lrn), name: buildLearnerName(student), termGrade,
         gradeState: complete ? 'COMPLETE' : 'INCOMPLETE', performanceBand: getPerformanceBand(termGrade),
         gradeSummary: { completeSubjects: subjectGrades.length, requiredSubjects: offeringsBySubject.size + missingOfferings.length, missingSubjects },
         honorStatus: isAdvisory && missingSubjects.some(subject => subject.review) ? 'NEEDS_REVIEW'

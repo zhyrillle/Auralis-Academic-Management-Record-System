@@ -1,6 +1,8 @@
 import React from "react";
 import depedLogo from "../assets/deped_logo.png";
 import depedGifLogo from "../assets/deped-logo.gif";
+import MaskedLrn from "./common/MaskedLrn";
+import { maskLrn } from "../utils/lrnHelper";
 import "../styles/SF10PreviewModal.css";
 
 // Defensive string sanitizer to prevent object-as-React-child crashes
@@ -389,7 +391,14 @@ export default function SF10Document({ student, sf10Data, page1Ref, page2Ref }) 
           <div className="sf10-info-row">
             <div className="sf10-info-field" style={{ flex: "2" }}>
               <span className="lbl">Learner Reference Number (LRN):</span>
-              <span className="underline-val" style={{ fontWeight: "bold" }}>{learner.lrn}</span>
+              <span className="underline-val" style={{ fontWeight: "bold" }}>
+                <MaskedLrn
+                  lrn={learner.lrn}
+                  showToggle={true}
+                  allowCopy={true}
+                  badge={false}
+                />
+              </span>
             </div>
             <div className="sf10-info-field" style={{ flex: "2" }}>
               <span className="lbl">Birthdate (mm/dd/yyyy):</span>
@@ -479,7 +488,7 @@ export default function SF10Document({ student, sf10Data, page1Ref, page2Ref }) 
         <div className="sf10-cert-section">
           <div className="sf10-cert-header">CERTIFICATION</div>
           <p className="sf10-cert-text">
-            I CERTIFY that this is a true record of <span style={{ textDecoration: "underline", fontWeight: "bold" }}>{cert.true_record_of}</span> with LRN <span style={{ textDecoration: "underline", fontWeight: "bold" }}>{cert.lrn}</span> and that he/she is eligible for admission to <span style={{ textDecoration: "underline", fontWeight: "bold" }}>{cert.eligible_for_admission_to_grade?.startsWith("Grade") ? cert.eligible_for_admission_to_grade : `Grade ${cert.eligible_for_admission_to_grade || "________"}`}</span>.
+            I CERTIFY that this is a true record of <span style={{ textDecoration: "underline", fontWeight: "bold" }}>{cert.true_record_of}</span> with LRN <span style={{ textDecoration: "underline", fontWeight: "bold" }}><span className="lrn-screen-val">{maskLrn(cert.lrn)}</span><span className="lrn-print-val" style={{ display: "none" }}>{cert.lrn}</span></span> and that he/she is eligible for admission to <span style={{ textDecoration: "underline", fontWeight: "bold" }}>{cert.eligible_for_admission_to_grade?.startsWith("Grade") ? cert.eligible_for_admission_to_grade : `Grade ${cert.eligible_for_admission_to_grade || "________"}`}</span>.
             <br />
             Name of School: <span style={{ textDecoration: "underline", fontWeight: "bold" }}>{cert.school_name}</span> School ID: <span style={{ textDecoration: "underline", fontWeight: "bold" }}>{cert.school_id}</span> Last School Year Attended: <span style={{ textDecoration: "underline", fontWeight: "bold" }}>{cert.last_school_year_attended}</span>
           </p>
@@ -522,7 +531,7 @@ export default function SF10Document({ student, sf10Data, page1Ref, page2Ref }) 
           <div className="sf10-cert-section">
             <div className="sf10-cert-header">CERTIFICATION</div>
           <p className="sf10-cert-text">
-            I CERTIFY that this is a true record of <span style={{ textDecoration: "underline", fontWeight: "bold" }}>{cert.true_record_of}</span> with LRN <span style={{ textDecoration: "underline", fontWeight: "bold" }}>{cert.lrn}</span> and that he/she is eligible for admission to <span style={{ textDecoration: "underline", fontWeight: "bold" }}>{recordG10.general_average?.remarks === "Passed" ? "Grade 11 (SHS)" : (cert.eligible_for_admission_to_grade?.startsWith("Grade") ? cert.eligible_for_admission_to_grade : `Grade ${cert.eligible_for_admission_to_grade || "________"}`)}</span>.
+            I CERTIFY that this is a true record of <span style={{ textDecoration: "underline", fontWeight: "bold" }}>{cert.true_record_of}</span> with LRN <span style={{ textDecoration: "underline", fontWeight: "bold" }}><span className="lrn-screen-val">{maskLrn(cert.lrn)}</span><span className="lrn-print-val" style={{ display: "none" }}>{cert.lrn}</span></span> and that he/she is eligible for admission to <span style={{ textDecoration: "underline", fontWeight: "bold" }}>{recordG10.general_average?.remarks === "Passed" ? "Grade 11 (SHS)" : (cert.eligible_for_admission_to_grade?.startsWith("Grade") ? cert.eligible_for_admission_to_grade : `Grade ${cert.eligible_for_admission_to_grade || "________"}`)}</span>.
             <br />
             Name of School: <span style={{ textDecoration: "underline", fontWeight: "bold" }}>{cert.school_name}</span> School ID: <span style={{ textDecoration: "underline", fontWeight: "bold" }}>{cert.school_id}</span> Last School Year Attended: <span style={{ textDecoration: "underline", fontWeight: "bold" }}>{cert.last_school_year_attended}</span>
           </p>

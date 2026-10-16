@@ -1,7 +1,56 @@
 const db = require('../config/db');
+const { encryptLrn, decryptLrn, hashLrn, maskLrn } = require('../utils/encryption');
+
+let isTableInitialized = false;
 
 class Student {
+  static formatRow(row) {
+    if (!row) return null;
+    const rawLrn = row.LRN || row.lrn;
+    const plainLrn = decryptLrn(rawLrn);
+    return {
+      ...row,
+      LRN: plainLrn,
+      lrn: plainLrn,
+      masked_lrn: maskLrn(plainLrn),
+    };
+  }
+
+  static async initTable() {
+    if (isTableInitialized) return;
+    try {
+      // 1. Ensure LRN column is VARCHAR(255) for encrypted string
+      await db.execute('ALTER TABLE STUDENT MODIFY COLUMN LRN VARCHAR(255) NOT NULL');
+    } catch (_) {}
+
+    try {
+      // 2. Ensure lrn_hash column exists for blind index
+      await db.execute('ALTER TABLE STUDENT ADD COLUMN lrn_hash VARCHAR(64) NULL');
+    } catch (_) {}
+
+    try {
+      // 3. Ensure blind index is indexed
+      await db.execute('CREATE INDEX idx_student_lrn_hash ON STUDENT (lrn_hash)');
+    } catch (_) {}
+
+    try {
+      // 4. Backfill any unencrypted LRNs
+      const [rows] = await db.execute("SELECT student_id, LRN FROM STUDENT WHERE LRN IS NOT NULL AND LRN NOT LIKE 'enc:v1:%' LIMIT 500");
+      for (const row of rows) {
+        if (row.LRN && !String(row.LRN).startsWith('enc:v1:')) {
+          const enc = encryptLrn(row.LRN);
+          const hash = hashLrn(row.LRN);
+          await db.execute('UPDATE STUDENT SET LRN = ?, lrn_hash = ? WHERE student_id = ?', [enc, hash, row.student_id]);
+        }
+      }
+    } catch (e) {
+      console.warn('Student LRN backfill notice:', e.message);
+    }
+    isTableInitialized = true;
+  }
+
   static async findAll() {
+    await this.initTable();
     const [rows] = await db.execute(`
       SELECT 
         s.student_id,
@@ -66,10 +115,11 @@ class Student {
       LEFT JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
       ORDER BY s.last_name ASC, s.first_name ASC
     `);
-    return rows;
+    return rows.map((r) => this.formatRow(r));
   }
 
   static async findById(id) {
+    await this.initTable();
     const [rows] = await db.execute(`
       SELECT 
         s.student_id,
@@ -134,7 +184,7 @@ class Student {
       LEFT JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
       WHERE s.student_id = ?
     `, [id]);
-    return rows[0];
+    return rows.length > 0 ? this.formatRow(rows[0]) : null;
   }
 
   static async findAllPrograms() {
@@ -147,11 +197,18 @@ class Student {
   }
 
   static async findByLRN(lrn) {
-    const [rows] = await db.execute('SELECT * FROM STUDENT WHERE LRN = ?', [lrn]);
-    return rows[0];
+    await this.initTable();
+    const searchHash = hashLrn(lrn);
+    const cleanLrn = String(lrn).trim();
+    const [rows] = await db.execute(
+      'SELECT * FROM STUDENT WHERE lrn_hash = ? OR LRN = ?',
+      [searchHash, cleanLrn]
+    );
+    return rows.length > 0 ? this.formatRow(rows[0]) : null;
   }
 
   static async create(data) {
+    await this.initTable();
     const {
       LRN,
       first_name,
@@ -170,11 +227,16 @@ class Student {
       program_id = null,
     } = data;
 
+    const cleanLrn = String(LRN).trim();
+    const encryptedLrn = encryptLrn(cleanLrn);
+    const lrnHash = hashLrn(cleanLrn);
+
     const [result] = await db.execute(
-      `INSERT INTO STUDENT (LRN, first_name, middle_name, last_name, extension_name, birthdate, sex, street, barangay, city, province, country, postal_code, status, program_id) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO STUDENT (LRN, lrn_hash, first_name, middle_name, last_name, extension_name, birthdate, sex, street, barangay, city, province, country, postal_code, status, program_id) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        LRN,
+        encryptedLrn,
+        lrnHash,
         first_name,
         middle_name || null,
         last_name,
@@ -195,6 +257,7 @@ class Student {
   }
 
   static async update(id, data) {
+    await this.initTable();
     const allowedKeys = [
       'LRN', 'first_name', 'middle_name', 'last_name', 'extension_name', 
       'birthdate', 'sex', 'street', 'barangay', 'city', 'province', 
@@ -205,8 +268,14 @@ class Student {
 
     for (const key of allowedKeys) {
       if (data[key] !== undefined) {
-        updates.push(`${key} = ?`);
-        values.push(data[key] === '' ? null : data[key]);
+        if (key === 'LRN') {
+          const clean = String(data.LRN).trim();
+          updates.push('LRN = ?', 'lrn_hash = ?');
+          values.push(encryptLrn(clean), hashLrn(clean));
+        } else {
+          updates.push(`${key} = ?`);
+          values.push(data[key] === '' ? null : data[key]);
+        }
       }
     }
 

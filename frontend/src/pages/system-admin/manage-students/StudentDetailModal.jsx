@@ -1,4 +1,5 @@
 import { X } from "lucide-react";
+import MaskedLrn from "../../../components/common/MaskedLrn";
 
 export default function StudentDetailModal({ isOpen, onClose, student }) {
   if (!isOpen || !student) return null;
@@ -60,7 +61,12 @@ export default function StudentDetailModal({ isOpen, onClose, student }) {
             <div className="detail-item">
               <span className="detail-label">Learner Reference Number (LRN)</span>
               <span className="detail-value">
-                <span className="lrn-badge">{student.LRN || student.lrn || "N/A"}</span>
+                <MaskedLrn
+                  lrn={student.LRN || student.lrn}
+                  maskedLrn={student.masked_lrn}
+                  showToggle={true}
+                  allowCopy={true}
+                />
               </span>
             </div>
 

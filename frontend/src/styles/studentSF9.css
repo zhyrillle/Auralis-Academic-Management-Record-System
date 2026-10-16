@@ -1575,6 +1575,9 @@
 .sf9-export-review-note { font-size: 10px; font-style: italic; margin: 4px 0; }
 @media print {
   .sf9-report-warnings { font-size: 9pt; background: white; border-color: #888; break-inside: avoid; }
+  .lrn-screen-val { display: none !important; }
+  .lrn-print-val { display: inline !important; }
+  .lrn-action-btn { display: none !important; }
 }
 
 .sf9-skeleton-block { display: block; width: 65%; height: 12px; border-radius: 4px; background: #f1f3f5; }

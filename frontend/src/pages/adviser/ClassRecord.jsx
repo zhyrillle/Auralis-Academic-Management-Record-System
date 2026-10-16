@@ -16,6 +16,7 @@ import unavailableIconUrl from "../../assets/adviser-assets/unavailableicon.png"
 import depedLogoUrl from "../../assets/deped_logo.png";
 import depedWordmarkLogoUrl from "../../assets/deped-logo.gif";
 import "../../styles/ClassRecord.css";
+import { maskLrn } from "../../utils/lrnHelper";
 import {
   getClassRecord,
   createAssessment,
@@ -2477,7 +2478,7 @@ function StudentRow({
       <td className="cr-student-num">{number}</td>
 
       {/* LEARNERS' NAME */}
-      <td className="cr-student-name" title={`LRN: ${student.lrn || "N/A"}`}>
+      <td className="cr-student-name" title={`LRN: ${maskLrn(student.lrn)}`}>
         {student.firstName} {student.lastName}
       </td>
 

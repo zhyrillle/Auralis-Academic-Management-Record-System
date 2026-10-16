@@ -346,6 +346,39 @@
   display: inline-block;
 }
 
+.masked-lrn-wrapper {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.lrn-action-btn {
+  padding: 3px !important;
+  color: #64748b !important;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease-in-out;
+}
+
+.lrn-action-btn:hover {
+  color: #0f172a !important;
+  background-color: #e2e8f0 !important;
+}
+
+@media print {
+  .lrn-screen-val {
+    display: none !important;
+  }
+  .lrn-print-val {
+    display: inline !important;
+  }
+  .lrn-action-btn {
+    display: none !important;
+  }
+}
+
 .student-name-cell {
   display: flex;
   flex-direction: column;

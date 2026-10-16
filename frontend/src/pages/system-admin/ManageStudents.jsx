@@ -14,6 +14,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import DropdownSelect from "../../components/common/DropdownSelect";
+import MaskedLrn from "../../components/common/MaskedLrn";
 import StudentFormModal from "./manage-students/StudentFormModal";
 import StudentDetailModal from "./manage-students/StudentDetailModal";
 import {
@@ -110,13 +111,14 @@ export default function ManageStudents() {
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase().trim();
         const lrn = String(student.LRN || student.lrn || "").toLowerCase();
+        const maskedLrn = String(student.masked_lrn || "").toLowerCase();
         const fullName = String(
           student.name ||
             `${student.first_name || ""} ${student.middle_name || ""} ${student.last_name || ""}`
         ).toLowerCase();
         const section = String(student.section || student.section_name || "").toLowerCase();
 
-        return lrn.includes(query) || fullName.includes(query) || section.includes(query);
+        return lrn.includes(query) || maskedLrn.includes(query) || fullName.includes(query) || section.includes(query);
       }
 
       return true;
@@ -432,7 +434,12 @@ export default function ManageStudents() {
                     return (
                       <tr key={student.student_id || student.id}>
                         <td>
-                          <span className="lrn-badge">{lrn}</span>
+                          <MaskedLrn
+                            lrn={lrn}
+                            maskedLrn={student.masked_lrn}
+                            showToggle={true}
+                            allowCopy={true}
+                          />
                         </td>
                         <td>
                           <div className="student-name-cell" title={fullName}>

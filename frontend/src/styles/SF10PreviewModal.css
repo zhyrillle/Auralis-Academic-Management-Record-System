@@ -651,4 +651,8 @@
     page-break-before: always !important;
     break-before: page !important;
   }
+
+  .lrn-screen-val { display: none !important; }
+  .lrn-print-val { display: inline !important; }
+  .lrn-action-btn { display: none !important; }
 }

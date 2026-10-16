@@ -2,6 +2,8 @@ import useCachedQuery from "../../services/useCachedQuery";
 import { cacheKey } from "../../services/navigationCache";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import DropdownSelect from "../../components/common/DropdownSelect";
+import MaskedLrn from "../../components/common/MaskedLrn";
+import { maskLrn } from "../../utils/lrnHelper";
 import { Plus, X, Edit, Users, Eye, CheckCircle2, AlertCircle, Loader2, Trash2 } from "lucide-react";
 import {
   fetchSections,
@@ -231,6 +233,7 @@ async function loadSectionCatalog() {
               middle_name: st.middle_name || "",
               extension_name: st.extension_name || "",
               lrn: String(st.LRN || st.lrn || ""),
+              masked_lrn: st.masked_lrn || maskLrn(st.LRN || st.lrn),
               grade_level_id: glId || null,
               gradeLevel: resolvedGrade,
               section_id: resolvedSectionId ? Number(resolvedSectionId) : null,
@@ -317,7 +320,8 @@ export default function StudentSectionManagement() {
     return students.filter((student) => {
       const searchMatch =
         student.name.toLowerCase().includes(studentSearch.toLowerCase()) ||
-        student.lrn.includes(studentSearch);
+        student.lrn.includes(studentSearch) ||
+        (student.masked_lrn && student.masked_lrn.includes(studentSearch));
       let sectionMatch = true;
       if (studentSectionFilter !== "All Sections") {
         if (studentSectionFilter === "Unassigned") sectionMatch = !student.section_id;
@@ -923,9 +927,12 @@ export default function StudentSectionManagement() {
                         </div>
                       </td>
                       <td>
-                        <span className="user-email" style={{ fontFamily: "monospace" }}>
-                          {student.lrn}
-                        </span>
+                        <MaskedLrn
+                          lrn={student.lrn}
+                          maskedLrn={student.masked_lrn}
+                          showToggle={true}
+                          allowCopy={true}
+                        />
                       </td>
                       <td>
                         <span
@@ -1477,7 +1484,7 @@ export default function StudentSectionManagement() {
                     if (manageSearch.trim() !== "") {
                       const q = manageSearch.toLowerCase();
                       const nameMatch = s.name.toLowerCase().includes(q);
-                      const lrnMatch = String(s.lrn || "").includes(q);
+                      const lrnMatch = String(s.lrn || "").includes(q) || String(s.masked_lrn || "").includes(q);
                       if (!nameMatch && !lrnMatch) return false;
                     }
 
@@ -1523,7 +1530,7 @@ export default function StudentSectionManagement() {
                                 <strong style={{ lineHeight: "1.2" }}>{student.name}</strong>
                                 <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
                                   <span style={{ fontSize: "0.85rem", color: "#64748b", lineHeight: "1.2" }}>
-                                    LRN: {student.lrn} · {formatLevelLabel(student.gradeLevel, student.grade_level_id)}
+                                    LRN: {student.masked_lrn || maskLrn(student.lrn)} · {formatLevelLabel(student.gradeLevel, student.grade_level_id)}
                                   </span>
                                   {student.program_code && (
                                     <span
@@ -1591,7 +1598,7 @@ export default function StudentSectionManagement() {
                                 <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "4px" }}>
                                   <strong style={{ lineHeight: "1.2" }}>{student.name}</strong>
                                   <span style={{ fontSize: "0.85rem", color: "#64748b", lineHeight: "1.2" }}>
-                                    LRN: {student.lrn} · {formatLevelLabel(student.gradeLevel, student.grade_level_id)}
+                                    LRN: {student.masked_lrn || maskLrn(student.lrn)} · {formatLevelLabel(student.gradeLevel, student.grade_level_id)}
                                   </span>
                                   {student.is_specialized == 1 && student.program_code && (
                                     <div>
@@ -1701,13 +1708,13 @@ export default function StudentSectionManagement() {
                   <div className="manage-student-list">
                     {students
                       .filter((s) => Number(s.section_id) === Number(targetSection.id))
-                      .filter((s) => viewSearch.trim() === "" || s.name.toLowerCase().includes(viewSearch.toLowerCase()) || s.lrn.includes(viewSearch))
+                      .filter((s) => viewSearch.trim() === "" || s.name.toLowerCase().includes(viewSearch.toLowerCase()) || s.lrn.includes(viewSearch) || (s.masked_lrn && s.masked_lrn.includes(viewSearch)))
                       .map((student) => (
                         <div key={student.id} className="manage-student-item">
                           <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "4px" }}>
                             <strong style={{ lineHeight: "1.2" }}>{student.name}</strong>
                             <span style={{ fontSize: "0.85rem", color: "#64748b", lineHeight: "1.2" }}>
-                              LRN: {student.lrn} · {formatLevelLabel(student.gradeLevel, student.grade_level_id)}
+                              LRN: {student.masked_lrn || maskLrn(student.lrn)} · {formatLevelLabel(student.gradeLevel, student.grade_level_id)}
                             </span>
                             {student.is_specialized == 1 && student.program_code && (
                               <div>
@@ -1729,7 +1736,7 @@ export default function StudentSectionManagement() {
                       ))}
                     {students
                       .filter((s) => Number(s.section_id) === Number(targetSection.id))
-                      .filter((s) => viewSearch.trim() === "" || s.name.toLowerCase().includes(viewSearch.toLowerCase()) || s.lrn.includes(viewSearch))
+                      .filter((s) => viewSearch.trim() === "" || s.name.toLowerCase().includes(viewSearch.toLowerCase()) || s.lrn.includes(viewSearch) || (s.masked_lrn && s.masked_lrn.includes(viewSearch)))
                       .length === 0 && (
                         <p className="users-empty-state" style={{ padding: "16px 0", border: "none" }}>
                           No students found.

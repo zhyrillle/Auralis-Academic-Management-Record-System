@@ -319,6 +319,9 @@ function SF10PreviewModalContent({ isOpen, onClose, student, requireOfficialData
               print-color-adjust: exact !important;
               color-adjust: exact !important;
             }
+            .lrn-screen-val { display: none !important; }
+            .lrn-print-val { display: inline !important; }
+            .lrn-action-btn { display: none !important; }
           </style>
         </head>
         <body>

@@ -1,5 +1,6 @@
 const db = require("../config/db");
 const GradeComputationService = require("./GradeComputationService");
+const { decryptLrn } = require("../utils/encryption");
 
 const SUBJECT_DEFINITIONS = [
   { key: "filipino", code: "FIL", label: "Filipino", aliases: ["FIL", "FILIPINO"] },
@@ -406,7 +407,7 @@ class MasterSheetService {
       return {
         studentSectionId: Number(student.student_section_id),
         studentId: Number(student.student_id),
-        lrn: String(student.lrn || ""),
+        lrn: decryptLrn(student.lrn),
         firstName: student.first_name,
         middleName: student.middle_name,
         lastName: student.last_name,

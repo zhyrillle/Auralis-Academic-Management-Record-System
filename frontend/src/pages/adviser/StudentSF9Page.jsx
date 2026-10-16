@@ -12,6 +12,7 @@ import Toast from "../../components/common/Toast.jsx";
 import { exportSf9Pdf } from "../../utils/exportSf9Pdf";
 import SF10PreviewModal from "../../components/SF10PreviewModal.jsx";
 import { exportSf10Excel } from "../../utils/exportSf10Excel.js";
+import MaskedLrn from "../../components/common/MaskedLrn.jsx";
 import JSZip from "jszip";
 
 export default function StudentSF9Page(props) {
@@ -602,7 +603,14 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
               <div className="sf9-info-line-row">
                 <div className="sf9-info-field grow-name">
                   <span className="sf9-field-label">LRN:</span>
-                  <span className="sf9-field-underline">{studentProfile.lrn}</span>
+                  <span className="sf9-field-underline">
+                    <MaskedLrn
+                      lrn={studentProfile.lrn}
+                      showToggle={true}
+                      allowCopy={true}
+                      badge={false}
+                    />
+                  </span>
                 </div>
                 <div className="sf9-info-field grade-field">
                   <span className="sf9-field-label">Grade:</span>

@@ -3,6 +3,7 @@ const router = express.Router();
 const db = require('../config/db');
 const MasterSheetService = require('../services/MasterSheetService');
 const { excludedDates, monthlyNoClassCounts } = require('../services/AttendanceSummaryService');
+const { decryptLrn, hashLrn } = require('../utils/encryption');
 
 const MONTH_NAMES = ["Jun", "Jul", "Aug", "Sept", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr"];
 const MONTH_INDEX_MAP = {
@@ -136,12 +137,13 @@ router.get('/student/:identifier', async (req, res) => {
     let student = null;
     let studentSectionId = null;
 
+    const lrnHash = hashLrn(cleanId);
     const [stRows] = await db.execute(
       `SELECT st.*, p.program_code, p.program_name, COALESCE(p.is_specialized, 0) AS is_specialized
        FROM STUDENT st
        LEFT JOIN PROGRAM p ON p.program_id = st.program_id
-       WHERE st.student_id = ? OR st.LRN = ? LIMIT 1`,
-      [cleanId, cleanId]
+       WHERE st.student_id = ? OR st.LRN = ? OR st.lrn_hash = ? LIMIT 1`,
+      [cleanId, cleanId, lrnHash]
     );
 
     if (stRows.length > 0) {
@@ -164,6 +166,10 @@ router.get('/student/:identifier', async (req, res) => {
     if (!student) {
       return res.status(404).json({ error: "Student not found" });
     }
+
+    // Decrypt LRN for official DepEd SF9 report
+    student.LRN = decryptLrn(student.LRN);
+    student.lrn = student.LRN;
 
     // 2. Find Student Section & Section details
     let sectionInfo = null;
