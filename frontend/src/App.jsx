@@ -10,6 +10,7 @@ import ManageUsers from "./pages/system-admin/ManageUsers";
 import StudentSectionManagement from "./pages/system-admin/StudentSectionManagement";
 import ManageStudents from "./pages/system-admin/ManageStudents";
 import AcademicPeriod from "./pages/system-admin/AcademicPeriod";
+import GradeTransmutation from "./pages/system-admin/GradeTransmutation";
 import AdviserDashboard from "./pages/adviser/AdviserDashboard";
 import DeptDashboard from "./pages/department-head/DeptDashboard";
 import DeptClassRecord from "./pages/department-head/DeptClassRecord";
@@ -97,6 +98,10 @@ export default function App() {
             element={<AcademicPeriod user={user} />}
           />
           <Route path="/system-admin/ws-config" element={<WSConfig />} />
+          <Route
+            path="/system-admin/grade-transmutation"
+            element={<GradeTransmutation />}
+          />
 
           {/* 2. Principal (Landing page is At-Risk Students) */}
           <Route
