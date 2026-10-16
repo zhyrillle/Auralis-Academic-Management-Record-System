@@ -43,7 +43,8 @@ export const TRANSMUTATION_TABLE = [
   { min: 46.00, max: 47.99, grade: 63, transmuted: 63 },
   { min: 43.00, max: 45.99, grade: 62, transmuted: 62 },
   { min: 40.00, max: 42.99, grade: 61, transmuted: 61 },
-  { min: 0.00, max: 39.99, grade: 60, transmuted: 60 },
+  { min: 25.00, max: 39.99, grade: 60, transmuted: 60 },
+  { min: 0.00, max: 24.00, grade: 60, transmuted: 60, isDefaultMinimum: true, label: "default minimum" },
 ];
 
 /**
@@ -52,7 +53,7 @@ export const TRANSMUTATION_TABLE = [
  * @param {number|string|null} initialGrade
  * @returns {number|null}
  */
-export function getTransmutedGrade(initialGrade) {
+export function getTransmutedGrade(initialGrade, customTiers = null) {
   if (initialGrade === null || initialGrade === undefined || initialGrade === "") {
     return null;
   }
@@ -65,8 +66,9 @@ export function getTransmutedGrade(initialGrade) {
 
   // Preserve decimal precision up to 2 places without premature truncation
   const roundedInitial = Math.round(numericGrade * 100) / 100;
+  const table = Array.isArray(customTiers) && customTiers.length > 0 ? customTiers : TRANSMUTATION_TABLE;
 
-  for (const tier of TRANSMUTATION_TABLE) {
+  for (const tier of table) {
     if (roundedInitial >= tier.min && roundedInitial <= tier.max) {
       return tier.transmuted !== undefined ? tier.transmuted : tier.grade;
     }
