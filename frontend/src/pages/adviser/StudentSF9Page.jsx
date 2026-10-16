@@ -432,8 +432,6 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
           <div>
             <h2 className="student-name-title">{studentProfile.name}</h2>
             <div className="student-meta-row">
-              <span>LRN: {studentProfile.lrn}</span>
-              <div className="meta-divider" />
               <span>{studentProfile.gradeLevel}</span>
               <div className="meta-divider" />
               <span>{studentProfile.sex}</span>
@@ -562,27 +560,27 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
              ============================================================ */}
           <div className={`sf9-official-sheet sf9-front-sheet ${viewMode === "back" ? "hide-on-screen" : ""}`}>
 
-              {/* Official Header */}
-              <div className="sf9-sheet-header">
-                <div className="sf9-header-grid">
-                  <div className="sf9-header-logo-left">
-                    <img src={depedLogo} alt="DepEd Seal" className="sf9-logo-img" />
-                  </div>
-                  <div className="sf9-header-text-center">
-                    <p className="sf9-hdr-line">Republic of the Philippines</p>
-                    <p className="sf9-hdr-line">Department of Education</p>
-                    <p className="sf9-hdr-line">Region X â€“ Northern Mindanao</p>
-                    <p className="sf9-hdr-line font-bold">SCHOOLS DIVISION OFFICE OF GINGOOG CITY</p>
-                    <p className="sf9-hdr-line">West 1 District</p><p className="sf9-hdr-line">Gingoog City, Misamis Oriental</p>
-                    <h3 className="sf9-school-name-title">GINGOOG CITY COMPREHENSIVE NATIONAL HIGH SCHOOL</h3>
-                    <h2 className="sf9-report-doc-title">LEARNER'S PERFORMANCE REPORT</h2>
-                    <p className="sf9-school-year-title">School Year {studentProfile.schoolYear}</p>
-                  </div>
-                  <div className="sf9-header-logo-right">
-                    <img src={gccnhsLogo} alt="GCCNS Seal" className="sf9-logo-img" />
-                  </div>
+            {/* Official Header */}
+            <div className="sf9-sheet-header">
+              <div className="sf9-header-grid">
+                <div className="sf9-header-logo-left">
+                  <img src={depedLogo} alt="DepEd Seal" className="sf9-logo-img" />
+                </div>
+                <div className="sf9-header-text-center">
+                  <p className="sf9-hdr-line">Republic of the Philippines</p>
+                  <p className="sf9-hdr-line">Department of Education</p>
+                  <p className="sf9-hdr-line">Region X â€“ Northern Mindanao</p>
+                  <p className="sf9-hdr-line font-bold">SCHOOLS DIVISION OFFICE OF GINGOOG CITY</p>
+                  <p className="sf9-hdr-line">West 1 District</p><p className="sf9-hdr-line">Gingoog City, Misamis Oriental</p>
+                  <h3 className="sf9-school-name-title">GINGOOG CITY COMPREHENSIVE NATIONAL HIGH SCHOOL</h3>
+                  <h2 className="sf9-report-doc-title">LEARNER'S PERFORMANCE REPORT</h2>
+                  <p className="sf9-school-year-title">School Year {studentProfile.schoolYear}</p>
+                </div>
+                <div className="sf9-header-logo-right">
+                  <img src={gccnhsLogo} alt="GCCNS Seal" className="sf9-logo-img" />
                 </div>
               </div>
+            </div>
 
             {/* Learner Information Underlined Form Fields */}
             <div className="sf9-student-info-section">
@@ -842,7 +840,7 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
                 <div className="sf9-approved-title font-bold">Approved:</div>
                 <div className="sf9-transfer-signatures-row">
                   <div className="sf9-sig-signatory-col school-head-sig">
-                    <div className="sf9-signatory-line font-bold">{studentProfile.principalName}</div>
+                    <div className="sf9-signatory-line font-bold">{studentProfile.principalName}, Ph.D.</div>
                     <div className="sf9-signatory-role">School Head</div>
                   </div>
                   <div className="sf9-sig-signatory-col adviser-sig">
@@ -869,7 +867,7 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
 
               <div className="sf9-cancel-signatory-row">
                 <div className="sf9-sig-signatory-col school-head-sig">
-                  <div className="sf9-signatory-line font-bold">{studentProfile.principalName}</div>
+                  <div className="sf9-signatory-line font-bold">{studentProfile.principalName}, Ph.D.</div>
                   <div className="sf9-signatory-role">School Head</div>
                 </div>
               </div>
@@ -898,27 +896,22 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
               <div className="profile-fields-list">
                 <div className="profile-field-group">
                   <span className="profile-field-label">Full Name</span>
-                  <span className="profile-field-value">{studentProfile.name || "â€”"}</span>
-                </div>
-
-                <div className="profile-field-group">
-                  <span className="profile-field-label">Learner Reference Number</span>
-                  <span className="profile-field-value">{studentProfile.lrn || "â€”"}</span>
+                  <span className="profile-field-value">{studentProfile.name || "Unavailable"}</span>
                 </div>
 
                 <div className="profile-field-group">
                   <span className="profile-field-label">Sex</span>
-                  <span className="profile-field-value">{studentProfile.sex || "â€”"}</span>
+                  <span className="profile-field-value">{studentProfile.sex || "Unavailable"}</span>
                 </div>
 
                 <div className="profile-field-group">
                   <span className="profile-field-label">Date of Birth</span>
-                  <span className="profile-field-value">{studentProfile.dateOfBirth || "â€”"}</span>
+                  <span className="profile-field-value">{studentProfile.dateOfBirth || "Unavailable"}</span>
                 </div>
 
                 <div className="profile-field-group">
                   <span className="profile-field-label">Address</span>
-                  <span className="profile-field-value">{studentProfile.address || "â€”"}</span>
+                  <span className="profile-field-value">{studentProfile.address || "Unavailable"}</span>
                 </div>
               </div>
             </div>
