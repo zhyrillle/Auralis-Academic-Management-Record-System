@@ -1,0 +1,9 @@
+-- Migration: Create GRADE_TRANSMUTATION_CONFIG table for storing System Admin custom transmutation table
+CREATE TABLE IF NOT EXISTS GRADE_TRANSMUTATION_CONFIG (
+    config_id INT PRIMARY KEY AUTO_INCREMENT,
+    is_custom_enabled TINYINT(1) NOT NULL DEFAULT 0,
+    ranges_json LONGTEXT NULL,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    updated_by BIGINT NULL,
+    CONSTRAINT fk_gtc_user FOREIGN KEY (updated_by) REFERENCES USER(user_id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
