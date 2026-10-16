@@ -13,6 +13,7 @@ import {
   BookOpen,
   Copy,
   CalendarClock,
+  Calculator,
 } from "lucide-react";
 
 export const sidebarConfig = {
@@ -52,6 +53,11 @@ export const sidebarConfig = {
       path: "/system-admin/ws-config",
       icon: Settings,
     },
+    {
+      title: "Grade Transmutation",
+      path: "/system-admin/grade-transmutation",
+      icon: Calculator,
+    },
   ],
   admin: [
     // Duplicate mapping to support both "admin" and "system-admin" keys
@@ -89,6 +95,11 @@ export const sidebarConfig = {
       title: "WS Config",
       path: "/system-admin/ws-config",
       icon: Settings,
+    },
+    {
+      title: "Grade Transmutation",
+      path: "/system-admin/grade-transmutation",
+      icon: Calculator,
     },
   ],
   principal: [
