@@ -7,16 +7,51 @@ notification, grade write, or prediction database write takes place.
 
 ## Run
 
-1. Use Python **3.14.3** with `pip install -r backend/ml/requirements.txt`.
-   On this development machine the notebook's existing Python already matches.
-2. Set `AURALIS_MODEL_PYTHON` to that Python executable if needed. Windows uses
-   the installed Python314 executable when present; otherwise the worker uses
-   `python3`. Do not put credentials in this setting.
-3. Start/restart the regular Node backend (`node server.js` in `backend`) and
+After pulling the repository, run these commands in `backend`:
+
+```sh
+npm install
+```
+
+The `postinstall` hook automatically runs model setup. It downloads a project-local
+uv installer from its official, versioned Astral
+URL, obtains Python **3.14.3**, creates `backend/.venv-model`, and installs the
+versions in `ml/requirements.txt`. This does not require an existing Python
+installation. Node.js 18 or newer and an internet connection are required for
+setup. The model and metadata remain the same trusted repository export.
+
+The installer, downloaded Python, and cache stay in `backend/.model-tools`.
+Both generated directories are ignored by Git. They are created on each laptop,
+not copied or committed. Setup does not change global Python, PATH, or `.env`.
+Rerunning setup reuses the environment and checks it again. An incomplete or
+wrong-version environment is reported without deleting it.
+
+Run `npm run model:setup` to retry setup by itself. If npm lifecycle scripts were
+disabled (for example, `npm install --ignore-scripts`), run this command manually.
+
+The backend automatically uses this private environment, so there is no need to
+activate it or start Python separately. An explicit `AURALIS_MODEL_PYTHON`
+override still takes priority. Remove an outdated override from `backend/.env`
+or the launching terminal if it points at another person's installation.
+
+Then:
+
+1. Start/restart the regular Node backend (`node server.js` in `backend`) and
    frontend (`npm run dev` in `frontend`). There is no separate public Python server.
-4. Sign in as Principal, then open At-Risk Prediction or At-Risk Breakdown.
+2. Sign in as Principal, then open At-Risk Prediction or At-Risk Breakdown.
    Choose the **target** term and school year. Each preview request starts a private
    Python worker with feature values only, never learner names or identifiers.
+
+If predictions are unavailable, run `npm run model:check` in `backend`. It uses
+the same interpreter selection as the backend and reports Python import errors,
+version mismatches, and missing model files directly. It sends an empty batch;
+no learner data is read or changed and no database connection is needed.
+
+Manual installations remain supported: use Python **3.14.3**, run
+`python -m pip install -r backend/ml/requirements.txt` from the repository root,
+and set `AURALIS_MODEL_PYTHON` to that exact executable when necessary. Without
+an override or private environment, the original Windows Python314 location
+and then `python3` fallback are retained.
 
 `english-model.joblib` is the trusted export copied from the notebook's
 `outputs/current/model.joblib`. It must be deployed together with

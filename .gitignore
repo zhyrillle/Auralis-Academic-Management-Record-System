@@ -7,5 +7,7 @@ frontend/.env.local
 frontend/.env.*.local
 __pycache__/
 *.pyc
+backend/.venv-model/
+backend/.model-tools/
 
 /test/
