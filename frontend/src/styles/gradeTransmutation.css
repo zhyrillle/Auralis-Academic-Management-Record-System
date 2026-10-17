@@ -571,3 +571,47 @@
     transition: none;
   }
 }
+
+/* ---------- Drag handle ---------- */
+.gt-drag-col {
+  width: 32px;
+  padding-left: 12px;
+  padding-right: 4px;
+}
+
+.gt-drag-handle {
+  width: 32px;
+  padding: 0 4px 0 12px;
+  vertical-align: middle;
+  text-align: center;
+}
+
+.gt-drag-grip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #e2e8f0;
+  cursor: default;
+  transition: color 0.18s ease;
+}
+
+.gt-drag-grip--active {
+  color: #94a3b8;
+  cursor: grab;
+}
+
+.gt-drag-grip--active:active {
+  cursor: grabbing;
+}
+
+.gt-table tbody tr:hover .gt-drag-grip--active {
+  color: var(--sidebar-bg, #112d61);
+}
+
+/* ---------- Drag-over highlight ---------- */
+.gt-row--drag-over {
+  background: #eff4ff !important;
+  outline: 2px dashed var(--sidebar-bg, #112d61);
+  outline-offset: -2px;
+}
+
