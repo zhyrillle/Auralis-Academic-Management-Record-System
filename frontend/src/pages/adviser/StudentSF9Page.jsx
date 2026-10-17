@@ -14,6 +14,7 @@ import SF10PreviewModal from "../../components/SF10PreviewModal.jsx";
 import { exportSf10Excel } from "../../utils/exportSf10Excel.js";
 import MaskedLrn from "../../components/common/MaskedLrn.jsx";
 import JSZip from "jszip";
+import { accountDraftKey, getSessionScope, assertCurrentSession } from "../../offline/syncManager.js";
 
 export default function StudentSF9Page(props) {
   const student = props.student;
@@ -51,6 +52,7 @@ function StudentReportSkeleton({ student, onBack }) {
 
 function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab, isAdviser: propIsAdviser, reportIdentifier, loadReport = getStudentSF9Details }) {
   const storedUser = useMemo(() => getStoredUser(), []);
+  const draftScope = useMemo(() => getSessionScope(), []);
   const normRole = useMemo(() => normalizeRole(storedUser?.role, storedUser), [storedUser]);
   const userRole = propUserRole || (normRole === "adviser" ? "adviser" : normRole === "principal" ? "principal" : "teacher");
   const isAdviser = typeof propIsAdviser === "boolean"
@@ -78,12 +80,12 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
 
   // Teacher Comments/Remarks state for terms with frontend localStorage persistence
   const studentKey = student?.lrn || student?.student_id || student?.studentId || student?.id || "default";
-  const storageKey = `sf9_comments_${studentKey}`;
+  const storageKey = accountDraftKey(`sf9_comments_${studentKey}_${schoolYearId || student?.schoolYear || "current"}`, draftScope);
 
   const [comments, setComments] = useState(() => {
     if (userRole === "principal") return { term1: "", term2: "", term3: "" };
     try {
-      const saved = localStorage.getItem(storageKey);
+      const saved = storageKey ? localStorage.getItem(storageKey) : null;
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
@@ -97,6 +99,7 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
   });
 
   const handleCommentChange = (term, val) => {
+    assertCurrentSession(draftScope);
     const updated = { ...comments, [term]: val };
     setComments(updated);
     try {

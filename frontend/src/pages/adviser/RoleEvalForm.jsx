@@ -1,3 +1,4 @@
+import { cachedApiFetch as fetch } from "../../services/navigationCache.js";
 import React, { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { Pencil, X } from "lucide-react";
@@ -124,7 +125,7 @@ export default function RoleEvalForm({ formType, person, onBack, onCancel }) {
     };
 
     try {
-      const res = await fetch("http://localhost:5000/api/feedback", {
+      const res = await fetch("http://localhost:5000/api/feedback", { queueOffline: false,
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)

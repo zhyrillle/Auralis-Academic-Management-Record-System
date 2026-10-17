@@ -12,7 +12,8 @@ export default function useCachedQuery(key, loader, { enabled = true, keepPrevio
   const data = entry?.data ?? previous?.data;
   const attemptedKey = useRef(null);
   useEffect(() => {
-    if (enabled && (!entry?.error || attemptedKey.current !== key)) {
+    if (!enabled) { attemptedKey.current = null; return; }
+    if (attemptedKey.current !== key || !entry) {
       attemptedKey.current = key;
       loadCached(key, loader).catch(() => {});
     }

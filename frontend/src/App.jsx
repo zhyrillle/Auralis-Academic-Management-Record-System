@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Login from "./pages/Login";
 import ForgotPassword from "./pages/ForgotPassword";
@@ -41,9 +41,20 @@ import AttendanceSheet from "./pages/adviser/AttendanceSheet";
 import PhilIri from "./pages/adviser/PhilIri";
 import ClassRecord from "./pages/adviser/ClassRecord";
 import { getStoredUser, setStoredUser } from "./utils/auth";
+import { getSessionScope, SESSION_CHANGED_EVENT } from "./offline/syncManager.js";
 
 export default function App() {
   const [user, setUser] = useState(() => getStoredUser());
+  const [sessionId, setSessionId] = useState(() => getSessionScope()?.sessionId || 'anonymous');
+
+  useEffect(() => {
+    const updateSession = () => {
+      setUser(getStoredUser());
+      setSessionId(getSessionScope()?.sessionId || 'anonymous');
+    };
+    window.addEventListener(SESSION_CHANGED_EVENT, updateSession);
+    return () => window.removeEventListener(SESSION_CHANGED_EVENT, updateSession);
+  }, []);
 
   const handleLoginSuccess = (userObj) => {
     setUser(userObj);
@@ -71,7 +82,7 @@ export default function App() {
 
         {/* Protected Dashboard Layout routes */}
         <Route
-          element={<DashboardLayout user={user} onLogout={handleLogout} />}
+          element={<DashboardLayout key={sessionId} user={user} onLogout={handleLogout} />}
         >
           {/* Shared profile route for every signed-in account */}
           <Route

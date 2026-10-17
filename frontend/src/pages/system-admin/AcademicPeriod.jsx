@@ -1,4 +1,5 @@
-import { cacheKey, getCachedData, loadCached } from "../../services/navigationCache";
+import { cacheKey } from "../../services/navigationCache";
+import useCachedQuery from "../../services/useCachedQuery";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   CalendarRange,
@@ -56,29 +57,42 @@ function ContentLoadingFrame({ loadingMode, pendingLabel, children }) {
 
 export default function AcademicPeriod({ user }) {
   const userId = user?.user_id;
-  const contextKey = (yearId) => cacheKey("admin:academic-period", { userId, schoolYearId: String(yearId || "current") });
-  const cached = getCachedData(contextKey());
 
   // Shared page navigation and school-year context
   const [activeView, setActiveView] = useState("overview");
-  const [schoolYears, setSchoolYears] = useState(() => cached?.schoolYears || []);
-  const [selectedSchoolYearId, setSelectedSchoolYearId] = useState(() => cached?.selectedSchoolYearId || "");
+  const [requestedSchoolYearId, setRequestedSchoolYearId] = useState();
   const [isSchoolYearMenuOpen, setIsSchoolYearMenuOpen] = useState(false);
-  const [selectedTermId, setSelectedTermId] = useState(() => cached?.terms[0]?.id || null);
-  const [terms, setTerms] = useState(() => cached?.terms || []);
-  const [departmentsByTerm, setDepartmentsByTerm] = useState(() => cached?.departmentsByTerm || {});
-  const [subjectsByTerm, setSubjectsByTerm] = useState(() => cached?.subjectsByTerm || {});
-  const [gradeSheetRecordsByTerm, setGradeSheetRecordsByTerm] = useState(() => cached?.gradeSheetRecordsByTerm || {});
-  const [reopeningRequests, setReopeningRequests] = useState(() => cached?.reopeningRequests || []);
-  const [activeReopenings, setActiveReopenings] = useState(() => cached?.activeReopenings || []);
-  const [upcomingSchoolYear, setUpcomingSchoolYear] = useState(() => cached?.upcomingSchoolYear || null);
-  const [upcomingPeriods, setUpcomingPeriods] = useState(() => cached?.upcomingPeriods || []);
-  const [suggestedUpcomingPeriods, setSuggestedUpcomingPeriods] = useState(() => cached?.suggestedUpcomingPeriods || []);
+  const [preferredTermId, setPreferredTermId] = useState(null);
+  const loadContext = useCallback(
+    () => getGradingPeriodContext(userId, requestedSchoolYearId),
+    [userId, requestedSchoolYearId],
+  );
+  const contextQuery = useCachedQuery(
+    cacheKey("admin:academic-period", {
+      userId,
+      schoolYearId: String(requestedSchoolYearId || "current"),
+    }),
+    loadContext,
+    { enabled: Boolean(userId), keepPreviousData: true },
+  );
+  const {
+    schoolYears = [], selectedSchoolYearId = "", terms = [],
+    departmentsByTerm = {}, subjectsByTerm = {}, gradeSheetRecordsByTerm = {},
+    reopeningRequests = [], activeReopenings = [], upcomingSchoolYear = null,
+    upcomingPeriods = [], suggestedUpcomingPeriods = [],
+  } = contextQuery.data || {};
+  const selectedTermId = terms.some((term) => term.id === preferredTermId)
+    ? preferredTermId : terms[0]?.id || null;
+  const isYearChanging = contextQuery.refreshing && requestedSchoolYearId
+    && selectedSchoolYearId !== requestedSchoolYearId;
+  const loadingMode = contextQuery.loading ? "initial"
+    : contextQuery.refreshing ? (isYearChanging ? "year-change" : "background") : "idle";
+  const pendingSchoolYearLabel = schoolYears.find((year) => year.id === requestedSchoolYearId)?.label || "";
+  const pageError = !userId ? "A signed-in user is required to load Academic Period data."
+    : !contextQuery.data ? contextQuery.error : "";
+  const refreshContext = contextQuery.refresh;
 
   // Shared request, feedback, and surface state
-  const [loadingMode, setLoadingMode] = useState(cached ? "idle" : "initial");
-  const [pendingSchoolYearLabel, setPendingSchoolYearLabel] = useState("");
-  const [pageError, setPageError] = useState("");
   const [reviewRequestId, setReviewRequestId] = useState(null);
   const [isReviewSaving, setIsReviewSaving] = useState(false);
   const [activityReopeningId, setActivityReopeningId] = useState(null);
@@ -86,87 +100,17 @@ export default function AcademicPeriod({ user }) {
   const [toastVariant, setToastVariant] = useState("success");
 
   const schoolYearMenuRef = useRef(null);
-  const selectedTermIdRef = useRef(cached?.terms[0]?.id || null);
-  const contextRequestId = useRef(0);
 
   const showToast = useCallback((message, variant = "success") => {
     setToastVariant(variant);
     setToastMessage(message || "The request could not be completed.");
   }, []);
 
-  // Loads one school year's complete Academic Period context atomically.
-  const loadContext = useCallback(
-    async (
-      schoolYearId,
-      { mode = "background", pendingLabel = "", force = mode === "background" } = {},
-    ) => {
-      if (!userId) {
-        setPageError("A signed-in user is required to load Academic Period data.");
-        setLoadingMode("idle");
-        return;
-      }
-
-      const requestId = ++contextRequestId.current;
-      const key = cacheKey("admin:academic-period", { userId, schoolYearId: String(schoolYearId || "current") });
-      const applyContext = context => {
-        setSchoolYears(context.schoolYears);
-        setSelectedSchoolYearId(context.selectedSchoolYearId);
-        setTerms(context.terms);
-        setDepartmentsByTerm(context.departmentsByTerm);
-        setSubjectsByTerm(context.subjectsByTerm);
-        setGradeSheetRecordsByTerm(context.gradeSheetRecordsByTerm);
-        setReopeningRequests(context.reopeningRequests);
-        setActiveReopenings(context.activeReopenings);
-        setUpcomingSchoolYear(context.upcomingSchoolYear);
-        setUpcomingPeriods(context.upcomingPeriods);
-        setSuggestedUpcomingPeriods(context.suggestedUpcomingPeriods);
-
-        const currentTermId = context.terms.some(
-          (term) => term.id === selectedTermIdRef.current,
-        )
-          ? selectedTermIdRef.current
-          : context.terms[0]?.id || null;
-
-        selectedTermIdRef.current = currentTermId;
-        setSelectedTermId(currentTermId);
-      };
-      const existing = !force && getCachedData(key);
-      if (existing) applyContext(existing);
-      setLoadingMode(existing ? "background" : mode);
-      setPendingSchoolYearLabel(mode === "year-change" ? pendingLabel : "");
-      setPageError("");
-
-      try {
-        const context = await loadCached(key, () => getGradingPeriodContext(userId, schoolYearId), { force });
-        if (requestId !== contextRequestId.current) return;
-        applyContext(context);
-      } catch (error) {
-        if (requestId !== contextRequestId.current) return;
-        const message =
-          error.message ||
-          "Unable to load academic period data. Check the backend connection and try again.";
-
-        if (mode === "initial") {
-          setPageError(message);
-        } else {
-          showToast(message, "error");
-        }
-      } finally {
-        if (requestId === contextRequestId.current) {
-          setLoadingMode("idle");
-          setPendingSchoolYearLabel("");
-        }
-      }
-    },
-    [showToast, userId],
-  );
-
   useEffect(() => {
-    // The initial API synchronization intentionally populates page state.
+    if (!contextQuery.error || !contextQuery.data) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadContext(undefined, { mode: "initial" });
-    return () => { contextRequestId.current += 1; };
-  }, [loadContext]);
+    showToast(contextQuery.error, "error");
+  }, [contextQuery.error, contextQuery.data, showToast]);
 
   useEffect(() => {
     if (!toastMessage) return undefined;
@@ -222,15 +166,11 @@ export default function AcademicPeriod({ user }) {
     setIsSchoolYearMenuOpen(false);
     if (schoolYear.id === selectedSchoolYearId) return;
 
-    loadContext(schoolYear.id, {
-      mode: "year-change",
-      pendingLabel: schoolYear.label,
-    });
+    setRequestedSchoolYearId(schoolYear.id);
   };
 
   const handleSelectTerm = (termId) => {
-    selectedTermIdRef.current = termId;
-    setSelectedTermId(termId);
+    setPreferredTermId(termId);
   };
 
   const handleChangeView = (nextView) => {
@@ -254,7 +194,7 @@ export default function AcademicPeriod({ user }) {
       await approveReopeningRequest(userId, requestId, payload);
       setReviewRequestId(null);
       showToast("Temporary reopening approved.");
-      await loadContext(selectedSchoolYearId);
+      await refreshContext();
     } catch (error) {
       showToast(error.message, "error");
     } finally {
@@ -269,7 +209,7 @@ export default function AcademicPeriod({ user }) {
       await denyReopeningRequest(userId, requestId, payload);
       setReviewRequestId(null);
       showToast("Reopening request denied.");
-      await loadContext(selectedSchoolYearId);
+      await refreshContext();
     } catch (error) {
       showToast(error.message, "error");
     } finally {
@@ -397,11 +337,7 @@ export default function AcademicPeriod({ user }) {
           </div>
           <button
             type="button"
-            onClick={() =>
-              loadContext(selectedSchoolYearId || undefined, {
-                mode: "initial", force: true,
-              })
-            }
+            onClick={refreshContext}
           >
             <RefreshCw size={16} aria-hidden="true" />
             Retry
@@ -450,7 +386,8 @@ export default function AcademicPeriod({ user }) {
               schoolYearLabel={selectedSchoolYear.label}
               isReadOnly={!isSelectedSchoolYearActive}
               periods={terms}
-              initialSelectedPeriodId={selectedTermId}
+              selectedPeriodId={selectedTermId}
+              onSelectPeriod={handleSelectTerm}
               upcomingSchoolYear={
                 isSelectedSchoolYearActive ? upcomingSchoolYear : null
               }
@@ -460,7 +397,7 @@ export default function AcademicPeriod({ user }) {
               suggestedUpcomingPeriods={
                 isSelectedSchoolYearActive ? suggestedUpcomingPeriods : []
               }
-              onRefresh={() => loadContext(selectedSchoolYearId)}
+              onRefresh={refreshContext}
               onToast={showToast}
             />
           )}

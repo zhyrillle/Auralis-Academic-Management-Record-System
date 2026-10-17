@@ -62,7 +62,7 @@ try {
     const { default: Page } = await server.ssrLoadModule('/src/pages/'+folder+'/'+name+'.jsx');
     const html = renderToString(React.createElement(MemoryRouter, null, React.createElement(Page, { user: { user_id: 1 } })));
     assert(html.length > 100, name+' renders content');
-    assert(!/pa-skeleton|mu-skeleton|grade-lock-skeleton|ws-config-skeleton/.test(html), name+' skips initial loading with cached data');
+    assert(!/pa-skeleton|mu-skeleton|grade-lock-skeleton|grading-period-skeleton|ws-config-skeleton/.test(html), name+' skips initial loading with cached data');
     process.stdout.write('PASS '+name+' loaded-view render\n');
   }
 
@@ -70,7 +70,9 @@ try {
   const { clearNavigationCache, apiFetch } = await server.ssrLoadModule('/src/services/navigationCache.js');
   const { getSectionDetails } = await server.ssrLoadModule('/src/services/sectionDetailsService.js');
   let signedInUser = { user_id: 10, role: 'adviser' };
-  globalThis.localStorage = { getItem: () => JSON.stringify(signedInUser) };
+  const storage = new Map();
+  globalThis.localStorage = { getItem: key => key === 'user' ? JSON.stringify(signedInUser) : storage.get(key) ?? null,
+    setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) };
   clearNavigationCache();
   const originalFetch = globalThis.fetch;
   let reads = 0;

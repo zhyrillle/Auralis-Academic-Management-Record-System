@@ -1,4 +1,4 @@
-import { apiFetch as fetch } from "../../services/navigationCache";
+import { cachedApiFetch as fetch } from "../../services/navigationCache";
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useLocation } from "react-router-dom";
@@ -64,8 +64,8 @@ export default function GradeReopeningRequest() {
       setOptionsError("");
       try {
         const responses = await Promise.all([
-          fetch(`${API_BASE_URL}/grading-periods/grade-sheets/reopening-options`, { headers }),
-          fetch(`${API_BASE_URL}/reopen-requests/user/${currentUser.user_id}`, { headers }),
+          fetch(`${API_BASE_URL}/grading-periods/grade-sheets/reopening-options`, { headers, force: refreshAttempt > 0 }),
+          fetch(`${API_BASE_URL}/reopen-requests/user/${currentUser.user_id}`, { headers, force: refreshAttempt > 0 }),
         ]);
         const payloads = await Promise.all(responses.map(response => response.json()));
         if (responses.some(response => !response.ok)) throw new Error(payloads.find(payload => payload.error || payload.message)?.error || "Reopening data could not be loaded.");

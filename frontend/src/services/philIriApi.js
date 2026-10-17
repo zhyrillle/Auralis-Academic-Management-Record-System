@@ -1,20 +1,23 @@
-import { apiFetch as fetch } from "./navigationCache";
+import { cachedApiFetch as fetch } from "./navigationCache";
 import { API_BASE_URL } from "./classRecordApi";
+import { accountDraftKey, getSessionScope, assertCurrentSession, isNetworkError } from "../offline/syncManager.js";
 
-const getStorageKey = (sectionId, testType, schoolYearId) =>
-  `phil_iri_${sectionId}_${testType}${schoolYearId ? `_sy_${schoolYearId}` : ""}`;
+const getStorageKey = (sectionId, testType, schoolYearId, scope) =>
+  accountDraftKey(`phil_iri_${sectionId}_${testType}${schoolYearId ? `_sy_${schoolYearId}` : ""}`, scope);
 
 /**
  * Fetch PHIL-IRI records for a specific section and test type ('PRE_TEST' or 'POST_TEST').
  * Automatically falls back to localStorage if table is not yet created in the database.
  */
 export async function getPhilIriRecords(sectionId, testType = "POST_TEST", subjectOfferingId = null, schoolYearId = null) {
-  const storageKey = getStorageKey(sectionId, testType, schoolYearId);
+  const scope = getSessionScope();
+  assertCurrentSession(scope);
+  const storageKey = getStorageKey(sectionId, testType, schoolYearId, scope);
   let localCache = null;
   try {
     const raw = localStorage.getItem(storageKey);
     if (raw) localCache = JSON.parse(raw);
-  } catch (_) {}
+  } catch { /* A missing or unreadable draft is not a successful server response. */ }
 
   try {
     let url = `${API_BASE_URL}/phil-iri/${encodeURIComponent(sectionId)}?testType=${encodeURIComponent(testType)}`;
@@ -25,6 +28,7 @@ export async function getPhilIriRecords(sectionId, testType = "POST_TEST", subje
     const res = await fetch(url);
     if (res.ok) {
       const data = await res.json();
+      assertCurrentSession(scope);
       if (data.tableReady) {
         return {
           records: Array.isArray(data.records) ? data.records : [],
@@ -35,10 +39,13 @@ export async function getPhilIriRecords(sectionId, testType = "POST_TEST", subje
       }
     }
   } catch (err) {
+    assertCurrentSession(scope);
+    if (!isNetworkError(err)) throw err;
     console.warn("Could not reach PHIL-IRI backend API, falling back to local storage:", err);
   }
 
   // Fallback to local storage if available
+  assertCurrentSession(scope);
   if (localCache && Array.isArray(localCache.records)) {
     return {
       records: localCache.records,
@@ -69,7 +76,10 @@ export async function savePhilIriBatch({
   passageWordsCount = 70,
   totalCompItems = 5,
 }) {
-  const storageKey = getStorageKey(sectionId, testType, schoolYearId);
+  const scope = getSessionScope();
+  assertCurrentSession(scope);
+  const storageKey = getStorageKey(sectionId, testType, schoolYearId, scope);
+  let savedLocally = false;
 
   // 1. Always backup to local storage first to prevent any data loss
   try {
@@ -82,7 +92,8 @@ export async function savePhilIriBatch({
         savedAt: new Date().toISOString(),
       })
     );
-  } catch (_) {}
+    savedLocally = true;
+  } catch { /* Only report a local save below if persistence actually succeeded. */ }
 
   // 2. Persist to MySQL backend API
   try {
@@ -99,9 +110,12 @@ export async function savePhilIriBatch({
     });
 
     const data = await res.json().catch(() => ({}));
+    assertCurrentSession(scope);
+    if (data.offline) return { success: true, offline: true, tableReady: false, source: "localStorage", message: data.message };
     if (res.ok && data.success) {
       return { success: true, tableReady: true, source: "database" };
     } else {
+      if (!savedLocally) throw new Error("Unable to save the PHIL-IRI records locally or to the server.");
       return {
         success: true,
         tableReady: data.tableReady ?? false,
@@ -110,6 +124,8 @@ export async function savePhilIriBatch({
       };
     }
   } catch (err) {
+    assertCurrentSession(scope);
+    if (!savedLocally || !isNetworkError(err)) throw err;
     console.warn("Failed to reach PHIL-IRI batch endpoint; scores saved in local storage:", err);
     return {
       success: true,

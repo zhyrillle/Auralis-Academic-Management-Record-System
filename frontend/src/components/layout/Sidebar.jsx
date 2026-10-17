@@ -46,8 +46,18 @@ export default function Sidebar({ user, onLogout, collapsed = false, mobileOpen 
     }));
   };
 
-  const handleLogout = () => {
-    removeStoredUser();
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [logoutError, setLogoutError] = useState("");
+  const handleLogout = async () => {
+    if (loggingOut) return;
+    setLoggingOut(true);
+    setLogoutError("");
+    try { await removeStoredUser(); }
+    catch {
+      setLogoutError("Your unsent work could not be saved on this device. Please save it before logging out.");
+      setLoggingOut(false);
+      return;
+    }
     if (onLogout) {
       onLogout();
     }
@@ -196,7 +206,8 @@ export default function Sidebar({ user, onLogout, collapsed = false, mobileOpen 
           </Link>
 
           {/* Logout Button */}
-          <button onClick={handleLogout} className="logout-btn" title="Logout">
+          {logoutError && <p role="alert" style={{ color: '#fca5a5', fontSize: 12, padding: '0 12px' }}>{logoutError}</p>}
+          <button onClick={handleLogout} className="logout-btn" title="Logout" disabled={loggingOut}>
             <LogOut size={20} className="logout-icon" />
             <span className="logout-btn-text">Logout</span>
           </button>

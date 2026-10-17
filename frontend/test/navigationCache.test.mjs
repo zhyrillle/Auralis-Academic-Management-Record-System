@@ -4,7 +4,9 @@ import { apiFetch, cacheKey, clearNavigationCache, getCachedData, loadCached } f
 import { filterRiskPreview } from '../src/utils/filterRiskPreview.js';
 
 let user = { user_id: 1, role: 'principal' };
-globalThis.localStorage = { getItem: () => JSON.stringify(user) };
+const storage = new Map();
+globalThis.localStorage = { getItem: key => key === 'user' ? JSON.stringify(user) : storage.get(key) ?? null,
+  setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) };
 
 test('loaded terms are reused, filters have distinct keys and concurrent reads are shared', async () => {
   clearNavigationCache();
@@ -72,10 +74,11 @@ test('successful saves invalidate views; reads and failed saves do not', async (
 
 test('a save during an in-flight read prevents its old data from entering the cache', async () => {
   clearNavigationCache();
-  let finish, calls = 0;
-  const loader = () => ++calls === 1 ? new Promise(resolve => { finish = resolve; }) : Promise.resolve('new');
+  let finish, started, calls = 0;
+  const ready = new Promise(resolve => { started = resolve; });
+  const loader = () => ++calls === 1 ? new Promise(resolve => { finish = resolve; started(); }) : Promise.resolve('new');
   const pending = loadCached('racing', loader);
-  await Promise.resolve();
+  await ready;
   clearNavigationCache();
   finish('old');
   assert.equal(await pending, 'new');
@@ -96,4 +99,17 @@ test('grade filtering recalculates counts without treating unscored learners as 
   assert.equal(grade8.gradeBreakdown.length, 1);
   assert.equal(filterRiskPreview(data, 'all'), data);
   assert.equal(data.students.length, 2);
+});
+
+test('late responses from a previous session are cancelled without publishing a page error', async () => {
+  await clearNavigationCache();
+  let finish, started;
+  const ready = new Promise(resolve => { started = resolve; });
+  const obsolete = loadCached('session-change', () => new Promise(resolve => { finish = resolve; started(); }));
+  await ready;
+  user = { user_id: 3, role: 'principal' };
+  await loadCached('session-change', async () => 'current-account');
+  finish('previous-account');
+  await assert.rejects(obsolete, error => error.name === 'AbortError' && error.code === 'SESSION_CHANGED');
+  assert.equal(getCachedData('session-change'), 'current-account');
 });

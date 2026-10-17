@@ -1,3 +1,4 @@
+import { cachedApiFetch as fetch } from "./navigationCache.js";
 /**
  * Notification Service
  *
@@ -30,7 +31,7 @@ export async function fetchDeptHeadNotifications(userId = null) {
       ? `${API_BASE_URL}/notifications/department-head?user_id=${encodeURIComponent(resolvedUserId)}`
       : `${API_BASE_URL}/notifications/department-head`;
     const headers = resolvedUserId ? { "x-auralis-user-id": String(resolvedUserId) } : {};
-    const res = await fetch(url, { headers });
+    const res = await fetch(url, { queueOffline: false, headers });
     return await parseResponse(res);
   } catch (error) {
     console.warn("Could not fetch department head notifications:", error);
@@ -44,7 +45,7 @@ export async function fetchDeptHeadNotifications(userId = null) {
  */
 export async function markNotificationAsRead(notificationId) {
   try {
-    const res = await fetch(`${API_BASE_URL}/notifications/${notificationId}/read`, {
+    const res = await fetch(`${API_BASE_URL}/notifications/${notificationId}/read`, { queueOffline: false,
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
     });
@@ -65,7 +66,7 @@ export async function markAllNotificationsAsRead(userId = null) {
     const headers = { "Content-Type": "application/json" };
     if (resolvedUserId) headers["x-auralis-user-id"] = String(resolvedUserId);
 
-    const res = await fetch(`${API_BASE_URL}/notifications/mark-all-read`, {
+    const res = await fetch(`${API_BASE_URL}/notifications/mark-all-read`, { queueOffline: false,
       method: "POST",
       headers,
       body: JSON.stringify({ user_id: resolvedUserId }),

@@ -1,3 +1,4 @@
+import { cachedApiFetch as fetch } from "./navigationCache.js";
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
 
 async function fetchApi(endpoint, queryParams = {}) {
@@ -17,7 +18,7 @@ async function fetchApi(endpoint, queryParams = {}) {
     }
   } catch (e) {}
 
-  const response = await fetch(url.toString(), {
+  const response = await fetch(url.toString(), { queueOffline: false,
     headers: {
       'Authorization': `Bearer ${token}`,
       'X-Auralis-User-Id': userId,

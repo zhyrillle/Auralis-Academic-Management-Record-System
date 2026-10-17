@@ -1,3 +1,4 @@
+import { cachedApiFetch as fetch } from "./navigationCache.js";
 import { cacheKey, loadCached } from './navigationCache.js';
 
 const API_BASE_URL = (
@@ -32,7 +33,7 @@ export const getSectionDetails = async ({
   const read = async () => {
     const response = await fetch(
       `${API_BASE_URL}/section-details/${encodeURIComponent(assignmentType)}/${encodeURIComponent(assignmentId)}?term=${encodeURIComponent(term)}`,
-      {
+      { queueOffline: false,
         headers: { "X-Auralis-User-Id": String(userId) },
         signal,
       },

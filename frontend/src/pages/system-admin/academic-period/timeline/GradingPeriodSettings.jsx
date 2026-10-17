@@ -1,4 +1,3 @@
-import { useState } from "react";
 import AcademicTimeline from "./AcademicTimeline";
 import UpcomingSchoolYear from "./UpcomingSchoolYear";
 import "../../../../styles/GradingPeriodSettings.css";
@@ -9,16 +8,14 @@ export default function GradingPeriodSettings({
   schoolYearLabel,
   isReadOnly = false,
   periods,
-  initialSelectedPeriodId,
+  selectedPeriodId,
+  onSelectPeriod,
   upcomingSchoolYear,
   upcomingPeriods,
   suggestedUpcomingPeriods,
   onRefresh,
   onToast,
 }) {
-  const [selectedPeriodId, setSelectedPeriodId] = useState(
-    initialSelectedPeriodId,
-  );
   const timelineVersion = periods
     .map(
       (period) =>
@@ -46,7 +43,7 @@ export default function GradingPeriodSettings({
         isReadOnly={isReadOnly}
         periods={periods}
         initialSelectedPeriodId={selectedPeriodId}
-        onSelectedPeriodChange={setSelectedPeriodId}
+        onSelectedPeriodChange={onSelectPeriod}
         onRefresh={onRefresh}
         onToast={onToast}
       />
