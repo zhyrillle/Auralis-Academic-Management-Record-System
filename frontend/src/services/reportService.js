@@ -1,3 +1,5 @@
+import { cachedApiFetch as fetch } from "./navigationCache.js";
+import { cacheKey, loadCached } from "./navigationCache.js";
 const API_BASE_URL = (
   import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api"
 ).replace(/\/$/, "");
@@ -7,7 +9,7 @@ const API_BASE_URL = (
  * @param {string|number} identifier - Student ID, LRN, or student_section_id
  * @returns {Promise<Object>} Aggregated SF10 learner, school, scholastic records, and certification
  */
-export const getStudentSF10Details = async (identifier) => {
+const readStudentSF10Details = async (identifier) => {
   if (!identifier) return null;
   const cleanId = encodeURIComponent(String(identifier).trim());
   
@@ -32,3 +34,7 @@ export const getStudentSF10Details = async (identifier) => {
   // If endpoints didn't succeed, throw last error
   throw lastError || new Error("Failed to fetch official SF10 details.");
 };
+
+export const getStudentSF10Details = (identifier) => identifier
+  ? loadCached(cacheKey('reports:sf10', { identifier: String(identifier).trim() }), () => readStudentSF10Details(identifier))
+  : Promise.resolve(null);

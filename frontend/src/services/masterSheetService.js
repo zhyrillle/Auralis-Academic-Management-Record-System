@@ -1,3 +1,4 @@
+import { cachedApiFetch as fetch } from "./navigationCache.js";
 import { jsPDF } from "jspdf";
 import educationSealUrl from "../assets/deped_logo.png";
 import depedWordmarkUrl from "../assets/deped-logo.gif";
@@ -21,16 +22,18 @@ export const normalizeMasterSheetError = (error) => {
   return error?.message || "The Master Sheet request could not be completed.";
 };
 
-export const getMasterSheetOptions = async (userId) => {
+export const getMasterSheetOptions = async (userId, { force = false } = {}) => {
   const response = await fetch(
     `${API_BASE_URL}/master-sheets/options?user_id=${encodeURIComponent(userId)}`,
+    { force },
   );
   return parseJsonResponse(response);
 };
 
-export const getMasterSheet = async (adviserAssignmentId, userId) => {
+export const getMasterSheet = async (adviserAssignmentId, userId, { force = false } = {}) => {
   const response = await fetch(
     `${API_BASE_URL}/master-sheets/${encodeURIComponent(adviserAssignmentId)}?user_id=${encodeURIComponent(userId)}`,
+    { force },
   );
   return parseJsonResponse(response);
 };

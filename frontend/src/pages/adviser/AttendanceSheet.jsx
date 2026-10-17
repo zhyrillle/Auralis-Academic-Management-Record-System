@@ -1,10 +1,11 @@
+import { cachedApiFetch as fetch } from "../../services/navigationCache.js";
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { Calendar, CalendarOff, CheckCircle, AlertTriangle, Info, Save, ChevronLeft, ChevronRight } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import "../../styles/attendanceSheet.css";
 import backIconUrl from "../../assets/backButton.svg";
 import { getStoredUser } from "../../utils/auth";
-import { apiFetch } from "../../services/navigationCache.js";
+import { cachedApiFetch as apiFetch } from "../../services/navigationCache.js";
 import Toast from "../../components/common/Toast.jsx";
 import EmptyState from "../../components/common/EmptyState.jsx";
 import AttendanceDayControl from "../../components/adviser/AttendanceDayControl.jsx";
@@ -127,7 +128,7 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
     loadAll();
   }, [targetSectionId, currentUser?.user_id, currentUser?.id]);
 
-  const loadAll = async () => {
+  const loadAll = async (force = false) => {
     setLoading(true);
     setLoadError('');
     try {
@@ -146,7 +147,7 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
       let assignment = null;
 
       try {
-        const assignRes = await fetch(`${BASE_URL}/section-adviser-assignments/section/${sectionId}`);
+        const assignRes = await fetch(`${BASE_URL}/section-adviser-assignments/section/${sectionId}`, { force: Boolean(force) });
         const assignments = assignRes.ok ? await assignRes.json() : [];
         if (Array.isArray(assignments) && assignments.length > 0) {
           const requestedId = activeClass?.adviser_assignment_id || activeClass?.assignmentId;
@@ -163,7 +164,7 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
         console.warn("Could not fetch adviser assignment:", e);
       }
 
-      const secRes = await fetch(`${BASE_URL}/sections/${sectionId}`);
+      const secRes = await fetch(`${BASE_URL}/sections/${sectionId}`, { force: Boolean(force) });
       const secData = secRes.ok ? await secRes.json() : null;
       sectionName = secData?.section_name || assignment?.section_name || activeClass?.sectionName || activeClass?.section_name || `Section ${sectionId}`;
       gradeLevelName = secData?.grade_level_name || assignment?.grade_level_name || activeClass?.gradeLevel || activeClass?.grade_level_name || "";
@@ -179,7 +180,7 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
       // 2. Get enrolled students for section
       let enrichedStudents = [];
       try {
-        const stuRes = await fetch(`${BASE_URL}/sections/${sectionId}/students`);
+        const stuRes = await fetch(`${BASE_URL}/sections/${sectionId}/students`, { force: Boolean(force) });
         if (stuRes.ok) {
           const list = await stuRes.json();
           if (Array.isArray(list) && list.length > 0) {
@@ -198,11 +199,11 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
       }
 
       if (enrichedStudents.length === 0) {
-        const ssRes = await fetch(`${BASE_URL}/student-sections`);
+        const ssRes = await fetch(`${BASE_URL}/student-sections`, { force: Boolean(force) });
         const allStudentSections = ssRes.ok ? await ssRes.json() : [];
         const sectionStudentSections = allStudentSections.filter(ss => Number(ss.section_id) === Number(sectionId));
 
-        const allStudentsRes = await fetch(`${BASE_URL}/students`);
+        const allStudentsRes = await fetch(`${BASE_URL}/students`, { force: Boolean(force) });
         const allStudents = allStudentsRes.ok ? await allStudentsRes.json() : [];
 
         enrichedStudents = sectionStudentSections.map(ss => {
@@ -223,7 +224,7 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
 
       // 3. Load all sheets for this section
       const yearQuery = assignment?.school_year_id ? `?schoolYearId=${assignment.school_year_id}` : '';
-      const sheetsRes = await fetch(`${BASE_URL}/attendance-sheets/section/${sectionId}${yearQuery}`);
+      const sheetsRes = await fetch(`${BASE_URL}/attendance-sheets/section/${sectionId}${yearQuery}`, { force: Boolean(force) });
       if (!sheetsRes.ok) throw new Error('Attendance day markers could not be loaded.');
       const sheets = await sheetsRes.json();
       const byDate = {};
@@ -235,7 +236,7 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
       setNoClassDays(noClassDaysFromSheets(sheets));
 
       // 4. Load attendance records for this section
-      const attRes = await fetch(`${BASE_URL}/attendance/section/${sectionId}${yearQuery}`);
+      const attRes = await fetch(`${BASE_URL}/attendance/section/${sectionId}${yearQuery}`, { force: Boolean(force) });
       if (!attRes.ok) throw new Error('Attendance records could not be loaded.');
       const attRows = await attRes.json();
       const attMap = {};
@@ -674,7 +675,7 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
 
   if (loadError) return <div className="attendance-sheet-container">
     <EmptyState icon={AlertTriangle} title="Attendance could not be loaded" description={loadError} />
-    <button type="button" className="att-save-btn" onClick={loadAll}>Retry</button>
+    <button type="button" className="att-save-btn" onClick={() => loadAll(true)}>Retry</button>
   </div>;
 
   return (

@@ -1,4 +1,4 @@
-import { apiFetch as fetch } from "./navigationCache";
+import { cachedApiFetch as fetch } from "./navigationCache";
 /**
  * Department Head Class Record Service
  *

@@ -1,3 +1,4 @@
+import { cachedApiFetch as fetch } from "../../services/navigationCache.js";
 import React, { useState, useEffect } from "react";
 import { Search, Pencil, X, Check } from "lucide-react";
 import backIconUrl from "../../assets/backButton.svg";

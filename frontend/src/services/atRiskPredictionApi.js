@@ -1,3 +1,4 @@
+import { cachedApiFetch as fetch } from "./navigationCache.js";
 const BASE = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api').replace(/\/$/, '');
 
 export async function requestRiskPreview(path, filters = {}, signal) {
@@ -6,7 +7,7 @@ export async function requestRiskPreview(path, filters = {}, signal) {
     if (value != null && value !== '') params.set(key, value);
   }
   const user = JSON.parse(localStorage.getItem('user') || 'null');
-  const response = await fetch(`${BASE}/principal/at-risk-prediction/${path}?${params}`, {
+  const response = await fetch(`${BASE}/principal/at-risk-prediction/${path}?${params}`, { queueOffline: false,
     headers: { 'X-Auralis-User-Id': String(user?.user_id || user?.id || '') }, signal,
   });
   const payload = await response.json();

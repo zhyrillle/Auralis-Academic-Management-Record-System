@@ -1,3 +1,4 @@
+import { cachedApiFetch as fetch } from "./navigationCache.js";
 const API_BASE_URL = "http://localhost:5000/api";
 
 const parseResponse = async (response) => {

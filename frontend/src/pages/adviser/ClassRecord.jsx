@@ -1,4 +1,4 @@
-import { apiFetch as fetch } from "../../services/navigationCache";
+import { cachedApiFetch as fetch } from "../../services/navigationCache";
 import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import {
@@ -36,6 +36,12 @@ import { eligibilityMessages, getGradeSheetReopeningEligibility } from "../../se
 import {
   getPendingOfflineScores,
   processOutbox,
+  getSessionScope,
+  isCurrentSession,
+  getSyncSnapshot,
+  saveOfflineScores,
+  registerLogoutDraftSaver,
+  isSessionCancellation,
 } from "../../offline/syncManager";
 
 const EMPTY_SCORES = Object.freeze({});
@@ -45,6 +51,7 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
   const location = useLocation();
   const params = useParams();
   const currentUserId = getStoredUser()?.user_id;
+  const [recordSession] = useState(() => getSessionScope());
 
   // Dynamic Class Context Resolution (from prop or router location state)
   const effectiveClass = useMemo(() => {
@@ -300,7 +307,7 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
 
   // Flush pending scores to backend (or IndexedDB when offline)
   const flushPendingScores = useCallback(async () => {
-    if (isLocked) return;
+    if (isLocked || !isCurrentSession(recordSession)) return;
 
     if (saveTimerRef.current) {
       clearTimeout(saveTimerRef.current);
@@ -324,6 +331,7 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
     const snapshot = Array.from(pendingQueueRef.current.entries());
     const payloadScores = snapshot.map(([k, v]) => v);
 
+    let saved = false;
     try {
       const res = await saveScoresBatch({
         subject_offering_id: subjectOfferingId,
@@ -331,7 +339,8 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
         scores: payloadScores,
         mapeh_component: (isMapeh || isMapehRef.current) ? (mapehComponent || mapehComponentRef.current || "MA") : null,
         examConfig: examConfigRef.current,
-      });
+      }, recordSession);
+      saved = true;
 
       // Remove only items whose queue record matches the sent snapshot
       // (preserves newer inputs typed while the save request was in flight!)
@@ -345,16 +354,32 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
         setSyncStatus(res?.offline || !navigator.onLine ? "offline" : "saved");
       }
     } catch (err) {
+      if (isSessionCancellation(err)) return;
       console.warn("Auto-save sync error:", err.message);
-      setSyncStatus(navigator.onLine ? "error" : "offline");
+      setSyncStatus("error");
     } finally {
       isFlushingRef.current = false;
-      if (hasPendingFlushRef.current || pendingQueueRef.current.size > 0) {
-        hasPendingFlushRef.current = false;
+      const shouldFlush = saved && (hasPendingFlushRef.current || pendingQueueRef.current.size > 0);
+      hasPendingFlushRef.current = false;
+      if (shouldFlush) {
         flushPendingScores();
       }
     }
-  }, [isLocked, subjectOfferingId, activeTerm, isMapeh, mapehComponent]);
+  }, [isLocked, subjectOfferingId, activeTerm, isMapeh, mapehComponent, recordSession]);
+
+  // Persist the debounce buffer before logout, while its original account is still active.
+  useEffect(() => registerLogoutDraftSaver(async () => {
+    if (!pendingQueueRef.current.size) return;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    const snapshot = Array.from(pendingQueueRef.current.entries());
+    await saveOfflineScores({ subject_offering_id: subjectOfferingId, term: activeTerm,
+      scores: snapshot.map(([, score]) => score),
+      mapeh_component: (isMapeh || isMapehRef.current) ? (mapehComponent || mapehComponentRef.current || "MA") : null,
+      examConfig: examConfigRef.current, apiUrl: `${API_BASE_URL}/scores/batch` }, recordSession);
+    snapshot.forEach(([key, value]) => {
+      if (pendingQueueRef.current.get(key) === value) pendingQueueRef.current.delete(key);
+    });
+  }), [subjectOfferingId, activeTerm, isMapeh, mapehComponent, recordSession]);
 
   const flushPendingScoresRef = useRef(flushPendingScores);
   flushPendingScoresRef.current = flushPendingScores;
@@ -367,8 +392,9 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
         setSyncStatus("saving");
         flushPendingScores();
         processOutbox()
-          .then(() => setSyncStatus("saved"))
-          .catch(() => setSyncStatus("saved"));
+          .then(getSyncSnapshot)
+          .then(snapshot => setSyncStatus(snapshot.failedCount ? "error" : snapshot.pendingCount ? "offline" : "saved"))
+          .catch(() => setSyncStatus("error"));
       }
     };
 
@@ -395,7 +421,7 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
         clearTimeout(saveTimerRef.current);
         saveTimerRef.current = null;
       }
-      if (pendingQueueRef.current.size > 0 && navigator.onLine) {
+      if (pendingQueueRef.current.size > 0 && navigator.onLine && isCurrentSession(recordSession)) {
         const payloadScores = Array.from(pendingQueueRef.current.values());
         try {
           fetch(`${API_BASE_URL}/scores/batch`, {
@@ -409,17 +435,22 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
               examConfig: examConfigRef.current,
             }),
             keepalive: true,
-          });
+          }).catch(e => console.warn("Unmount sync error:", e));
         } catch (e) {
           console.warn("Unmount keepalive sync error:", e);
         }
       }
     };
-  }, [subjectOfferingId, activeTerm, isMapeh, mapehComponent]);
+  }, [subjectOfferingId, activeTerm, isMapeh, mapehComponent, recordSession]);
 
   // Page reload / tab close beforeunload guard
   useEffect(() => {
-    const handleBeforeUnload = () => {
+    const handleBeforeUnload = (event) => {
+      if (!isCurrentSession(recordSession)) return;
+      if (pendingQueueRef.current.size > 0) {
+        event.preventDefault();
+        event.returnValue = "";
+      }
       if (pendingQueueRef.current.size > 0 && navigator.onLine) {
         const payloadScores = Array.from(pendingQueueRef.current.values());
         const payload = JSON.stringify({
@@ -436,7 +467,7 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
 
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [subjectOfferingId, activeTerm, isMapeh, mapehComponent]);
+  }, [subjectOfferingId, activeTerm, isMapeh, mapehComponent, recordSession]);
 
   // ============================================================
   // PARSE DATA PAYLOAD HELPER
@@ -699,7 +730,7 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
   // LOAD DATA FROM BACKEND
   // ============================================================
   const loadClassRecord = useCallback(
-    async (termToLoad, targetComp = null) => {
+    async (termToLoad, targetComp = null, force = false) => {
       const activeComp = targetComp || (isMapehRef.current ? mapehComponentRef.current : "MA");
       const requestId = ++recordRequestRef.current;
       const selectionKey = `${subjectOfferingId}:${sectionId}:${effectiveSubjectId}:${termToLoad}:${activeComp}`;
@@ -707,7 +738,7 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
       setModalState(previous => ({ ...previous, isOpen: false }));
 
       try {
-        const data = await getClassRecord(subjectOfferingId, termToLoad, sectionId, activeComp, effectiveSubjectId);
+        const data = await getClassRecord(subjectOfferingId, termToLoad, sectionId, activeComp, effectiveSubjectId, { force });
         if (requestId !== recordRequestRef.current) return;
         if (!data?.class_context || !Array.isArray(data.students) || !Array.isArray(data.assessments)) {
           throw new Error("The class record response is incomplete. Please retry.");
@@ -769,6 +800,7 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
             if (Array.isArray(pendingOffline) && pendingOffline.length > 0) {
               console.log(`[ClassRecord] Restoring ${pendingOffline.length} pending offline scores from IndexedDB`);
               pendingOffline.forEach((item) => {
+                if ((item.mapeh_component || null) !== (isCurrentMapeh ? (activeComp || "MA") : null)) return;
                 const sId = String(item.student_id);
                 if (!parsed.grades[sId]) return;
 
@@ -856,7 +888,7 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
           setRecordLoad({ key: selectionKey, status: "ready", error: "" });
         }
       } catch (err) {
-        if (requestId !== recordRequestRef.current) return;
+        if (requestId !== recordRequestRef.current || isSessionCancellation(err)) return;
         console.warn("Error loading class record:", err.message);
         setRecordLoad({ key: selectionKey, status: "error", error: err.message || "Unable to load this term's class record." });
       }
@@ -1834,7 +1866,7 @@ const formatToISODate = (val) => {
           <h3>Unable to load Term {activeTerm.replace("T", "")} record</h3>
           <p>{recordError}</p>
           <button type="button" className="class-record-request-btn"
-            onClick={() => loadClassRecordRef.current(activeTerm, mapehComponentRef.current)}>Retry</button>
+            onClick={() => loadClassRecordRef.current(activeTerm, mapehComponentRef.current, true)}>Retry</button>
         </div>
       ) : (
         <div className="class-record-content">

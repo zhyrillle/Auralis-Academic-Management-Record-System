@@ -1,3 +1,4 @@
+import { cachedApiFetch as fetch } from "../../services/navigationCache.js";
 import { useState, useEffect, useMemo } from "react";
 import "../../styles/performanceReport.css";
 import { getStoredUser } from "../../utils/auth";

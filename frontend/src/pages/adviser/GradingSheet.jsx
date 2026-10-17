@@ -1,3 +1,4 @@
+import { cachedApiFetch as fetch } from "../../services/navigationCache.js";
 import { useState, useMemo, useEffect } from "react";
 import { Download, Printer, Check, Calendar, CheckCircle2 } from "lucide-react";
 import backIconUrl from "../../assets/backButton.svg";

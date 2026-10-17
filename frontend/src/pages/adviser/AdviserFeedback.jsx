@@ -1,3 +1,4 @@
+import { cachedApiFetch as fetch } from "../../services/navigationCache.js";
 import React, { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import {

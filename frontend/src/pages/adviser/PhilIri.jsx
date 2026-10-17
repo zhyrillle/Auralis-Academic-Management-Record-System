@@ -1,3 +1,4 @@
+import { cachedApiFetch as fetch } from "../../services/navigationCache.js";
 import { Fragment, useState, useEffect, useMemo, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Download, Cloud, CloudOff, RefreshCw, Pencil, Check } from "lucide-react";

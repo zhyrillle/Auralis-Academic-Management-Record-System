@@ -1,4 +1,4 @@
-import { apiFetch } from './navigationCache';
+import { cachedApiFetch as apiFetch } from './navigationCache';
 import { API_BASE_URL } from './classRecordApi';
 import { getStoredUser } from '../utils/auth';
 

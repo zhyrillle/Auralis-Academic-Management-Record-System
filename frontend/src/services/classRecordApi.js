@@ -1,9 +1,12 @@
-import { apiFetch as fetch } from "./navigationCache";
+import { cachedApiFetch as fetch, clearNavigationCache } from "./navigationCache.js";
 import {
   getPersistentCache,
-  setPersistentCache,
+  removePersistentCache,
   saveOfflineScores,
-} from "../offline/syncManager";
+  getSessionScope,
+  assertCurrentSession,
+  isNetworkError,
+} from "../offline/syncManager.js";
 
 export const API_BASE_URL = (
   import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api"
@@ -12,7 +15,9 @@ export const API_BASE_URL = (
 const parseResponse = async (response) => {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(data.error || data.message || "The request could not be completed.");
+    const error = new Error(data.error || data.message || "The request could not be completed.");
+    error.status = response.status;
+    throw error;
   }
   return data;
 };
@@ -22,8 +27,10 @@ export const getClassRecord = async (
   term = "T1",
   sectionId = null,
   mapehComponent = null,
-  subjectId = null
+  subjectId = null,
+  { force = false } = {}
 ) => {
+  const scope = getSessionScope();
   let url = `${API_BASE_URL}/class-record/${subjectOfferingId}?term=${encodeURIComponent(term)}`;
   if (sectionId) {
     url += `&section_id=${encodeURIComponent(sectionId)}`;
@@ -38,14 +45,17 @@ export const getClassRecord = async (
   const cacheKey = `classRecord_${subjectOfferingId}_${term}_${sectionId || ""}_${mapehComponent || ""}_${subjectId || ""}`;
 
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, { force });
     const data = await parseResponse(res);
-    // Persist full class record to IndexedDB for offline access
-    setPersistentCache(cacheKey, data).catch(() => {});
+    assertCurrentSession(scope);
     return data;
   } catch (err) {
-    // If offline or network fails, try to load from persistent cache
-    const cached = await getPersistentCache(cacheKey);
+    // Preserve access to an older same-session snapshot made before the shared
+    // read-cache integration. New reads use the shared cache above.
+    assertCurrentSession(scope);
+    if ([401, 403].includes(err.status)) await removePersistentCache(cacheKey, scope);
+    if (!isNetworkError(err)) throw err;
+    const cached = await getPersistentCache(cacheKey, scope);
     if (cached) {
       console.log(`[ClassRecordApi] Serving offline cached record for ${cacheKey}`);
       return cached;
@@ -79,7 +89,8 @@ export const deleteAssessment = async (assessmentId) => {
   return parseResponse(res);
 };
 
-export const saveScoresBatch = async ({ subject_offering_id, term = "T1", scores, mapeh_component = null, examConfig = null }) => {
+export const saveScoresBatch = async ({ subject_offering_id, term = "T1", scores, mapeh_component = null, examConfig = null }, scope = getSessionScope()) => {
+  assertCurrentSession(scope);
   const payload = {
     subject_offering_id,
     term,
@@ -95,7 +106,7 @@ export const saveScoresBatch = async ({ subject_offering_id, term = "T1", scores
   const url = `${API_BASE_URL}/scores/batch`;
 
   // If currently offline, directly persist to IndexedDB offlineScores and outbox queue
-  if (typeof navigator !== "undefined" && !navigator.onLine) {
+  if (typeof navigator !== "undefined" && navigator.onLine === false) {
     await saveOfflineScores({
       subject_offering_id,
       term,
@@ -103,7 +114,8 @@ export const saveScoresBatch = async ({ subject_offering_id, term = "T1", scores
       mapeh_component,
       examConfig,
       apiUrl: url,
-    });
+    }, scope);
+    clearNavigationCache({ persistent: false });
     return {
       success: true,
       offline: true,
@@ -114,13 +126,18 @@ export const saveScoresBatch = async ({ subject_offering_id, term = "T1", scores
 
   try {
     const res = await fetch(url, {
+      queueOffline: false, // Scores need their overlay and outbox entry saved atomically below.
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
-    return await parseResponse(res);
+    const data = await parseResponse(res);
+    assertCurrentSession(scope);
+    return data;
   } catch (err) {
-    // Network failed while trying to save - fallback to offline storage
+    assertCurrentSession(scope);
+    if (!isNetworkError(err)) throw err;
+    // Only a network failure can fall back to offline storage, never a server rejection.
     console.warn("[ClassRecordApi] Network error during batch save, storing offline:", err.message);
     await saveOfflineScores({
       subject_offering_id,
@@ -129,7 +146,8 @@ export const saveScoresBatch = async ({ subject_offering_id, term = "T1", scores
       mapeh_component,
       examConfig,
       apiUrl: url,
-    });
+    }, scope);
+    clearNavigationCache({ persistent: false });
     return {
       success: true,
       offline: true,

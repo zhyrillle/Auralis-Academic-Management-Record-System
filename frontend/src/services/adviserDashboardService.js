@@ -1,3 +1,4 @@
+import { cachedApiFetch as fetch } from "./navigationCache.js";
 /**
  * Adviser Dashboard Service
  *

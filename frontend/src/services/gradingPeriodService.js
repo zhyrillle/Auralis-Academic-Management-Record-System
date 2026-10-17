@@ -1,4 +1,4 @@
-import { apiFetch as fetch } from "./navigationCache";
+import { cachedApiFetch as fetch } from "./navigationCache";
 const API_BASE_URL = (
   import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api"
 ).replace(/\/$/, "");
@@ -27,6 +27,7 @@ async function request(path, { userId, method = "GET", body } = {}) {
 
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {
+      cacheRead: !path.endsWith('/reopening-eligibility'),
       method,
       headers: authHeaders(userId, body !== undefined),
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),

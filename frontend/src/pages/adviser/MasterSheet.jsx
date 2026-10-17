@@ -133,7 +133,7 @@ export default function MasterSheet() {
     setIsLoadingOptions(true);
     setRequestError("");
     try {
-      const response = await getMasterSheetOptions(userId);
+      const response = await getMasterSheetOptions(userId, { force: true });
       const nextAssignments = response.assignments || [];
       setAssignments(nextAssignments);
       const preferred =
@@ -195,7 +195,7 @@ export default function MasterSheet() {
     setIsLoadingSheet(true);
     setRequestError("");
     try {
-      const response = await getMasterSheet(selectedAssignmentId, userId);
+      const response = await getMasterSheet(selectedAssignmentId, userId, { force: true });
       masterSheetRef.current = response;
       lastLoadedAssignmentIdRef.current = String(selectedAssignmentId);
       setMasterSheet(response);

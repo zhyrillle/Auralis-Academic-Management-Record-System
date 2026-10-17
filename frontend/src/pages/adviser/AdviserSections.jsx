@@ -1,4 +1,4 @@
-import { apiFetch as fetch } from "../../services/navigationCache";
+import { cachedApiFetch as fetch } from "../../services/navigationCache";
 import { useState, useMemo, useEffect } from "react";
 import { Check, FileSpreadsheet, ArrowDownNarrowWide, Loader2 } from "lucide-react";
 import { useLocation } from "react-router-dom";
