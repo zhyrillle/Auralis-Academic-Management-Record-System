@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Search } from "lucide-react";
 
-export default function SearchBar({ query, setQuery, placeholder = "Search..." }) {
+export default function SearchBar({ query, setQuery, placeholder = "Search...", id }) {
     const [isHovered, setIsHovered] = useState(false);
     const [isFocused, setIsFocused] = useState(false);
 
@@ -20,6 +20,7 @@ export default function SearchBar({ query, setQuery, placeholder = "Search..." }
                 display: "inline-flex",
                 alignItems: "center",
                 width: "100%",
+                minWidth: 0,
                 maxWidth: "480px",
             }}
         >
@@ -28,17 +29,19 @@ export default function SearchBar({ query, setQuery, placeholder = "Search..." }
                 className="icon-container"
                 style={{
                     position: "absolute",
-                    left: "0px",
+                    left: "1px",
+                    top: "1px",
+                    bottom: "1px",
+                    pointerEvents: "none",
                     zIndex: 2,
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    width: "50px",
-                    height: "33px",
+                    width: "46px",
                     borderTopLeftRadius: "30px",
                     borderBottomLeftRadius: "30px",
-                    borderTopRightRadius: "20px",
-                    borderBottomRightRadius: "20px",
+                    borderTopRightRadius: "0px",
+                    borderBottomRightRadius: "0px",
                     backgroundColor: isFocused ? "var(--primary-color)" : "transparent",
                     transition: "background-color 0.2s ease"
                 }}
@@ -55,7 +58,9 @@ export default function SearchBar({ query, setQuery, placeholder = "Search..." }
             </div>
 
             <input
+                id={id}
                 type="text"
+                aria-label={placeholder}
                 placeholder={placeholder}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
@@ -66,6 +71,7 @@ export default function SearchBar({ query, setQuery, placeholder = "Search..." }
                 className="search-input"
                 style={{
                     width: "100%",
+                    boxSizing: "border-box",
                     fontFamily: "var(--font-inter)",
                     fontSize: "var(--fs-caption)",
                     fontWeight: "var(--fw-normal)",
@@ -74,9 +80,6 @@ export default function SearchBar({ query, setQuery, placeholder = "Search..." }
                     border: `1px solid ${getBorderColor()}`,
                     borderRadius: "30px",
 
-                    /* --- THE FIX --- */
-                    /* Changed left padding to 60px. This leaves a clean 10px buffer space 
-                       after your 50px wide icon container so text never touches it. */
                     padding: "8px 16px 8px 60px",
 
                     outline: "none",

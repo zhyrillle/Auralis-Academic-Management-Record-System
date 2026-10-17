@@ -1,0 +1,299 @@
+.app-overlay {
+  position: fixed;
+  inset: 0;
+  box-sizing: border-box;
+  width: 100vw;
+  max-width: none;
+  height: 100dvh;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #24324a;
+  overflow: hidden;
+  font: inherit;
+}
+
+.app-overlay[open] {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.app-overlay::backdrop {
+  background: rgb(15 29 53 / 35%);
+  backdrop-filter: blur(3px);
+  animation: overlay-backdrop-in .22s ease both;
+}
+
+body:has(.app-overlay[open]) {
+  overflow: hidden;
+}
+
+.app-overlay__panel {
+  position: relative;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  width: min(620px, 100%);
+  height: 100%;
+  background: #fff;
+  box-shadow: -12px 0 55px rgb(17 45 97 / 14%);
+  animation: overlay-drawer-in .22s cubic-bezier(.2,.7,.2,1) both;
+}
+
+.app-overlay--modal[open] {
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.app-overlay--modal .app-overlay__panel {
+  width: min(510px, 100%);
+  height: auto;
+  max-height: calc(100dvh - 48px);
+  border-radius: 18px;
+  animation-name: overlay-modal-in;
+}
+
+.app-overlay--bottom[open] {
+  align-items: flex-end;
+  justify-content: center;
+  padding: 20px;
+}
+.app-overlay--bottom .app-overlay__panel {
+  overflow: hidden;
+  width: min(540px, 100%);
+  height: auto;
+  max-height: min(620px, calc(100dvh - 40px));
+  border-radius: 18px;
+  box-shadow: 0 16px 60px rgb(17 45 97 / 20%);
+  animation-name: overlay-bottom-in;
+}
+
+.app-overlay__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 26px 28px 22px;
+  border-bottom: 1px solid #e8edf5;
+  flex: 0 0 auto;
+}
+
+.app-overlay__eyebrow {
+  display: block;
+  color: #96771b;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.app-overlay__header h2 {
+  color: #123062;
+  margin: 0;
+  font-size: 21px;
+  line-height: 1.25;
+}
+
+.app-overlay__header p {
+  margin: 8px 0 0;
+  color: #718096;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.app-overlay__close {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  color: #64748b;
+  cursor: pointer;
+}
+
+.app-overlay__close:hover {
+  background: #f4f7fb;
+  color: #123062;
+}
+
+.app-overlay__body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 24px 28px;
+  flex: 1;
+}
+
+.app-overlay__error {
+  padding: 12px 14px;
+  margin: 0 0 18px;
+  background: #fff3f4;
+  color: #bc3f4e;
+  border: 1px solid #f1d4d9;
+  border-radius: 9px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.app-overlay__notification-tray {
+  position: absolute;
+  z-index: 2;
+  left: 50%;
+  bottom: 16px;
+  translate: -50% 0;
+  width: max-content;
+  max-width: calc(100% - 32px);
+}
+.app-overlay__footer .app-overlay__notification-tray {
+  bottom: calc(100% + 12px);
+}
+.app-overlay .app-overlay__notification {
+  position: static;
+  width: auto;
+  max-width: none;
+  margin: 0;
+  box-sizing: border-box;
+  border: 1px solid #dbe4ef;
+  background: #fff;
+  box-shadow: 0 8px 26px rgb(17 45 97 / 16%);
+  font-size: 12px;
+  animation: overlay-bottom-in .2s ease both;
+}
+
+.app-overlay__footer {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 18px 28px;
+  border-top: 1px solid #e8edf5;
+  background: #fff;
+  flex: 0 0 auto;
+}
+
+.app-overlay.is-closing .app-overlay__panel {
+  animation: overlay-drawer-out .22s ease both;
+  pointer-events: none;
+}
+
+.app-overlay--modal.is-closing .app-overlay__panel {
+  animation-name: overlay-modal-out;
+}
+
+.app-overlay--bottom.is-closing .app-overlay__panel {
+  animation-name: overlay-bottom-out;
+}
+.app-overlay.is-closing::backdrop {
+  animation: overlay-backdrop-out .22s ease both;
+}
+
+.app-overlay button:disabled {
+  opacity: .55;
+  cursor: wait;
+}
+
+.app-overlay :focus-visible {
+  outline: 2px solid #c9a227;
+  outline-offset: 3px;
+}
+
+@keyframes overlay-drawer-in {
+
+  from {
+    opacity: .5;
+    transform: translateX(100%);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes overlay-drawer-out {
+
+  to {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+}
+
+@keyframes overlay-modal-in {
+
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes overlay-modal-out {
+
+  to {
+    opacity: 0;
+    transform: translateY(10px) scale(.98);
+  }
+}
+
+@keyframes overlay-bottom-in {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes overlay-bottom-out {
+  to { opacity: 0; transform: translateY(18px); }
+}
+
+@keyframes overlay-backdrop-in {
+
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes overlay-backdrop-out {
+
+  to {
+    opacity: 0;
+  }
+}
+
+@media (max-width: 1536px), (max-height: 820px) {
+  .app-overlay__header { padding: 16px 22px 14px; }
+  .app-overlay__body { padding: 16px 22px; }
+  .app-overlay__footer { padding: 12px 22px; }
+}
+
+@media (max-width: 640px) {
+
+  .app-overlay__header, .app-overlay__body {
+    padding: 20px;
+  }
+
+  .app-overlay__footer {
+    padding: 16px 20px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  .app-overlay__panel, .app-overlay::backdrop, .app-overlay.is-closing .app-overlay__panel, .app-overlay.is-closing::backdrop {
+    animation-duration: .01ms;
+  }
+}

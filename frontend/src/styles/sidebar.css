@@ -329,7 +329,11 @@
 }
 
 /* Bottom Actions Section */
-.sidebar-footer {
+.sidebar-container .sidebar-footer {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  flex-shrink: 0;
   padding: 20px 16px;
   border-top: 1px solid rgba(255, 255, 255, 0.05);
   display: flex;
@@ -402,11 +406,19 @@
 }
 
 .profile-info {
+  min-width: 0;
+  flex: 1;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   text-overflow: ellipsis;
   transition: opacity var(--transition-speed);
+}
+
+.sidebar-container .profile-name, .sidebar-container .profile-role {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .profile-name {
@@ -467,6 +479,68 @@
 .sidebar-container.collapsed .logout-btn-text {
   display: none;
   opacity: 0;
+}
+
+.sidebar-container .logout-btn:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.8);
+  outline-offset: 2px;
+}
+
+/* Keep account actions compact on laptops without changing the shared layout. */
+@media (max-width: 1536px), (max-height: 820px) {
+  .sidebar-container .sidebar-footer {
+    padding: 10px 12px;
+    gap: 6px;
+  }
+
+  .sidebar-container .profile-card-link {
+    box-sizing: border-box;
+    min-height: 48px;
+    padding: 6px 8px;
+    gap: 10px;
+  }
+
+  .sidebar-container .profile-avatar {
+    box-sizing: border-box;
+    width: 34px;
+    height: 34px;
+    border-width: 1px;
+  }
+
+  .sidebar-container .profile-name {
+    font-size: 14px;
+    line-height: 1.35;
+  }
+
+  .sidebar-container .profile-role {
+    font-size: 12px;
+    line-height: 1.35;
+  }
+
+  .sidebar-container .logout-btn {
+    box-sizing: border-box;
+    min-height: 40px;
+    padding: 8px 12px;
+    gap: 12px;
+    font-size: 14px;
+    line-height: 1.4;
+  }
+
+  .sidebar-container.collapsed .sidebar-footer {
+    padding: 10px 8px;
+  }
+
+  .sidebar-container.collapsed .profile-card-link {
+    justify-content: center;
+    width: 48px;
+    padding: 6px;
+  }
+
+  .sidebar-container.collapsed .logout-btn {
+    width: 40px;
+    height: 40px;
+    padding: 8px;
+  }
 }
 
 /* Collapsed Popover/Tooltip fallback for UX */

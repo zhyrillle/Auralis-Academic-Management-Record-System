@@ -28,7 +28,12 @@ export default function DropdownSelect({
       if (!rootRef.current?.contains(event.target)) setIsOpen(false);
     };
     const handleKeyDown = (event) => {
-      if (event.key === "Escape") setIsOpen(false);
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        setIsOpen(false);
+        rootRef.current?.querySelector("button")?.focus();
+      }
     };
 
     document.addEventListener("mousedown", handlePointerDown);

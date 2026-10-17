@@ -1,152 +1,33 @@
-import { X } from "lucide-react";
+import { UserRound, Pencil } from "lucide-react";
+import OverlayPanel from "../../../components/common/OverlayPanel";
 import MaskedLrn from "../../../components/common/MaskedLrn";
-
-export default function StudentDetailModal({ isOpen, onClose, student }) {
-  if (!isOpen || !student) return null;
-
-  const fullName =
-    student.name ||
-    `${student.first_name || ""} ${student.middle_name || ""} ${student.last_name || ""} ${student.extension_name || ""}`.trim();
-
-  const formattedBirthdate = student.birthdate
-    ? new Date(student.birthdate).toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      })
-    : "Not provided";
-
-  const calculateAge = (dob) => {
-    if (!dob) return "N/A";
-    const birth = new Date(dob);
-    const now = new Date();
-    let age = now.getFullYear() - birth.getFullYear();
-    const m = now.getMonth() - birth.getMonth();
-    if (m < 0 || (m === 0 && now.getDate() < birth.getDate())) age--;
-    return age > 0 ? `${age} years old` : "N/A";
-  };
-
-  const fullAddress = [
-    student.street,
-    student.barangay,
-    student.city,
-    student.province,
-    student.country,
-    student.postal_code,
-  ]
-    .filter(Boolean)
-    .join(", ") || "No address on record";
-
-  return (
-    <div className="modal-overlay" role="dialog" aria-modal="true">
-      <div className="student-modal-card">
-        {/* Header */}
-        <div className="student-modal-header">
-          <h2>Student Profile Details</h2>
-          <button
-            type="button"
-            className="btn-modal-close"
-            onClick={onClose}
-            aria-label="Close dialog"
-          >
-            <X size={20} />
-          </button>
-        </div>
-
-        {/* Body */}
-        <div className="student-modal-body">
-          {/* Section: Academic Information */}
-          <div className="modal-section-title">Academic Information</div>
-          <div className="detail-grid">
-            <div className="detail-item">
-              <span className="detail-label">Learner Reference Number (LRN)</span>
-              <span className="detail-value">
-                <MaskedLrn
-                  lrn={student.LRN || student.lrn}
-                  maskedLrn={student.masked_lrn}
-                  showToggle={true}
-                  allowCopy={true}
-                />
-              </span>
-            </div>
-
-            <div className="detail-item">
-              <span className="detail-label">Current Grade Level</span>
-              <span className="detail-value">
-                <span className="badge-pill badge-grade">
-                  {student.gradeLevel || student.grade_level_name || "Unassigned"}
-                </span>
-              </span>
-            </div>
-
-            <div className="detail-item">
-              <span className="detail-label">Assigned Section</span>
-              <span className="detail-value">
-                <span className="badge-pill badge-section">
-                  {student.section || student.section_name || "Unassigned"}
-                </span>
-              </span>
-            </div>
-
-            <div className="detail-item">
-              <span className="detail-label">Curriculum Program</span>
-              <span className="detail-value">
-                <span className="badge-pill badge-program">
-                  {student.program_code
-                    ? `${student.program_code} - ${student.program_name || ""}`
-                    : "EBEC - General"}
-                </span>
-              </span>
-            </div>
-          </div>
-
-          {/* Section: Personal Information */}
-          <div className="modal-section-title">Personal Details</div>
-          <div className="detail-grid">
-            <div className="detail-item">
-              <span className="detail-label">Full Name</span>
-              <span className="detail-value">{fullName}</span>
-            </div>
-
-            <div className="detail-item">
-              <span className="detail-label">Biological Sex</span>
-              <span className="detail-value">
-                {student.sex === "M"
-                  ? "Male"
-                  : student.sex === "F"
-                  ? "Female"
-                  : student.sex || "N/A"}
-              </span>
-            </div>
-
-            <div className="detail-item">
-              <span className="detail-label">Birthdate</span>
-              <span className="detail-value">{formattedBirthdate}</span>
-            </div>
-
-            <div className="detail-item">
-              <span className="detail-label">Age</span>
-              <span className="detail-value">{calculateAge(student.birthdate)}</span>
-            </div>
-          </div>
-
-          {/* Section: Residential Address */}
-          <div className="modal-section-title">Residential Address</div>
-          <div className="detail-grid">
-            <div className="detail-item detail-full-address">
-              <span className="detail-label">Complete Address</span>
-              <span className="detail-value">{fullAddress}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="student-modal-footer">
-          <button type="button" className="btn-modal-cancel" onClick={onClose}>
-            Close
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+import { formatSectionGrade } from "../../../utils/studentSections";
+export default function StudentDetailModal({
+  isOpen,
+  onClose,
+  student,
+  onEdit
+}) {
+  const fullName = student?.name || [student?.first_name, student?.middle_name, student?.last_name, student?.extension_name].filter(Boolean).join(" ");
+  const birth = student?.birthdate ? new Date(student.birthdate) : null;
+  const birthdate = birth && Number.isFinite(birth.getTime()) ? birth.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric"
+  }) : "Not provided";
+  const address = [student?.street, student?.barangay, student?.city, student?.province, student?.country, student?.postal_code].filter(Boolean).join(", ") || "No address on record";
+  const groups = [{
+    title: "Academic information",
+    fields: [["LRN", <MaskedLrn key="lrn" lrn={student?.LRN || student?.lrn} maskedLrn={student?.masked_lrn} showToggle allowCopy />], ["Grade level", formatSectionGrade(student?.gradeLevel || student?.grade_level_name, student?.grade_level_id)], ["Section", student?.section || student?.section_name || "Unassigned"], ["Curriculum program", student?.program_code || "EBEC"], ["Status", student?.status || "Active"]]
+  }, {
+    title: "Personal information",
+    fields: [["Full name", fullName], ["Sex", student?.sex === "M" ? "Male" : student?.sex === "F" ? "Female" : student?.sex], ["Birthdate", birthdate]]
+  }, {
+    title: "Residential address",
+    fields: [["Complete address", address]]
+  }];
+  return <OverlayPanel isOpen={isOpen} onClose={onClose} title="Student profile" eyebrow="Learner details" description="A read-only view of the learner’s recorded information." className="student-profile-drawer" footer={<><button type="button" className="student-admin-button" onClick={onClose}>Close</button>{onEdit && <button type="button" className="student-admin-button student-admin-button--primary" onClick={onEdit}><Pencil size={15} />Edit profile</button>}</>}>
+    <div className="student-profile-identity"><span><UserRound size={25} /></span><div><h3>{fullName}</h3><p>{student?.program_code || "EBEC"} · {student?.section || student?.section_name || "No section assigned"}</p></div></div>
+    {groups.map(group => <section className="student-profile-group" key={group.title}><h3>{group.title}</h3><dl>{group.fields.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value || "Not provided"}</dd></div>)}</dl></section>)}
+  </OverlayPanel>;
 }
