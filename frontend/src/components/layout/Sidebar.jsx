@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { sidebarConfig } from "../../config/sidebarConfig";
 import { normalizeRole, getRoleDisplayTitle, removeStoredUser, getRoleDefaultPath } from "../../utils/auth";
@@ -8,6 +8,67 @@ import logoIcon from "../../assets/auralis-logo.png";
 
 const isRouteActive = (pathname, path) => Boolean(path)
   && (pathname === path || pathname.startsWith(`${path}/`));
+
+function positionSidebarFlyout(trigger, panel) {
+  if (!trigger || !panel) return;
+  const anchor = trigger.getBoundingClientRect();
+  const sidebarRight = trigger.closest(".sidebar-container")?.getBoundingClientRect().right ?? anchor.right;
+  const top = Math.max(12, Math.min(anchor.top + anchor.height / 2 - panel.offsetHeight / 2, window.innerHeight - panel.offsetHeight - 12));
+  panel.style.left = `${Math.max(12, Math.min(sidebarRight + 10, window.innerWidth - panel.offsetWidth - 12))}px`;
+  panel.style.top = `${top}px`;
+  panel.style.setProperty("--sidebar-flyout-origin-y", `${anchor.top + anchor.height / 2 - top}px`);
+}
+
+// The same collapsed navigation works for every role's submenu groups.
+function CollapsedSidebarGroup({ item, pathname, active, onNavigate }) {
+  const id = useId();
+  const triggerRef = useRef(null);
+  const panelRef = useRef(null);
+  const [isOpen, setIsOpen] = useState(false);
+  const Icon = item.icon;
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    const position = () => positionSidebarFlyout(triggerRef.current, panelRef.current);
+    window.addEventListener("resize", position);
+    window.addEventListener("scroll", position, true);
+    return () => {
+      window.removeEventListener("resize", position);
+      window.removeEventListener("scroll", position, true);
+    };
+  }, [isOpen]);
+
+  return <div className="menu-group sidebar-collapsed-group">
+    <button type="button" ref={triggerRef} id={`${id}-trigger`}
+      className={`sidebar-item ${active ? "active" : ""}`}
+      aria-label={item.title} title={item.title} aria-expanded={isOpen}
+      aria-controls={`${id}-submenu`} popoverTarget={`${id}-submenu`}
+      onClick={() => positionSidebarFlyout(triggerRef.current, panelRef.current)}>
+      <span className="sidebar-item-icon">{Icon && <Icon size={20} />}</span>
+    </button>
+    <div ref={panelRef} id={`${id}-submenu`} popover="auto"
+      className="sidebar-flyout" role="group" aria-label={`${item.title} navigation`}
+      onToggle={event => {
+        const open = event.nativeEvent.newState === "open";
+        setIsOpen(open);
+        if (open) {
+          positionSidebarFlyout(triggerRef.current, panelRef.current);
+          panelRef.current?.querySelector("a")?.focus();
+        }
+      }}>
+      <div className="sidebar-flyout__items">{item.submenu.map(subItem => {
+        const selected = isRouteActive(pathname, subItem.path);
+        return <Link key={subItem.path} to={subItem.path}
+          className={`submenu-item ${selected ? "active" : ""}`}
+          aria-current={selected ? "page" : undefined}
+          onClick={() => {
+            panelRef.current?.hidePopover();
+            onNavigate?.();
+          }}>{subItem.title}</Link>;
+      })}</div>
+    </div>
+  </div>;
+}
 
 export default function Sidebar({ user, onLogout, collapsed = false, mobileOpen = false, onCloseMobile }) {
   const location = useLocation();
@@ -109,6 +170,11 @@ export default function Sidebar({ user, onLogout, collapsed = false, mobileOpen 
             const isOpen = openMenus[index] ?? routeOpenMenus[index] ?? false;
 
             const IconComponent = item.icon;
+
+            if (hasSubmenu && collapsed) {
+              return <CollapsedSidebarGroup key={index} item={item}
+                pathname={location.pathname} active={isActive} onNavigate={onCloseMobile} />;
+            }
 
             if (hasSubmenu) {
               return (
