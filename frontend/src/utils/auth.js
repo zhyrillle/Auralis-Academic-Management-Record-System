@@ -1,4 +1,5 @@
-import { clearNavigationCache } from "../services/navigationCache";
+import { clearNavigationCache } from "../services/navigationCache.js";
+import { resetOfflineSession, preserveDraftsBeforeLogout } from "../offline/syncManager.js";
 // Normalize role string from backend or user object to a standard canonical role key
 export const normalizeRole = (role, userObj) => {
   let targetUser = userObj;
@@ -152,18 +153,20 @@ export const setStoredUser = (userObj) => {
     const scope = user => JSON.stringify([user?.user_id ?? user?.id ?? null, user?.role ?? null,
       user?.is_adviser ?? user?.isAdviser ?? null]);
     localStorage.setItem("user", JSON.stringify(userObj));
-    if (scope(previous) !== scope(userObj)) clearNavigationCache();
+    if (scope(previous) !== scope(userObj)) {
+      resetOfflineSession();
+      clearNavigationCache({ persistent: false });
+    }
   } catch (e) {
     console.error("Error saving user to localStorage:", e);
   }
 };
 
 // Clear stored user
-export const removeStoredUser = () => {
-  try {
-    localStorage.removeItem("user");
-    clearNavigationCache();
-  } catch (e) {
-    console.error("Error clearing user from localStorage:", e);
-  }
+export const removeStoredUser = async () => {
+  // If a draft cannot be stored, stay signed in so the user can recover it.
+  await preserveDraftsBeforeLogout();
+  localStorage.removeItem("user");
+  await resetOfflineSession();
+  clearNavigationCache({ persistent: false });
 };
