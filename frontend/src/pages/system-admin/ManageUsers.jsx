@@ -1,11 +1,13 @@
-import { apiFetch as fetch } from "../../services/navigationCache";
+import { cachedApiFetch as fetch } from "../../services/navigationCache";
 import useCachedQuery from "../../services/useCachedQuery";
 import { cacheKey } from "../../services/navigationCache";
 import { useEffect, useMemo, useRef, useState } from "react";
 import DropdownSelect from "../../components/common/DropdownSelect";
+import OverlayPanel from "../../components/common/OverlayPanel";
 import ManageUsersSkeleton from "./manage-users/ManageUsersSkeleton";
 import UserFormModal from "./manage-users/UserFormModal";
 import "../../styles/ManageUsers.css";
+import { isSessionCancellation } from "../../offline/syncManager.js";
 
 const API_URL = "http://localhost:5000/api";
 
@@ -27,13 +29,6 @@ function Icon({ type, size = 22 }) {
         <svg {...common}>
           <circle cx="11" cy="11" r="7" />
           <path d="m20 20-4-4" />
-        </svg>
-      );
-    case "eye":
-      return (
-        <svg {...common}>
-          <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z" />
-          <circle cx="12" cy="12" r="2.5" />
         </svg>
       );
     case "edit":
@@ -191,6 +186,8 @@ export default function UserManagement() {
   const [deleteUser, setDeleteUser] = useState(null);
   const [formMode, setFormMode] = useState(null);
   const [selectedUser, setSelectedUser] = useState(null);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const profileRequestId = useRef(0);
   const [pfpError, setPfpError] = useState(false);
 
   const [savingUser, setSavingUser] = useState(false);
@@ -222,7 +219,7 @@ export default function UserManagement() {
   const fetchUsers = userQuery.refresh;
   const fetchFormOptions = optionsQuery.refresh;
 
-  useEffect(() => () => { formRequestId.current += 1; }, []);
+  useEffect(() => () => { formRequestId.current += 1; profileRequestId.current += 1; }, []);
 
   const getUserDepartment = (user) => {
     if (!user) return "-";
@@ -263,25 +260,32 @@ export default function UserManagement() {
     });
   }, [users, search, roleFilter, statusFilter]);
 
+  const closeProfile = () => {
+    profileRequestId.current += 1;
+    setProfileOpen(false);
+  };
+
   const handleAddUser = () => {
     formRequestId.current += 1;
     setLoadingDetails(false);
     setDetailsError("");
     setEditTarget(null);
-    setSelectedUser(null);
+    closeProfile();
     setFormMode("add");
     setFormError("");
     setFormData({ ...emptyForm });
   };
 
   const handleViewUser = async (user) => {
+    const requestId = ++profileRequestId.current;
     setSelectedUser(user);
+    setProfileOpen(true);
     setPfpError(false);
     try {
       const response = await fetch(`${API_URL}/users/${user.user_id}`);
       if (response.ok) {
         const fullUser = await response.json();
-        setSelectedUser(fullUser);
+        if (requestId === profileRequestId.current) setSelectedUser(fullUser);
       }
     } catch (error) {
       console.error("Failed to load user detail overview:", error);
@@ -296,7 +300,7 @@ export default function UserManagement() {
     try {
       setFormError("");
       setFormMode("edit");
-      setSelectedUser(null);
+      closeProfile();
 
       // Fetch user details from API
       const response = await fetch(`${API_URL}/users/${user.user_id}`);
@@ -401,6 +405,7 @@ export default function UserManagement() {
       setDeleteUser(null);
       await fetchUsers();
     } catch (error) {
+      if (isSessionCancellation(error)) return;
       alert(error.message || "Failed to delete user.");
     } finally {
       setDeletingUser(false);
@@ -565,8 +570,7 @@ export default function UserManagement() {
       if (!response.ok) throw new Error(data.error || "Failed to save user.");
 
       setFormMode(null);
-      setFormData({ ...emptyForm });
-      setSelectedUser(null);
+      closeProfile();
       await fetchUsers();
     } catch (error) {
       setFormError(error.message || "Failed to save user.");
@@ -598,7 +602,7 @@ export default function UserManagement() {
               <div className="users-panel-header">
                 <div>
                   <h2>User Directory</h2>
-                  <p>View and maintain school personnel accounts.</p>
+                  <p>Select a row to view the account. Use the actions to edit or delete.</p>
                 </div>
                 <span className="users-result-count">{filteredUsers.length} users</span>
               </div>
@@ -640,7 +644,14 @@ export default function UserManagement() {
                   </thead>
                   <tbody>
                     {filteredUsers.map((user) => (
-                      <tr key={user.user_id}>
+                      <tr key={user.user_id} data-user-row tabIndex={0} aria-label={`View profile for ${getUsername(user)}`}
+                        onClick={() => handleViewUser(user)} onKeyDown={event => {
+                          if (event.target !== event.currentTarget) return;
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            handleViewUser(user);
+                          }
+                        }}>
                         <td>
                           <div className="user-name">
                             <span>{getUsername(user)}</span>
@@ -651,13 +662,10 @@ export default function UserManagement() {
                         <td>{getUserDepartment(user)}</td>
                         <td>
                           <div className="actions">
-                            <button type="button" className="action-btn action-btn--view" title="View" aria-label={`View ${getUsername(user)}`} onClick={() => handleViewUser(user)}>
-                              <Icon type="eye" size={21} />
-                            </button>
-                            <button type="button" className="action-btn action-btn--edit" title="Edit" aria-label={`Edit ${getUsername(user)}`} onClick={() => handleEditUser(user)}>
+                            <button type="button" className="action-btn action-btn--edit" title="Edit" aria-label={`Edit ${getUsername(user)}`} onClick={event => { event.stopPropagation(); handleEditUser(user); }}>
                               <Icon type="edit" size={21} />
                             </button>
-                            <button type="button" className="action-btn action-btn--delete" title="Delete" aria-label={`Delete ${getUsername(user)}`} onClick={() => setDeleteUser(user)}>
+                            <button type="button" className="action-btn action-btn--delete" title="Delete" aria-label={`Delete ${getUsername(user)}`} onClick={event => { event.stopPropagation(); setDeleteUser(user); }}>
                               <Icon type="trash" size={21} />
                             </button>
                           </div>
@@ -679,15 +687,14 @@ export default function UserManagement() {
           </>
         )}
 
-        {/* VIEW USER MODAL */}
-        {selectedUser && (
-          <div className="modal-overlay" onClick={() => setSelectedUser(null)}>
-            <div className="user-profile-modal" onClick={(e) => e.stopPropagation()}>
-              <div className="profile-modal-header">
-                <h2>User Profile</h2>
-                <p>Account details and role assignment</p>
-              </div>
-
+        <OverlayPanel isOpen={profileOpen} onClose={closeProfile} variant="bottom"
+          className="user-management-overlay user-profile-tray" title="User Profile"
+          description="Account details and role assignment"
+          footer={<>
+            <button type="button" className="profile-close-btn" onClick={closeProfile}>Close</button>
+            <button type="button" className="profile-edit-btn" disabled={!selectedUser} onClick={() => handleEditUser(selectedUser)}>Edit User</button>
+          </>}>
+          {selectedUser && <>
               <div className="profile-summary">
                 <div className="profile-avatar-wrapper">
                   {selectedUser.pfp_url && !pfpError ? (
@@ -774,22 +781,9 @@ export default function UserManagement() {
                 </div>
               )}
 
-              <div className="profile-modal-actions">
-                <button type="button" className="profile-close-btn" onClick={() => setSelectedUser(null)}>
-                  Close
-                </button>
 
-                <button
-                  type="button"
-                  className="profile-edit-btn"
-                  onClick={() => handleEditUser(selectedUser)}
-                >
-                  Edit User
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+          </>}
+        </OverlayPanel>
 
         {/* DELETE USER MODAL */}
         {deleteUser && (
@@ -823,9 +817,9 @@ export default function UserManagement() {
           </div>
         )}
 
-        {formMode && (
-          <UserFormModal
-            mode={formMode}
+        <UserFormModal
+            isOpen={Boolean(formMode)}
+            mode={formMode || (formData.user_id ? "edit" : "add")}
             data={formData}
             gradeLevels={gradeLevels}
             sections={sections}
@@ -844,7 +838,6 @@ export default function UserManagement() {
             onClose={handleCloseForm}
             onSave={handleSaveUser}
           />
-        )}
       </div>
     </div>
   );

@@ -5,7 +5,8 @@
   box-sizing: border-box;
 }
 
-.user-management-page {
+.user-management-page,
+.user-management-overlay {
   --mu-navy: var(--sidebar-bg, #112d61);
   --mu-text: #172b49;
   --mu-muted: #64748b;
@@ -212,7 +213,7 @@
    BADGES
 ========================= */
 
-.user-management-page .role-badge {
+:is(.user-management-page, .user-management-overlay) .role-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -224,31 +225,31 @@
   letter-spacing: 0.3px;
 }
 
-.user-management-page .role-badge.principal {
+:is(.user-management-page, .user-management-overlay) .role-badge.principal {
   background: #ede9fe;
   color: #6d28d9;
   border: 1px solid #ddd6fe;
 }
 
-.user-management-page .role-badge.department-head {
+:is(.user-management-page, .user-management-overlay) .role-badge.department-head {
   background: #e0f2fe;
   color: #0369a1;
   border: 1px solid #bae6fd;
 }
 
-.user-management-page .role-badge.adviser {
+:is(.user-management-page, .user-management-overlay) .role-badge.adviser {
   background: #fef3c7;
   color: #b45309;
   border: 1px solid #fde68a;
 }
 
-.user-management-page .role-badge.subject-teacher {
+:is(.user-management-page, .user-management-overlay) .role-badge.subject-teacher {
   background: #f1f5f9;
   color: #475569;
   border: 1px solid #e2e8f0;
 }
 
-.user-management-page .status-badge {
+:is(.user-management-page, .user-management-overlay) .status-badge {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -258,12 +259,12 @@
   font-weight: 600;
 }
 
-.user-management-page .status-badge.active {
+:is(.user-management-page, .user-management-overlay) .status-badge.active {
   background: #dcfce7;
   color: #15803d;
 }
 
-.user-management-page .status-badge.inactive {
+:is(.user-management-page, .user-management-overlay) .status-badge.inactive {
   background: #fee2e2;
   color: #b91c1c;
 }
@@ -274,11 +275,11 @@
   border-radius: 50%;
 }
 
-.user-management-page .status-badge.active .status-dot {
+:is(.user-management-page, .user-management-overlay) .status-badge.active .status-dot {
   background: #22c55e;
 }
 
-.user-management-page .status-badge.inactive .status-dot {
+:is(.user-management-page, .user-management-overlay) .status-badge.inactive .status-dot {
   background: #ef4444;
 }
 
@@ -309,31 +310,31 @@
   overflow-y: auto;
 }
 
-.user-management-page .profile-modal-header {
+:is(.user-management-page, .user-management-overlay) .profile-modal-header {
   margin-bottom: 26px;
 }
 
-.user-management-page .profile-modal-header h2 {
+:is(.user-management-page, .user-management-overlay) .profile-modal-header h2 {
   margin: 0 0 6px;
   font-size: 24px;
   font-weight: 600;
   color: #26354d;
 }
 
-.user-management-page .profile-modal-header p {
+:is(.user-management-page, .user-management-overlay) .profile-modal-header p {
   margin: 0;
   font-size: 15px;
   color: #94a3b8;
 }
 
-.user-management-page .profile-summary {
+:is(.user-management-page, .user-management-overlay) .profile-summary {
   display: flex;
   align-items: center;
   position: relative;
   gap: 20px;
 }
 
-.user-management-page .profile-avatar-wrapper {
+:is(.user-management-page, .user-management-overlay) .profile-avatar-wrapper {
   width: 90px;
   height: 90px;
   min-width: 90px;
@@ -349,14 +350,14 @@
   border: 3px solid #f1f5f9;
 }
 
-.user-management-page .profile-avatar-img {
+:is(.user-management-page, .user-management-overlay) .profile-avatar-img {
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
 }
 
-.user-management-page .profile-summary .profile-avatarz,
+:is(.user-management-page, .user-management-overlay) .profile-summary .profile-avatarz,
 .user-management-page div.profile-avatarz {
   width: 100% !important;
   height: 100% !important;
@@ -373,42 +374,42 @@
   line-height: 1 !important;
 }
 
-.user-management-page .profile-main-info {
+:is(.user-management-page, .user-management-overlay) .profile-main-info {
   flex: 1;
 }
 
-.user-management-page .profile-main-info h3 {
+:is(.user-management-page, .user-management-overlay) .profile-main-info h3 {
   margin: 0 0 4px;
   font-size: 22px;
   font-weight: 600;
   color: #1e293b;
 }
 
-.user-management-page .profile-username {
+:is(.user-management-page, .user-management-overlay) .profile-username {
   margin: 0 0 8px;
   font-size: 14px;
   color: #64748b;
 }
 
-.user-management-page .profile-main-info .role-badge {
+:is(.user-management-page, .user-management-overlay) .profile-main-info .role-badge {
   min-width: auto;
   height: 26px;
   padding: 0 10px;
   font-size: 12px;
 }
 
-.user-management-page .profile-status {
+:is(.user-management-page, .user-management-overlay) .profile-status {
   margin-left: auto;
   align-self: center;
 }
 
-.user-management-page .profile-status .status-badge {
+:is(.user-management-page, .user-management-overlay) .profile-status .status-badge {
   height: 27px;
   padding: 0 11px;
   font-size: 13px;
 }
 
-.user-management-page .profile-divider {
+:is(.user-management-page, .user-management-overlay) .profile-divider {
   width: 100%;
   height: 1px;
   background: #e2e8f0;
@@ -416,46 +417,46 @@
   margin-bottom: 18px;
 }
 
-.user-management-page .profile-details {
+:is(.user-management-page, .user-management-overlay) .profile-details {
   display: grid;
   grid-template-columns: 1fr 1fr;
   column-gap: 40px;
   row-gap: 16px;
 }
 
-.user-management-page .profile-detail {
+:is(.user-management-page, .user-management-overlay) .profile-detail {
   display: flex;
   flex-direction: column;
 }
 
-.user-management-page .profile-detail span {
+:is(.user-management-page, .user-management-overlay) .profile-detail span {
   margin-bottom: 4px;
   font-size: 13px;
   color: #64748b;
   font-weight: 500;
 }
 
-.user-management-page .profile-detail strong {
+:is(.user-management-page, .user-management-overlay) .profile-detail strong {
   font-size: 15px;
   font-weight: 500;
   color: #1e293b;
 }
 
 /* Profile teaching assignments section */
-.user-management-page .profile-assignments-section {
+:is(.user-management-page, .user-management-overlay) .profile-assignments-section {
   margin-top: 20px;
   padding-top: 18px;
   border-top: 1px solid #e2e8f0;
 }
 
-.user-management-page .profile-assignments-title {
+:is(.user-management-page, .user-management-overlay) .profile-assignments-title {
   font-size: 14px;
   font-weight: 600;
   color: #26354d;
   margin: 0 0 10px;
 }
 
-.user-management-page .profile-assignments-list {
+:is(.user-management-page, .user-management-overlay) .profile-assignments-list {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -464,7 +465,7 @@
   padding-right: 4px;
 }
 
-.user-management-page .profile-assignment-item {
+:is(.user-management-page, .user-management-overlay) .profile-assignment-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -475,18 +476,18 @@
   font-size: 13px;
 }
 
-.user-management-page .profile-assignment-sub {
+:is(.user-management-page, .user-management-overlay) .profile-assignment-sub {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.user-management-page .profile-assignment-sub strong {
+:is(.user-management-page, .user-management-overlay) .profile-assignment-sub strong {
   color: #1e293b;
   font-weight: 600;
 }
 
-.user-management-page .profile-code-badge {
+:is(.user-management-page, .user-management-overlay) .profile-code-badge {
   font-size: 11px;
   font-weight: 600;
   padding: 2px 6px;
@@ -495,7 +496,7 @@
   border-radius: 4px;
 }
 
-.user-management-page .profile-assignment-sec {
+:is(.user-management-page, .user-management-overlay) .profile-assignment-sec {
   color: #0f8a62;
   font-weight: 500;
   background: #e6f7f2;
@@ -504,7 +505,7 @@
   font-size: 12px;
 }
 
-.user-management-page .profile-assignments-empty {
+:is(.user-management-page, .user-management-overlay) .profile-assignments-empty {
   padding: 14px;
   text-align: center;
   font-size: 13px;
@@ -514,7 +515,7 @@
   border-radius: 8px;
 }
 
-.user-management-page .profile-modal-actions {
+:is(.user-management-page, .user-management-overlay) .profile-modal-actions {
   display: flex;
   justify-content: flex-end;
   align-items: center;
@@ -522,8 +523,8 @@
   margin-top: 28px;
 }
 
-.user-management-page .profile-close-btn,
-.user-management-page .profile-edit-btn {
+:is(.user-management-page, .user-management-overlay) .profile-close-btn,
+:is(.user-management-page, .user-management-overlay) .profile-edit-btn {
   height: 44px;
   padding: 0 20px;
   border-radius: 11px;
@@ -533,24 +534,24 @@
   transition: all 0.2s ease;
 }
 
-.user-management-page .profile-close-btn {
+:is(.user-management-page, .user-management-overlay) .profile-close-btn {
   background: #ffffff;
   color: #26354d;
   border: 1px solid #d8dce2;
 }
 
-.user-management-page .profile-edit-btn {
+:is(.user-management-page, .user-management-overlay) .profile-edit-btn {
   background: #26354d;
   color: #ffffff;
   border: 1px solid #26354d;
 }
 
-.user-management-page .profile-close-btn:hover {
+:is(.user-management-page, .user-management-overlay) .profile-close-btn:hover {
   background: #f1f5f9;
   border-color: #cbd5e1;
 }
 
-.user-management-page .profile-edit-btn:hover {
+:is(.user-management-page, .user-management-overlay) .profile-edit-btn:hover {
   background: #172338;
 }
 
@@ -790,7 +791,7 @@
   left: auto;
 }
 
-.user-management-page .visually-hidden {
+:is(.user-management-page, .user-management-overlay) .visually-hidden {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -956,8 +957,8 @@
   font-size: 12px;
 }
 
-.user-management-page .role-badge,
-.user-management-page .status-badge {
+:is(.user-management-page, .user-management-overlay) .role-badge,
+:is(.user-management-page, .user-management-overlay) .status-badge {
   min-height: 25px;
   padding: 4px 9px;
   border: 1px solid transparent;
@@ -968,44 +969,44 @@
   white-space: nowrap;
 }
 
-.user-management-page .role-badge.principal {
+:is(.user-management-page, .user-management-overlay) .role-badge.principal {
   color: #6b35b8;
   background: #f2ebff;
   border-color: #e4d6ff;
 }
 
-.user-management-page .role-badge.department-head {
+:is(.user-management-page, .user-management-overlay) .role-badge.department-head {
   color: #17679c;
   background: #eaf6ff;
   border-color: #cce9fb;
 }
 
-.user-management-page .role-badge.adviser {
+:is(.user-management-page, .user-management-overlay) .role-badge.adviser {
   color: #946300;
   background: #fff7da;
   border-color: #f4e2a1;
 }
 
-.user-management-page .role-badge.subject-teacher {
+:is(.user-management-page, .user-management-overlay) .role-badge.subject-teacher {
   color: #4d6078;
   background: #eef3f8;
   border-color: #dfe7ef;
 }
 
-.user-management-page .status-badge.active {
+:is(.user-management-page, .user-management-overlay) .status-badge.active {
   color: #06724f;
   background: #e6f7f1;
   border-color: #c7eddf;
 }
 
-.user-management-page .status-badge.inactive {
+:is(.user-management-page, .user-management-overlay) .status-badge.inactive {
   color: #b32631;
   background: #fff0f1;
   border-color: #ffd4d8;
 }
 
-.user-management-page .status-badge.active .status-dot { background: #00a878; }
-.user-management-page .status-badge.inactive .status-dot { background: #e0454f; }
+:is(.user-management-page, .user-management-overlay) .status-badge.active .status-dot { background: #00a878; }
+:is(.user-management-page, .user-management-overlay) .status-badge.inactive .status-dot { background: #e0454f; }
 
 /* Align existing dialogs with the System Admin surfaces. */
 .user-management-page .modal-overlay {
@@ -1028,151 +1029,151 @@
 .user-management-page .delete-modal {
   width: min(520px, 100%);
 }
-.user-management-page .profile-modal-header h2,
+:is(.user-management-page, .user-management-overlay) .profile-modal-header h2,
 .user-management-page .delete-modal-header h2 {
   color: var(--mu-navy);
   font-family: var(--font-dm-sans, "DM Sans", sans-serif);
   font-size: 23px;
   font-weight: 700;
 }
-.user-management-page .profile-modal-header p,
+:is(.user-management-page, .user-management-overlay) .profile-modal-header p,
 .user-management-page .delete-modal-header p {
   color: var(--mu-muted);
   font-size: 13px;
   line-height: 1.45;
 }
 
-.user-management-page .profile-edit-btn {
+:is(.user-management-page, .user-management-overlay) .profile-edit-btn {
   background: var(--mu-navy);
   border-color: var(--mu-navy);
 }
-.user-management-page .profile-edit-btn:hover {
+:is(.user-management-page, .user-management-overlay) .profile-edit-btn:hover {
   background: #1e3e78;
   border-color: #1e3e78;
 }
 
 /* Add/Edit dialog: header and footer remain visible while the form scrolls. */
-.user-management-page .user-form-overlay {
+:is(.user-management-page, .user-management-overlay) .user-form-overlay {
   position: fixed; inset: 0; z-index: 9999; display: grid; place-items: center;
   padding: 24px; background: rgba(8, 24, 47, 0.58); backdrop-filter: blur(3px);
 }
-.user-management-page .user-form-modal {
+:is(.user-management-page, .user-management-overlay) .user-form-modal {
   display: flex; flex-direction: column; width: min(800px, 100%); min-width: 0;
   height: min(740px, calc(100dvh - 48px)); max-height: calc(100dvh - 48px); overflow: hidden; background: #fff;
   border: 1px solid var(--mu-border); border-radius: 16px;
   box-shadow: 0 24px 70px rgba(8, 31, 62, 0.24); outline: none;
 }
-.user-management-page .user-form-header {
+:is(.user-management-page, .user-management-overlay) .user-form-header {
   display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;
   flex: 0 0 auto; padding: 22px 24px; border-bottom: 1px solid var(--mu-border);
 }
-.user-management-page .user-form-heading { display: flex; align-items: center; gap: 12px; min-width: 0; }
-.user-management-page .user-form-icon {
+:is(.user-management-page, .user-management-overlay) .user-form-heading { display: flex; align-items: center; gap: 12px; min-width: 0; }
+:is(.user-management-page, .user-management-overlay) .user-form-icon {
   display: grid; place-items: center; width: 42px; height: 42px; flex-shrink: 0;
   border-radius: 12px; color: var(--mu-navy); background: #edf2fa;
 }
-.user-management-page .user-form-header h2 {
+:is(.user-management-page, .user-management-overlay) .user-form-header h2 {
   margin: 0 0 5px; color: var(--mu-navy); font-family: var(--font-dm-sans, sans-serif);
   font-size: 23px; line-height: 1.2;
 }
-.user-management-page .user-form-header p,
-.user-management-page .user-form-section-heading p {
+:is(.user-management-page, .user-management-overlay) .user-form-header p,
+:is(.user-management-page, .user-management-overlay) .user-form-section-heading p {
   margin: 0; color: var(--mu-muted); font-size: 12px; line-height: 1.5;
 }
-.user-management-page .user-form-close {
+:is(.user-management-page, .user-management-overlay) .user-form-close {
   display: grid; place-items: center; width: 40px; height: 40px; flex: 0 0 40px;
   border: 1px solid var(--mu-border); border-radius: 9px; background: #fff; color: #526b88;
 }
-.user-management-page .user-form-layout { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; margin: 0; }
-.user-management-page .user-form-body { flex: 1 1 auto; min-height: 0; padding: 24px; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
-.user-management-page .user-form-fields { display: grid; gap: 24px; margin: 0; padding: 0; border: 0; min-width: 0; }
-.user-management-page .user-form-section { min-width: 0; }
-.user-management-page .user-form-section + .user-form-section { padding-top: 22px; border-top: 1px solid #e8eef5; }
-.user-management-page .user-form-section-heading { margin-bottom: 16px; }
-.user-management-page .user-form-section h3 { margin: 0 0 5px; color: var(--mu-navy); font-size: 15px; }
-.user-management-page .user-form-section h4 { margin: 0; color: #39516e; font-size: 12px; font-weight: 700; }
-.user-management-page .user-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
-.user-management-page .user-form-field { min-width: 0; display: grid; gap: 7px; }
-.user-management-page .user-form-label { color: #39516e; font-size: 12px; font-weight: 650; line-height: 1.4; }
-.user-management-page .user-form-label > span { color: #b4232c; }
-.user-management-page .user-form-field input,
-.user-management-page .user-form-select .dropdown-select__trigger {
+:is(.user-management-page, .user-management-overlay) .user-form-layout { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; margin: 0; }
+:is(.user-management-page, .user-management-overlay) .user-form-body { flex: 1 1 auto; min-height: 0; padding: 24px; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+:is(.user-management-page, .user-management-overlay) .user-form-fields { display: grid; gap: 24px; margin: 0; padding: 0; border: 0; min-width: 0; }
+:is(.user-management-page, .user-management-overlay) .user-form-section { min-width: 0; }
+:is(.user-management-page, .user-management-overlay) .user-form-section + .user-form-section { padding-top: 22px; border-top: 1px solid #e8eef5; }
+:is(.user-management-page, .user-management-overlay) .user-form-section-heading { margin-bottom: 16px; }
+:is(.user-management-page, .user-management-overlay) .user-form-section h3 { margin: 0 0 5px; color: var(--mu-navy); font-size: 15px; }
+:is(.user-management-page, .user-management-overlay) .user-form-section h4 { margin: 0; color: #39516e; font-size: 12px; font-weight: 700; }
+:is(.user-management-page, .user-management-overlay) .user-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+:is(.user-management-page, .user-management-overlay) .user-form-field { min-width: 0; display: grid; gap: 7px; }
+:is(.user-management-page, .user-management-overlay) .user-form-label { color: #39516e; font-size: 12px; font-weight: 650; line-height: 1.4; }
+:is(.user-management-page, .user-management-overlay) .user-form-label > span { color: #b4232c; }
+:is(.user-management-page, .user-management-overlay) .user-form-field input,
+:is(.user-management-page, .user-management-overlay) .user-form-select .dropdown-select__trigger {
   width: 100%; min-width: 0; height: 40px; margin: 0; padding: 0 12px;
   border: 1px solid #d4dfeb; border-radius: 9px; background: #fff; color: #17345f; font-size: 13px;
 }
-.user-management-page .user-form-select .dropdown-select__trigger { padding-right: 36px; }
-.user-management-page .user-form-select .dropdown-select__menu {
+:is(.user-management-page, .user-management-overlay) .user-form-select .dropdown-select__trigger { padding-right: 36px; }
+:is(.user-management-page, .user-management-overlay) .user-form-select .dropdown-select__menu {
   position: static; width: 100%; min-width: 0; max-height: 200px; margin-top: 7px;
   box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
 }
-.user-management-page .user-form-select .dropdown-select__menu button { white-space: normal; overflow-wrap: anywhere; }
-.user-management-page .user-form-field input:focus-visible,
-.user-management-page .user-form-modal button:focus-visible {
+:is(.user-management-page, .user-management-overlay) .user-form-select .dropdown-select__menu button { white-space: normal; overflow-wrap: anywhere; }
+:is(.user-management-page, .user-management-overlay) .user-form-field input:focus-visible,
+:is(.user-management-page, .user-management-overlay) .user-form-modal button:focus-visible {
   outline: 2px solid #6f94c7; outline-offset: 2px;
 }
-.user-management-page .user-form-modal button { cursor: pointer; }
-.user-management-page .user-form-modal button:disabled,
-.user-management-page .user-form-field input:disabled {
+:is(.user-management-page, .user-management-overlay) .user-form-modal button { cursor: pointer; }
+:is(.user-management-page, .user-management-overlay) .user-form-modal button:disabled,
+:is(.user-management-page, .user-management-overlay) .user-form-field input:disabled {
   opacity: 0.6; cursor: not-allowed;
 }
-.user-management-page .user-form-field small,
-.user-management-page .user-form-help { margin: 0; font-size: 11px; line-height: 1.5; color: #64748b; }
-.user-management-page .user-form-advisory { padding: 16px; background: #f8fafc; border: 1px solid var(--mu-border); border-radius: 10px; margin-bottom: 20px; }
-.user-management-page .user-form-advisory h4 { margin-bottom: 12px; }
-.user-management-page .user-form-assignment-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
-.user-management-page .user-form-add,
-.user-management-page .user-form-remove {
+:is(.user-management-page, .user-management-overlay) .user-form-field small,
+:is(.user-management-page, .user-management-overlay) .user-form-help { margin: 0; font-size: 11px; line-height: 1.5; color: #64748b; }
+:is(.user-management-page, .user-management-overlay) .user-form-advisory { padding: 16px; background: #f8fafc; border: 1px solid var(--mu-border); border-radius: 10px; margin-bottom: 20px; }
+:is(.user-management-page, .user-management-overlay) .user-form-advisory h4 { margin-bottom: 12px; }
+:is(.user-management-page, .user-management-overlay) .user-form-assignment-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+:is(.user-management-page, .user-management-overlay) .user-form-add,
+:is(.user-management-page, .user-management-overlay) .user-form-remove {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   min-height: 40px; padding: 0 10px; border: 1px solid var(--mu-border); border-radius: 8px;
   color: var(--mu-navy); background: #fff; font-size: 12px; font-weight: 600;
 }
-.user-management-page .user-form-remove { color: #b4232c; border-color: #f3d8da; }
-.user-management-page .user-form-add:hover { background: #edf2fa; }
-.user-management-page .user-form-remove:hover { background: #fff1f2; }
-.user-management-page .user-form-assignment {
+:is(.user-management-page, .user-management-overlay) .user-form-remove { color: #b4232c; border-color: #f3d8da; }
+:is(.user-management-page, .user-management-overlay) .user-form-add:hover { background: #edf2fa; }
+:is(.user-management-page, .user-management-overlay) .user-form-remove:hover { background: #fff1f2; }
+:is(.user-management-page, .user-management-overlay) .user-form-assignment {
   padding: 14px; margin-top: 12px; border: 1px solid var(--mu-border); border-radius: 10px; background: #f8fafc;
 }
-.user-management-page .user-form-assignment-label { display: flex; justify-content: flex-end; align-items: center; gap: 12px; margin-bottom: 12px; font-size: 12px; color: #39516e; }
-.user-management-page .user-form-assignment-grid { display: grid; grid-template-columns: 1fr 1fr 1.35fr; gap: 12px; align-items: start; }
-.user-management-page .user-form-empty { padding: 20px; border: 1px dashed #cbd5e1; border-radius: 10px; font-size: 12px; line-height: 1.6; text-align: center; color: #64748b; }
-.user-management-page .user-form-footer {
+:is(.user-management-page, .user-management-overlay) .user-form-assignment-label { display: flex; justify-content: flex-end; align-items: center; gap: 12px; margin-bottom: 12px; font-size: 12px; color: #39516e; }
+:is(.user-management-page, .user-management-overlay) .user-form-assignment-grid { display: grid; grid-template-columns: 1fr 1fr 1.35fr; gap: 12px; align-items: start; }
+:is(.user-management-page, .user-management-overlay) .user-form-empty { padding: 20px; border: 1px dashed #cbd5e1; border-radius: 10px; font-size: 12px; line-height: 1.6; text-align: center; color: #64748b; }
+:is(.user-management-page, .user-management-overlay) .user-form-footer {
   display: flex; justify-content: space-between; align-items: center; gap: 16px; flex: 0 0 auto;
   padding: 16px 24px; border-top: 1px solid var(--mu-border); background: #f8fafc;
 }
-.user-management-page .user-form-footer > span { color: #64748b; font-size: 11px; }
-.user-management-page .user-form-footer > div { display: flex; gap: 10px; }
-.user-management-page .user-form-cancel,
-.user-management-page .user-form-submit,
-.user-management-page .user-form-load-error button {
+:is(.user-management-page, .user-management-overlay) .user-form-footer > span { color: #64748b; font-size: 11px; }
+:is(.user-management-page, .user-management-overlay) .user-form-footer > div { display: flex; gap: 10px; }
+:is(.user-management-page, .user-management-overlay) .user-form-cancel,
+:is(.user-management-page, .user-management-overlay) .user-form-submit,
+:is(.user-management-page, .user-management-overlay) .user-form-load-error button {
   min-height: 40px; padding: 0 16px; border: 1px solid var(--mu-border); border-radius: 9px;
   font-size: 13px; font-weight: 650; background: #fff; color: var(--mu-navy); white-space: nowrap;
 }
-.user-management-page .user-form-submit { background: var(--mu-navy); border-color: var(--mu-navy); color: #fff; }
-.user-management-page .user-form-submit:hover:not(:disabled) { background: #1e3e78; }
-.user-management-page .user-form-error { padding: 12px; color: #a21f2d; background: #fff1f2; border: 1px solid #fecdd3; border-radius: 9px; font-size: 13px; }
-.user-management-page .user-form-load-error { padding: 36px 12px; text-align: center; color: #a21f2d; font-size: 13px; }
-.user-management-page .user-form-loading { padding: 12px 0 32px; }
-.user-management-page .user-form-placeholder-label { width: 100px; height: 12px; }
-.user-management-page .user-form-placeholder-input { height: 40px; border-radius: 9px; }
+:is(.user-management-page, .user-management-overlay) .user-form-submit { background: var(--mu-navy); border-color: var(--mu-navy); color: #fff; }
+:is(.user-management-page, .user-management-overlay) .user-form-submit:hover:not(:disabled) { background: #1e3e78; }
+:is(.user-management-page, .user-management-overlay) .user-form-error { padding: 12px; color: #a21f2d; background: #fff1f2; border: 1px solid #fecdd3; border-radius: 9px; font-size: 13px; }
+:is(.user-management-page, .user-management-overlay) .user-form-load-error { padding: 36px 12px; text-align: center; color: #a21f2d; font-size: 13px; }
+:is(.user-management-page, .user-management-overlay) .user-form-loading { padding: 12px 0 32px; }
+:is(.user-management-page, .user-management-overlay) .user-form-placeholder-label { width: 100px; height: 12px; }
+:is(.user-management-page, .user-management-overlay) .user-form-placeholder-input { height: 40px; border-radius: 9px; }
 @media (min-width: 641px) and (max-height: 820px) {
-  .user-management-page .user-form-header { padding: 16px 20px; }
-  .user-management-page .user-form-body { padding: 18px 20px; }
-  .user-management-page .user-form-fields { gap: 18px; }
-  .user-management-page .user-form-section + .user-form-section { padding-top: 18px; }
-  .user-management-page .user-form-footer { padding: 12px 20px; }
+  :is(.user-management-page, .user-management-overlay) .user-form-header { padding: 16px 20px; }
+  :is(.user-management-page, .user-management-overlay) .user-form-body { padding: 18px 20px; }
+  :is(.user-management-page, .user-management-overlay) .user-form-fields { gap: 18px; }
+  :is(.user-management-page, .user-management-overlay) .user-form-section + .user-form-section { padding-top: 18px; }
+  :is(.user-management-page, .user-management-overlay) .user-form-footer { padding: 12px 20px; }
 }
 @media (max-width: 640px) {
-  .user-management-page .user-form-overlay { padding: 12px; }
-  .user-management-page .user-form-modal { height: calc(100dvh - 24px); max-height: calc(100dvh - 24px); }
-  .user-management-page .user-form-header, .user-management-page .user-form-body { padding: 16px; }
-  .user-management-page .user-form-header h2 { font-size: 20px; }
-  .user-management-page .user-form-icon { display: none; }
-  .user-management-page .user-form-grid, .user-management-page .user-form-assignment-grid { grid-template-columns: 1fr; }
-  .user-management-page .user-form-assignment-heading { flex-wrap: wrap; }
-  .user-management-page .user-form-modal button, .user-management-page .user-form-field input { min-height: 44px; }
-  .user-management-page .user-form-footer { padding: 12px 16px; flex-wrap: wrap; }
-  .user-management-page .user-form-footer > div { width: 100%; }
-  .user-management-page .user-form-footer button { flex: 1; }
+  :is(.user-management-page, .user-management-overlay) .user-form-overlay { padding: 12px; }
+  :is(.user-management-page, .user-management-overlay) .user-form-modal { height: calc(100dvh - 24px); max-height: calc(100dvh - 24px); }
+  :is(.user-management-page, .user-management-overlay) .user-form-header, :is(.user-management-page, .user-management-overlay) .user-form-body { padding: 16px; }
+  :is(.user-management-page, .user-management-overlay) .user-form-header h2 { font-size: 20px; }
+  :is(.user-management-page, .user-management-overlay) .user-form-icon { display: none; }
+  :is(.user-management-page, .user-management-overlay) .user-form-grid, :is(.user-management-page, .user-management-overlay) .user-form-assignment-grid { grid-template-columns: 1fr; }
+  :is(.user-management-page, .user-management-overlay) .user-form-assignment-heading { flex-wrap: wrap; }
+  :is(.user-management-page, .user-management-overlay) .user-form-modal button, :is(.user-management-page, .user-management-overlay) .user-form-field input { min-height: 44px; }
+  :is(.user-management-page, .user-management-overlay) .user-form-footer { padding: 12px 16px; flex-wrap: wrap; }
+  :is(.user-management-page, .user-management-overlay) .user-form-footer > div { width: 100%; }
+  :is(.user-management-page, .user-management-overlay) .user-form-footer button { flex: 1; }
 }
 
 /* Initial layout-matching skeleton */
@@ -1182,7 +1183,7 @@
   gap: 20px;
 }
 
-.user-management-page .manage-users-skeleton__block {
+:is(.user-management-page, .user-management-overlay) .manage-users-skeleton__block {
   display: block;
   background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 38%, #f1f5f9 63%);
   background-size: 400% 100%;
@@ -1394,30 +1395,30 @@
     max-height: calc(100vh - 24px);
     padding: 22px 18px;
   }
-  .user-management-page .profile-details{
+  :is(.user-management-page, .user-management-overlay) .profile-details{
     grid-template-columns: 1fr;
   }
 
-  .user-management-page .profile-summary {
+  :is(.user-management-page, .user-management-overlay) .profile-summary {
     align-items: flex-start;
     flex-wrap: wrap;
   }
 
-  .user-management-page .profile-status {
+  :is(.user-management-page, .user-management-overlay) .profile-status {
     margin-left: 0;
   }
 
-  .user-management-page .profile-assignment-item {
+  :is(.user-management-page, .user-management-overlay) .profile-assignment-item {
     align-items: flex-start;
     flex-direction: column;
   }
-  .user-management-page .profile-modal-actions,
+  :is(.user-management-page, .user-management-overlay) .profile-modal-actions,
   .user-management-page .delete-modal-actions {
     align-items: stretch;
     flex-direction: column-reverse;
   }
-  .user-management-page .profile-close-btn,
-  .user-management-page .profile-edit-btn,
+  :is(.user-management-page, .user-management-overlay) .profile-close-btn,
+  :is(.user-management-page, .user-management-overlay) .profile-edit-btn,
   .user-management-page .delete-close-btn,
   .user-management-page .delete-confirm-btn {
     width: 100%;
@@ -1431,7 +1432,7 @@
     gap: 10px;
   }
 
-  .user-management-page .profile-avatar-wrapper {
+  :is(.user-management-page, .user-management-overlay) .profile-avatar-wrapper {
     width: 64px;
     height: 64px;
     min-width: 64px;
@@ -1447,4 +1448,128 @@
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
   }
+}
+
+/* Shared native overlays for account editing and the compact profile tray. */
+.user-management-overlay,
+.user-management-overlay * {
+  box-sizing: border-box;
+}
+.app-overlay.user-management-overlay {
+  font-family: var(--font-inter, "Inter", sans-serif);
+}
+.user-form-drawer .app-overlay__panel {
+  width: min(660px, 100%);
+}
+.user-form-drawer .user-form-layout {
+  display: block;
+  margin: 0;
+}
+.user-form-drawer .user-form-body {
+  padding: 0;
+  overflow: visible;
+}
+.user-form-drawer .app-overlay__footer {
+  justify-content: space-between;
+}
+.user-form-footer-note {
+  color: #64748b;
+  font-size: 12px;
+}
+.user-form-footer-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.user-management-page .users-table tbody tr[data-user-row] {
+  cursor: pointer;
+}
+.user-management-page .users-table tbody tr[data-user-row]:focus-visible {
+  outline: 2px solid #c9a227;
+  outline-offset: -2px;
+  background: #f1f5fb;
+}
+.user-management-page .users-table tbody tr[data-user-row]:hover .user-name {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.user-profile-tray .app-overlay__panel {
+  max-height: min(620px, calc(100dvh - 40px));
+}
+.user-profile-tray .app-overlay__header {
+  padding: 16px 20px 12px;
+}
+.user-profile-tray .app-overlay__header h2 {
+  font-size: 18px;
+}
+.user-profile-tray .app-overlay__header p {
+  margin-top: 5px;
+  font-size: 12px;
+}
+.user-profile-tray .app-overlay__body {
+  padding: 14px 20px 18px;
+}
+.user-profile-tray .profile-summary {
+  gap: 12px;
+}
+.user-profile-tray .profile-avatar-wrapper {
+  width: 52px;
+  height: 52px;
+  min-width: 52px;
+  min-height: 52px;
+  border-width: 2px;
+}
+.user-profile-tray .profile-summary .profile-avatarz {
+  font-size: 18px !important;
+}
+.user-profile-tray .profile-main-info {
+  min-width: 0;
+}
+.user-profile-tray .profile-main-info h3 {
+  font-size: 16px;
+  overflow-wrap: anywhere;
+}
+.user-profile-tray .profile-username {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.user-profile-tray .profile-divider {
+  margin: 14px 0;
+}
+.user-profile-tray .profile-details {
+  column-gap: 20px;
+  row-gap: 12px;
+}
+.user-profile-tray .profile-detail span {
+  font-size: 12px;
+}
+.user-profile-tray .profile-detail strong {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.user-profile-tray .profile-assignments-section {
+  margin-top: 14px;
+  padding-top: 14px;
+}
+.user-profile-tray .profile-assignments-list {
+  max-height: 130px;
+}
+.user-profile-tray .profile-assignments-empty {
+  color: #64748b;
+}
+.user-profile-tray .profile-close-btn,
+.user-profile-tray .profile-edit-btn {
+  height: 36px;
+  min-height: 36px;
+  padding: 0 14px;
+  font-size: 12px;
+}
+@media (max-width: 480px) {
+  .user-form-drawer .user-form-footer-note { display: none; }
+  .user-form-drawer .user-form-footer-actions { width: 100%; }
+  .user-form-drawer .user-form-footer-actions button { flex: 1; }
+  .user-profile-tray .profile-details { grid-template-columns: 1fr; }
+  .user-profile-tray .profile-summary { flex-wrap: wrap; }
+  .user-profile-tray .profile-status { flex: 0 0 calc(100% - 64px); margin-left: 64px; }
 }
