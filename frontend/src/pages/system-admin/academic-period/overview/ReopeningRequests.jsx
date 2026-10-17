@@ -1,10 +1,5 @@
 import { useMemo, useState } from "react";
-import {
-  CheckCircle2,
-  ChevronRight,
-  Search,
-  SearchX,
-} from "lucide-react";
+import { CheckCircle2, ChevronRight, Search, SearchX } from "lucide-react";
 import Badge from "../../../../components/common/Badge";
 import DropdownSelect from "../../../../components/common/DropdownSelect";
 import EmptyState from "../../../../components/common/EmptyState";
@@ -69,8 +64,7 @@ export default function ReopeningRequests({
 
     return requests.filter((request) => {
       const matchesDepartment =
-        departmentFilter === "all" ||
-        request.department === departmentFilter;
+        departmentFilter === "all" || request.department === departmentFilter;
       const searchableText = [
         request.teacherName,
         request.subject,
@@ -87,17 +81,16 @@ export default function ReopeningRequests({
       );
     });
   }, [departmentFilter, query, requests]);
-  const emptyStateCopy =
-    !term.hasEnded
-      ? {
-          title: "Requests are not available yet",
-          description:
-            "Teachers may submit requests during the seven days after this term ends.",
-        }
-      : {
-            title: "No pending requests",
-            description: `There are no reopening requests awaiting review for ${term.label}. Valid in-window requests can still be reviewed after the request window closes.`,
-          };
+  const emptyStateCopy = !term.hasEnded
+    ? {
+        title: "Requests are not available yet",
+        description:
+          "Teachers may submit requests during the seven days after this term ends.",
+      }
+    : {
+        title: "No pending requests",
+        description: `There are no reopening requests awaiting review for ${term.label}.`,
+      };
 
   return (
     <section
@@ -111,7 +104,9 @@ export default function ReopeningRequests({
         <div className="grade-lock-panel__heading">
           <div>
             <h2 id="reopening-requests-title">Reopening Requests</h2>
-            <p>Review late submissions and grade corrections for {term.label}.</p>
+            <p>
+              Review late submissions and grade corrections for {term.label}.
+            </p>
           </div>
           <Badge variant="attention">{requests.length} pending</Badge>
         </div>
