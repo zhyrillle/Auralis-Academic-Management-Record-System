@@ -138,8 +138,86 @@ try {
   await page.locator('.sidebar-container.collapsed').waitFor();
   assert((await footerMetrics()).fits);
   assert(await page.locator('.sidebar-container .logout-btn').isVisible());
+  const iconCenters = await page.locator('.sidebar-container .sidebar-menu .sidebar-item-icon').evaluateAll(icons => icons.map(icon => {
+    const box = icon.getBoundingClientRect();
+    return box.left + box.width / 2;
+  }));
+  assert(Math.max(...iconCenters) - Math.min(...iconCenters) < 1, 'Collapsed navigation icons share the same center line');
+  await page.locator('.sidebar-container a[href="/system-admin/manage-users"]').click();
+  await page.getByRole('heading', { name: 'User Management', exact: true, level: 1 }).waitFor();
+  const sectionTrigger = page.getByRole('button', { name: 'Student Sections', exact: true });
+  const sectionFlyout = page.getByRole('group', { name: 'Student Sections navigation', exact: true });
+  await sectionTrigger.click();
+  await sectionFlyout.waitFor();
+  assert.equal(await sectionTrigger.getAttribute('aria-expanded'), 'true');
+  assert.equal(await sectionFlyout.getByRole('link').count(), 2);
+  assert.equal(await sectionFlyout.locator('.sidebar-flyout__title').count(), 0);
+  assert(await sectionFlyout.getByRole('link', { name: 'Manage Sections', exact: true }).evaluate(element => element === document.activeElement));
+  const flyoutTransition = await sectionFlyout.evaluate(element => {
+    const style = getComputedStyle(element);
+    const transforms = element.getAnimations().filter(animation => animation.transitionProperty === 'transform')
+      .flatMap(animation => animation.effect.getKeyframes().map(frame => new DOMMatrixReadOnly(frame.transform)));
+    return { properties: style.transitionProperty, durations: style.transitionDuration.split(',').map(value => parseFloat(value)),
+      scaleOnly: transforms.every(matrix => matrix.e === 0 && matrix.f === 0), easing: style.transitionTimingFunction };
+  });
+  assert(flyoutTransition.properties.includes('opacity') && flyoutTransition.properties.includes('transform'));
+  assert(Math.max(...flyoutTransition.durations) >= 0.16);
+  assert(flyoutTransition.scaleOnly);
+  assert(flyoutTransition.easing.includes('1.45'));
+  await sectionFlyout.evaluate(element => Promise.all(element.getAnimations().map(animation => animation.finished)));
+  const flyoutBounds = await sectionFlyout.evaluate(element => {
+    const panel = element.getBoundingClientRect();
+    const sidebarElement = document.querySelector('.sidebar-container');
+    const sidebar = sidebarElement.getBoundingClientRect();
+    const trigger = document.getElementById(element.id.replace('-submenu', '-trigger')).getBoundingClientRect();
+    const tail = getComputedStyle(element, '::before');
+    return { attached: Math.abs(panel.left + parseFloat(tail.left) - sidebar.right) <= 1,
+      aligned: Math.abs((trigger.top + trigger.height / 2) - (panel.top + panel.height / 2)) <= 2,
+      tailAligned: Math.abs(panel.top + parseFloat(tail.top) - (trigger.top + trigger.height / 2)) <= 2,
+      hasTail: tail.content !== 'none' && tail.clipPath.startsWith('polygon') && parseFloat(tail.width) > 0,
+      sameBackground: getComputedStyle(element.querySelector('.sidebar-flyout__items')).backgroundColor === getComputedStyle(sidebarElement).backgroundColor,
+      fits: panel.right <= innerWidth - 10 && panel.top >= 10 && panel.bottom <= innerHeight - 10 };
+  });
+  assert.deepEqual(flyoutBounds, { attached: true, aligned: true, tailAligned: true, hasTail: true, sameBackground: true, fits: true });
+  await page.screenshot({ path: join(artifacts, 'sidebar-collapsed-flyout.png'), animations: 'disabled' });
+  await page.keyboard.press('Escape');
+  await sectionFlyout.waitFor({ state: 'hidden' });
+  assert.equal(await sectionTrigger.getAttribute('aria-expanded'), 'false');
+  assert(await sectionTrigger.evaluate(element => element === document.activeElement));
+  await page.keyboard.press('Enter');
+  await sectionFlyout.waitFor();
+  await page.keyboard.press('Tab');
+  assert(await sectionFlyout.getByRole('link', { name: 'Manage Students', exact: true }).evaluate(element => element === document.activeElement));
+  await page.keyboard.press('Enter');
+  await page.getByRole('heading', { name: 'Manage Students', exact: true, level: 1 }).waitFor();
+  await sectionFlyout.waitFor({ state: 'hidden' });
+  assert.equal(await page.locator('.sidebar-container.collapsed').count(), 1);
+  await sectionTrigger.click();
+  await sectionFlyout.waitFor();
+  assert.equal(await sectionFlyout.getByRole('link', { name: 'Manage Students', exact: true }).getAttribute('aria-current'), 'page');
+  assert.equal(await sectionFlyout.getByRole('link', { name: 'Manage Students', exact: true }).evaluate(element => getComputedStyle(element).boxShadow), 'none');
+  await sectionFlyout.evaluate(element => Promise.all(element.getAnimations().map(animation => animation.finished)));
+  assert.deepEqual(await sectionFlyout.getByRole('link', { name: 'Manage Students', exact: true }).evaluate(element => {
+    const style = getComputedStyle(element);
+    return { background: style.backgroundColor, color: style.color };
+  }), { background: 'rgb(255, 255, 255)', color: 'rgb(17, 45, 97)' });
+  await page.screenshot({ path: join(artifacts, 'sidebar-collapsed-flyout-selected.png'), animations: 'disabled' });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  assert.equal(await sectionFlyout.evaluate(element => getComputedStyle(element).transitionDuration), '0s');
+  await page.getByRole('heading', { name: 'Manage Students', exact: true, level: 1 }).click();
+  await sectionFlyout.waitFor({ state: 'hidden' });
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await sectionTrigger.click();
+  await sectionFlyout.getByRole('link', { name: 'Manage Sections', exact: true }).click();
+  await page.getByRole('heading', { name: 'Banana', exact: true }).waitFor();
+  await sectionFlyout.waitFor({ state: 'hidden' });
+  await sectionTrigger.click();
+  await sectionFlyout.waitFor();
   await page.locator('.sidebar-container').screenshot({ path: join(artifacts, 'sidebar-collapsed.png'), animations: 'disabled' });
   await page.getByRole('button', { name: 'Collapse navigation sidebar', exact: true }).click();
+  assert.equal(await page.locator('.sidebar-flyout:popover-open').count(), 0);
+  assert(await page.getByRole('link', { name: 'Manage Sections', exact: true }).isVisible());
+  console.log('PASS collapsed sidebar submenus stay reachable by pointer/keyboard, dismiss on Escape/outside click, preserve route selection, and close when expanded');
   await page.setViewportSize({ width: 1920, height: 1080 });
   assert((await footerMetrics()).height > compactFooter.height + 20);
   await page.setViewportSize({ width: 390, height: 844 });

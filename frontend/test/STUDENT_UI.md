@@ -55,3 +55,13 @@ uses a faster 60px/s timing basis with a four-second minimum loop.
 After integrating main's LRN privacy update, both tables and learner profiles
 reuse MaskedLrn. Checks verify masked defaults, reveal/hide, retained copy
 controls, and that revealing an LRN does not open the clickable profile row.
+
+Collapsed sidebar groups reuse their existing navigation entries in an anchored
+native popover. Checks cover both student destinations, keyboard navigation,
+Escape/focus restoration, outside dismissal, active links, viewport bounds, and
+cleanup when switching back to the expanded sidebar.
+The flyout has no repeated heading, centers its full container on the trigger,
+connects to the sidebar through a centered navy tail, and pops out using a
+scale-and-overshoot transition without sliding. Collapsed
+icons share one center line, and reduced-motion settings disable the transition.
+Selected destinations use a white background and navy text without a gold accent.

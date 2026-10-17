@@ -156,6 +156,11 @@
   justify-content: center;
 }
 
+.sidebar-container.collapsed .sidebar-item-content {
+  flex: 0 0 auto;
+  gap: 0;
+}
+
 .sidebar-item-content {
   display: flex;
   align-items: center;
@@ -301,6 +306,111 @@
 /* Submenu when sidebar is collapsed */
 .sidebar-container.collapsed .sidebar-submenu {
   display: none;
+}
+
+.sidebar-collapsed-group > .sidebar-item {
+  width: 100%;
+  border: none;
+  font: inherit;
+  background: transparent;
+}
+
+.sidebar-collapsed-group > .sidebar-item.active {
+  background: var(--active-bg);
+}
+
+.sidebar-collapsed-group > .sidebar-item:focus-visible,
+.sidebar-flyout .submenu-item:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.8);
+  outline-offset: -3px;
+}
+
+/* Native popovers enter the top layer, outside the scrolling sidebar's clip. */
+.sidebar-flyout {
+  position: fixed;
+  inset: auto;
+  box-sizing: border-box;
+  width: 220px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 24px);
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+  color: #fff;
+  background: transparent;
+  border: 0;
+  opacity: 0;
+  transform: scale(0.72);
+  transform-origin: -10px var(--sidebar-flyout-origin-y, 50%);
+  transition:
+    opacity 140ms ease,
+    transform 240ms cubic-bezier(0.2, 1.45, 0.45, 1),
+    display 240ms allow-discrete,
+    overlay 240ms allow-discrete;
+}
+
+.sidebar-flyout::before {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  left: -10px;
+  top: clamp(12px, var(--sidebar-flyout-origin-y, 50%), calc(100% - 12px));
+  width: 12px;
+  height: 20px;
+  background: var(--sidebar-bg);
+  clip-path: polygon(0 50%, 100% 0, 100% 100%);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.sidebar-flyout__items {
+  box-sizing: border-box;
+  max-height: inherit;
+  padding: 6px 8px;
+  overflow-y: auto;
+  background: var(--sidebar-bg);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  box-shadow: 8px 8px 24px rgba(15, 23, 42, 0.16);
+}
+
+.sidebar-flyout:popover-open {
+  opacity: 1;
+  transform: scale(1);
+}
+
+@starting-style {
+  .sidebar-flyout:popover-open {
+    opacity: 0;
+    transform: scale(0.72);
+  }
+}
+
+.sidebar-flyout .submenu-item {
+  margin: 2px 0;
+  padding: 10px 12px;
+  color: #fff;
+  font-size: 13px;
+}
+
+.sidebar-flyout .submenu-item:hover,
+.sidebar-flyout .submenu-item:focus-visible {
+  background: var(--sidebar-bg-hover);
+}
+
+.sidebar-flyout .submenu-item.active {
+  color: var(--active-text);
+  background: #fff;
+}
+
+.sidebar-flyout .submenu-item.active:focus-visible {
+  outline-color: var(--active-text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-flyout {
+    transition: none;
+  }
 }
 
 /* Submenu Item Style */
