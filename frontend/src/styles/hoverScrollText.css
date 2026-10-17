@@ -1,0 +1,33 @@
+.hover-scroll-text {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.hover-scroll-text__content {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hover-scroll-text[data-overflow="true"]:is(:hover, :focus-visible) .hover-scroll-text__content {
+  max-width: none;
+  animation: hover-scroll-left var(--hover-scroll-duration, 4s) linear infinite;
+}
+.hover-scroll-text:focus-visible {
+  outline: 2px solid #7393c4;
+  outline-offset: -2px;
+}
+@keyframes hover-scroll-left {
+  0%, 12% { transform: translateX(0); }
+  82%, 100% { transform: translateX(var(--hover-scroll-distance, 0px)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hover-scroll-text .hover-scroll-text__content {
+    max-width: 100% !important;
+    animation: none !important;
+  }
+}

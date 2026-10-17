@@ -572,9 +572,23 @@
 .audit-trail__action strong { color: #27364a; font-weight: 650; }
 .audit-trail__time { margin-top: 4px; color: #687b96; font-size: 11px; }
 .audit-trail__context + small { margin-top: 4px; color: #687b96; font-size: 11px; }
+.audit-trail__table td:nth-child(4) .badge {
+  display: block;
+  box-sizing: border-box;
+  width: fit-content;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .audit-trail__action { min-width: 250px; }
 .audit-trail__action strong { display: block; font-size: 12.5px; line-height: 1.35; }
 .audit-trail__action small { margin-top: 4px; color: #687b96; font-size: 11px; }
+.audit-trail__action:hover .hover-scroll-text[data-overflow="true"] .hover-scroll-text__content,
+.audit-event-row:focus-visible .hover-scroll-text[data-overflow="true"] .hover-scroll-text__content {
+  max-width: none;
+  animation: hover-scroll-left var(--hover-scroll-duration, 4s) linear infinite;
+}
 
 .audit-row--skeleton td span {
   display: block;

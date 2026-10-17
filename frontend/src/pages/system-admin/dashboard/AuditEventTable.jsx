@@ -1,5 +1,6 @@
 import { AlertCircle, FileSearch } from "lucide-react";
 import Badge from "../../../components/common/Badge";
+import HoverScrollText from "../../../components/common/HoverScrollText";
 
 const formatDateTime = (value) => {
   const date = new Date(value);
@@ -97,10 +98,10 @@ export default function AuditEventTable({
                           <small>{event.actingAs}</small>
                         )}
                     </td>
-                    <td><Badge variant="module">{event.module}</Badge></td>
+                    <td><Badge variant="module" title={event.module}>{event.module}</Badge></td>
                     <td className="audit-trail__action">
-                      <strong>{event.summary}</strong>
-                      {event.target && <small>{event.target}</small>}
+                      <HoverScrollText as="strong" text={event.summary} />
+                      {event.target && <HoverScrollText as="small" text={event.target} />}
                     </td>
                     <td>
                       <Badge variant={event.impact.toLowerCase()}>{event.impact}</Badge>
