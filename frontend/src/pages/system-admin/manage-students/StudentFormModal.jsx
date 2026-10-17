@@ -1,6 +1,45 @@
-import { useState, useEffect } from "react";
-import { X, Loader2, ChevronDown } from "lucide-react";
-
+import { useEffect, useId, useState } from "react";
+import { Loader2 } from "lucide-react";
+import OverlayPanel from "../../../components/common/OverlayPanel";
+import DropdownSelect from "../../../components/common/DropdownSelect";
+function initialValues(student) {
+  const date = student?.birthdate ? new Date(student.birthdate) : null;
+  return {
+    student_id: student?.student_id ? String(student.student_id) : "",
+    LRN: String(student?.LRN || student?.lrn || ""),
+    first_name: student?.first_name || "",
+    middle_name: student?.middle_name || "",
+    last_name: student?.last_name || "",
+    extension_name: student?.extension_name || "",
+    birthdate: date && Number.isFinite(date.getTime()) ? date.toISOString().slice(0, 10) : "",
+    sex: student?.sex || "M",
+    street: student?.street || "",
+    barangay: student?.barangay || "",
+    city: student?.city || "Gingoog City",
+    province: student?.province || "Misamis Oriental",
+    country: student?.country || "Philippines",
+    postal_code: student?.postal_code || "9014",
+    status: String(student?.status || "ACTIVE").toUpperCase(),
+    program_id: String(student?.program_id || "4")
+  };
+}
+function InputField({
+  field,
+  label,
+  value,
+  onChange,
+  disabled,
+  error,
+  required,
+  type = "text",
+  ...props
+}) {
+  const id = useId();
+  return <div className="student-admin-field"><label htmlFor={id}>{label}{required && <span aria-hidden="true"> *</span>}</label>
+    <input id={id} name={field} value={value} onChange={event => onChange(field, event.target.value)} disabled={disabled} type={type} aria-required={required} aria-invalid={Boolean(error)} aria-describedby={error ? `${id}-error` : undefined} {...props} />
+    {error && <span id={`${id}-error`} className="student-admin-field-error">{error}</span>}
+  </div>;
+}
 export default function StudentFormModal({
   isOpen,
   onClose,
@@ -8,452 +47,104 @@ export default function StudentFormModal({
   initialData = null,
   programs = [],
   isSaving = false,
+  errorMessage
 }) {
-  const isEdit = Boolean(initialData?.student_id);
-
-  const [formData, setFormData] = useState({
-    student_id: "",
-    LRN: "",
-    first_name: "",
-    middle_name: "",
-    last_name: "",
-    extension_name: "",
-    birthdate: "",
-    sex: "M",
-    street: "",
-    barangay: "",
-    city: "Gingoog City",
-    province: "Misamis Oriental",
-    country: "Philippines",
-    postal_code: "9014",
-    status: "ACTIVE",
-    program_id: "4", // Default to EBEC
-  });
-
-  const [errors, setErrors] = useState({});
-
+  const [state, setState] = useState(() => ({
+    values: initialValues(initialData),
+    errors: {}
+  }));
+  const formId = useId();
+  const programId = useId();
+  const sexId = useId();
+  const isEdit = Boolean(initialData?.student_id || initialData?.id);
   useEffect(() => {
-    if (initialData) {
-      setFormData({
-        student_id: initialData.student_id ? String(initialData.student_id) : "",
-        LRN: initialData.LRN || initialData.lrn || "",
-        first_name: initialData.first_name || "",
-        middle_name: initialData.middle_name || "",
-        last_name: initialData.last_name || "",
-        extension_name: initialData.extension_name || "",
-        birthdate: initialData.birthdate
-          ? new Date(initialData.birthdate).toISOString().split("T")[0]
-          : "",
-        sex: initialData.sex || "M",
-        street: initialData.street || "",
-        barangay: initialData.barangay || "",
-        city: initialData.city || "Gingoog City",
-        province: initialData.province || "Misamis Oriental",
-        country: initialData.country || "Philippines",
-        postal_code: initialData.postal_code || "9014",
-        status: initialData.status ? initialData.status.toUpperCase() : "ACTIVE",
-        program_id: initialData.program_id ? String(initialData.program_id) : "4",
-      });
-      setErrors({});
-    } else {
-      setFormData({
-        student_id: "",
-        LRN: "",
-        first_name: "",
-        middle_name: "",
-        last_name: "",
-        extension_name: "",
-        birthdate: "",
-        sex: "M",
-        street: "",
-        barangay: "",
-        city: "Gingoog City",
-        province: "Misamis Oriental",
-        country: "Philippines",
-        postal_code: "9014",
-        status: "ACTIVE",
-        program_id: "4",
-      });
-      setErrors({});
-    }
+    if (!isOpen) return;
+    // Reset only on opening, so the closing transition retains its content.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setState({
+      values: initialValues(initialData),
+      errors: {}
+    });
   }, [initialData, isOpen]);
-
-  if (!isOpen) return null;
-
-  const handleChange = (field, value) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
-    if (errors[field]) {
-      setErrors((prev) => ({ ...prev, [field]: "" }));
+  const change = (field, value) => setState(previous => ({
+    ...previous,
+    values: {
+      ...previous.values,
+      [field]: value
+    },
+    errors: {
+      ...previous.errors,
+      [field]: ""
     }
+  }));
+  const submit = event => {
+    event.preventDefault();
+    if (isSaving) return;
+    const values = state.values;
+    const errors = {};
+    if (!/^\d{12}$/.test(values.LRN.trim())) errors.LRN = "Enter a 12-digit LRN.";
+    if (!values.first_name.trim()) errors.first_name = "First name is required.";
+    if (!values.last_name.trim()) errors.last_name = "Last name is required.";
+    if (!values.sex) errors.sex = "Select the student’s sex.";
+    if (Object.keys(errors).length) {
+      setState(previous => ({
+        ...previous,
+        errors
+      }));
+      event.currentTarget.elements.namedItem(Object.keys(errors)[0])?.focus();
+      return;
+    }
+    onSubmit({
+      ...values,
+      LRN: values.LRN.trim(),
+      first_name: values.first_name.trim(),
+      last_name: values.last_name.trim(),
+      middle_name: values.middle_name.trim() || null,
+      extension_name: values.extension_name.trim() || null,
+      birthdate: values.birthdate || null,
+      program_id: values.program_id ? Number(values.program_id) : null
+    });
   };
-
-  const validate = () => {
-    const newErrors = {};
-    const lrnClean = String(formData.LRN || "").trim();
-
-    if (!lrnClean) {
-      newErrors.LRN = "LRN is required.";
-    } else if (!/^\d{12}$/.test(lrnClean)) {
-      newErrors.LRN = "LRN must be exactly 12 numeric digits.";
-    }
-
-    if (!formData.first_name?.trim()) {
-      newErrors.first_name = "First name is required.";
-    }
-
-    if (!formData.last_name?.trim()) {
-      newErrors.last_name = "Last name is required.";
-    }
-
-    if (!formData.sex) {
-      newErrors.sex = "Please select sex.";
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!validate()) return;
-
-    const payload = {
-      ...formData,
-      LRN: String(formData.LRN).trim(),
-      first_name: String(formData.first_name).trim(),
-      last_name: String(formData.last_name).trim(),
-      middle_name: formData.middle_name ? String(formData.middle_name).trim() : null,
-      extension_name: formData.extension_name ? String(formData.extension_name).trim() : null,
-      birthdate: formData.birthdate || null,
-      program_id: formData.program_id ? Number(formData.program_id) : null,
-      status: formData.status || "ACTIVE",
-    };
-
-    onSubmit(payload);
-  };
-
-  return (
-    <div className="modal-overlay" role="dialog" aria-modal="true">
-      <div className="student-modal-card">
-        {/* Fixed Header */}
-        <div className="student-modal-header">
-          <h2>{isEdit ? "Edit Student Record" : "Register New Student"}</h2>
-          <button
-            type="button"
-            className="btn-modal-close"
-            onClick={onClose}
-            aria-label="Close dialog"
-            disabled={isSaving}
-          >
-            <X size={20} />
-          </button>
-        </div>
-
-        {/* Form Container */}
-        <form onSubmit={handleSubmit} className="student-modal-form">
-          <div className="student-modal-body">
-            {/* Academic & Identification */}
-            <div className="modal-section-title">Academic & Identification</div>
-            <div className="student-form-grid three-col">
-              <div className="student-form-field">
-                <label className="student-form-label" htmlFor="student_id">
-                  Student ID
-                </label>
-                <input
-                  id="student_id"
-                  type="text"
-                  className="student-form-input"
-                  placeholder="Auto-generated"
-                  value={formData.student_id ? `ID #${formData.student_id}` : ""}
-                  disabled
-                />
-                <div className="student-form-error-slot" />
-              </div>
-
-              <div className="student-form-field">
-                <label className="student-form-label" htmlFor="LRN">
-                  LRN <span className="required">*</span>
-                </label>
-                <input
-                  id="LRN"
-                  type="text"
-                  maxLength="12"
-                  className={`student-form-input${errors.LRN ? " has-error" : ""}`}
-                  placeholder="Enter 12-digit LRN"
-                  value={formData.LRN}
-                  onChange={(e) =>
-                    handleChange("LRN", e.target.value.replace(/\D/g, ""))
-                  }
-                  disabled={isSaving}
-                />
-                <div className="student-form-error-slot">
-                  {errors.LRN && <span className="student-form-error">{errors.LRN}</span>}
-                </div>
-              </div>
-
-              <div className="student-form-field">
-                <label className="student-form-label" htmlFor="program_id">
-                  Specialized Program / Track <span className="required">*</span>
-                </label>
-                <div className="select-wrapper">
-                  <select
-                    id="program_id"
-                    className="student-form-input student-form-select"
-                    value={formData.program_id}
-                    onChange={(e) => handleChange("program_id", e.target.value)}
-                    disabled={isSaving}
-                  >
-                    {programs.map((p) => (
-                      <option key={p.program_id} value={String(p.program_id)}>
-                        {p.program_code} - {p.program_name}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown size={15} className="select-caret" />
-                </div>
-                <div className="student-form-error-slot" />
-              </div>
-            </div>
-
-            {/* Basic Information */}
-            <div className="modal-section-title">Basic Information</div>
-            <div className="student-form-grid three-col">
-              <div className="student-form-field">
-                <label className="student-form-label" htmlFor="first_name">
-                  First Name <span className="required">*</span>
-                </label>
-                <input
-                  id="first_name"
-                  type="text"
-                  className={`student-form-input${errors.first_name ? " has-error" : ""}`}
-                  placeholder="Enter first name"
-                  value={formData.first_name}
-                  onChange={(e) => handleChange("first_name", e.target.value)}
-                  disabled={isSaving}
-                />
-                <div className="student-form-error-slot">
-                  {errors.first_name && (
-                    <span className="student-form-error">{errors.first_name}</span>
-                  )}
-                </div>
-              </div>
-
-              <div className="student-form-field">
-                <label className="student-form-label" htmlFor="middle_name">
-                  Middle Name
-                </label>
-                <input
-                  id="middle_name"
-                  type="text"
-                  className="student-form-input"
-                  placeholder="Enter middle name"
-                  value={formData.middle_name}
-                  onChange={(e) => handleChange("middle_name", e.target.value)}
-                  disabled={isSaving}
-                />
-                <div className="student-form-error-slot" />
-              </div>
-
-              <div className="student-form-field">
-                <label className="student-form-label" htmlFor="last_name">
-                  Last Name <span className="required">*</span>
-                </label>
-                <input
-                  id="last_name"
-                  type="text"
-                  className={`student-form-input${errors.last_name ? " has-error" : ""}`}
-                  placeholder="Enter last name"
-                  value={formData.last_name}
-                  onChange={(e) => handleChange("last_name", e.target.value)}
-                  disabled={isSaving}
-                />
-                <div className="student-form-error-slot">
-                  {errors.last_name && (
-                    <span className="student-form-error">{errors.last_name}</span>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="student-form-grid three-col">
-              <div className="student-form-field">
-                <label className="student-form-label" htmlFor="extension_name">
-                  Name Extension
-                </label>
-                <input
-                  id="extension_name"
-                  type="text"
-                  className="student-form-input"
-                  placeholder="e.g. Jr., Sr., II, III"
-                  value={formData.extension_name}
-                  onChange={(e) => handleChange("extension_name", e.target.value)}
-                  disabled={isSaving}
-                />
-                <div className="student-form-error-slot" />
-              </div>
-
-              <div className="student-form-field">
-                <label className="student-form-label" htmlFor="birthdate">
-                  Birthdate
-                </label>
-                <input
-                  id="birthdate"
-                  type="date"
-                  className="student-form-input"
-                  value={formData.birthdate}
-                  onChange={(e) => handleChange("birthdate", e.target.value)}
-                  disabled={isSaving}
-                />
-                <div className="student-form-error-slot" />
-              </div>
-
-              <div className="student-form-field">
-                <label className="student-form-label" htmlFor="sex">
-                  Sex <span className="required">*</span>
-                </label>
-                <div className="select-wrapper">
-                  <select
-                    id="sex"
-                    className="student-form-input student-form-select"
-                    value={formData.sex}
-                    onChange={(e) => handleChange("sex", e.target.value)}
-                    disabled={isSaving}
-                  >
-                    <option value="M">Male</option>
-                    <option value="F">Female</option>
-                  </select>
-                  <ChevronDown size={15} className="select-caret" />
-                </div>
-                <div className="student-form-error-slot" />
-              </div>
-            </div>
-
-            {/* Residential Address */}
-            <div className="modal-section-title">Residential Address</div>
-            <div className="student-form-grid">
-              <div className="student-form-field">
-                <label className="student-form-label" htmlFor="street">
-                  Street / Purok
-                </label>
-                <input
-                  id="street"
-                  type="text"
-                  className="student-form-input"
-                  placeholder="Enter street or purok (e.g. Purok 2)"
-                  value={formData.street}
-                  onChange={(e) => handleChange("street", e.target.value)}
-                  disabled={isSaving}
-                />
-                <div className="student-form-error-slot" />
-              </div>
-
-              <div className="student-form-field">
-                <label className="student-form-label" htmlFor="barangay">
-                  Barangay
-                </label>
-                <input
-                  id="barangay"
-                  type="text"
-                  className="student-form-input"
-                  placeholder="Enter barangay (e.g. Barangay 1)"
-                  value={formData.barangay}
-                  onChange={(e) => handleChange("barangay", e.target.value)}
-                  disabled={isSaving}
-                />
-                <div className="student-form-error-slot" />
-              </div>
-            </div>
-
-            <div className="student-form-grid">
-              <div className="student-form-field">
-                <label className="student-form-label" htmlFor="city">
-                  City / Municipality
-                </label>
-                <input
-                  id="city"
-                  type="text"
-                  className="student-form-input"
-                  placeholder="Enter city (e.g. Gingoog City)"
-                  value={formData.city}
-                  onChange={(e) => handleChange("city", e.target.value)}
-                  disabled={isSaving}
-                />
-                <div className="student-form-error-slot" />
-              </div>
-
-              <div className="student-form-field">
-                <label className="student-form-label" htmlFor="province">
-                  Province
-                </label>
-                <input
-                  id="province"
-                  type="text"
-                  className="student-form-input"
-                  placeholder="Enter province (e.g. Misamis Oriental)"
-                  value={formData.province}
-                  onChange={(e) => handleChange("province", e.target.value)}
-                  disabled={isSaving}
-                />
-                <div className="student-form-error-slot" />
-              </div>
-            </div>
-
-            <div className="student-form-grid">
-              <div className="student-form-field">
-                <label className="student-form-label" htmlFor="country">
-                  Country
-                </label>
-                <input
-                  id="country"
-                  type="text"
-                  className="student-form-input"
-                  placeholder="Enter country (default: Philippines)"
-                  value={formData.country}
-                  onChange={(e) => handleChange("country", e.target.value)}
-                  disabled={isSaving}
-                />
-                <div className="student-form-error-slot" />
-              </div>
-
-              <div className="student-form-field">
-                <label className="student-form-label" htmlFor="postal_code">
-                  Postal Code
-                </label>
-                <input
-                  id="postal_code"
-                  type="text"
-                  className="student-form-input"
-                  placeholder="Enter postal code (e.g. 9014)"
-                  value={formData.postal_code}
-                  onChange={(e) => handleChange("postal_code", e.target.value)}
-                  disabled={isSaving}
-                />
-                <div className="student-form-error-slot" />
-              </div>
-            </div>
+  const input = (field, label, props = {}) => <InputField key={field} field={field} label={label} value={state.values[field]} onChange={change} disabled={isSaving} error={state.errors[field]} {...props} />;
+  return <OverlayPanel isOpen={isOpen} onClose={onClose} busy={isSaving} title={isEdit ? "Edit student" : "Add student"} eyebrow="Learner profile" description="Maintain the student’s profile here. Grade and section assignments are handled separately." className="student-profile-drawer" footer={<><button type="button" className="student-admin-button" disabled={isSaving} onClick={onClose}>Cancel</button>
+      <button type="submit" form={formId} className="student-admin-button student-admin-button--primary" aria-busy={isSaving} disabled={isSaving}>{isSaving && <Loader2 size={15} className="student-admin-spinner" aria-hidden="true" />}{isSaving ? "Saving…" : isEdit ? "Update student" : "Save student"}</button></>}>
+    {errorMessage && <p role="alert" className="student-admin-field-error">{errorMessage}</p>}
+    <form id={formId} onSubmit={submit} noValidate className="student-admin-form student-profile-form">
+        <section className="student-admin-form-section"><h3>Identification & curriculum</h3><p>Required fields are marked with an asterisk.</p>
+          <div className="student-admin-form-grid">{input("LRN", "Learner Reference Number", {
+            required: true,
+            inputMode: "numeric",
+            maxLength: 12,
+            placeholder: "12-digit LRN"
+          })}
+            <div className="student-admin-field"><label htmlFor={programId}>Curriculum program</label><DropdownSelect id={programId} label="Curriculum program" value={state.values.program_id} disabled={isSaving} options={programs.map(program => ({
+              value: String(program.program_id),
+              label: `${program.program_code} · ${program.program_name}`
+            }))} onChange={value => change("program_id", value)} /></div></div>
+        </section>
+        <section className="student-admin-form-section"><h3>Personal information</h3><p>Use the learner’s official school records.</p>
+          <div className="student-admin-form-grid">{input("first_name", "First name", {
+            required: true
+          })}{input("last_name", "Last name", {
+            required: true
+          })}
+            {input("middle_name", "Middle name")}{input("extension_name", "Extension name", {
+            placeholder: "e.g. Jr."
+          })}{input("birthdate", "Birthdate", {
+            type: "date"
+          })}
+            <div className="student-admin-field"><label htmlFor={sexId}>Sex *</label><DropdownSelect id={sexId} label="Sex" value={state.values.sex} disabled={isSaving} options={[{
+              value: "M",
+              label: "Male"
+            }, {
+              value: "F",
+              label: "Female"
+            }]} onChange={value => change("sex", value)} /></div>
           </div>
-
-          {/* Fixed Footer */}
-          <div className="student-modal-footer">
-            <button
-              type="button"
-              className="btn-modal-cancel"
-              onClick={onClose}
-              disabled={isSaving}
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="btn-modal-save"
-              disabled={isSaving}
-            >
-              {isSaving && <Loader2 size={16} className="animate-spin" />}
-              {isEdit ? "Update Student" : "Save Student"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
+        </section>
+      <section className="student-admin-form-section"><h3>Residential address</h3><p>Keep contact and address details current.</p>
+        <div className="student-admin-form-grid">{input("street", "Street / Purok")}{input("barangay", "Barangay")}{input("city", "City / Municipality")}{input("province", "Province")}{input("country", "Country")}{input("postal_code", "Postal code")}</div>
+      </section>
+    </form>
+  </OverlayPanel>;
 }

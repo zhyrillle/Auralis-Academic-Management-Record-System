@@ -1,565 +1,227 @@
+import { useEffect, useMemo, useState } from "react";
+import { Users, Plus, Pencil, Trash2, GraduationCap, AlertCircle } from "lucide-react";
 import useCachedQuery from "../../services/useCachedQuery";
 import { cacheKey } from "../../services/navigationCache";
-import { useMemo, useState } from "react";
-import {
-  Users,
-  Search,
-  Plus,
-  Eye,
-  Edit,
-  Trash2,
-  GraduationCap,
-  AlertCircle,
-  Loader2,
-  CheckCircle2,
-} from "lucide-react";
+import { isSessionCancellation } from "../../offline/syncManager";
 import DropdownSelect from "../../components/common/DropdownSelect";
+import SearchBar from "../../components/common/SearchBar";
 import MaskedLrn from "../../components/common/MaskedLrn";
+import StatCard from "../../components/common/StatCard";
+import EmptyState from "../../components/common/EmptyState";
+import Toast from "../../components/common/Toast";
+import Badge from "../../components/common/Badge";
+import OverlayPanel from "../../components/common/OverlayPanel";
+import TablePagination from "../../components/common/TablePagination";
 import StudentFormModal from "./manage-students/StudentFormModal";
 import StudentDetailModal from "./manage-students/StudentDetailModal";
-import {
-  fetchStudents,
-  fetchPrograms,
-  createStudent,
-  updateStudent,
-  deleteStudent,
-} from "../../services/studentService";
+import { fetchStudents, fetchPrograms, createStudent, updateStudent, deleteStudent } from "../../services/studentService";
+import "../../styles/adminDashboard.css";
+import "../../styles/StudentAdmin.css";
 import "../../styles/ManageStudents.css";
-
-const GRADE_FILTER_TABS = [
-  { id: "all", label: "All Grades" },
-  { id: "G7", label: "Grade 7" },
-  { id: "G8", label: "Grade 8" },
-  { id: "G9", label: "Grade 9" },
-  { id: "G10", label: "Grade 10" },
-  { id: "unassigned", label: "Unassigned" },
-];
-
+const EMPTY_LIST = [];
+const GRADES = [{
+  value: "all",
+  label: "All grade levels"
+}, ...[7, 8, 9, 10].map(grade => ({
+  value: `G${grade}`,
+  label: `Grade ${grade}`
+})), {
+  value: "unassigned",
+  label: "Unassigned"
+}];
+function normalizeGrade(student) {
+  const raw = String(student.grade_level_name || student.gradeLevel || "").toUpperCase();
+  const number = Number(raw.replace(/\D/g, ""));
+  if ([7, 8, 9, 10].includes(number)) return `G${number}`;
+  if (Number(student.grade_level_id) >= 1 && Number(student.grade_level_id) <= 4) return `G${Number(student.grade_level_id) + 6}`;
+  return "unassigned";
+}
+const studentName = student => student.name || [student.last_name && `${student.last_name},`, student.first_name, student.middle_name, student.extension_name].filter(Boolean).join(" ");
 async function loadStudentCatalog() {
   const [students, programs] = await Promise.all([fetchStudents(), fetchPrograms()]);
-  return { students, programs };
+  return {
+    students,
+    programs
+  };
 }
-
-const EMPTY_LIST = [];
-
 export default function ManageStudents() {
-  const { data, loading, error, refresh: loadData } = useCachedQuery(cacheKey('admin:students'), loadStudentCatalog);
-  const students = data?.students || EMPTY_LIST;
-  const programs = data?.programs || EMPTY_LIST;
-
-  // Filters
+  const query = useCachedQuery(cacheKey("admin:students"), loadStudentCatalog);
+  const students = query.data?.students || EMPTY_LIST;
+  const programs = query.data?.programs || EMPTY_LIST;
   const [gradeFilter, setGradeFilter] = useState("all");
-  const [searchQuery, setSearchQuery] = useState("");
   const [programFilter, setProgramFilter] = useState("all");
-
-  // Pagination
-  const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 12;
-
-  // Modals state
-  const [isFormModalOpen, setIsFormModalOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [formOpen, setFormOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState(null);
-  const [isSaving, setIsSaving] = useState(false);
-
-  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState(null);
-
-  // Toast notification
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deletingStudent, setDeletingStudent] = useState(null);
+  const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState(null);
-
-  const showToast = (message, type = "success") => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 4000);
-  };
-
-  // Compute Grade level normalization
-  const normalizeGrade = (student) => {
-    const raw = String(student.grade_level_name || student.gradeLevel || "").toUpperCase();
-    if (raw.includes("7") || raw === "G7") return "G7";
-    if (raw.includes("8") || raw === "G8") return "G8";
-    if (raw.includes("9") || raw === "G9") return "G9";
-    if (raw.includes("10") || raw === "G10") return "G10";
-    return "unassigned";
-  };
-
-  // Counts for each tab
-  const gradeCounts = useMemo(() => {
-    const counts = { all: students.length, G7: 0, G8: 0, G9: 0, G10: 0, unassigned: 0 };
-    students.forEach((s) => {
-      const g = normalizeGrade(s);
-      if (counts[g] !== undefined) counts[g]++;
-      else counts.unassigned++;
+  useEffect(() => {
+    document.querySelector(".page-content-area")?.scrollTo({
+      top: 0
     });
-    return counts;
+  }, []);
+  useEffect(() => {
+    if (!toast) return undefined;
+    const timer = window.setTimeout(() => setToast(null), 4500);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
+  const counts = useMemo(() => {
+    const result = {
+      all: students.length,
+      G7: 0,
+      G8: 0,
+      G9: 0,
+      G10: 0,
+      unassigned: 0
+    };
+    students.forEach(student => {
+      result[normalizeGrade(student)]++;
+    });
+    return result;
   }, [students]);
-
-  // Filtered students
-  const filteredStudents = useMemo(() => {
-    return students.filter((student) => {
-      // Grade filter
-      if (gradeFilter !== "all") {
-        const studentGrade = normalizeGrade(student);
-        if (studentGrade !== gradeFilter) return false;
-      }
-
-      // Program filter
-      if (programFilter !== "all") {
-        if (String(student.program_id) !== String(programFilter)) return false;
-      }
-
-      // Search query (LRN or full name or section)
-      if (searchQuery.trim()) {
-        const query = searchQuery.toLowerCase().trim();
-        const lrn = String(student.LRN || student.lrn || "").toLowerCase();
-        const maskedLrn = String(student.masked_lrn || "").toLowerCase();
-        const fullName = String(
-          student.name ||
-            `${student.first_name || ""} ${student.middle_name || ""} ${student.last_name || ""}`
-        ).toLowerCase();
-        const section = String(student.section || student.section_name || "").toLowerCase();
-
-        return lrn.includes(query) || maskedLrn.includes(query) || fullName.includes(query) || section.includes(query);
-      }
-
-      return true;
-    });
-  }, [students, gradeFilter, programFilter, searchQuery]);
-
-  // Paginated students
-  const totalPages = Math.ceil(filteredStudents.length / pageSize) || 1;
-  const paginatedStudents = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return filteredStudents.slice(start, start + pageSize);
-  }, [filteredStudents, currentPage]);
-
-  // Handlers for Add/Edit
-  const handleOpenAdd = () => {
-    setEditingStudent(null);
-    setIsFormModalOpen(true);
-  };
-
-  const handleOpenEdit = (student) => {
-    setEditingStudent(student);
-    setIsFormModalOpen(true);
-  };
-
-  const handleOpenDetail = (student) => {
+  const filtered = useMemo(() => students.filter(student => (gradeFilter === "all" || normalizeGrade(student) === gradeFilter) && (programFilter === "all" || String(student.program_id) === programFilter) && `${studentName(student)} ${student.LRN || student.lrn || ""} ${student.masked_lrn || ""} ${student.section || student.section_name || ""}`.toLowerCase().includes(search.toLowerCase().trim())), [students, gradeFilter, programFilter, search]);
+  const currentPage = Math.min(page, Math.max(1, Math.ceil(filtered.length / 12)));
+  const shown = filtered.slice((currentPage - 1) * 12, currentPage * 12);
+  const openProfile = student => {
     setSelectedStudent(student);
-    setIsDetailModalOpen(true);
+    setDetailOpen(true);
   };
-
-  const handleFormSubmit = async (formData) => {
+  const openForm = student => {
+    setToast(null);
+    setEditingStudent(student);
+    setFormOpen(true);
+  };
+  const onSave = async payload => {
+    if (saving) return;
+    setSaving(true);
     try {
-      setIsSaving(true);
-      if (editingStudent?.student_id) {
-        await updateStudent(editingStudent.student_id, formData);
-        showToast("Student updated successfully.");
-      } else {
-        await createStudent(formData);
-        showToast("Student registered successfully.");
-      }
-      setIsFormModalOpen(false);
-      setEditingStudent(null);
-      await loadData();
-    } catch (err) {
-      console.error("Save error:", err);
-      alert(err.message || "Failed to save student record.");
+      const id = editingStudent?.student_id || editingStudent?.id;
+      if (id) await updateStudent(id, payload);else await createStudent(payload);
+      setToast({
+        message: id ? "Student updated successfully." : "Student registered successfully.",
+        type: "success"
+      });
+      setFormOpen(false);
+      await query.refresh();
+    } catch (error) {
+      if (!isSessionCancellation(error)) setToast({
+        message: error.message || "The student record could not be saved.",
+        type: "error"
+      });
     } finally {
-      setIsSaving(false);
+      setSaving(false);
     }
   };
-
-  const handleDelete = async (student) => {
-    const lrn = student.LRN || student.lrn;
-    const name = student.name || `${student.first_name} ${student.last_name}`;
-    if (!window.confirm(`Are you sure you want to delete student "${name}" (LRN: ${lrn})?`)) {
-      return;
-    }
-
+  const confirmDelete = async () => {
+    if (saving || !deletingStudent) return;
+    setSaving(true);
     try {
-      await deleteStudent(student.student_id);
-      showToast("Student deleted successfully.");
-      await loadData();
-    } catch (err) {
-      console.error("Delete error:", err);
-      alert(err.message || "Failed to delete student.");
+      await deleteStudent(deletingStudent.student_id || deletingStudent.id);
+      setDeleteOpen(false);
+      setToast({
+        message: "Student deleted successfully.",
+        type: "success"
+      });
+      await query.refresh();
+    } catch (error) {
+      if (!isSessionCancellation(error)) setToast({
+        message: error.message || "The student could not be deleted.",
+        type: "error"
+      });
+    } finally {
+      setSaving(false);
     }
   };
-
-  // Program options for dropdown
-  const programOptions = useMemo(() => {
-    return [
-      { value: "all", label: "All Programs" },
-      ...programs.map((p) => ({
-        value: String(p.program_id),
-        label: p.program_code,
-      })),
-    ];
-  }, [programs]);
-
-  return (
-    <div className="manage-students-container">
-      {/* Toast Notification */}
-      {toast && (
-        <div
-          style={{
-            position: "fixed",
-            top: "20px",
-            right: "24px",
-            zIndex: 9999,
-            backgroundColor: toast.type === "error" ? "#fee2e2" : "#ecfdf5",
-            color: toast.type === "error" ? "#991b1b" : "#065f46",
-            border: `1px solid ${toast.type === "error" ? "#f87171" : "#a7f3d0"}`,
-            borderRadius: "8px",
-            padding: "0.75rem 1.25rem",
-            display: "flex",
-            alignItems: "center",
-            gap: "0.5rem",
-            boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
-            fontSize: "0.875rem",
-            fontWeight: "500",
-          }}
-        >
-          {toast.type === "error" ? <AlertCircle size={18} /> : <CheckCircle2 size={18} />}
-          <span>{toast.message}</span>
-        </div>
-      )}
-
-      {/* Page Header */}
-      <div className="manage-students-header">
-        <div className="manage-students-title-area">
-          <h1>Manage Students</h1>
-          <p className="manage-students-subtitle">
-            View, filter, and register student records across Grade 7 to 10.
-          </p>
-        </div>
-
-        <div className="manage-students-actions-top">
-          <button
-            type="button"
-            className="btn-primary-add"
-            onClick={handleOpenAdd}
-          >
-            <Plus size={18} />
-            <span>Add Student</span>
-          </button>
-        </div>
-      </div>
-
-      {/* KPI Cards */}
-      <div className="students-stats-grid">
-        <div className="students-stat-card">
-          <div className="students-stat-icon primary">
-            <Users size={22} />
-          </div>
-          <div className="students-stat-info">
-            <span className="students-stat-value">{gradeCounts.all}</span>
-            <span className="students-stat-label">Total Students</span>
-          </div>
-        </div>
-
-        <div className="students-stat-card">
-          <div className="students-stat-icon g7">
-            <GraduationCap size={22} />
-          </div>
-          <div className="students-stat-info">
-            <span className="students-stat-value">{gradeCounts.G7}</span>
-            <span className="students-stat-label">Grade 7</span>
-          </div>
-        </div>
-
-        <div className="students-stat-card">
-          <div className="students-stat-icon g8">
-            <GraduationCap size={22} />
-          </div>
-          <div className="students-stat-info">
-            <span className="students-stat-value">{gradeCounts.G8}</span>
-            <span className="students-stat-label">Grade 8</span>
-          </div>
-        </div>
-
-        <div className="students-stat-card">
-          <div className="students-stat-icon g9">
-            <GraduationCap size={22} />
-          </div>
-          <div className="students-stat-info">
-            <span className="students-stat-value">{gradeCounts.G9}</span>
-            <span className="students-stat-label">Grade 9</span>
-          </div>
-        </div>
-
-        <div className="students-stat-card">
-          <div className="students-stat-icon g10">
-            <GraduationCap size={22} />
-          </div>
-          <div className="students-stat-info">
-            <span className="students-stat-value">{gradeCounts.G10}</span>
-            <span className="students-stat-label">Grade 10</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Toolbar & Filters */}
-      <div className="manage-students-toolbar">
-        {/* Grade Filter Tabs */}
-        <div className="grade-filter-tabs" role="tablist">
-          {GRADE_FILTER_TABS.map((tab) => {
-            const isActive = gradeFilter === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                className={`grade-tab-btn ${isActive ? "active" : ""}`}
-                onClick={() => {
-                  setGradeFilter(tab.id);
-                  setCurrentPage(1);
-                }}
-              >
-                <span>{tab.label}</span>
-                <span className="grade-tab-count">{gradeCounts[tab.id] || 0}</span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Search & Select Filters */}
-        <div className="students-controls-row">
-          <div className="students-search-box">
-            <Search size={16} className="students-search-icon" />
-            <input
-              type="text"
-              className="students-search-input"
-              placeholder="Search by student name or LRN..."
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                setCurrentPage(1);
-              }}
-            />
-          </div>
-
-          <div className="students-filters-group">
-            <div className="filter-dropdown-wrap">
-              <DropdownSelect
-                label="Program"
-                value={programFilter}
-                options={programOptions}
-                onChange={(val) => {
-                  setProgramFilter(val);
-                  setCurrentPage(1);
-                }}
-                className="manage-users-filter-select"
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Table Card with Locked Fixed Columns */}
-      <div className="manage-students-table-card">
-        {loading ? (
-          <div style={{ padding: "4rem 2rem", textAlign: "center", color: "#64748b" }}>
-            <Loader2
-              size={32}
-              className="animate-spin"
-              style={{ margin: "0 auto 1rem auto", color: "#17376d" }}
-            />
-            <p style={{ margin: 0, fontWeight: 500 }}>Loading student records from database...</p>
-          </div>
-        ) : error ? (
-          <div style={{ padding: "3rem 2rem", textAlign: "center", color: "#dc2626" }}>
-            <AlertCircle size={32} style={{ margin: "0 auto 1rem auto" }} />
-            <p style={{ margin: "0 0 1rem 0", fontWeight: 600 }}>{error}</p>
-            <button
-              type="button"
-              className="btn-primary-add"
-              style={{ margin: "0 auto" }}
-              onClick={loadData}
-            >
-              Retry
-            </button>
-          </div>
-        ) : filteredStudents.length === 0 ? (
-          <div style={{ padding: "4rem 2rem", textAlign: "center", color: "#64748b" }}>
-            <Users size={40} style={{ margin: "0 auto 1rem auto", opacity: 0.4 }} />
-            <p style={{ margin: "0 0 0.5rem 0", fontSize: "1.05rem", fontWeight: 600, color: "#1e293b" }}>
-              No students found
-            </p>
-            <p style={{ margin: 0, fontSize: "0.875rem" }}>
-              Try adjusting your grade filter, program filter, or search keywords.
-            </p>
-          </div>
-        ) : (
-          <>
-            <div className="students-table-responsive">
-              <table className="students-table">
-                {/* Fixed column widths so headers and cells never shift across pages */}
-                <colgroup>
-                  <col style={{ width: "150px" }} />
-                  <col style={{ width: "280px" }} />
-                  <col style={{ width: "90px" }} />
-                  <col style={{ width: "140px" }} />
-                  <col style={{ width: "160px" }} />
-                  <col style={{ width: "140px" }} />
-                  <col style={{ width: "110px" }} />
-                </colgroup>
-                <thead>
-                  <tr>
-                    <th>LRN</th>
-                    <th>Student Name</th>
-                    <th>Sex</th>
-                    <th>Grade Level</th>
-                    <th>Section</th>
-                    <th>Program</th>
-                    <th style={{ textAlign: "right", paddingRight: "1.25rem" }}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {paginatedStudents.map((student) => {
-                    const lrn = student.LRN || student.lrn || "N/A";
-                    const fullName =
-                      student.name ||
-                      `${student.last_name || ""}, ${student.first_name || ""} ${student.middle_name || ""}${student.extension_name ? ` ${student.extension_name}` : ""}`.trim();
-
-                    const gradeLabel =
-                      student.gradeLevel && student.gradeLevel !== "Unassigned"
-                        ? student.gradeLevel
-                        : student.grade_level_name && student.grade_level_name !== "Unassigned"
-                        ? `Grade ${student.grade_level_name.replace("G", "")}`
-                        : "Unassigned";
-
-                    const sectionLabel = student.section || student.section_name || "Unassigned";
-                    const programLabel = student.program_code || "EBEC";
-
-                    return (
-                      <tr key={student.student_id || student.id}>
-                        <td>
-                          <MaskedLrn
-                            lrn={lrn}
-                            maskedLrn={student.masked_lrn}
-                            showToggle={true}
-                            allowCopy={true}
-                          />
-                        </td>
-                        <td>
-                          <div className="student-name-cell" title={fullName}>
-                            <span className="student-name-main">{fullName}</span>
-                          </div>
-                        </td>
-                        <td>
-                          <span style={{ fontWeight: 500 }}>
-                            {student.sex === "M"
-                              ? "Male"
-                              : student.sex === "F"
-                              ? "Female"
-                              : student.sex || "—"}
-                          </span>
-                        </td>
-                        <td>
-                          <span className="badge-pill badge-grade">{gradeLabel}</span>
-                        </td>
-                        <td>
-                          <span className="badge-pill badge-section">{sectionLabel}</span>
-                        </td>
-                        <td>
-                          <span className="badge-pill badge-program">{programLabel}</span>
-                        </td>
-                        <td>
-                          <div
-                            className="students-actions-cell"
-                            style={{ justifyContent: "flex-end" }}
-                          >
-                            <button
-                              type="button"
-                              className="btn-action-icon view"
-                              title="View Full Profile"
-                              onClick={() => handleOpenDetail(student)}
-                            >
-                              <Eye size={17} />
-                            </button>
-                            <button
-                              type="button"
-                              className="btn-action-icon edit"
-                              title="Edit Student"
-                              onClick={() => handleOpenEdit(student)}
-                            >
-                              <Edit size={17} />
-                            </button>
-                            <button
-                              type="button"
-                              className="btn-action-icon delete"
-                              title="Delete Student"
-                              onClick={() => handleDelete(student)}
-                            >
-                              <Trash2 size={17} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Table Footer with Pagination */}
-            <div className="students-table-footer">
-              <span>
-                Showing <strong>{(currentPage - 1) * pageSize + 1}</strong> to{" "}
-                <strong>
-                  {Math.min(currentPage * pageSize, filteredStudents.length)}
-                </strong>{" "}
-                of <strong>{filteredStudents.length}</strong> students
-              </span>
-
-              <div className="pagination-controls">
-                <button
-                  type="button"
-                  className="btn-pagination"
-                  disabled={currentPage <= 1}
-                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                >
-                  Previous
-                </button>
-                <span style={{ padding: "0 0.5rem" }}>
-                  Page {currentPage} of {totalPages}
-                </span>
-                <button
-                  type="button"
-                  className="btn-pagination"
-                  disabled={currentPage >= totalPages}
-                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                >
-                  Next
-                </button>
-              </div>
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* Add / Edit Student Form Modal */}
-      <StudentFormModal
-        isOpen={isFormModalOpen}
-        onClose={() => {
-          setIsFormModalOpen(false);
-          setEditingStudent(null);
-        }}
-        onSubmit={handleFormSubmit}
-        initialData={editingStudent}
-        programs={programs}
-        isSaving={isSaving}
-      />
-
-      {/* View Detail Modal */}
-      <StudentDetailModal
-        isOpen={isDetailModalOpen}
-        onClose={() => {
-          setIsDetailModalOpen(false);
-          setSelectedStudent(null);
-        }}
-        student={selectedStudent}
-      />
-    </div>
-  );
+  return <div className="student-admin-page manage-students-container">
+    <header className="student-admin-header"><div><h1>Manage Students</h1><p>All learner profiles across Grades 7–10, including regular and specialized programs.</p></div>
+      <button type="button" className="student-admin-button student-admin-button--primary" onClick={() => openForm(null)}><Plus size={17} />Add Student</button></header>
+    <section className="student-overview-grid" aria-label="Student overview">
+      {[{
+        title: "All students",
+        key: "all",
+        description: "Regular & specialized programs",
+        icon: Users,
+        variant: "primary"
+      }, ...[7, 8, 9, 10].map((grade, index) => ({
+        title: `Grade ${grade}`,
+        key: `G${grade}`,
+        description: "Learners with a grade assignment",
+        icon: GraduationCap,
+        variant: ["info", "warning", "primary", "info"][index]
+      }))].map(card => <StatCard key={card.key} title={card.title} value={query.loading ? "—" : counts[card.key]} description={card.description} icon={card.icon} variant={card.variant} />)}
+    </section>
+    <section className="student-admin-panel">
+      <div className="student-admin-panel-heading"><div><h2>Student directory</h2><p>Select a student row to view their profile. Use the actions to edit or delete.</p></div><span className="student-admin-count">{filtered.length} {filtered.length === 1 ? "student" : "students"}</span></div>
+      <div className="student-admin-toolbar"><SearchBar query={search} setQuery={value => {
+          setSearch(value);
+          setPage(1);
+        }} placeholder="Search name, LRN, or section…" />
+        <DropdownSelect label="Grade level" value={gradeFilter} options={GRADES} onChange={value => {
+          setGradeFilter(value);
+          setPage(1);
+        }} />
+        <DropdownSelect label="Program" value={programFilter} options={[{
+          value: "all",
+          label: "All programs"
+        }, ...programs.map(program => ({
+          value: String(program.program_id),
+          label: program.program_code
+        }))]} onChange={value => {
+          setProgramFilter(value);
+          setPage(1);
+        }} /></div>
+      {query.loading ? <EmptyState className="student-admin-empty student-admin-loading" icon={Users} title="Loading student records…" /> : query.error ? <div className="student-admin-empty"><EmptyState icon={AlertCircle} title="Students are unavailable" description={query.error} /><button type="button" className="student-admin-button" onClick={query.refresh}>Retry</button></div> : !shown.length ? <EmptyState className="student-admin-empty" icon={Users} title="No students found" description="Try another grade level, program, or search." /> : <><div className="student-admin-table-scroll"><table className="student-admin-table student-directory-table"><colgroup><col style={{
+                width: "16%"
+              }} /><col style={{
+                width: "25%"
+              }} /><col style={{
+                width: "8%"
+              }} /><col style={{
+                width: "11%"
+              }} /><col style={{
+                width: "13%"
+              }} /><col style={{
+                width: "9%"
+              }} /><col style={{
+                width: "18%"
+              }} /></colgroup>
+              <thead><tr><th>LRN</th><th>Student name</th><th>Sex</th><th>Grade level</th><th>Section</th><th>Program</th><th>Actions</th></tr></thead>
+              <tbody>{shown.map(student => {
+                const id = student.student_id || student.id;
+                const name = studentName(student);
+                const grade = normalizeGrade(student);
+                return <tr key={id} className="student-directory-row" tabIndex={0} aria-label={`View profile for ${name}`} onClick={() => openProfile(student)} onKeyDown={event => {
+                  if (event.target !== event.currentTarget) return;
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    openProfile(student);
+                  }
+                }}><td className="student-admin-mono"><MaskedLrn lrn={student.LRN || student.lrn} maskedLrn={student.masked_lrn} showToggle allowCopy /></td><td><strong>{name}</strong></td><td>{student.sex === "M" ? "Male" : student.sex === "F" ? "Female" : student.sex || "—"}</td><td>{grade === "unassigned" ? "Unassigned" : `Grade ${grade.slice(1)}`}</td><td><span className="student-admin-badge student-admin-badge--muted">{student.section || student.section_name || "Unassigned"}</span></td><td><Badge className="student-admin-program" variant={`program-${String(student.program_code || "EBEC").toLowerCase()}`} title={student.program_name || student.program_code || "EBEC"}>{student.program_code || "EBEC"}</Badge></td>
+                  <td><div className="student-admin-actions">                    <button type="button" className="student-admin-icon-button" aria-label={`Edit ${name}`} title="Edit student" onClick={event => {
+                        event.stopPropagation();
+                        openForm(student);
+                      }}><Pencil size={16} /></button>
+                    <button type="button" className="student-admin-icon-button student-admin-icon-button--danger" aria-label={`Delete ${name}`} title="Delete student" onClick={event => {
+                        event.stopPropagation();
+                        setToast(null);
+                        setDeletingStudent(student);
+                        setDeleteOpen(true);
+                      }}><Trash2 size={16} /></button></div></td></tr>;
+              })}</tbody></table></div><TablePagination page={currentPage} pageSize={12} total={filtered.length} onPageChange={setPage} /></>}
+    </section>
+    <StudentFormModal isOpen={formOpen} onClose={() => setFormOpen(false)} onSubmit={onSave} initialData={editingStudent} programs={programs} isSaving={saving} errorMessage={toast?.type === "error" ? toast.message : ""} />
+    <StudentDetailModal isOpen={detailOpen} onClose={() => setDetailOpen(false)} student={selectedStudent} onEdit={() => {
+      setDetailOpen(false);
+      openForm(selectedStudent);
+    }} />
+    <OverlayPanel isOpen={deleteOpen} onClose={() => setDeleteOpen(false)} title="Delete student" eyebrow="Student record" busy={saving} error={toast?.type === "error" ? toast.message : ""} description="Review this action carefully. This deletes a learner profile, not just a section assignment." footer={<><button type="button" className="student-admin-button" disabled={saving} onClick={() => setDeleteOpen(false)}>Cancel</button><button type="button" className="student-admin-button student-admin-button--danger" disabled={saving} onClick={confirmDelete}>{saving ? "Deleting…" : "Delete student"}</button></>}>
+      <div className="student-admin-form-note"><strong>{deletingStudent && studentName(deletingStudent)}</strong><p>LRN: <MaskedLrn lrn={deletingStudent?.LRN || deletingStudent?.lrn} maskedLrn={deletingStudent?.masked_lrn} /></p>Academic records or other linked information may prevent deletion.</div>
+    </OverlayPanel>
+    <Toast className="app-toast--bottom-tray" message={toast?.message} variant={toast?.type} icon={toast?.type === "error" ? AlertCircle : undefined} onDismiss={() => setToast(null)} />
+  </div>;
 }

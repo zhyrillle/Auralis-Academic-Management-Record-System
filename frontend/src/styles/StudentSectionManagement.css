@@ -1,114 +1,425 @@
-
-.section-management-page .bulk-action-bar {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  background-color: #f8fafc;
-  padding: 12px 20px;
-  border-radius: 8px;
-  border: 1px dashed #cbd5e1;
-  margin-top: 16px;
-  font-size: 0.9rem;
-  font-weight: 500;
-  color: #334155;
+.section-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 20px;
+  padding: 0 24px 24px;
 }
 
-.section-management-page input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  cursor: pointer;
-  accent-color: var(--mu-navy);
+.section-card {
+  min-width: 0;
+  padding: 24px;
+  border: 1px solid #eef2f6;
+  border-radius: 15px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgb(15 23 42 / 6%);
+  transition: transform .2s ease, box-shadow .2s ease;
 }
 
-.section-action-menu {
-  position: relative;
-  display: inline-block;
+.section-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 16px 35px rgb(15 23 42 / 12%);
 }
 
-.section-action-dropdown {
-  position: absolute;
-  right: 0;
-  top: 100%;
-  margin-top: 4px;
-  background: white;
-  border: 1px solid var(--mu-border);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  border-radius: 6px;
-  padding: 4px 0;
-  z-index: 50;
-  min-width: 160px;
-}
-
-.section-action-dropdown button {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 8px 16px;
-  background: none;
-  border: none;
-  text-align: left;
-  font-size: 0.85rem;
-  color: var(--mu-text);
-  cursor: pointer;
-}
-
-.section-action-dropdown button:hover {
-  background-color: #f1f5f9;
-}
-
-.manage-student-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.manage-student-item {
+.section-card__heading {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  padding: 12px;
-  border: 1px solid var(--mu-border);
-  border-radius: 6px;
-  background: #f8fafc;
+  align-items: flex-start;
+  gap: 12px;
 }
 
-.manage-student-item div {
+.section-card h3 {
+  margin: 0;
+  color: #1e293b;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.section-card__grade {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border-radius: 20px;
+  background: #edf3fc;
+  color: #123062;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.section-card__grade[data-grade-level="1"] { color: #1d4ed8; background: #e8f0fe; }
+.section-card__grade[data-grade-level="2"] { color: #047857; background: #e6f7f1; }
+.section-card__grade[data-grade-level="3"] { color: #946300; background: #fff7da; }
+.section-card__grade[data-grade-level="4"] { color: #6d28d9; background: #f3e8ff; }
+
+.section-card__program {
+  color: #64748b;
+  margin: 7px 0 18px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.section-card__students {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.section-capacity {
+  margin: 12px 0 19px;
+}
+
+.section-capacity > div:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: #53627b;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+
+.section-capacity__bar {
+  height: 5px;
+  border-radius: 8px;
+  background: #edf1f7;
+  overflow: hidden;
+}
+
+.section-capacity__bar > span {
+  display: block;
+  height: 100%;
+  background: #16a34a;
+  border-radius: inherit;
+  transition: width .3s ease;
+}
+
+.section-capacity--target .section-capacity__bar > span {
+  background: #eab308;
+}
+
+.section-capacity--over .section-capacity__bar > span {
+  background: #dc2626;
+}
+
+.section-capacity small {
+  display: block;
+  margin-top: 7px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.section-card__actions {
+  display: flex;
+  gap: 9px;
+  margin-top: 16px;
+}
+
+.section-card__actions .student-admin-button {
+  flex: 1;
+  min-height: 38px;
+  padding: 7px 10px;
+  font-size: 13px;
+}
+
+.section-card__actions .student-admin-icon-button {
+  width: 38px;
+  height: 38px;
+}
+
+.section-card--skeleton {
+  height: 260px;
+  background: linear-gradient(110deg,#f6f8fb 20%,#eaf0f7 40%,#f6f8fb 60%);
+}
+
+.section-card--skeleton::before {
+  display: none;
+}
+
+.section-specialization-field {
+  margin-top: 18px;
+}
+
+.section-management-drawer .app-overlay__body {
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
-.manage-student-item strong {
-  font-size: 0.9rem;
-  color: var(--mu-navy);
+.section-management-drawer .section-capacity {
+  padding: 15px;
+  border: 1px solid #e6ecf4;
+  border-radius: 11px;
+  margin: 0 0 20px;
+  background: #fbfcfe;
 }
 
-.manage-student-item span {
-  font-size: 0.8rem;
-  color: var(--mu-muted);
+.section-management-drawer .segmented-control {
+  display: flex;
+  width: fit-content;
+  flex-shrink: 0;
 }
 
-.btn-danger {
-  color: #ef4444;
-  font-weight: 600;
-  background: none;
-  border: none;
+.section-management-drawer .segmented-control button {
+  padding-left: 12px;
+  padding-right: 12px;
+}
+
+.section-drawer-content {
+  min-height: 0;
+  overflow-y: auto;
+  padding-top: 24px;
+  flex: 1;
+  animation: student-admin-in .2s ease-out;
+}
+
+.section-management-drawer .section-capacity {
+  flex-shrink: 0;
+}
+
+.section-drawer-search {
+  padding: 0 0 16px;
+}
+
+.section-drawer-selection {
+  margin-right: auto;
+  color: #7a89a1;
+  font-size: 13px;
+}
+
+.section-select-page {
+  padding: 8px 0 13px;
+}
+
+.section-student-list {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.section-student-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px;
+  border: 1px solid #e6ecf5;
+  border-radius: 10px;
+  background: #fcfdff;
+}
+
+.section-student-row > div {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.section-student-row strong {
+  color: #2f4a70;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.section-student-row small {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.section-management-drawer .student-admin-pagination {
+  padding: 16px 0 0;
+  margin-top: 16px;
+}
+
+.section-assignment-table {
+  min-width: 800px;
+}
+
+.section-assignment-table th:nth-child(n+5):not(:last-child), .section-assignment-table td:nth-child(n+5):not(:last-child) {
+  padding-left: 4px;
+  padding-right: 6px;
+}
+
+.section-change-button {
+  min-height: 33px;
+  padding: 5px 13px;
+  font-size: 12px;
+}
+
+.section-assignment-status {
+  text-transform: capitalize;
+}
+
+.section-management-page.has-selection {
+  padding-bottom: 150px;
+}
+
+.student-selection-tray {
+  position: fixed;
+  z-index: 100;
+  bottom: 22px;
+  left: calc(50% + 126px);
+  transform: translateX(-50%);
+  width: min(700px, calc(100vw - 340px));
+  border: 1px solid #dbe3ef;
+  border-radius: 15px;
+  background: #fff;
+  box-shadow: 0 10px 48px rgb(17 45 97 / 16%);
+  animation: selection-tray-in .22s ease both;
+}
+
+.student-selection-tray__bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 15px 18px;
+}
+
+.dashboard-layout:has(.sidebar-container.collapsed) .student-selection-tray {
+  left: calc(50% + 40px);
+  width: min(700px, calc(100vw - 150px));
+}
+
+.student-selection-tray__bar > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.student-selection-tray strong {
+  display: block;
+  color: #294770;
+  font-size: 13px;
+  margin-bottom: 5px;
+}
+
+.student-selection-tray__review {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0;
+  border: 0;
+  color: #8a98ad;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
   cursor: pointer;
 }
 
-.btn-danger:hover {
-  text-decoration: underline;
+.student-selection-tray__list {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 7px;
+  max-height: 140px;
+  overflow-y: auto;
+  padding: 14px 18px;
+  border-bottom: 1px solid #e9edf4;
 }
 
-.section-management-page .users-panel {
-  overflow: visible !important;
+.student-selection-tray__list > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 9px;
+  background: #f2f5fa;
+  color: #516988;
+  border-radius: 7px;
+  font-size: 12px;
 }
 
-/* Ensure the table responsive container doesn't hide dropdowns either if it had overflow-x auto */
-.section-management-page .table-responsive {
-  overflow: visible !important;
+.student-selection-tray__list button {
+  display: grid;
+  place-items: center;
+  padding: 2px;
+  border: 0;
+  background: transparent;
+  color: #6e819c;
+  cursor: pointer;
 }
 
-.section-management-page .filter-container {
-  overflow: visible !important;
+.section-assignment-select .dropdown-select__menu {
+  position: static;
+  box-sizing: border-box;
+  width: 100%;
+  max-height: 200px;
+  margin-top: 8px;
+  box-shadow: none;
+}
+
+.section-assignment-review {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 150px;
+  overflow-y: auto;
+  margin-bottom: 22px;
+}
+
+.section-assignment-review > span {
+  padding: 10px 12px;
+  background: #f6f8fc;
+  border-radius: 8px;
+  color: #456084;
+  font-size: 13px;
+}
+
+.section-assignment-review small {
+  display: block;
+  margin-top: 5px;
+  font-family: monospace;
+  color: #8795a9;
+  font-size: 12px;
+}
+
+@keyframes selection-tray-in {
+
+  from {
+    opacity: 0;
+    translate: 0 15px;
+  }
+}
+
+@media (max-width: 1280px) {
+
+  .section-card-grid {
+    gap: 14px;
+    grid-template-columns: repeat(auto-fill, minmax(285px, 1fr));
+  }
+
+  .section-card {
+    padding: 18px;
+  }
+}
+
+@media (max-width: 1100px) {
+
+  .student-selection-tray {
+    left: calc(50% + 40px);
+    width: min(700px, calc(100vw - 130px));
+  }
+}
+
+@media (max-width: 768px) {
+
+  .student-selection-tray {
+    left: 50%;
+    width: calc(100vw - 32px);
+    bottom: 16px;
+  }
+
+  .student-selection-tray__bar {
+    flex-wrap: wrap;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  .section-card, .section-capacity__bar > span {
+    transition: none;
+  }
+
+  .section-drawer-content, .student-selection-tray {
+    animation: none;
+  }
 }
