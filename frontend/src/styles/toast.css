@@ -101,6 +101,23 @@
   }
 }
 
+.app-toast.app-toast--bottom-tray {
+  left: 50%;
+  right: auto;
+  bottom: 20px;
+  translate: -50% 0;
+  width: max-content;
+  max-width: min(460px, calc(100vw - 32px));
+  box-sizing: border-box;
+  border: 1px solid #dbe4ef;
+  animation-name: app-toast-tray-lifecycle;
+}
+@keyframes app-toast-tray-lifecycle {
+  0% { opacity: 0; transform: translateY(16px); }
+  12%, 82% { opacity: 1; transform: none; }
+  100% { opacity: 0; transform: translateY(16px); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .app-toast {
     animation: none;

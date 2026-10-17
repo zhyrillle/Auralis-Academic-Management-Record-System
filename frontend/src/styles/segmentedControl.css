@@ -1,0 +1,54 @@
+.segmented-control {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  max-width: 100%;
+  border: 1px solid #e1e8f2;
+  border-radius: 12px;
+  background: #eef2f8;
+}
+
+.segmented-control button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 7px 15px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: #64748b;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color .18s, background .18s, box-shadow .18s;
+}
+
+.segmented-control button[aria-pressed="true"] {
+  color: #fff;
+  background: #123062;
+  box-shadow: 0 2px 6px rgb(17 45 97 / 9%);
+}
+
+.segmented-control button:hover:not(:disabled):not([aria-pressed="true"]) {
+  color: #123062;
+}
+
+.segmented-control button:focus-visible {
+  outline: 2px solid #c9a227;
+  outline-offset: 2px;
+}
+
+.segmented-control button:disabled {
+  opacity: .55;
+  cursor: wait;
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  .segmented-control button {
+    transition: none;
+  }
+}
