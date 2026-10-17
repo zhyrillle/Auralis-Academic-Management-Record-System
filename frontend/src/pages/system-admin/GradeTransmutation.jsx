@@ -4,9 +4,11 @@ import {
   AlertCircle,
   AlertTriangle,
   CheckCircle2,
+  GripVertical,
   Info,
   Loader2,
   Lock,
+  LockOpen,
   Plus,
   RotateCcw,
   Save,
@@ -18,7 +20,6 @@ import { TRANSMUTATION_TABLE } from "../../utils/depedTransmutation";
 import {
   getGradeTransmutationConfig,
   saveGradeTransmutationConfig,
-  resetGradeTransmutationConfig,
 } from "../../services/gradeTransmutationService";
 import "../../styles/wsConfig.css";
 import "../../styles/gradeTransmutation.css";
@@ -169,6 +170,11 @@ export default function GradeTransmutation() {
   const [previewGrade, setPreviewGrade] = useState("");
   const [toast, setToast] = useState("");
   const [pendingAction, setPendingAction] = useState(null);
+  // Independent table lock: lets admins lock the table while custom is still ON.
+  const [isTableLocked, setIsTableLocked] = useState(false);
+  // Drag-to-reorder: id of the row being dragged and the id being hovered over.
+  const dragIdRef = useRef(null);
+  const [dragOverId, setDragOverId] = useState(null);
 
   const errors = useMemo(() => validateRanges(ranges), [ranges]);
   const errorCount = Object.keys(errors).length;
@@ -275,6 +281,42 @@ export default function GradeTransmutation() {
     setRanges((current) => current.filter((range) => range.id !== id));
   };
 
+  const handleTableLockToggle = () => setIsTableLocked((prev) => !prev);
+
+  // ── Drag-to-reorder (native HTML5 DnD) ────────────────────────────────────
+  const handleDragStart = (id) => {
+    dragIdRef.current = id;
+  };
+
+  const handleDragOver = (event, overId) => {
+    event.preventDefault(); // allow drop
+    if (overId !== dragIdRef.current) setDragOverId(overId);
+  };
+
+  const handleDrop = (overId) => {
+    const fromId = dragIdRef.current;
+    if (!fromId || fromId === overId) {
+      dragIdRef.current = null;
+      setDragOverId(null);
+      return;
+    }
+    setRanges((current) => {
+      const next = [...current];
+      const fromIndex = next.findIndex((r) => r.id === fromId);
+      const toIndex = next.findIndex((r) => r.id === overId);
+      if (fromIndex === -1 || toIndex === -1) return current;
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      return next;
+    });
+    dragIdRef.current = null;
+    setDragOverId(null);
+  };
+
+  const handleDragEnd = () => {
+    dragIdRef.current = null;
+    setDragOverId(null);
+  };
   const handleResetDefaults = () => {
     setRanges(cloneRanges(defaultRanges));
     showToast("Ranges reset to official DepEd SY 2026-2027 defaults. Click 'Save Changes' to apply.");
@@ -453,28 +495,60 @@ export default function GradeTransmutation() {
       </section>
 
       <div className="gt-grid">
-        {/* Ranges table — locked when custom toggle is off */}
-        <fieldset className="gt-content" disabled={isDisabled || isLoading || isSaving} aria-disabled={isDisabled || isLoading || isSaving}>
-          <section className="ws-config-panel gt-panel" aria-labelledby="gt-table-title">
-            <div className="ws-config-panel__heading">
-              <div>
-                <h2 id="gt-table-title">Grade Ranges</h2>
-                <p>Each initial grade range maps to an official transmuted grade.</p>
-              </div>
-              <div className="gt-panel-actions">
-                <span className="ws-config-panel__count">{ranges.length} ranges</span>
+        {/* Ranges panel card — heading is OUTSIDE the fieldset so Lock/Unlock always works */}
+        <section className="ws-config-panel gt-panel" aria-labelledby="gt-table-title">
+          <div className="ws-config-panel__heading">
+            <div>
+              <h2 id="gt-table-title">Grade Ranges</h2>
+              <p>Each initial grade range maps to an official transmuted grade.</p>
+            </div>
+            <div className="gt-panel-actions">
+              <span className="ws-config-panel__count">{ranges.length} ranges</span>
+              {/* Lock/Unlock button — visible only while custom transmutation is ON.
+                  Rendered OUTSIDE the fieldset so locking never disables it. */}
+              {!isDisabled && (
                 <button
                   type="button"
-                  className="ws-config-button ws-config-button--secondary gt-small-button"
-                  onClick={() => setPendingAction("reset")}
-                  disabled={isDisabled || isLoading || isSaving}
+                  className={`ws-config-button gt-small-button ${
+                    isTableLocked
+                      ? "ws-config-button--primary"
+                      : "ws-config-button--secondary"
+                  }`}
+                  onClick={handleTableLockToggle}
+                  title={isTableLocked ? "Unlock table for editing" : "Lock table to prevent accidental edits"}
+                  aria-pressed={isTableLocked}
                 >
-                  <RotateCcw size={15} aria-hidden="true" />
-                  Reset to DepEd Default
+                  {isTableLocked ? (
+                    <>
+                      <LockOpen size={15} aria-hidden="true" />
+                      Unlock Table
+                    </>
+                  ) : (
+                    <>
+                      <Lock size={15} aria-hidden="true" />
+                      Lock Table
+                    </>
+                  )}
                 </button>
-              </div>
+              )}
+              <button
+                type="button"
+                className="ws-config-button ws-config-button--secondary gt-small-button"
+                onClick={() => setPendingAction("reset")}
+                disabled={isDisabled || isTableLocked || isLoading || isSaving}
+              >
+                <RotateCcw size={15} aria-hidden="true" />
+                Reset to DepEd Default
+              </button>
             </div>
+          </div>
 
+          {/* fieldset wraps only the editable table area and footer */}
+          <fieldset
+            className="gt-content"
+            disabled={isDisabled || isTableLocked || isLoading || isSaving}
+            aria-disabled={isDisabled || isTableLocked || isLoading || isSaving}
+          >
             {errorCount > 0 && !isDisabled && (
               <div className="gt-inline-error" role="alert">
                 <AlertCircle size={16} aria-hidden="true" />
@@ -486,6 +560,7 @@ export default function GradeTransmutation() {
               <table className="gt-table">
                 <thead>
                   <tr>
+                    <th scope="col" className="gt-drag-col" aria-label="Drag to reorder"></th>
                     <th scope="col">#</th>
                     <th scope="col">Initial Grade (Min)</th>
                     <th scope="col">Initial Grade (Max)</th>
@@ -497,13 +572,13 @@ export default function GradeTransmutation() {
                 <tbody>
                   {isLoading ? (
                     <tr>
-                      <td colSpan={6} className="ws-config-table-state">
+                      <td colSpan={7} className="ws-config-table-state">
                         Loading grade transmutation table...
                       </td>
                     </tr>
                   ) : ranges.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="ws-config-table-state">
+                      <td colSpan={7} className="ws-config-table-state">
                         No ranges defined. Add a range to get started.
                       </td>
                     </tr>
@@ -515,9 +590,33 @@ export default function GradeTransmutation() {
                       const isDefaultMin =
                         range.label === "default minimum" ||
                         (Number(range.min) === 0 && Number(range.max) === 24);
+                      const isDragOver = dragOverId === range.id;
+                      const canDrag = !isDisabled && !isTableLocked && !isLoading && !isSaving;
 
                       return (
-                        <tr key={range.id} className={rowError ? "gt-row--invalid" : ""}>
+                        <tr
+                          key={range.id}
+                          className={[
+                            rowError ? "gt-row--invalid" : "",
+                            isDragOver ? "gt-row--drag-over" : "",
+                          ]
+                            .filter(Boolean)
+                            .join(" ")}
+                          draggable={canDrag}
+                          onDragStart={() => handleDragStart(range.id)}
+                          onDragOver={(e) => handleDragOver(e, range.id)}
+                          onDrop={() => handleDrop(range.id)}
+                          onDragEnd={handleDragEnd}
+                        >
+                          <td className="gt-drag-handle" aria-hidden="true">
+                            <span
+                              className={`gt-drag-grip ${
+                                canDrag ? "gt-drag-grip--active" : ""
+                              }`}
+                            >
+                              <GripVertical size={16} />
+                            </span>
+                          </td>
                           <td className="gt-index">{index + 1}</td>
                           {["min", "max"].map((field) => (
                             <td key={field}>
@@ -610,8 +709,8 @@ export default function GradeTransmutation() {
                 Add Range
               </button>
             </div>
-          </section>
-        </fieldset>
+          </fieldset>
+        </section>
 
         {/* Side column — preview and summary */}
         <aside className="gt-side">
