@@ -22,6 +22,8 @@ import {
 import {
   calculateStudentGrades,
   DEFAULT_JHS_WEIGHTS,
+  setTransmutationConfig,
+  initTransmutationConfig,
 } from "../../utils/depedTransmutation.js";
 import { maskLrn } from "../../utils/lrnHelper.js";
 import { getStoredUser } from "../../utils/auth.js";
@@ -84,6 +86,10 @@ const DEFAULT_PT_COLUMNS = [
 export default function DeptClassRecord() {
   const currentUser = useMemo(() => getStoredUser(), []);
   const effectiveUserId = useMemo(() => getUserId(currentUser), [currentUser]);
+
+  useEffect(() => {
+    initTransmutationConfig().catch(() => {});
+  }, []);
 
   // Loading States
   const [isLoadingOptions, setIsLoadingOptions] = useState(true);
@@ -233,6 +239,9 @@ export default function DeptClassRecord() {
 
         if (isCancelled) return;
         if (recordData) {
+          if (recordData.transmutation_config) {
+            setTransmutationConfig(recordData.transmutation_config);
+          }
           setClassRecordPayload(recordData);
         }
       } catch (err) {

@@ -16,7 +16,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { TRANSMUTATION_TABLE } from "../../utils/depedTransmutation";
+import { TRANSMUTATION_TABLE, setTransmutationConfig } from "../../utils/depedTransmutation";
 import {
   getGradeTransmutationConfig,
   saveGradeTransmutationConfig,
@@ -189,10 +189,17 @@ export default function GradeTransmutation() {
   const isDisabled = !isCustomEnabled;
   const activeRanges = isCustomEnabled ? ranges : defaultRanges;
 
-  const previewResult = useMemo(
-    () => findTransmutedMatch(activeRanges, previewGrade),
-    [activeRanges, previewGrade],
-  );
+  const previewResult = useMemo(() => {
+    if (!isCustomEnabled) {
+      const value = toNumber(previewGrade);
+      if (Number.isNaN(value)) return null;
+      return {
+        transmuted: Math.min(100, Math.max(0, Math.round(value))),
+        label: "Untransmuted (Raw Grade)",
+      };
+    }
+    return findTransmutedMatch(ranges, previewGrade);
+  }, [isCustomEnabled, ranges, previewGrade]);
 
   const showToast = (message) => {
     setToast(message);
@@ -223,6 +230,7 @@ export default function GradeTransmutation() {
         const cloned = cloneRanges(loadedRanges);
         setRanges(cloned);
         setSavedRanges(cloned);
+        setTransmutationConfig(data);
       } catch (err) {
         if (!isMounted) return;
         showToast(err.message || "Failed to load grade transmutation configuration.");
@@ -247,11 +255,16 @@ export default function GradeTransmutation() {
       });
       setIsCustomEnabled(turningOn);
       setSavedCustomEnabled(turningOn);
+      const updatedRanges = res?.config?.ranges || ranges;
       if (res?.config?.ranges) {
         const cloned = cloneRanges(res.config.ranges);
         setRanges(cloned);
         setSavedRanges(cloned);
       }
+      setTransmutationConfig({
+        is_custom_enabled: turningOn,
+        ranges: updatedRanges,
+      });
       showToast(
         turningOn
           ? "Custom transmutation enabled and saved."
@@ -347,9 +360,17 @@ export default function GradeTransmutation() {
         const cloned = cloneRanges(loadedRanges);
         setRanges(cloned);
         setSavedRanges(cloned);
+        setTransmutationConfig({
+          is_custom_enabled: nextCustom,
+          ranges: loadedRanges,
+        });
       } else {
         setSavedCustomEnabled(isCustomEnabled);
         setSavedRanges(cloneRanges(ranges));
+        setTransmutationConfig({
+          is_custom_enabled: isCustomEnabled,
+          ranges,
+        });
       }
 
       showToast(res.message || "Transmutation table saved successfully.");
@@ -365,7 +386,7 @@ export default function GradeTransmutation() {
       ? {
           title: "Turn off custom transmutation?",
           message:
-            "The system will revert to the official DepEd default transmutation table and the ranges table will be locked.",
+            "When turned off, grades will not be transmuted (raw initial grades are used directly as quarterly grades).",
           confirmLabel: "Turn Off",
           tone: "danger",
           icon: ToggleRight,
@@ -374,7 +395,7 @@ export default function GradeTransmutation() {
       : {
           title: "Turn on custom transmutation?",
           message:
-            "Custom grade ranges will be enabled and will override the official DepEd default transmutation table.",
+            "Custom grade ranges will be enabled and applied to convert initial grades into transmuted grades.",
           confirmLabel: "Turn On",
           tone: "primary",
           icon: ToggleRight,
@@ -392,7 +413,7 @@ export default function GradeTransmutation() {
       title: "Save transmutation table?",
       message: isCustomEnabled
         ? `This will apply ${ranges.length} custom grade range${ranges.length === 1 ? "" : "s"} to all academic computations.`
-        : "This will revert to the official DepEd SY 2026-2027 default transmutation table.",
+        : "Grade transmutation is turned off. Grades will not be transmuted.",
       confirmLabel: "Save Changes",
       tone: "primary",
       icon: Save,
@@ -473,8 +494,8 @@ export default function GradeTransmutation() {
             <h2 id="gt-toggle-label">Custom Transmutation</h2>
             <p>
               {isCustomEnabled
-                ? "Custom ranges are enabled. Saved ranges override the official DepEd transmutation table."
-                : "Turned off. The system uses the official DepEd SY 2026–2027 transmutation table and ranges are locked."}
+                ? "Custom ranges are enabled. Initial grades are converted into transmuted grades using the table below."
+                : "Turned off. Grades are not transmuted (raw initial grades are used directly as quarterly grades)."}
             </p>
           </div>
         </div>
@@ -765,7 +786,7 @@ export default function GradeTransmutation() {
               <div>
                 <dt>Status</dt>
                 <dd>
-                  {isDisabled ? "DepEd Default" : hasChanges ? "Unsaved changes" : "Custom Saved"}
+                  {isDisabled ? "Disabled (Untransmuted)" : hasChanges ? "Unsaved changes" : "Custom Saved"}
                 </dd>
               </div>
             </dl>

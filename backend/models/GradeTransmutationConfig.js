@@ -47,6 +47,7 @@ const OFFICIAL_DEPED_TABLE = [
 ];
 
 let cachedActiveConfig = null;
+let cachedIsCustomEnabled = false;
 let lastCacheTime = 0;
 let isTableInitialized = false;
 const CACHE_TTL_MS = 15000;
@@ -83,6 +84,7 @@ class GradeTransmutationConfig {
         );
       }
       isTableInitialized = true;
+      await this.getActiveTiers();
     } catch (err) {
       console.error('Error initializing GRADE_TRANSMUTATION_CONFIG:', err.message);
     }
@@ -148,6 +150,8 @@ class GradeTransmutationConfig {
 
     const defaultRanges = this.OFFICIAL_TABLE;
     if (rows.length === 0) {
+      cachedIsCustomEnabled = false;
+      cachedActiveConfig = null;
       return {
         is_custom_enabled: false,
         ranges: defaultRanges,
@@ -167,9 +171,22 @@ class GradeTransmutationConfig {
       }
     }
 
+    const isEnabled = Boolean(row.is_custom_enabled);
+    cachedIsCustomEnabled = isEnabled;
+    cachedActiveConfig = (isEnabled && customRanges)
+      ? customRanges.map((r) => ({
+          min: Number(r.min),
+          max: Number(r.max),
+          grade: Number(r.transmuted),
+          transmuted: Number(r.transmuted),
+          label: r.label || null,
+        }))
+      : null;
+    lastCacheTime = Date.now();
+
     return {
-      is_custom_enabled: Boolean(row.is_custom_enabled),
-      ranges: (Boolean(row.is_custom_enabled) && customRanges) ? customRanges : defaultRanges,
+      is_custom_enabled: isEnabled,
+      ranges: (isEnabled && customRanges) ? customRanges : defaultRanges,
       saved_custom_ranges: customRanges,
       default_ranges: defaultRanges,
       updated_at: row.updated_at,
@@ -218,6 +235,7 @@ class GradeTransmutationConfig {
 
     // Invalidate cache
     cachedActiveConfig = null;
+    cachedIsCustomEnabled = enabled;
     lastCacheTime = 0;
 
     return this.getConfig();
@@ -234,6 +252,7 @@ class GradeTransmutationConfig {
 
     // Invalidate cache
     cachedActiveConfig = null;
+    cachedIsCustomEnabled = false;
     lastCacheTime = 0;
 
     return this.getConfig();
@@ -241,12 +260,13 @@ class GradeTransmutationConfig {
 
   static async getActiveTiers() {
     const now = Date.now();
-    if (cachedActiveConfig && (now - lastCacheTime < CACHE_TTL_MS)) {
+    if (lastCacheTime && (now - lastCacheTime < CACHE_TTL_MS)) {
       return cachedActiveConfig;
     }
 
     try {
       const config = await this.getConfig();
+      cachedIsCustomEnabled = Boolean(config.is_custom_enabled);
       if (config.is_custom_enabled && Array.isArray(config.ranges) && config.ranges.length > 0) {
         cachedActiveConfig = config.ranges.map((r) => ({
           min: Number(r.min),
@@ -256,37 +276,26 @@ class GradeTransmutationConfig {
           label: r.label || null,
         }));
       } else {
-        cachedActiveConfig = OFFICIAL_DEPED_TABLE.map((r) => ({
-          min: Number(r.min),
-          max: Number(r.max),
-          grade: Number(r.transmuted),
-          transmuted: Number(r.transmuted),
-          label: r.label || null,
-        }));
+        // Option B: when custom transmutation is OFF, no transmutation table is active (grades are not transmuted)
+        cachedActiveConfig = null;
       }
     } catch (err) {
-      console.error('Failed to get active transmutation config, falling back to DepEd default:', err.message);
-      cachedActiveConfig = OFFICIAL_DEPED_TABLE.map((r) => ({
-        min: Number(r.min),
-        max: Number(r.max),
-        grade: Number(r.transmuted),
-        transmuted: Number(r.transmuted),
-        label: r.label || null,
-      }));
+      console.error('Failed to get active transmutation config:', err.message);
+      cachedIsCustomEnabled = false;
+      cachedActiveConfig = null;
     }
 
     lastCacheTime = now;
     return cachedActiveConfig;
   }
 
+  static isCustomEnabledSync() {
+    return cachedIsCustomEnabled === true;
+  }
+
   static getActiveTiersSync() {
-    return cachedActiveConfig || OFFICIAL_DEPED_TABLE.map((r) => ({
-      min: Number(r.min),
-      max: Number(r.max),
-      grade: Number(r.transmuted),
-      transmuted: Number(r.transmuted),
-      label: r.label || null,
-    }));
+    if (!cachedIsCustomEnabled) return null;
+    return cachedActiveConfig;
   }
 
   static transmuteSync(initialGrade, tiers = null) {
@@ -294,10 +303,32 @@ class GradeTransmutationConfig {
       return null;
     }
 
-    const activeTiers = (Array.isArray(tiers) && tiers.length > 0) ? tiers : this.getActiveTiersSync();
-
     const numeric = Number(initialGrade);
     if (isNaN(numeric)) return null;
+
+    // If caller explicitly passed tiers, transmute using those tiers
+    if (Array.isArray(tiers) && tiers.length > 0) {
+      if (numeric >= 100) return 100;
+      if (numeric <= 0) return 60;
+      const rounded = Math.round(numeric * 100) / 100;
+      for (const tier of tiers) {
+        if (rounded >= tier.min && rounded <= tier.max) {
+          return tier.transmuted !== undefined ? tier.transmuted : tier.grade;
+        }
+      }
+      return 60;
+    }
+
+    // Option B: When custom transmutation is OFF, grades are NOT transmuted
+    if (!this.isCustomEnabledSync()) {
+      return Math.min(100, Math.max(0, Math.round(numeric)));
+    }
+
+    const activeTiers = this.getActiveTiersSync();
+    if (!activeTiers || activeTiers.length === 0) {
+      return Math.min(100, Math.max(0, Math.round(numeric)));
+    }
+
     if (numeric >= 100) return 100;
     if (numeric <= 0) return 60;
 

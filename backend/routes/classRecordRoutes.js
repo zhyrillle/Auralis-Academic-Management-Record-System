@@ -4,6 +4,7 @@ const db                  = require('../config/db');
 const StudentGrade        = require('../models/StudentGrade');
 const AuditEvent          = require('../models/AuditEvent');
 const NotificationService = require('../services/NotificationService');
+const GradeTransmutationConfig = require('../models/GradeTransmutationConfig');
 const { decryptLrn }      = require('../utils/encryption');
 const {
   DEFAULT_JHS_WEIGHTS,
@@ -1044,6 +1045,10 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
         teHPS: assessments.find((a) => a.assessment_id === teActId)?.max_score ?? (isMapeh ? 25 : 40),
         st1Id: st1ActId, st2Id: st2ActId, teId: teActId, isMapeh },
       assessments,
+      transmutation_config: {
+        is_custom_enabled: GradeTransmutationConfig.isCustomEnabledSync(),
+        ranges: GradeTransmutationConfig.getActiveTiersSync(),
+      },
       students: computedStudents,
     });
   } catch (err) {

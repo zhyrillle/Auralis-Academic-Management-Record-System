@@ -47,10 +47,63 @@ export const TRANSMUTATION_TABLE = [
   { min: 0.00, max: 24.00, grade: 60, transmuted: 60, isDefaultMinimum: true, label: "default minimum" },
 ];
 
+let activeTransmutationConfig = (() => {
+  try {
+    const raw = typeof window !== "undefined" ? localStorage.getItem("auralis_transmutation_config") : null;
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return {
+        isCustomEnabled: Boolean(parsed.is_custom_enabled ?? parsed.isCustomEnabled),
+        tiers: Array.isArray(parsed.ranges || parsed.tiers) ? (parsed.ranges || parsed.tiers) : null,
+      };
+    }
+  } catch (_) {}
+  return { isCustomEnabled: false, tiers: null };
+})();
+
 /**
- * Converts an Initial Grade (0.00 to 100.00) into a Transmuted/Term Grade (60 to 100).
- * Accepts decimal precision up to 2 places without premature integer truncation.
+ * Configure runtime active transmutation mode for the frontend.
+ * When isCustomEnabled is false, transmutation is disabled (Option B).
+ */
+export function setTransmutationConfig(config = {}) {
+  const isEnabled = Boolean(config.is_custom_enabled ?? config.isCustomEnabled);
+  const tiers = config.ranges || config.tiers;
+  activeTransmutationConfig = {
+    isCustomEnabled: isEnabled,
+    tiers: Array.isArray(tiers) && tiers.length > 0 ? tiers : null,
+  };
+  try {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("auralis_transmutation_config", JSON.stringify(activeTransmutationConfig));
+    }
+  } catch (_) {}
+}
+
+export function getActiveTransmutationConfig() {
+  return activeTransmutationConfig;
+}
+
+export async function initTransmutationConfig(baseUrl = "http://localhost:5000/api") {
+  try {
+    const res = await fetch(`${baseUrl}/grade-transmutation`);
+    if (res.ok) {
+      const data = await res.json();
+      setTransmutationConfig(data);
+      return data;
+    }
+  } catch (err) {
+    console.warn("[Transmutation] Could not fetch transmutation config:", err.message);
+  }
+  return activeTransmutationConfig;
+}
+
+/**
+ * Converts an Initial Grade (0.00 to 100.00) into a Transmuted/Term Grade.
+ * Under Option B:
+ * - If custom transmutation is ON: uses custom tiers (or default MATATAG table if custom ranges empty).
+ * - If custom transmutation is OFF: grades are NOT transmuted (raw initial grade rounded to integer, clamped 0-100).
  * @param {number|string|null} initialGrade
+ * @param {Array|null} customTiers
  * @returns {number|null}
  */
 export function getTransmutedGrade(initialGrade, customTiers = null) {
@@ -61,16 +114,44 @@ export function getTransmutedGrade(initialGrade, customTiers = null) {
   const numericGrade = Number(initialGrade);
   if (isNaN(numericGrade)) return null;
 
+  // 1. If explicit tiers are passed by the caller
+  if (Array.isArray(customTiers) && customTiers.length > 0) {
+    if (numericGrade >= 100) return 100;
+    if (numericGrade <= 0) return 60;
+    const roundedInitial = Math.round(numericGrade * 100) / 100;
+    for (const tier of customTiers) {
+      const tMin = Number(tier.min);
+      const tMax = Number(tier.max);
+      if (roundedInitial >= tMin && roundedInitial <= tMax) {
+        const val = tier.transmuted !== undefined ? tier.transmuted : tier.grade;
+        return Number(val);
+      }
+    }
+    return 60;
+  }
+
+  // 2. Option B: When custom transmutation is OFF, grades are NOT transmuted!
+  if (!activeTransmutationConfig.isCustomEnabled) {
+    return Math.min(100, Math.max(0, Math.round(numericGrade)));
+  }
+
+  // 3. Custom transmutation is ON:
+  const table = (Array.isArray(activeTransmutationConfig.tiers) && activeTransmutationConfig.tiers.length > 0)
+    ? activeTransmutationConfig.tiers
+    : TRANSMUTATION_TABLE;
+
   if (numericGrade >= 100) return 100;
   if (numericGrade <= 0) return 60;
 
   // Preserve decimal precision up to 2 places without premature truncation
   const roundedInitial = Math.round(numericGrade * 100) / 100;
-  const table = Array.isArray(customTiers) && customTiers.length > 0 ? customTiers : TRANSMUTATION_TABLE;
 
   for (const tier of table) {
-    if (roundedInitial >= tier.min && roundedInitial <= tier.max) {
-      return tier.transmuted !== undefined ? tier.transmuted : tier.grade;
+    const tMin = Number(tier.min);
+    const tMax = Number(tier.max);
+    if (roundedInitial >= tMin && roundedInitial <= tMax) {
+      const val = tier.transmuted !== undefined ? tier.transmuted : tier.grade;
+      return Number(val);
     }
   }
 
