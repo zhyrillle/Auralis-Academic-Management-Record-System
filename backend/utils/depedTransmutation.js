@@ -63,22 +63,35 @@ function getTransmutedGrade(initialGrade, customTiers = null) {
   const numericGrade = Number(initialGrade);
   if (isNaN(numericGrade)) return null;
 
+  let isCustomEnabled = false;
+  let table = null;
+
+  if (Array.isArray(customTiers) && customTiers.length > 0) {
+    isCustomEnabled = true;
+    table = customTiers;
+  } else {
+    try {
+      const GradeTransmutationConfig = require('../models/GradeTransmutationConfig');
+      if (typeof GradeTransmutationConfig.isCustomEnabledSync === 'function') {
+        isCustomEnabled = GradeTransmutationConfig.isCustomEnabledSync();
+      }
+      if (isCustomEnabled && typeof GradeTransmutationConfig.getActiveTiersSync === 'function') {
+        table = GradeTransmutationConfig.getActiveTiersSync();
+      }
+    } catch (_) {}
+  }
+
+  // Option B: When custom transmutation is toggled OFF, grades are NOT transmuted!
+  // The quarterly grade is simply the rounded initial grade (clamped between 0 and 100).
+  if (!isCustomEnabled || !table || table.length === 0) {
+    return Math.min(100, Math.max(0, Math.round(numericGrade)));
+  }
+
   if (numericGrade >= 100) return 100;
   if (numericGrade <= 0) return 60;
 
   // Preserve decimal precision up to 2 places without premature truncation
   const roundedInitial = Math.round(numericGrade * 100) / 100;
-  let table = TRANSMUTATION_TABLE;
-  if (Array.isArray(customTiers) && customTiers.length > 0) {
-    table = customTiers;
-  } else {
-    try {
-      const GradeTransmutationConfig = require('../models/GradeTransmutationConfig');
-      if (typeof GradeTransmutationConfig.getActiveTiersSync === 'function') {
-        table = GradeTransmutationConfig.getActiveTiersSync() || TRANSMUTATION_TABLE;
-      }
-    } catch (_) {}
-  }
 
   for (const tier of table) {
     if (roundedInitial >= tier.min && roundedInitial <= tier.max) {
@@ -356,7 +369,7 @@ function selectSavedSummary(savedGrade) {
   const initialGrade = savedGrade?.initial_grade == null || savedGrade.initial_grade === '' ? null : Number(savedGrade.initial_grade);
   const termGrade = savedGrade?.quarterly_grade == null || savedGrade.quarterly_grade === '' ? null : Number(savedGrade.quarterly_grade);
   const valid = Number.isFinite(initialGrade) && initialGrade >= 0 && initialGrade <= 100
-    && Number.isFinite(termGrade) && termGrade >= 60 && termGrade <= 100;
+    && Number.isFinite(termGrade) && termGrade >= 0 && termGrade <= 100;
   return { initialGrade: valid ? initialGrade : null, termGrade: valid ? termGrade : null,
     quarterlyGrade: valid ? termGrade : null, remarks: valid ? savedGrade.remarks : null,
     isFailing: valid && termGrade < 75,

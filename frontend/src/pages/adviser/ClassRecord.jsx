@@ -29,6 +29,8 @@ import {
 import {
   calculateStudentGrades,
   DEFAULT_JHS_WEIGHTS,
+  setTransmutationConfig,
+  initTransmutationConfig,
 } from "../../utils/depedTransmutation";
 import { triggerClassRecordPrint } from "../../utils/exportClassRecordPdf";
 import { getStoredUser } from "../../utils/auth";
@@ -52,6 +54,10 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
   const params = useParams();
   const currentUserId = getStoredUser()?.user_id;
   const [recordSession] = useState(() => getSessionScope());
+
+  useEffect(() => {
+    initTransmutationConfig().catch(() => {});
+  }, []);
 
   // Dynamic Class Context Resolution (from prop or router location state)
   const effectiveClass = useMemo(() => {
@@ -474,6 +480,10 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
   // ============================================================
   const parseRecordPayload = useCallback((data) => {
     if (!data) return null;
+
+    if (data.transmutation_config) {
+      setTransmutationConfig(data.transmutation_config);
+    }
 
     const isSheetLocked = Boolean(
       data.is_locked ?? (data.grade_sheet ? !data.grade_sheet.is_editable : false)

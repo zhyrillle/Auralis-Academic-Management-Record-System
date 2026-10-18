@@ -52,7 +52,7 @@ router.put('/', async (req, res) => {
         new_state: { is_custom_enabled: saved.is_custom_enabled, rangesCount: saved.ranges.length },
         summary: saved.is_custom_enabled
           ? `Updated custom grade transmutation table (${saved.ranges.length} ranges).`
-          : 'Reverted grade transmutation to official DepEd default table.',
+          : 'Disabled grade transmutation (grades are not transmuted; raw initial grades applied).',
       });
     } catch (auditErr) {
       console.warn('Failed to record audit event for grade transmutation:', auditErr.message);
@@ -62,7 +62,7 @@ router.put('/', async (req, res) => {
       success: true,
       message: saved.is_custom_enabled
         ? 'Custom grade transmutation table saved successfully.'
-        : 'Reverted to official DepEd default transmutation table.',
+        : 'Grade transmutation turned off. Grades will not be transmuted.',
       config: saved,
     });
   } catch (error) {

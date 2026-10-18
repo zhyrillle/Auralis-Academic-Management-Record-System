@@ -62,30 +62,44 @@ test('GradeTransmutationConfig validateRanges detects overlaps and invalid range
   assert.equal(GradeTransmutationConfig.validateRanges(valid), null);
 });
 
-test('GradeTransmutationConfig transmuteSync correctly matches boundary scores', () => {
-  assert.equal(GradeTransmutationConfig.transmuteSync(100), 100);
-  assert.equal(GradeTransmutationConfig.transmuteSync(99.5), 100);
-  assert.equal(GradeTransmutationConfig.transmuteSync(99.49), 99);
-  assert.equal(GradeTransmutationConfig.transmuteSync(70.0), 75);
-  assert.equal(GradeTransmutationConfig.transmuteSync(69.99), 74);
-  assert.equal(GradeTransmutationConfig.transmuteSync(39.99), 60);
-  assert.equal(GradeTransmutationConfig.transmuteSync(24.0), 60);
-  assert.equal(GradeTransmutationConfig.transmuteSync(0.0), 60);
-  assert.equal(GradeTransmutationConfig.transmuteSync(-5), 60);
-  assert.equal(GradeTransmutationConfig.transmuteSync(105), 100);
-  assert.equal(GradeTransmutationConfig.transmuteSync(''), null);
+test('GradeTransmutationConfig transmuteSync matches boundary scores with explicit tiers and untransmuted without tiers', () => {
+  const officialTiers = GradeTransmutationConfig.OFFICIAL_TABLE.map((t) => ({
+    min: Number(t.min),
+    max: Number(t.max),
+    transmuted: Number(t.transmuted),
+  }));
+
+  // With explicit tiers provided
+  assert.equal(GradeTransmutationConfig.transmuteSync(100, officialTiers), 100);
+  assert.equal(GradeTransmutationConfig.transmuteSync(99.5, officialTiers), 100);
+  assert.equal(GradeTransmutationConfig.transmuteSync(99.49, officialTiers), 99);
+  assert.equal(GradeTransmutationConfig.transmuteSync(70.0, officialTiers), 75);
+  assert.equal(GradeTransmutationConfig.transmuteSync(69.99, officialTiers), 74);
+  assert.equal(GradeTransmutationConfig.transmuteSync(39.99, officialTiers), 60);
+  assert.equal(GradeTransmutationConfig.transmuteSync(24.0, officialTiers), 60);
+  assert.equal(GradeTransmutationConfig.transmuteSync(0.0, officialTiers), 60);
+  assert.equal(GradeTransmutationConfig.transmuteSync(-5, officialTiers), 60);
+  assert.equal(GradeTransmutationConfig.transmuteSync(105, officialTiers), 100);
+  assert.equal(GradeTransmutationConfig.transmuteSync('', officialTiers), null);
+
+  // Without custom enabled, grades are NOT transmuted
+  assert.equal(GradeTransmutationConfig.transmuteSync(84.6), 85);
+  assert.equal(GradeTransmutationConfig.transmuteSync(70.0), 70);
 });
 
 test('GradeTransmutationConfig database operations: init, get, save, and reset', async () => {
   await GradeTransmutationConfig.initTable();
 
-  // Initially reset to clean state
+  // Initially reset to clean state (custom OFF: grades are not transmuted)
   await GradeTransmutationConfig.resetToDefault({ updated_by: null });
   const initial = await GradeTransmutationConfig.getConfig();
   assert.equal(initial.is_custom_enabled, false);
   assert.equal(initial.ranges.length, 42);
+  const inactiveTiers = await GradeTransmutationConfig.getActiveTiers();
+  assert.equal(inactiveTiers, null);
+  assert.equal(GradeTransmutationConfig.transmuteSync(84), 84); // Untransmuted
 
-  // Save custom configuration
+  // Save custom configuration (custom ON: grades are transmuted)
   const customRanges = [
     { id: 'c-1', min: '75.00', max: '100.00', transmuted: '90' },
     { id: 'c-2', min: '0.00', max: '74.99', transmuted: '70' },
@@ -101,13 +115,17 @@ test('GradeTransmutationConfig database operations: init, get, save, and reset',
   // Active tiers should reflect custom ranges
   const activeTiers = await GradeTransmutationConfig.getActiveTiers();
   assert.equal(activeTiers.length, 2);
+  assert.equal(GradeTransmutationConfig.transmuteSync(80), 90);
+  assert.equal(GradeTransmutationConfig.transmuteSync(70), 70);
 
-  // Reset back to default
+  // Reset back to default (custom OFF: grades are not transmuted)
   const reset = await GradeTransmutationConfig.resetToDefault({ updated_by: null });
   assert.equal(reset.is_custom_enabled, false);
   assert.equal(reset.ranges.length, 42);
 
   const resetActiveTiers = await GradeTransmutationConfig.getActiveTiers();
-  assert.equal(resetActiveTiers.length, 42);
+  assert.equal(resetActiveTiers, null);
+  assert.equal(GradeTransmutationConfig.transmuteSync(84.6), 85); // Untransmuted
 });
+
 
