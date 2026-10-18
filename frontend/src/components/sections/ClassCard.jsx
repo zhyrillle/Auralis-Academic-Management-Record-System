@@ -1,7 +1,8 @@
 import { Eye, FileSpreadsheet, Edit2, Star } from "lucide-react";
 import "../../styles/themes.css";
+import "../../styles/sectionCard.css";
 
-export default function ClassCard({ cls, onView, onGradingSheet, onEdit }) {
+export default function ClassCard({ cls, onView, onGradingSheet, onEdit, children, hideClassType = false, showSecondaryActions = true, className = '', viewAriaLabel, gradeId }) {
   const isSpecialized = Boolean(
     cls?.is_specialized == 1 ||
     cls?.is_specialized === true ||
@@ -15,7 +16,7 @@ export default function ClassCard({ cls, onView, onGradingSheet, onEdit }) {
   const programCode = cls?.program_code || cls?.programCode || cls?.program_name || null;
   const validProgCode = programCode && String(programCode).toUpperCase() !== "EBEC" ? String(programCode).toUpperCase() : null;
 
-  let displayClassType = cls?.classType;
+  let displayClassType;
   if (isAdviser && isSpecialized) {
     displayClassType = validProgCode ? `Advisory Class - ${validProgCode}` : "Advisory Class";
   } else if (isSpecialized) {
@@ -31,7 +32,7 @@ export default function ClassCard({ cls, onView, onGradingSheet, onEdit }) {
 
 
   return (
-    <div
+    <div className={className} role={className ? 'article' : undefined} aria-label={className ? `${cls.sectionName}, ${cls.gradeLevel}` : undefined}
       style={{
         background: "#ffffff",
         borderRadius: "15px",
@@ -42,7 +43,7 @@ export default function ClassCard({ cls, onView, onGradingSheet, onEdit }) {
         flexDirection: "column",
         justifyContent: "flex-start",
         transition: "all 0.3s ease",
-        height: "205px",
+        height: children ? "auto" : "205px",
       }}
 
       onMouseEnter={(e) => {
@@ -85,13 +86,15 @@ export default function ClassCard({ cls, onView, onGradingSheet, onEdit }) {
 
 
           <span
+            className={gradeId == null ? undefined : 'section-card__grade'}
+            data-grade-level={gradeId}
             style={{
-              backgroundColor: isSpecialized
+              backgroundColor: gradeId != null ? undefined : isSpecialized
                 ? "rgba(201, 162, 39, 0.1)"
                 : isGreenBadge
                 ? "rgba(22,163,74,0.1)"
                 : "rgba(17,45,97,0.06)",
-              color: isSpecialized
+              color: gradeId != null ? undefined : isSpecialized
                 ? "#c9a227"
                 : isGreenBadge
                 ? "#16a34a"
@@ -123,7 +126,7 @@ export default function ClassCard({ cls, onView, onGradingSheet, onEdit }) {
 
 
         {/* Class Type */}
-        <div
+        {!hideClassType && <div
           style={{
             display: "flex",
             alignItems: "center",
@@ -146,9 +149,11 @@ export default function ClassCard({ cls, onView, onGradingSheet, onEdit }) {
             {displayClassType}
           </span>
 
-        </div>
+        </div>}
 
       </div>
+
+      {children}
 
 
       {/* Buttons */}
@@ -157,7 +162,7 @@ export default function ClassCard({ cls, onView, onGradingSheet, onEdit }) {
           display: "flex",
           alignItems: "center",
           gap: "10px",
-          marginTop: "40px",
+          marginTop: children ? "18px" : "40px",
           paddingTop: "0px",
           //borderTop: "1px solid #f1f5f9",
         }}
@@ -165,7 +170,8 @@ export default function ClassCard({ cls, onView, onGradingSheet, onEdit }) {
 
         {/* View Button */}
         <button
-          title="Section Details"
+          title={viewAriaLabel || "Section Details"}
+          aria-label={viewAriaLabel}
           style={{
             flex: 1,
             display: "flex",
@@ -188,7 +194,7 @@ export default function ClassCard({ cls, onView, onGradingSheet, onEdit }) {
         </button>
 
 
-        {/* Grading Sheet */}
+        {showSecondaryActions && <>{/* Grading Sheet */}
         <button
           title="Grading Sheet"
           style={{
@@ -228,6 +234,7 @@ export default function ClassCard({ cls, onView, onGradingSheet, onEdit }) {
         >
           <Edit2 size={16} />
         </button>
+        </>}
 
       </div>
 

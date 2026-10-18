@@ -16,7 +16,7 @@ import {
 } from "../../services/sectionDetailsService.js";
 import StudentSF9Page from "./StudentSF9Page.jsx";
 import SectionDetailsSkeleton from "./SectionDetailsSkeleton.jsx";
-import backIconUrl from "../../assets/backButton.svg";
+import BackButton from "../../components/common/BackButton";
 
 import "../../styles/sectionDetails.css";
 import "../../styles/modelPreview.css";
@@ -515,9 +515,7 @@ function SectionDetailsHeader({ onBack }) {
   return (
     <div className="section-details-header-bar">
       <div className="section-details-title-area">
-        <button className="back-btn" onClick={onBack} title="Back to Classes" type="button">
-          <img src={backIconUrl} alt="Back" width={17} height={17} />
-        </button>
+        <BackButton onClick={onBack} label="Back to Classes" />
         <h1 className="section-details-title">
           <button type="button" onClick={onBack}>Assigned Classes</button>
         </h1>
