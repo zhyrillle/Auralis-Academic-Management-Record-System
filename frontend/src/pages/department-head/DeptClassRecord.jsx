@@ -1,17 +1,15 @@
-import { Fragment, useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import {
-  Download,
   FileSpreadsheet,
   LoaderCircle,
   Lock,
 } from "lucide-react";
-import DropdownSelect from "../../components/common/DropdownSelect.jsx";
 import SearchBar from "../../components/common/SearchBar.jsx";
+import BackButton from "../../components/common/BackButton.jsx";
 import Toast from "../../components/common/Toast.jsx";
 import depedLogoUrl from "../../assets/deped_logo.png";
 import depedWordmarkLogoUrl from "../../assets/deped-logo.gif";
 import {
-  getDeptFilterOptions,
   getDeptClassRecord,
   downloadDeptClassRecord,
 } from "../../services/deptHeadClassRecordApi.js";
@@ -21,7 +19,7 @@ import {
 } from "../../services/classRecordApi.js";
 import {
   calculateStudentGrades,
-  DEFAULT_JHS_WEIGHTS,
+  resolveComponentWeights,
   setTransmutationConfig,
   initTransmutationConfig,
 } from "../../utils/depedTransmutation.js";
@@ -32,7 +30,7 @@ import "../../styles/masterSheet.css";
 import "../../styles/deptClassRecord.css";
 
 const EMPTY_SCORES = Object.freeze({});
-const getUserId = (user) => user?.user_id || user?.id || user?.user?.user_id || user?.user?.id || 4;
+const getUserId = (user) => user?.user_id || user?.id;
 const emptyToast = { message: "", variant: "success", icon: null };
 
 const formatGradeLevelLabel = (name) => {
@@ -83,7 +81,7 @@ const DEFAULT_PT_COLUMNS = [
   { id: "pt_4", assessment_id: "pt_4", label: "4", activity_name: "Performance Task 4", max_score: 40 },
 ];
 
-export default function DeptClassRecord() {
+export default function DeptClassRecord({ selection, onBack }) {
   const currentUser = useMemo(() => getStoredUser(), []);
   const effectiveUserId = useMemo(() => getUserId(currentUser), [currentUser]);
 
@@ -92,17 +90,15 @@ export default function DeptClassRecord() {
   }, []);
 
   // Loading States
-  const [isLoadingOptions, setIsLoadingOptions] = useState(true);
+  const [recordError, setRecordError] = useState("");
   const [isLoadingRecord, setIsLoadingRecord] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [toast, setToast] = useState(emptyToast);
 
-  // Filters State
-  const [filterData, setFilterData] = useState(null);
-  const [selectedSchoolYearId, setSelectedSchoolYearId] = useState("1");
-  const [selectedGradeLevelId, setSelectedGradeLevelId] = useState("all");
-  const [selectedSectionId, setSelectedSectionId] = useState("1");
-  const [selectedSubjectId, setSelectedSubjectId] = useState(null);
+  const filterData = useMemo(() => ({ ...selection.context, sections: [selection.section], subjects: [selection.context.subject] }), [selection]);
+  const selectedSchoolYearId = String(selection.schoolYearId);
+  const selectedSectionId = String(selection.section.sectionId);
+  const selectedSubjectId = String(selection.context.subject.subjectId);
 
   // Term & Subject Component State
   const [activeTerm, setActiveTerm] = useState("T1");
@@ -133,13 +129,6 @@ export default function DeptClassRecord() {
     return [{ subjectId: 3, code: "ENG", name: "English" }];
   }, [filterData]);
 
-  // Initialize selected subject if not yet set
-  useEffect(() => {
-    if (!selectedSubjectId && deptSubjects.length > 0) {
-      setSelectedSubjectId(String(deptSubjects[0].subjectId));
-    }
-  }, [deptSubjects, selectedSubjectId]);
-
   // MAPEH subject detection
   const isMapeh = useMemo(() => {
     const currentSubj = deptSubjects.find(
@@ -155,51 +144,6 @@ export default function DeptClassRecord() {
     );
   }, [deptSubjects, selectedSubjectId, departmentName]);
 
-  // 1. Load Filter Options on mount
-  useEffect(() => {
-    let isCancelled = false;
-
-    async function loadOptions() {
-      setIsLoadingOptions(true);
-      try {
-        const options = await getDeptFilterOptions(effectiveUserId);
-        if (isCancelled) return;
-
-        if (options && options.sections && options.sections.length > 0) {
-          setFilterData(options);
-
-          // Find current or first school year
-          const currentSy = options.schoolYears.find((sy) => sy.isCurrent) || options.schoolYears[0];
-          if (currentSy) {
-            setSelectedSchoolYearId(String(currentSy.id));
-          }
-
-          // Default to first section (e.g. Mahogany)
-          if (options.sections[0]) {
-            setSelectedSectionId(String(options.sections[0].sectionId));
-          }
-
-          // Default to first subject under department
-          if (options.subjects && options.subjects.length > 0) {
-            setSelectedSubjectId(String(options.subjects[0].subjectId));
-          }
-        }
-      } catch (err) {
-        console.warn("Could not load department filter options:", err);
-      } finally {
-        if (!isCancelled) {
-          setIsLoadingOptions(false);
-        }
-      }
-    }
-
-    loadOptions();
-
-    return () => {
-      isCancelled = true;
-    };
-  }, [effectiveUserId]);
-
   // 2. Fetch Class Record whenever section, school year, subject, term, or mapeh component changes
   useEffect(() => {
     if (!selectedSectionId) return;
@@ -208,11 +152,13 @@ export default function DeptClassRecord() {
 
     async function loadFullRecord() {
       setIsLoadingRecord(true);
+      setRecordError("");
+      setClassRecordPayload(null);
       try {
         // Step A: Fetch department context & find offeringId for the section
         const deptData = await getDeptClassRecord({
           sectionId: selectedSectionId,
-          schoolYearId: selectedSchoolYearId || "1",
+          schoolYearId: selectedSchoolYearId,
           userId: effectiveUserId,
         });
 
@@ -222,13 +168,14 @@ export default function DeptClassRecord() {
         // Find subject offering for the selected subject
         const foundSubj = (deptData?.subjects || []).find(
           (s) => String(s.subjectId) === String(selectedSubjectId)
-        ) || deptData?.subjects?.[0];
+        );
 
         const offeringId = foundSubj?.subjectOfferingId || null;
         setActiveOfferingId(offeringId);
 
         // Step B: Load official class record payload from backend class-record endpoint
-        const targetOfferingOrZero = offeringId || 0;
+        if (!offeringId) throw new Error("No class record offering is available for this section and school year.");
+        const targetOfferingOrZero = offeringId;
         const recordData = await getClassRecord(
           targetOfferingOrZero,
           activeTerm,
@@ -245,7 +192,7 @@ export default function DeptClassRecord() {
           setClassRecordPayload(recordData);
         }
       } catch (err) {
-        console.warn("Error fetching department class record:", err);
+        if (!isCancelled) setRecordError(err.message || "The class record could not be loaded.");
       } finally {
         if (!isCancelled) {
           setIsLoadingRecord(false);
@@ -268,99 +215,7 @@ export default function DeptClassRecord() {
     effectiveUserId,
   ]);
 
-  // Dropdown Options
-  const schoolYearOptions = useMemo(() => {
-    if (filterData?.schoolYears?.length) {
-      return filterData.schoolYears.map((sy) => ({
-        value: String(sy.id),
-        label: `SY ${sy.label}${sy.isCurrent ? " (Current)" : ""}`,
-      }));
-    }
-    return [
-      { value: "1", label: "SY 2026-2027 (Current)" },
-      { value: "2", label: "SY 2025-2026" },
-      { value: "3", label: "SY 2027-2028" },
-    ];
-  }, [filterData]);
-
-  const gradeLevelOptions = useMemo(() => {
-    if (filterData?.gradeLevels?.length) {
-      return [
-        { value: "all", label: "All Grade Levels" },
-        ...filterData.gradeLevels.map((gl) => ({
-          value: String(gl.id),
-          label: formatGradeLevelLabel(gl.name),
-        })),
-      ];
-    }
-    return [
-      { value: "all", label: "All Grade Levels" },
-      { value: "1", label: "Grade 7" },
-      { value: "2", label: "Grade 8" },
-      { value: "3", label: "Grade 9" },
-      { value: "4", label: "Grade 10" },
-    ];
-  }, [filterData]);
-
-  const filteredSections = useMemo(() => {
-    const list = filterData?.sections || [
-      { sectionId: 1, sectionName: "Mahogany", gradeLevelId: 1, gradeLevelName: "G7" },
-      { sectionId: 2, sectionName: "Narra", gradeLevelId: 1, gradeLevelName: "G7" },
-      { sectionId: 7, sectionName: "Molave", gradeLevelId: 1, gradeLevelName: "G7" },
-      { sectionId: 17, sectionName: "Tanguile", gradeLevelId: 1, gradeLevelName: "G7" },
-      { sectionId: 8, sectionName: "Honesty", gradeLevelId: 2, gradeLevelName: "G8" },
-      { sectionId: 9, sectionName: "Fortitude", gradeLevelId: 2, gradeLevelName: "G8" },
-      { sectionId: 10, sectionName: "Wisdom", gradeLevelId: 2, gradeLevelName: "G8" },
-      { sectionId: 11, sectionName: "Opal", gradeLevelId: 3, gradeLevelName: "G9" },
-      { sectionId: 12, sectionName: "Sapphire", gradeLevelId: 3, gradeLevelName: "G9" },
-      { sectionId: 13, sectionName: "Emerald", gradeLevelId: 3, gradeLevelName: "G9" },
-      { sectionId: 14, sectionName: "Jupiter", gradeLevelId: 4, gradeLevelName: "G10" },
-      { sectionId: 15, sectionName: "Saturn", gradeLevelId: 4, gradeLevelName: "G10" },
-      { sectionId: 16, sectionName: "Venus", gradeLevelId: 4, gradeLevelName: "G10" },
-    ];
-
-    if (selectedGradeLevelId === "all") return list;
-    return list.filter(
-      (sec) => String(sec.gradeLevelId) === String(selectedGradeLevelId)
-    );
-  }, [filterData, selectedGradeLevelId]);
-
-  const sectionOptions = useMemo(() => {
-    return filteredSections.map((sec) => ({
-      value: String(sec.sectionId),
-      label: `${formatGradeLevelLabel(sec.gradeLevelName)} - ${sec.sectionName}`,
-    }));
-  }, [filteredSections]);
-
-  const handleSchoolYearChange = (syId) => {
-    setSelectedSchoolYearId(syId);
-  };
-
-  const handleGradeLevelChange = (glId) => {
-    setSelectedGradeLevelId(glId);
-    const newFiltered =
-      glId === "all"
-        ? filterData?.sections || []
-        : (filterData?.sections || []).filter(
-            (sec) => String(sec.gradeLevelId) === String(glId)
-          );
-    if (newFiltered.length > 0) {
-      const stillValid = newFiltered.some(
-        (sec) => String(sec.sectionId) === String(selectedSectionId)
-      );
-      if (!stillValid) {
-        setSelectedSectionId(String(newFiltered[0].sectionId));
-      }
-    }
-  };
-
-  const handleSectionChange = (secId) => {
-    setSelectedSectionId(secId);
-  };
-
-  const handleSubjectChange = (subjId) => {
-    setSelectedSubjectId(subjId);
-  };
+  const filteredSections = filterData.sections;
 
   // Metadata resolution
   const currentSectionMeta = useMemo(() => {
@@ -509,8 +364,8 @@ export default function DeptClassRecord() {
     // Component Weights
     const weights = data?.component_weights || (
       isMapeh
-        ? DEFAULT_JHS_WEIGHTS.MAPEH
-        : DEFAULT_JHS_WEIGHTS.ENGLISH || { WW: 30, PT: 50, EX: 20 }
+        ? resolveComponentWeights({}, true).weights
+        : { WW: 30, PT: 50, EX: 20 }
     );
 
     return {
@@ -717,7 +572,7 @@ export default function DeptClassRecord() {
   );
 
   return (
-    <div className="class-record-page dept-class-record-page">
+    <div className="class-record-page dept-class-record-page dept-monitor-page dept-monitor-record">
       {/* Toast Feedback */}
       <Toast
         message={toast.message}
@@ -726,73 +581,14 @@ export default function DeptClassRecord() {
         onClose={() => setToast(emptyToast)}
       />
 
-      {/* 1. TOP HEADER & MULTI-FILTERS BAR */}
-      <div className="dept-cr-top-header">
-        <div className="ms-page-header">
-          <div>
-            <p className="ms-page-eyebrow">ACADEMIC MONITORING</p>
-            <h1>Class Records</h1>
-            <p>
-              Department of {departmentName} — Official DepEd e-Class Record View
-            </p>
-          </div>
-
-          {/* Selectors: School Year, Year Level, Section, Department Subject */}
-          <div
-            className="ms-selectors"
-            aria-label="Department Head class record filters"
-          >
-            <div className="ms-selector-field">
-              <span>School year</span>
-              <DropdownSelect
-                label="School year"
-                value={selectedSchoolYearId}
-                options={schoolYearOptions}
-                onChange={handleSchoolYearChange}
-                disabled={isLoadingOptions || isLoadingRecord}
-              />
-            </div>
-
-            <div className="ms-selector-field">
-              <span>Year level</span>
-              <DropdownSelect
-                label="Year level"
-                value={selectedGradeLevelId}
-                options={gradeLevelOptions}
-                onChange={handleGradeLevelChange}
-                disabled={isLoadingOptions || isLoadingRecord}
-              />
-            </div>
-
-            <div className="ms-selector-field">
-              <span>Section</span>
-              <DropdownSelect
-                label="Section"
-                value={selectedSectionId}
-                options={sectionOptions}
-                onChange={handleSectionChange}
-                disabled={isLoadingOptions || isLoadingRecord}
-              />
-            </div>
-
-            {deptSubjects.length > 1 && (
-              <div className="ms-selector-field">
-                <span>Subject</span>
-                <DropdownSelect
-                  label="Subject"
-                  value={selectedSubjectId}
-                  options={deptSubjects.map((s) => ({
-                    value: String(s.subjectId),
-                    label: s.name,
-                  }))}
-                  onChange={handleSubjectChange}
-                  disabled={isLoadingOptions || isLoadingRecord}
-                />
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+      <header className="dept-monitor-header">
+        <div className="dept-monitor-heading-with-back"><BackButton onClick={onBack} /><div><p className="dept-monitor-eyebrow">{departmentName} DEPARTMENT</p><h1>Class Records</h1>
+          <div className="dept-monitor-record-meta"><span><strong>{currentSectionMeta.sectionName}</strong> · {currentSectionMeta.gradeLevel}</span>
+            <span>SY {selection.context.schoolYears.find(year => String(year.id) === selectedSchoolYearId)?.label}</span>
+            <span>{effectiveSubjectName}</span></div>
+        </div></div>
+      </header>
+      {recordError && <div className="dept-monitor-state" role="alert"><strong>Class record is unavailable</strong><p>{recordError}</p><button className="dept-monitor-button" onClick={onBack}>Return to sections</button></div>}
 
       {/* 2. SUBHEADER & CONTROLS ROW (Section Info, View-Only Badge, Search Bar, Download, Term Pills) */}
       <div className="dept-cr-subheader">
@@ -848,13 +644,13 @@ export default function DeptClassRecord() {
                 type="button"
                 className="dept-cr-download-btn"
                 onClick={handleDownload}
-                disabled={isDownloading || isLoadingRecord}
+disabled={isDownloading || isLoadingRecord || Boolean(recordError) || !activeOfferingId}
                 title="Download official DepEd Excel spreadsheet"
               >
                 {isDownloading ? (
                   <LoaderCircle size={15} className="spin-icon" />
                 ) : (
-                  <span className="action-icon">↓</span>
+                  <span className="action-icon" aria-hidden="true">↓</span>
                 )}
                 <span>{isDownloading ? "Downloading…" : "Download"}</span>
               </button>
@@ -888,7 +684,7 @@ export default function DeptClassRecord() {
       </div>
 
       {/* 3. OFFICIAL CLASS RECORD TEMPLATE CONTAINER */}
-      <div className="cr-template-container">
+      {!recordError && <><div className="cr-template-container">
         {/* INSTITUTIONAL HEADER & METADATA */}
         <div className="cr-template-header-wrap">
           <div className="cr-seal-wrap">
@@ -1699,7 +1495,7 @@ export default function DeptClassRecord() {
             <strong>Grade Submission Deadline: {submissionDeadline}</strong>
           </div>
         </div>
-      </footer>
+      </footer></>}
     </div>
   );
 }

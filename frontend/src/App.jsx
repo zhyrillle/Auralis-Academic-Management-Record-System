@@ -13,7 +13,7 @@ import AcademicPeriod from "./pages/system-admin/AcademicPeriod";
 import GradeTransmutation from "./pages/system-admin/GradeTransmutation";
 import AdviserDashboard from "./pages/adviser/AdviserDashboard";
 import DeptDashboard from "./pages/department-head/DeptDashboard";
-import DeptClassRecord from "./pages/department-head/DeptClassRecord";
+import DepartmentDirectory from "./pages/department-head/DepartmentDirectory";
 import DeptHeadNotifications from "./pages/department-head/DeptHeadNotifications";
 import TeacherDashboard from "./pages/teacher/TeacherDashboard";
 import PerformanceReport from "./pages/adviser/PerformanceReport";
@@ -183,8 +183,9 @@ export default function App() {
           />
           <Route
             path="/department-head/class-records"
-            element={<DeptClassRecord />}
+            element={<DepartmentDirectory />}
           />
+          <Route path="/department-head/phil-iri" element={<DepartmentDirectory mode="phil-iri" />} />
           <Route
             path="/department-head/notifications"
             element={<DeptHeadNotifications />}

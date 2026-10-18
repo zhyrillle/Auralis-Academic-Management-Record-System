@@ -5,6 +5,7 @@ import { normalizeRole, getRoleDisplayTitle, removeStoredUser, getRoleDefaultPat
 import { ChevronDown, LogOut, CircleUser } from "lucide-react";
 import logoName from "../../assets/auralis-logo-name.png";
 import logoIcon from "../../assets/auralis-logo.png";
+import { useDepartmentContext } from "../../services/deptHeadMonitoringApi";
 
 const isRouteActive = (pathname, path) => Boolean(path)
   && (pathname === path || pathname.startsWith(`${path}/`));
@@ -76,9 +77,11 @@ export default function Sidebar({ user, onLogout, collapsed = false, mobileOpen 
   
   // Resolve mapping names dynamically based on normalized user role
   const roleKey = normalizeRole(user);
+  const departmentContext = useDepartmentContext();
   const menuItems = useMemo(
-    () => sidebarConfig[roleKey] || sidebarConfig[user?.role] || sidebarConfig.principal || [],
-    [roleKey, user?.role],
+    () => (sidebarConfig[roleKey] || sidebarConfig[user?.role] || sidebarConfig.principal || [])
+      .filter(item => !item.requiresPhilIri || departmentContext.data?.canViewPhilIri),
+    [roleKey, user?.role, departmentContext.data?.canViewPhilIri],
   );
   const defaultDashboardPath = getRoleDefaultPath(user?.role);
   const isProfileActive = location.pathname === "/profile";

@@ -386,6 +386,10 @@
   gap: 5px;
 }
 
+.stacked-bar-chart { position: relative; }
+.stacked-bar-chart__tooltip { box-sizing: border-box; width: 148px; animation: stacked-bar-tooltip-appear 120ms ease-out; }
+@keyframes stacked-bar-tooltip-appear { from { opacity: 0; } to { opacity: 1; } }
+
 .stacked-bar-chart__groups {
   display: grid;
   gap: 14px;
@@ -588,6 +592,7 @@
   .bar-chart__bar,
   .donut-chart__segment,
   .stacked-bar-chart__bar > span,
+  .stacked-bar-chart__tooltip,
   .progress-bar__fill {
     animation: none;
   }

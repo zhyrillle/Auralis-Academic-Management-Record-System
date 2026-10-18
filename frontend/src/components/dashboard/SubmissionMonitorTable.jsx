@@ -1,93 +1,30 @@
-/**
- * @typedef {Object} SubmissionMonitorItem
- * @property {string} teacher
- * @property {string} gradeSection
- * @property {string} status - Pending | Submitted | Overdue
- * @property {number} completion
- */
+import { useState } from 'react';
+import ProgressBar from '../common/ProgressBar';
+import DropdownSelect from '../common/DropdownSelect';
+import TablePagination from '../common/TablePagination';
 
-/**
- * @typedef {Object} SubmissionMonitorTableProps
- * @property {SubmissionMonitorItem[]} data
- * @property {boolean} [loading]
- */
-
-const STATUS_CONFIG = {
-  Pending: {
-    className: "dept-pill-amber",
-    icon: "●",
-  },
-  Submitted: {
-    className: "dept-pill-green",
-    icon: "●",
-  },
-  Overdue: {
-    className: "dept-pill-red",
-    icon: "●",
-  },
-};
+const STATUS_CONFIG = { Pending: 'dept-pill-amber', Submitted: 'dept-pill-green', Overdue: 'dept-pill-red' };
 
 export default function SubmissionMonitorTable({ data, loading }) {
-  if (loading) {
-    return (
-      <div className="dept-card">
-        <h2 className="dept-card-title">Submission Monitor</h2>
-        <div className="dept-skeleton-table" />
-      </div>
-    );
-  }
-
-  return (
-    <div className="dept-card">
-      <h2 className="dept-card-title">Submission Monitor</h2>
-      <div className="dept-table-wrap">
-        <table className="dept-table">
-          <thead>
-            <tr>
-              <th>Teacher</th>
-              <th>Grade/Section</th>
-              <th>Status</th>
-              <th>Completion</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.length === 0 && (
-              <tr>
-                <td colSpan={4} className="dept-no-data-row">
-                  No data provided yet
-                </td>
-              </tr>
-            )}
-            {data.map((row, idx) => {
-              const statusCfg = STATUS_CONFIG[row.status] || STATUS_CONFIG.Pending;
-
-              return (
-                <tr key={idx}>
-                  <td>{row.teacher}</td>
-                  <td>{row.gradeSection}</td>
-                  <td>
-                    <span className={`dept-pill ${statusCfg.className}`}>
-                      <span className="dept-pill-icon">{statusCfg.icon}</span>
-                      {row.status}
-                    </span>
-                  </td>
-                  <td>
-                    <div className="dept-progress-cell">
-                      <div className="dept-progress-track">
-                        <div
-                          className="dept-progress-fill"
-                          style={{ width: `${row.completion}%` }}
-                        />
-                      </div>
-                      <span className="dept-progress-text">{row.completion}%</span>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(5);
+  const safePage = Math.min(page, Math.max(1, Math.ceil(data.length / pageSize)));
+  return <section className="dept-card dept-submission-monitor">
+    <div className="dept-card-header-row"><h2 className="dept-card-title">Submission Monitor</h2>
+      <DropdownSelect label="Submission rows" value={pageSize} options={[5, 10, 20].map(value => ({ value, label: value + ' rows' }))}
+        onChange={value => { setPageSize(Number(value)); setPage(1); }} />
     </div>
-  );
+    {loading ? <div className="dept-skeleton-table" role="status" aria-label="Loading submissions" /> : <>
+      <div className="dept-table-wrap"><table className="dept-table">
+        <thead><tr><th>Teacher</th><th>Grade/Section</th><th>Status</th><th>Completion</th></tr></thead>
+        <tbody>{!data.length && <tr><td colSpan={4} className="dept-no-data-row">No data provided yet</td></tr>}
+          {data.slice((safePage - 1) * pageSize, safePage * pageSize).map((row, index) => <tr key={index}>
+            <td>{row.teacher}</td><td>{row.gradeSection}</td>
+            <td><span className={'dept-pill ' + (STATUS_CONFIG[row.status] || STATUS_CONFIG.Pending)}><span className="dept-pill-icon" aria-hidden="true">●</span>{row.status}</span></td>
+            <td><div className="dept-progress-cell"><ProgressBar className="dept-progress-track" value={row.completion} ariaLabel={row.teacher + ' submission completion'} /><span className="dept-progress-text">{row.completion}%</span></div></td>
+          </tr>)}</tbody>
+      </table></div>
+      <TablePagination page={safePage} pageSize={pageSize} total={data.length} onPageChange={setPage} itemLabel="submission" />
+    </>}
+  </section>;
 }

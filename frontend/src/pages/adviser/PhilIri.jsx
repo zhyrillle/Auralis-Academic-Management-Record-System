@@ -10,6 +10,7 @@ import { getClassRecord, API_BASE_URL } from "../../services/classRecordApi";
 import { getPhilIriRecords, savePhilIriBatch } from "../../services/philIriApi";
 import { getStoredUser } from "../../utils/auth";
 import EmptyState from "../../components/common/EmptyState";
+import { PhilIriInstitutionalHeader, PhilIriReportHeader, PhilIriScreeningTable, PhilIriPostTestTable, PhilIriReadingSummary } from "../../components/phil-iri/PhilIriReport";
 import {
   getScreeningRecords,
   saveScreeningRecords,
@@ -375,62 +376,43 @@ function ScreeningTest({
         ? sum + Number(value) : sum;
     }, 0));
     return (
-      <table className="screening-table">
-        <caption className="screening-visually-hidden">Screening test learner record</caption>
-        <thead>
+      <PhilIriScreeningTable renderBoundary={boundaryInput}
+        renderMaximum={part => <span className="screening-item-count">
+          (<input
+            type="number" min="1" max="1000" step="1"
+            className="screening-max-input"
+            aria-label={`${part} item count`}
+            title={`Edit the number of ${part} items`}
+            disabled={locked}
+            value={config[`${part}_max`]}
+            onChange={(event) => changeConfig(`${part}_max`, event.target.value)}
+          />)
+        </span>}
+        footer={<>
           <tr>
-            <th rowSpan={2} scope="col">
-              No.
-            </th>
-            <th rowSpan={2} scope="col">
-              Learner’s Name
-            </th>
-            <th rowSpan={2} scope="col">
-              Test taken
-              <br />√ / X
-            </th>
-            <th colSpan={3} scope="colgroup">
-              Number of correct responses
-            </th>
-            <th rowSpan={2} scope="col">
+            <th colSpan={2} scope="row">
               Total
-              <br />
-              score
             </th>
-            <th rowSpan={2} scope="col">
-              {boundaryInput("<")}
-            </th>
-            <th rowSpan={2} scope="col">
-              {boundaryInput("≥")}
-            </th>
+            <td aria-label="Total learners who took the test">{testedCount}</td>
+            {partTotals.map((total, index) => <td key={SCREENING_PARTS[index]} aria-label={`Total ${SCREENING_PARTS[index]} scores`}>{total}</td>)}
+            <td aria-label="Sum of complete total scores">{complete.reduce((sum, total) => sum + total, 0)}</td>
+            <td>
+              {
+                complete.filter(
+                  (total) => total < Number(config.score_threshold),
+                ).length
+              }
+            </td>
+            <td>
+              {
+                complete.filter(
+                  (total) => total >= Number(config.score_threshold),
+                ).length
+              }
+            </td>
           </tr>
-          <tr>
-            {SCREENING_PARTS.map((part) => (
-              <th scope="col" key={part}>
-                {part === "inferential"
-                  ? "Inferential"
-                  : part === "literal"
-                    ? "Literal"
-                    : "Critical"}
-                <br />
-                <span className="screening-item-count">
-                  (
-                  <input
-                    type="number" min="1" max="1000" step="1"
-                    className="screening-max-input"
-                    aria-label={`${part} item count`}
-                    title={`Edit the number of ${part} items`}
-                    disabled={locked}
-                    value={config[`${part}_max`]}
-                    onChange={(event) => changeConfig(`${part}_max`, event.target.value)}
-                  />
-                  )
-                </span>
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
+        </>}>
+
           {students.map((student, index) => {
             const id = String(student.student_section_id);
             const row = scores[id] || {};
@@ -511,32 +493,7 @@ function ScreeningTest({
               </Fragment>
             );
           })}
-        </tbody>
-        <tfoot>
-          <tr>
-            <th colSpan={2} scope="row">
-              Total
-            </th>
-            <td aria-label="Total learners who took the test">{testedCount}</td>
-            {partTotals.map((total, index) => <td key={SCREENING_PARTS[index]} aria-label={`Total ${SCREENING_PARTS[index]} scores`}>{total}</td>)}
-            <td aria-label="Sum of complete total scores">{complete.reduce((sum, total) => sum + total, 0)}</td>
-            <td>
-              {
-                complete.filter(
-                  (total) => total < Number(config.score_threshold),
-                ).length
-              }
-            </td>
-            <td>
-              {
-                complete.filter(
-                  (total) => total >= Number(config.score_threshold),
-                ).length
-              }
-            </td>
-          </tr>
-        </tfoot>
-      </table>
+      </PhilIriScreeningTable>
     );
   }
 
@@ -564,25 +521,9 @@ function ScreeningTest({
           className={`phil-iri-sheet screening-sheet ${editing ? "is-editing" : ""}`}
           id="philiri-pdf-container"
         >
-          <div className="phil-iri-sheet-header">
-            <img
-              src={logo}
-              alt="DepEd Official Seal"
-              className="phil-iri-sheet-seal"
-            />
-            <p className="phil-iri-sheet-dept">
-              Republic of the Philippines · Department of Education
-            </p>
-            <p className="phil-iri-sheet-school">
-              {classMeta?.school_name ||
-                "Gingoog City Comprehensive National High School"}
-            </p>
-            <h2 className="phil-iri-sheet-title">
-              PHIL-IRI Screening Test Class Reading Record
-            </h2>
-            <h3 className="phil-iri-sheet-subject">ENGLISH</h3>
-            <p className="phil-iri-sheet-sy">SY {schoolYear}</p>
-          </div>
+          <PhilIriReportHeader schoolYear={schoolYear} title="PHIL-IRI Screening Test Class Reading Record">
+            <PhilIriInstitutionalHeader compact logo={logo} schoolName={classMeta?.school_name || undefined} />
+          </PhilIriReportHeader>
           <div className="phil-iri-sheet-meta-row">
             <span>
               Grade & Section: <input
@@ -1713,37 +1654,11 @@ export default function PhilIri({ activeClass: propActiveClass, onBack }) {
             id="philiri-pdf-container"
           >
             {/* EXACT OFFICIAL DEPED HEADER */}
-            <div className="phil-iri-sheet-header">
-              <img
-                src={depedLogoBase64 || depedLogoUrl}
-                alt="DepEd Official Seal"
-                className="phil-iri-sheet-seal"
-                crossOrigin="anonymous"
-              />
-              <p className="phil-iri-sheet-dept">Republic of the Philippines</p>
-              <p className="phil-iri-sheet-dept">Department of Education</p>
-              <p className="phil-iri-sheet-dept">
-                {classMeta?.region || "Region X"}
-              </p>
-              <p className="phil-iri-sheet-dept">
-                {classMeta?.division
-                  ? `Division of ${classMeta.division}`
-                  : "Division of Gingoog City"}
-              </p>
-              <p className="phil-iri-sheet-school">
-                {classMeta?.school_name ||
-                  "Gingoog City Comprehensive National High School"}
-              </p>
-
-              <h2 className="phil-iri-sheet-title">
-                Philippine - Informal Reading Inventory (PHIL - IRI)
-              </h2>
-              <h3 className="phil-iri-sheet-subject">ENGLISH</h3>
-              <h4 className="phil-iri-sheet-test-label">
-                POST – TEST RESULT
-              </h4>
-              <p className="phil-iri-sheet-sy">SY {schoolYear}</p>
-            </div>
+            <PhilIriReportHeader schoolYear={schoolYear} testLabel="POST – TEST RESULT">
+              <PhilIriInstitutionalHeader logo={depedLogoBase64 || depedLogoUrl}
+                schoolName={classMeta?.school_name || undefined}
+                region={classMeta?.region || undefined} division={classMeta?.division || undefined} />
+            </PhilIriReportHeader>
 
             {/* METADATA BAR */}
             <div className="phil-iri-sheet-meta-row">
@@ -1764,38 +1679,7 @@ export default function PhilIri({ activeClass: propActiveClass, onBack }) {
 
             {/* 9-COLUMN EXACT REPLICA TABLE */}
             <div className="post-test-table-scroll" role="region" aria-label="Post-Test scores; scroll horizontally to see all columns" tabIndex={0}>
-            <table className="phil-iri-sheet-table">
-              <caption className="screening-visually-hidden">Post-Test learner scores and calculated reading levels</caption>
-              <thead>
-                <tr>
-                  <th className="col-no" rowSpan={2} scope="col">No.</th>
-                  <th className="col-learner-name" rowSpan={2} scope="col">Learner's Name</th>
-                  <th colSpan={3} scope="colgroup">Oral Reading</th>
-                  <th colSpan={3} scope="colgroup">Comprehension</th>
-                  <th className="col-overall-level" rowSpan={2} scope="col">Overall Reading Level</th>
-                </tr>
-                <tr>
-                  <th className="col-words-read" scope="col">
-                    No. of words
-                    <br />
-                    correctly read
-                  </th>
-                  <th className="col-oral-pct" scope="col">
-                    Accuracy (%)
-                  </th>
-                  <th className="col-oral-level" scope="col">Reading Level</th>
-                  <th className="col-comp-score" scope="col">
-                    No. of Correct
-                    <br />
-                    Answers
-                  </th>
-                  <th className="col-comp-pct" scope="col">
-                    Score (%)
-                  </th>
-                  <th className="col-comp-level" scope="col">Reading Level</th>
-                </tr>
-              </thead>
-              <tbody>
+            <PhilIriPostTestTable>
                 {/* BOYS ROSTER */}
                 {maleStudents.length > 0 && (
                   <tr className="post-test-gender-row"><th colSpan={9} scope="rowgroup">MALES · {totalBoys} learners</th></tr>
@@ -1814,83 +1698,11 @@ export default function PhilIri({ activeClass: propActiveClass, onBack }) {
                     <EmptyState className="post-test-empty" title="No learners to display" description="Learners enrolled in this section will appear here." />
                   </td></tr>
                 )}
-              </tbody>
-            </table>
+            </PhilIriPostTestTable>
             </div>
 
             {/* SUMMARY DISTRIBUTION BOX */}
-            <div className="phil-iri-sheet-summary-box">
-              <table className="phil-iri-sheet-summary-table">
-                <caption>Overall Reading Level Summary</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">Learners</th>
-                    <th scope="col">INDEPENDENT</th>
-                    <th scope="col">INSTRUCTIONAL</th>
-                    <th scope="col">FRUSTRATION</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <th scope="row">Males</th>
-                    <td>
-                      <span className="phil-iri-underline-val">
-                        {summaryCounts.boys.INDEPENDENT}
-                      </span>
-                    </td>
-                    <td>
-                      <span className="phil-iri-underline-val">
-                        {summaryCounts.boys.INSTRUCTIONAL}
-                      </span>
-                    </td>
-                    <td>
-                      <span className="phil-iri-underline-val">
-                        {summaryCounts.boys.FRUSTRATION}
-                      </span>
-                    </td>
-                  </tr>
-                  <tr>
-                    <th scope="row">Females</th>
-                    <td>
-                      <span className="phil-iri-underline-val">
-                        {summaryCounts.girls.INDEPENDENT}
-                      </span>
-                    </td>
-                    <td>
-                      <span className="phil-iri-underline-val">
-                        {summaryCounts.girls.INSTRUCTIONAL}
-                      </span>
-                    </td>
-                    <td>
-                      <span className="phil-iri-underline-val">
-                        {summaryCounts.girls.FRUSTRATION}
-                      </span>
-                    </td>
-                  </tr>
-                  <tr className="phil-iri-total-row">
-                    <th scope="row">Total</th>
-                    <td>
-                      <span className="phil-iri-underline-val">
-                        {summaryCounts.boys.INDEPENDENT +
-                          summaryCounts.girls.INDEPENDENT}
-                      </span>
-                    </td>
-                    <td>
-                      <span className="phil-iri-underline-val">
-                        {summaryCounts.boys.INSTRUCTIONAL +
-                          summaryCounts.girls.INSTRUCTIONAL}
-                      </span>
-                    </td>
-                    <td>
-                      <span className="phil-iri-underline-val">
-                        {summaryCounts.boys.FRUSTRATION +
-                          summaryCounts.girls.FRUSTRATION}
-                      </span>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+            <PhilIriReadingSummary counts={summaryCounts} />
 
             {/* BOTTOM BLOCK: SIGNATURES & OFFICIAL FOOTER */}
             <div className="phil-iri-sheet-bottom-block">

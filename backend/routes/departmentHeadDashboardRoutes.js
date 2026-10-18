@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
 const DeptHeadClassRecordService = require('../services/DeptHeadClassRecordService');
+router.use('/monitoring', require('./deptHeadMonitoringRoutes'));
 
 async function getDepartmentId(userId) {
   if (!userId) throw new Error('User not authenticated');

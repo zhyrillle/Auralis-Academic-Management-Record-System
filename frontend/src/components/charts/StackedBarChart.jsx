@@ -1,3 +1,4 @@
+import { useId, useRef, useState } from "react";
 import "../../styles/charts.css";
 
 export default function StackedBarChart({
@@ -5,16 +6,36 @@ export default function StackedBarChart({
   ariaLabel,
   legendItems: suppliedLegendItems,
   maxVisibleGroups,
+  showTooltips = false,
   emptyMessage = "No chart data available.",
 }) {
+  const chartRef = useRef(null);
+  const tooltipId = useId();
+  const [activeSegment, setActiveSegment] = useState(null);
+  const activeGroup = groups.find(group => group.id === activeSegment?.groupId);
+  const activeData = activeGroup?.segments.find(segment => segment.id === activeSegment?.segmentId);
   const legendItems = suppliedLegendItems || groups[0]?.segments || [];
   const hasLimitedViewport = Number.isInteger(maxVisibleGroups);
   const isScrollable = hasLimitedViewport && groups.length > maxVisibleGroups;
   // Render rows whenever groups exist; zero-valued segments simply draw empty tracks.
   const hasData = groups.length > 0;
 
+  const showSegmentTooltip = (element, group, segment) => {
+    if (!showTooltips) return;
+    const chartBounds = chartRef.current.getBoundingClientRect();
+    const segmentBounds = element.getBoundingClientRect();
+    setActiveSegment({
+      groupId: group.id,
+      segmentId: segment.id,
+      x: segmentBounds.left + segmentBounds.width / 2 - chartBounds.left,
+      y: segmentBounds.top - chartBounds.top,
+    });
+  };
+
   return (
-    <div className="stacked-bar-chart" role="group" aria-label={ariaLabel}>
+    <div className="stacked-bar-chart" role="group" aria-label={ariaLabel} ref={chartRef}
+      onScrollCapture={() => setActiveSegment(null)}
+      onKeyDown={event => { if (event.key === 'Escape') setActiveSegment(null); }}>
       <div className="stacked-bar-chart__legend" aria-label="Chart legend">
         {legendItems.map((segment) => (
           <span key={segment.id}>
@@ -54,10 +75,15 @@ export default function StackedBarChart({
                       backgroundColor: segment.color,
                       animationDelay: `${groupIndex * 55 + segmentIndex * 35}ms`,
                     }}
-                    title={`${segment.label}: ${segment.value}%`}
+                    title={showTooltips ? undefined : `${segment.label}: ${segment.valueLabel ?? `${segment.value}%`}`}
                     tabIndex="0"
                     role="img"
-                    aria-label={`${group.label}, ${segment.label}: ${segment.value}%`}
+                    aria-label={`${group.label}, ${segment.label}: ${segment.valueLabel ?? `${segment.value}%`}`}
+                    aria-describedby={showTooltips && activeData && activeSegment.groupId === group.id && activeSegment.segmentId === segment.id ? tooltipId : undefined}
+                    onMouseEnter={event => showSegmentTooltip(event.currentTarget, group, segment)}
+                    onMouseLeave={() => setActiveSegment(null)}
+                    onFocus={event => showSegmentTooltip(event.currentTarget, group, segment)}
+                    onBlur={() => setActiveSegment(null)}
                   />
                 ))}
               </div>
@@ -70,6 +96,15 @@ export default function StackedBarChart({
           </p>
         )}
       </div>
+      {showTooltips && activeData && (
+        <div className="chart-tooltip chart-tooltip--compact stacked-bar-chart__tooltip"
+          id={tooltipId} role="tooltip"
+          style={{ left: `clamp(74px, ${activeSegment.x}px, calc(100% - 74px))`, top: activeSegment.y }}>
+          <strong>{activeGroup.label}</strong>
+          <span>{activeData.label}</span>
+          <small>{activeData.valueLabel ?? `${activeData.value}%`}</small>
+        </div>
+      )}
     </div>
   );
 }

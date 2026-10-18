@@ -14,6 +14,7 @@ import TablePagination from "../../components/common/TablePagination";
 import Toast from "../../components/common/Toast";
 import Badge from "../../components/common/Badge";
 import SectionCapacity from "./student-sections/SectionCapacity";
+import SectionCard from "../../components/sections/SectionCard";
 import SectionFormFields from "./student-sections/SectionFormFields";
 import SectionManagementDrawer from "./student-sections/SectionManagementDrawer";
 import StudentSelectionTray from "./student-sections/StudentSelectionTray";
@@ -240,12 +241,8 @@ export default function StudentSectionManagement() {
         {loading ? <div className="section-card-grid" role="status" aria-label="Loading sections">{[1, 2, 3, 4, 5, 6].map(id => <div className="section-card section-card--skeleton student-admin-loading" key={id} />)}</div> : query.error ? <div className="student-admin-empty"><EmptyState icon={AlertCircle} title="Sections are unavailable" description={query.error} /><button type="button" className="student-admin-button" onClick={query.refresh}>Retry</button></div> : !filteredSections.length ? <EmptyState className="student-admin-empty" icon={LayoutGrid} title="No sections found" description="Try another search or create a section to get started." /> : <div className="section-card-grid">{filteredSections.map(section => {
             const program = sectionProgram(section);
             const count = countMembers(section.id);
-            return <article key={section.id} className="section-card" aria-label={`${section.name}, ${formatSectionGrade(section.level, section.grade_level_id)}`}>
-              <div className="section-card__heading"><h3>{section.name}</h3><span className="section-card__grade" data-grade-level={section.grade_level_id}>{formatSectionGrade(section.level, section.grade_level_id).replace("Grade ", "G")}</span></div>
-              <p className="section-card__program">{program ? `Special Program - ${program.code}` : "Regular Class"}</p>
-              <div className="section-card__students"><Users size={17} /><span>{count} {count === 1 ? "Student" : "Students"}</span></div>
-              <SectionCapacity count={count} />
-              <div className="section-card__actions"><button type="button" className="student-admin-button" aria-label={`Manage ${section.name}`} onClick={() => openDrawer(section)}><Settings2 size={16} />Manage</button>
+            return <SectionCard key={section.id} name={section.name} ariaLabel={`${section.name}, ${formatSectionGrade(section.level, section.grade_level_id)}`} grade={formatSectionGrade(section.level, section.grade_level_id).replace("Grade ", "G")} gradeId={section.grade_level_id} program={program ? `Special Program - ${program.code}` : "Regular Class"} count={count}
+              actions={<><button type="button" className="student-admin-button" aria-label={`Manage ${section.name}`} onClick={() => openDrawer(section)}><Settings2 size={16} />Manage</button>
                 <button type="button" className="student-admin-button" aria-label={`View students in ${section.name}`} onClick={() => {
                   setSectionFilter(String(section.id));
                   setAssignmentFilter("all");
@@ -257,9 +254,7 @@ export default function StudentSectionManagement() {
                   setToast(null);
                   setDrawerSection(section);
                   setDeleteOpen(true);
-                }}><Trash2 size={16} /></button>
-              </div>
-            </article>;
+                }}><Trash2 size={16} /></button></>}><SectionCapacity count={count} /></SectionCard>;
           })}</div>}
       </> : <>
         <div className="student-admin-toolbar"><SearchBar query={studentSearch} setQuery={value => {
