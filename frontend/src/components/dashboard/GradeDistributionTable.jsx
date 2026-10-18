@@ -54,30 +54,23 @@ export default function GradeDistributionTable({ data, schoolYear, loading }) {
     <div className="dept-card">
       <div className="dept-card-header-row">
         <h2 className="dept-card-title">Grade Distribution CMSS</h2>
-        <select
-          className="dept-filter-select dept-distribution-sy"
-          value={schoolYear}
-          onChange={() => {}}
-          disabled
-        >
-          <option value="">School Year</option>
-        </select>
+        <span className="dept-table-context">{schoolYear ? `SY ${schoolYear}` : "All school years"}</span>
       </div>
       <div className="dept-table-wrap">
         <table className="dept-table dept-grade-table">
           <thead>
             <tr>
               <th rowSpan={2} className="dept-grade-row-header">Grade Level</th>
-              <th colSpan={3} className="dept-grade-super-header">Score Mean</th>
-              <th colSpan={3} className="dept-grade-super-header">MPS</th>
+              <th scope="colgroup" colSpan={3} className="dept-grade-super-header dept-column-mean">Score Mean</th>
+              <th scope="colgroup" colSpan={3} className="dept-grade-super-header dept-column-mps">MPS</th>
             </tr>
             <tr>
-              <th>Term 1</th>
-              <th>Term 2</th>
-              <th>Term 3</th>
-              <th>Term 1</th>
-              <th>Term 2</th>
-              <th>Term 3</th>
+              <th scope="col" className="dept-subcolumn-mean">Term 1</th>
+              <th scope="col" className="dept-subcolumn-mean">Term 2</th>
+              <th scope="col" className="dept-subcolumn-mean">Term 3</th>
+              <th scope="col" className="dept-subcolumn-mps">Term 1</th>
+              <th scope="col" className="dept-subcolumn-mps">Term 2</th>
+              <th scope="col" className="dept-subcolumn-mps">Term 3</th>
             </tr>
           </thead>
           <tbody>
@@ -112,9 +105,6 @@ export default function GradeDistributionTable({ data, schoolYear, loading }) {
             )}
           </tbody>
         </table>
-      </div>
-      <div className="dept-card-footer">
-        <button className="dept-link-btn" type="button">View Details →</button>
       </div>
     </div>
   );

@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import FilterBar from "../../components/dashboard/FilterBar";
 import ComparativeAnalysisCard from "../../components/dashboard/ComparativeAnalysisCard";
 import OverallPassRateCard from "../../components/dashboard/OverallPassRateCard";
-import StatCard from "../../components/dashboard/StatCard";
+import StatCard from "../../components/common/StatCard";
+import { Users, ClipboardCheck, Clock3, AlertTriangle } from "lucide-react";
 import SubmissionMonitorTable from "../../components/dashboard/SubmissionMonitorTable";
 import PerformanceMatrixTable from "../../components/dashboard/PerformanceMatrixTable";
 import GradeDistributionTable from "../../components/dashboard/GradeDistributionTable";
@@ -15,6 +16,8 @@ import {
   getGradeDistribution,
 } from "../../services/dashboardApi";
 import "../../styles/departmentHeadDashboard.css";
+import "../../styles/departmentMonitoring.css";
+import { useDepartmentContext } from "../../services/deptHeadMonitoringApi";
 
 const EMPTY_COMPARATIVE = [];
 const EMPTY_PASS_RATE = { passed: 0, failed: 0, total: 0, passRatePercentage: 0 };
@@ -30,11 +33,15 @@ const EMPTY_MATRIX = [];
 const EMPTY_DISTRIBUTION = [];
 
 export default function DeptDashboard() {
+  const context = useDepartmentContext();
+  const departmentName = context.data?.department?.name;
   const [filters, setFilters] = useState({
     schoolYear: "",
     gradeLevel: "",
     quarter: "",
   });
+  const defaultYear = (context.data?.schoolYears.find(year => year.isCurrent) || context.data?.schoolYears[0])?.label || '';
+  const activeFilters = useMemo(() => ({ ...filters, schoolYear: filters.schoolYear || defaultYear }), [filters, defaultYear]);
   const [comparative, setComparative] = useState(EMPTY_COMPARATIVE);
   const [passRate, setPassRate] = useState(EMPTY_PASS_RATE);
   const [stats, setStats] = useState(EMPTY_STATS);
@@ -45,6 +52,7 @@ export default function DeptDashboard() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
+    if (!activeFilters.schoolYear) return undefined;
     let cancelled = false;
 
     async function load() {
@@ -54,12 +62,12 @@ export default function DeptDashboard() {
       try {
         const [comparativeData, passRateData, statsData, submissionsData, matrixData, distributionData] =
           await Promise.all([
-            getComparativeAnalysis(filters).catch(() => EMPTY_COMPARATIVE),
-            getOverallPassRate(filters).catch(() => EMPTY_PASS_RATE),
-            getDashboardStats(filters).catch(() => EMPTY_STATS),
-            getSubmissionMonitor(filters).catch(() => EMPTY_SUBMISSIONS),
-            getPerformanceMatrix(filters).catch(() => EMPTY_MATRIX),
-            getGradeDistribution({ schoolYear: filters.schoolYear }).catch(() => EMPTY_DISTRIBUTION),
+            getComparativeAnalysis(activeFilters).catch(() => EMPTY_COMPARATIVE),
+            getOverallPassRate(activeFilters).catch(() => EMPTY_PASS_RATE),
+            getDashboardStats(activeFilters).catch(() => EMPTY_STATS),
+            getSubmissionMonitor(activeFilters).catch(() => EMPTY_SUBMISSIONS),
+            getPerformanceMatrix(activeFilters).catch(() => EMPTY_MATRIX),
+            getGradeDistribution({ schoolYear: activeFilters.schoolYear }).catch(() => EMPTY_DISTRIBUTION),
           ]);
 
         if (cancelled) return;
@@ -86,32 +94,35 @@ export default function DeptDashboard() {
     return () => {
       cancelled = true;
     };
-  }, [filters]);
+  }, [activeFilters]);
 
   const handleFilterChange = (key, value) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
   };
 
   return (
-    <div className="dept-dashboard-page">
+    <div className="dept-dashboard-page dept-monitor-page">
       <div className="dept-dashboard-header">
         <div>
-          <h1 className="dept-dashboard-title">Department Head - English</h1>
+          <p className="dept-monitor-eyebrow">DEPARTMENT OVERVIEW</p>
+          <h1 className="dept-dashboard-title">{departmentName ? `${departmentName} Department` : "Department Dashboard"}</h1>
           <p className="dept-dashboard-subtitle">Monitor submissions, performance, and grade distribution.</p>
         </div>
       </div>
 
       <FilterBar
-        filters={filters}
+        filters={activeFilters}
         onChange={handleFilterChange}
         disabled={loading}
+        schoolYears={context.data?.schoolYears}
       />
 
-      {error && <div className="dept-error-banner">{error}</div>}
+      {(error || context.error) && <div className="dept-error-banner">{error || context.error}</div>}
 
       <div className="dept-dashboard-body">
         <div className="dept-main-cards">
           <ComparativeAnalysisCard
+            departmentName={departmentName}
             data={comparative}
             loading={loading}
             error={!loading && comparative.length === 0 ? null : undefined}
@@ -123,47 +134,14 @@ export default function DeptDashboard() {
         </div>
 
         <div className="dept-stats-row">
-          <StatCard
-            title="Total Teachers"
-            value={stats.totalTeachers}
-            caption="Department Wide"
-            accentColor="#0033C4"
-          />
-          <StatCard
-            title="Submitted Grades"
-            value={`${stats.submittedGradesPercent}%`}
-            caption={
-              <span className="dept-stat-caption-inline">
-                {stats.submittedGrades} submitted
-                <div className="dept-stat-progress-track">
-                  <div
-                    className="dept-stat-progress-fill"
-                    style={{ width: `${stats.submittedGradesPercent}%` }}
-                  />
-                </div>
-              </span>
-            }
-            accentColor="#0033C4"
-          />
-          <StatCard
-            title="Delayed Submissions"
-            value={stats.delayedSubmissions}
-            caption="Requires follow-up"
-            accentColor="#EF4444"
-          />
-          <StatCard
-            title="At-Risk Students"
-            value={stats.atRiskStudents}
-            caption="Need intervention"
-            accentColor="#F4B400"
-          />
+          <StatCard title="Total Teachers" value={stats.totalTeachers} description="Department wide" icon={Users} variant="info" />
+          <StatCard title="Submitted Grades" value={stats.submittedGradesPercent + '%'} description={stats.submittedGrades + ' submitted'} icon={ClipboardCheck} variant="success" />
+          <StatCard title="Delayed Submissions" value={stats.delayedSubmissions} description="Requires follow-up" icon={Clock3} variant="warning" />
+          <StatCard title="At-Risk Students" value={stats.atRiskStudents} description="Need intervention" icon={AlertTriangle} variant="warning" />
         </div>
 
-        <SubmissionMonitorTable
-          data={submissions}
-          loading={loading}
-        />
-
+        <div className="dept-monitor-details">
+        <SubmissionMonitorTable data={submissions} loading={loading} />
         <PerformanceMatrixTable
           data={matrix}
           loading={loading}
@@ -171,9 +149,10 @@ export default function DeptDashboard() {
 
         <GradeDistributionTable
           data={distribution}
-          schoolYear={filters.schoolYear}
+          schoolYear={activeFilters.schoolYear}
           loading={loading}
         />
+        </div>
       </div>
     </div>
   );

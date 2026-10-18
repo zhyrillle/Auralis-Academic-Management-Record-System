@@ -1,0 +1,8 @@
+.filter-toolbar { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px 18px; padding:10px 12px; border:1px solid #dce6f3; border-radius:12px; background:#f0f5fc; min-width:0; }
+.filter-toolbar__controls,.filter-toolbar__end { display:flex; align-items:center; flex-wrap:wrap; gap:12px; min-width:0; }
+.filter-toolbar__controls { flex:1; }
+.filter-toolbar__end { margin-left:auto; }
+.filter-toolbar .dropdown-select { width:180px; }
+.filter-toolbar .dropdown-select__trigger { min-height:40px; background:#fff; }
+.filter-toolbar .segmented-control { background:#f6f8fc; }
+@media(max-width:640px) { .filter-toolbar__controls,.filter-toolbar__end { width:100%; } .filter-toolbar .dropdown-select { flex:1 1 140px; width:auto; } .filter-toolbar__end { justify-content:space-between; } }
