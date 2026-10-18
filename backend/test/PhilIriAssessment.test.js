@@ -8,6 +8,7 @@ function harness() {
   const calls = [], module = { exports: {} };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../models/PhilIriAssessment.js'), 'utf8'), {
     module, require: name => {
+      if (name === '../utils/encryption') return { decryptLrn: value => value };
       assert.equal(name, '../config/db');
       return { execute: async (sql, params) => { calls.push({ sql, params }); return [[]]; } };
     },

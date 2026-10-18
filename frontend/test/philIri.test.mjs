@@ -23,6 +23,46 @@ try {
   const { default: Page } = await server.ssrLoadModule('/src/pages/adviser/PhilIri.jsx');
   const api = await server.ssrLoadModule('/src/services/philIriApi.js');
   const { accountDraftKey } = await server.ssrLoadModule('/src/offline/syncManager.js');
+  const { PhilIriInstitutionalHeader, PhilIriReportHeader, PhilIriScreeningTable, PhilIriPostTestTable, PhilIriReadingSummary } =
+    await server.ssrLoadModule('/src/components/phil-iri/PhilIriReport.jsx');
+
+  await test('shared report presentation keeps adviser controls optional and monitoring output read-only', () => {
+    const boundary = comparison => React.createElement('span', null, 'Score ', comparison, ' 28');
+    const editable = renderToString(React.createElement(PhilIriScreeningTable, {
+      renderBoundary: boundary,
+      renderMaximum: part => React.createElement('input', { 'aria-label': part + ' item count', type: 'number', defaultValue: 14 }),
+    }));
+    assert.equal((editable.match(/<input/g) || []).length, 3);
+    assert.doesNotMatch(editable, />LRN<|>Status</);
+    const readOnly = renderToString(React.createElement(PhilIriScreeningTable, {
+      renderBoundary: boundary, maxima: { literal: 14, inferential: 12, critical: 14 }, showLrn: true, showStatus: true,
+    }));
+    assert.doesNotMatch(readOnly, /<input|<button/);
+    assert.match(readOnly.replace(/<!--.*?-->/g, ''), /\(14\)/);
+    assert.match(readOnly, />LRN</);
+    assert.match(readOnly, />Status</);
+    assert.match(renderToString(React.createElement(PhilIriPostTestTable)), /Oral Reading/);
+    const header = renderToString(React.createElement(PhilIriReportHeader, { schoolYear: '2026-2027', testLabel: 'POST – TEST RESULT' }));
+    assert.match(header, /Philippine - Informal Reading Inventory/);
+    assert.doesNotMatch(header, /<img|<button|footer|Download/);
+    const officialHeader = renderToString(React.createElement(PhilIriReportHeader, { schoolYear: '2026-2027' },
+      React.createElement(PhilIriInstitutionalHeader, { region: '10', division: 'Gingoog City' })));
+    assert.match(officialHeader, /DepEd Official Seal/);
+    assert.match(officialHeader, /Republic of the Philippines/);
+    assert.match(officialHeader.replace(/<!--.*?-->/g, ''), /Division of Gingoog City/);
+    assert.doesNotMatch(officialHeader, /Download|<button/);
+  });
+
+  await test('shared reading-level summary preserves totals including learners whose sex is not recorded', () => {
+    const html = renderToString(React.createElement(PhilIriReadingSummary, { counts: {
+      boys: { INDEPENDENT: 2, INSTRUCTIONAL: 1, FRUSTRATION: 3 },
+      girls: { INDEPENDENT: 4, INSTRUCTIONAL: 2, FRUSTRATION: 1 },
+      unknown: { INDEPENDENT: 1 },
+    } }));
+    assert.match(html, /Sex not recorded/);
+    const totalRow = html.slice(html.indexOf('class="phil-iri-total-row"'));
+    for (const value of [7, 3, 4]) assert.match(totalRow, new RegExp('>' + value + '</span>'));
+  });
 
   await test('only Screening and Post-Test tabs render, with Screening selected by default', () => {
     const html = renderToString(React.createElement(MemoryRouter, { initialEntries: ['/adviser/phil-iri'] },

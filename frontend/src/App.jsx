@@ -185,6 +185,7 @@ export default function App() {
             path="/department-head/class-records"
             element={<DepartmentDirectory />}
           />
+          <Route path="/department-head/phil-iri" element={<DepartmentDirectory mode="phil-iri" />} />
           <Route
             path="/department-head/notifications"
             element={<DeptHeadNotifications />}

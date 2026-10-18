@@ -21,6 +21,7 @@ import {
   useDepartmentContext,
 } from "../../services/deptHeadMonitoringApi";
 import DeptClassRecord from "./DeptClassRecord";
+import DeptPhilIriDetail from "./DeptPhilIriDetail";
 import "../../styles/departmentMonitoring.css";
 
 const gradeLabel = (section) =>
@@ -181,7 +182,15 @@ export default function DepartmentDirectory({ mode = "records" }) {
           />
         </div>
       );
-    return (
+    return philIri ? (
+      <DeptPhilIriDetail
+        key={`${yearId}:${sectionId}`}
+        section={selected}
+        schoolYearId={yearId}
+        context={context.data}
+        onBack={back}
+      />
+    ) : (
       <DeptClassRecord
         key={`${yearId}:${sectionId}`}
         selection={{
