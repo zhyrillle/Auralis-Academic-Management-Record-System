@@ -55,7 +55,7 @@ const TRANSMUTATION_TABLE = [
  * @param {number|string|null} initialGrade
  * @returns {number|null}
  */
-function getTransmutedGrade(initialGrade, customTiers = null) {
+function getTransmutedGrade(initialGrade, customTiers = null, config = null) {
   if (initialGrade === null || initialGrade === undefined || initialGrade === "") {
     return null;
   }
@@ -63,19 +63,37 @@ function getTransmutedGrade(initialGrade, customTiers = null) {
   const numericGrade = Number(initialGrade);
   if (isNaN(numericGrade)) return null;
 
-  let isCustomEnabled = false;
+  let resolvedConfig = null;
   let table = null;
+  let isCustomEnabled = null;
+
+  if (customTiers && typeof customTiers === 'object' && !Array.isArray(customTiers)) {
+    resolvedConfig = customTiers;
+  } else if (config && typeof config === 'object') {
+    resolvedConfig = config;
+  }
+
+  if (resolvedConfig) {
+    if (resolvedConfig.is_custom_enabled !== undefined || resolvedConfig.isCustomEnabled !== undefined) {
+      isCustomEnabled = Boolean(resolvedConfig.is_custom_enabled ?? resolvedConfig.isCustomEnabled);
+    }
+    if (Array.isArray(resolvedConfig.ranges || resolvedConfig.tiers)) {
+      table = resolvedConfig.ranges || resolvedConfig.tiers;
+    }
+  }
 
   if (Array.isArray(customTiers) && customTiers.length > 0) {
-    isCustomEnabled = true;
     table = customTiers;
-  } else {
+    if (isCustomEnabled === null) isCustomEnabled = true;
+  }
+
+  if (isCustomEnabled === null || (isCustomEnabled && (!table || table.length === 0))) {
     try {
       const GradeTransmutationConfig = require('../models/GradeTransmutationConfig');
-      if (typeof GradeTransmutationConfig.isCustomEnabledSync === 'function') {
+      if (isCustomEnabled === null && typeof GradeTransmutationConfig.isCustomEnabledSync === 'function') {
         isCustomEnabled = GradeTransmutationConfig.isCustomEnabledSync();
       }
-      if (isCustomEnabled && typeof GradeTransmutationConfig.getActiveTiersSync === 'function') {
+      if (isCustomEnabled && (!table || table.length === 0) && typeof GradeTransmutationConfig.getActiveTiersSync === 'function') {
         table = GradeTransmutationConfig.getActiveTiersSync();
       }
     } catch (_) {}
@@ -94,8 +112,11 @@ function getTransmutedGrade(initialGrade, customTiers = null) {
   const roundedInitial = Math.round(numericGrade * 100) / 100;
 
   for (const tier of table) {
-    if (roundedInitial >= tier.min && roundedInitial <= tier.max) {
-      return tier.transmuted !== undefined ? tier.transmuted : tier.grade;
+    const tMin = Number(tier.min);
+    const tMax = Number(tier.max);
+    if (roundedInitial >= tMin && roundedInitial <= tMax) {
+      const val = tier.transmuted !== undefined ? tier.transmuted : tier.grade;
+      return Number(val);
     }
   }
 
@@ -158,7 +179,7 @@ function getGradeDescriptor(grade, style = 'matatag') {
  * @param {Object} params.weights - component weights { WW: 20, PT: 50, EX: 30 }
  * @param {Object} [params.examConfig] - optional examination sub-weights & HPS { st1Weight, st2Weight, teWeight }
  */
-function calculateStudentGrades({ assessments = [], scores = {}, weights = {}, examConfig = {}, isMapeh = false, isMapehSubject: isMapehSubjectProp = false }) {
+function calculateStudentGrades({ assessments = [], scores = {}, weights = {}, examConfig = {}, isMapeh = false, isMapehSubject: isMapehSubjectProp = false, transmutationConfig = null }) {
   const isMapehSubject = Boolean(
     isMapeh ||
     isMapehSubjectProp ||
@@ -297,7 +318,7 @@ function calculateStudentGrades({ assessments = [], scores = {}, weights = {}, e
 
   // Initial Grade = WS_WW + WS_PT + WS_QA/EX
   const initialGrade = !resolved.error && hasAnyInput ? parseFloat(totalWS.toFixed(2)) : null;
-  const quarterlyGrade = initialGrade !== null ? transmuteGrade(initialGrade) : null;
+  const quarterlyGrade = initialGrade !== null ? transmuteGrade(initialGrade, null, transmutationConfig) : null;
   const termGrade = quarterlyGrade;
   const descriptor = termGrade !== null ? getGradeDescriptor(termGrade) : '-';
   const isFailing = quarterlyGrade !== null && quarterlyGrade < 75;

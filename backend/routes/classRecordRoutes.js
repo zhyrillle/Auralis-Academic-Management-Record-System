@@ -469,6 +469,7 @@ async function ensureDefaultActivitiesForSheet(gradeSheetId, subjectId, schoolYe
  */
 router.get('/class-record/:subject_offering_id', async (req, res) => {
   try {
+    await GradeTransmutationConfig.getActiveTiers();
     const subjectOfferingId = Number(req.params.subject_offering_id);
     const requestedSectionId = req.query.section_id ? Number(req.query.section_id) : null;
     const requestedSubjectId = req.query.subject_id ? Number(req.query.subject_id) : null;
@@ -1680,6 +1681,7 @@ async function forwardScoresToCloud(scoresToForward, gradesToForward) {
  * Requirement 3: Score Entry Endpoint & Requirement 4: Auto-Calculation & Persistence
  */
 async function handleBatchScores(req, res) {
+  await GradeTransmutationConfig.getActiveTiers();
   const connection = await db.getConnection();
   try {
     const { subject_offering_id, term = 'T1', scores, examConfig } = req.body;
@@ -2318,6 +2320,7 @@ router.post('/class-record/calculate-and-save', async (req, res) => {
  */
 router.get('/class-record/:subject_offering_id/export', async (req, res) => {
   try {
+    await GradeTransmutationConfig.getActiveTiers();
     const ExcelJS = require('exceljs');
     const subjectOfferingId = Number(req.params.subject_offering_id);
     const rawTerm = req.query.term || 'T1';
