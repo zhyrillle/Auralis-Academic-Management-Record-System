@@ -69,7 +69,7 @@ function isCreatedToday(dateInput) {
  */
 function formatNotification(n) {
   return {
-    id:                  n.notification_id,
+    id:                  n.notification_id || n.id,
     title:               n.title,
     message:             n.message,
     timestamp:           formatRelativeTime(n.created_at),
@@ -78,6 +78,7 @@ function formatNotification(n) {
     type:                n.type  || 'general',
     related_entity_type: n.related_entity_type || null,
     related_entity_id:   n.related_entity_id   || null,
+    action_link:         n.action_link || null,
   };
 }
 
@@ -315,7 +316,7 @@ router.get('/department-head', async (req, res) => {
             message: `Mr. Juan Dela Cruz submitted Quarter 2 final grades for Grade 9 – Rizal (${userDeptName}).`,
             timestamp: '5 mins', unread: true,
             created_at: new Date(now.getTime() - 5 * 60000).toISOString(),
-            action_link: null,
+            action_link: '/department-head/class-records',
           },
           {
             id: 'demo-2', type: 'AT_RISK',
@@ -323,7 +324,7 @@ router.get('/department-head', async (req, res) => {
             message: `4 students in Grade 9 – Einstein have been flagged with high risk in ${userDeptName} based on quarterly assessments.`,
             timestamp: '30 mins', unread: true,
             created_at: new Date(now.getTime() - 30 * 60000).toISOString(),
-            action_link: null,
+            action_link: '/department-head/dashboard',
           },
           {
             id: 'demo-3', type: 'DEADLINE',
@@ -331,7 +332,7 @@ router.get('/department-head', async (req, res) => {
             message: `Quarter 2 grade submission window closes in 3 days. Subject teachers in your department have pending records.`,
             timestamp: '2 hours', unread: true,
             created_at: new Date(now.getTime() - 120 * 60000).toISOString(),
-            action_link: '/grade-submission',
+            action_link: '/department-head/class-records',
           },
           {
             id: 'demo-4', type: 'REQUEST',
@@ -339,7 +340,7 @@ router.get('/department-head', async (req, res) => {
             message: `Grade reopening request for Grade 8 – Mabini (${userDeptName}) has been approved and unlocked for 48 hours.`,
             timestamp: 'Yesterday', unread: false,
             created_at: yesterday.toISOString(),
-            action_link: null,
+            action_link: '/department-head/class-records',
           },
           {
             id: 'demo-5', type: 'SUMMARY',
@@ -347,7 +348,7 @@ router.get('/department-head', async (req, res) => {
             message: `Consolidated pass rates and subject master sheets for ${userDeptName} (Quarter 1) have been finalized and archived.`,
             timestamp: 'Yesterday', unread: false,
             created_at: yesterday.toISOString(),
-            action_link: '/master-sheets',
+            action_link: '/department-head/dashboard',
           }
         );
       }
@@ -372,6 +373,362 @@ router.get('/department-head', async (req, res) => {
     });
   } catch (err) {
     console.error('[GET /api/notifications/department-head]', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/notifications/adviser
+// Class Adviser-specific feed:
+//   • Real DB notifications addressed to this adviser
+//   • Live synthesized notifications (grade submissions in advisory section,
+//     pending subject submissions for active term, at-risk alerts, etc.)
+//   • Realistic fallback demo seed when no records exist yet
+// ─────────────────────────────────────────────────────────────────────────────
+
+router.get('/adviser', async (req, res) => {
+  try {
+    const userId = getUserId(req);
+
+    // 1. Resolve advisory section(s) for this user
+    let advisorySections = [];
+    let teachingSections = [];
+    if (userId) {
+      try {
+        const [secRows] = await db.execute(
+          `SELECT DISTINCT sec.section_id, sec.section_name, gl.grade_level_name, gl.grade_level_id, saa.school_year_id
+           FROM SECTION_ADVISER_ASSIGNMENT saa
+           JOIN SECTION sec ON saa.section_id = sec.section_id
+           JOIN GRADE_LEVEL gl ON sec.grade_level_id = gl.grade_level_id
+           WHERE saa.user_id = ?`,
+          [userId]
+        );
+        advisorySections = secRows;
+
+        // Also fetch teaching sections/offerings
+        const [teachRows] = await db.execute(
+          `SELECT DISTINCT so.subject_offering_id, so.section_id, sec.section_name, gl.grade_level_name, sub.subject_name
+           FROM TEACHER_ASSIGNMENT ta
+           JOIN SUBJECT_OFFERING so ON ta.subject_offering_id = so.subject_offering_id
+           JOIN SECTION sec ON so.section_id = sec.section_id
+           JOIN GRADE_LEVEL gl ON sec.grade_level_id = gl.grade_level_id
+           JOIN SUBJECT sub ON so.subject_id = sub.subject_id
+           WHERE ta.user_id = ?`,
+          [userId]
+        );
+        teachingSections = teachRows;
+      } catch (sErr) {
+        console.warn('[notifications/adviser] Failed to resolve sections:', sErr.message);
+      }
+    }
+
+    // 2. Fetch from NOTIFICATION table addressed specifically to this user
+    let dbNotifs = [];
+    try {
+      if (userId) {
+        const [rows] = await db.execute(
+          `SELECT * FROM NOTIFICATION
+           WHERE user_id = ?
+           ORDER BY created_at DESC, notification_id DESC
+           LIMIT 50`,
+          [userId]
+        );
+        dbNotifs = rows;
+      }
+    } catch (e) {
+      console.warn('[notifications/adviser] DB read error:', e.message);
+    }
+
+    // 3. Dynamically synthesize live notifications based on the user's real sections
+    const synthesized = [];
+    const now = new Date();
+    const yesterdayDate = new Date(now);
+    yesterdayDate.setDate(now.getDate() - 1);
+
+    // Resolve active or latest academic term
+    let activeTerm = null;
+    try {
+      const [terms] = await db.execute(
+        `SELECT term_id, term_name, ends_at FROM ACADEMIC_TERM
+         ORDER BY (status = 'ongoing') DESC, term_id DESC LIMIT 1`
+      );
+      if (terms.length) activeTerm = terms[0];
+    } catch (_) {}
+
+    // A. Section-level diagnostics for each advisory section
+    for (const sec of advisorySections) {
+      const secLabel = `${sec.grade_level_name || 'Grade'} – ${sec.section_name}`;
+
+      // 3a. Recent grade sheet submissions for this section
+      try {
+        const [sheets] = await db.execute(
+          `SELECT
+             gs.grade_sheet_id,
+             gs.submitted_at,
+             gs.updated_at,
+             sub.subject_name,
+             COALESCE(CONCAT(u.first_name, ' ', u.last_name), 'Subject Teacher') AS teacher_name,
+             atm.term_name
+           FROM GRADE_SHEET gs
+           JOIN SUBJECT_OFFERING so ON gs.subject_offering_id = so.subject_offering_id
+           JOIN SUBJECT sub ON so.subject_id = sub.subject_id
+           LEFT JOIN TEACHER_ASSIGNMENT ta ON ta.subject_offering_id = so.subject_offering_id
+           LEFT JOIN USER u ON ta.user_id = u.user_id
+           LEFT JOIN ACADEMIC_TERM atm ON gs.term_id = atm.term_id
+           WHERE so.section_id = ? AND gs.workflow_status = 'SUBMITTED'
+           ORDER BY COALESCE(gs.submitted_at, gs.updated_at) DESC
+           LIMIT 3`,
+          [sec.section_id]
+        );
+
+        for (const s of sheets) {
+          synthesized.push({
+            id: `sub-${s.grade_sheet_id}`,
+            title: `Grade Submission Received — ${s.subject_name}`,
+            message: `${s.teacher_name} submitted ${s.term_name || 'final'} grades for ${secLabel} (${s.subject_name}).`,
+            timestamp: formatRelativeTime(s.submitted_at || s.updated_at),
+            created_at: s.submitted_at || s.updated_at || new Date().toISOString(),
+            unread: true,
+            type: 'SUBMISSION',
+            action_link: `/adviser/master-sheet`,
+          });
+        }
+      } catch (subErr) {
+        console.warn('[notifications/adviser] synthesize submissions error:', subErr.message);
+      }
+
+      // 3b. Pending unsubmitted subjects check for the active term
+      if (activeTerm) {
+        try {
+          const [pendingOfferings] = await db.execute(
+            `SELECT sub.subject_name
+             FROM SUBJECT_OFFERING so
+             JOIN SUBJECT sub ON so.subject_id = sub.subject_id
+             LEFT JOIN GRADE_SHEET gs ON gs.subject_offering_id = so.subject_offering_id
+                                     AND gs.term_id = ?
+                                     AND gs.workflow_status = 'SUBMITTED'
+             WHERE so.section_id = ? AND gs.grade_sheet_id IS NULL
+             LIMIT 5`,
+            [activeTerm.term_id, sec.section_id]
+          );
+
+          if (pendingOfferings.length > 0) {
+            const pendingNames = pendingOfferings.map(o => o.subject_name).join(', ');
+            synthesized.push({
+              id: `pending-${sec.section_id}-${activeTerm.term_id}`,
+              title: 'Grade Submission Reminder',
+              message: `${activeTerm.term_name} Term grades for ${secLabel} remain incomplete. Pending subjects: ${pendingNames}`,
+              timestamp: 'Today',
+              created_at: new Date().toISOString(),
+              unread: true,
+              type: 'DEADLINE',
+              action_link: `/adviser/master-sheet`,
+            });
+          } else {
+            synthesized.push({
+              id: `completed-${sec.section_id}-${activeTerm.term_id}`,
+              title: 'Grade Submission Completed',
+              message: `All subject teachers for ${secLabel} have submitted their ${activeTerm.term_name} Term grades. Master Sheet and SF9 are ready.`,
+              timestamp: 'Today',
+              created_at: new Date().toISOString(),
+              unread: true,
+              type: 'SUMMARY',
+              action_link: `/adviser/master-sheet`,
+            });
+          }
+        } catch (pErr) {
+          console.warn('[notifications/adviser] synthesize pending subjects error:', pErr.message);
+        }
+      }
+
+      // 3c. At-risk learners in this section (failing quarterly grades)
+      try {
+        const [atRiskRows] = await db.execute(
+          `SELECT DISTINCT
+             st.student_id,
+             CONCAT(st.first_name, ' ', st.last_name) AS student_name,
+             sub.subject_name,
+             sg.quarterly_grade
+           FROM STUDENT_GRADE sg
+           JOIN STUDENT_SECTION ss ON sg.student_id = ss.student_id
+           JOIN STUDENT st ON st.student_id = ss.student_id
+           JOIN SUBJECT_OFFERING so ON sg.subject_offering_id = so.subject_offering_id
+           JOIN SUBJECT sub ON so.subject_id = sub.subject_id
+           WHERE ss.section_id = ?
+             AND sg.quarterly_grade IS NOT NULL
+             AND sg.quarterly_grade < 75
+           LIMIT 2`,
+          [sec.section_id]
+        );
+
+        for (const ar of atRiskRows) {
+          synthesized.push({
+            id: `atrisk-${ar.student_id}-${ar.subject_name}`,
+            title: 'At-Risk Student Detected',
+            message: `${ar.student_name} in ${secLabel} has been identified as at-risk due to a failing grade (${Math.round(ar.quarterly_grade)}) in ${ar.subject_name}.`,
+            timestamp: 'Today',
+            created_at: new Date().toISOString(),
+            unread: true,
+            type: 'AT_RISK',
+            action_link: `/adviser/performance`,
+          });
+        }
+      } catch (arErr) {
+        console.warn('[notifications/adviser] synthesize at-risk error:', arErr.message);
+      }
+
+      // 3d. Grade reopening requests for this section
+      try {
+        const [reopens] = await db.execute(
+          `SELECT
+             grr.request_id,
+             grr.reason,
+             grr.status,
+             grr.requested_at,
+             sub.subject_name,
+             CONCAT(u.first_name, ' ', u.last_name) AS teacher_name
+           FROM GRADE_REOPEN_REQUEST grr
+           JOIN TEACHER_ASSIGNMENT ta ON grr.teacher_assignment_id = ta.teacher_assignment_id
+           JOIN SUBJECT_OFFERING so ON ta.subject_offering_id = so.subject_offering_id
+           JOIN SUBJECT sub ON so.subject_id = sub.subject_id
+           JOIN USER u ON ta.user_id = u.user_id
+           WHERE so.section_id = ?
+           ORDER BY grr.requested_at DESC
+           LIMIT 2`,
+          [sec.section_id]
+        );
+
+        for (const ro of reopens) {
+          synthesized.push({
+            id: `reopen-${ro.request_id}`,
+            title: `Grade Reopening — ${ro.subject_name}`,
+            message: `${ro.teacher_name || 'Teacher'} requested reopening for ${secLabel} (${ro.subject_name}): "${ro.reason || 'Correction needed'}".`,
+            timestamp: formatRelativeTime(ro.requested_at),
+            created_at: ro.requested_at || new Date().toISOString(),
+            unread: true,
+            type: 'REQUEST',
+            action_link: `/adviser/request`,
+          });
+        }
+      } catch (roErr) {
+        console.warn('[notifications/adviser] synthesize reopen error:', roErr.message);
+      }
+    }
+
+    // B. If user has teaching classes (no advisory section, or dual role)
+    if (advisorySections.length === 0 && teachingSections.length > 0) {
+      for (const t of teachingSections.slice(0, 3)) {
+        synthesized.push({
+          id: `teach-sub-${t.subject_offering_id}`,
+          title: `Class Record Reminder — ${t.subject_name}`,
+          message: `Class record for ${t.grade_level_name} – ${t.section_name} (${t.subject_name}) is currently open for encoding.`,
+          timestamp: 'Today',
+          created_at: new Date().toISOString(),
+          unread: true,
+          type: 'DEADLINE',
+          action_link: `/teacher/sections`,
+        });
+      }
+    }
+
+    // C. Demo fallback seed if no sections exist at all for this user
+    if (synthesized.length === 0 && dbNotifs.length === 0) {
+      synthesized.push(
+        {
+          id: 'adv-demo-1',
+          title: 'Grade Submission Reminder',
+          message: `Quarter 2 grades for Grade 9 – Rizal remain incomplete. Pending teachers: Mathematics, Science, English`,
+          timestamp: '5 mins',
+          created_at: new Date(now.getTime() - 5 * 60000).toISOString(),
+          unread: true,
+          type: 'DEADLINE',
+          action_link: '/adviser/master-sheet',
+        },
+        {
+          id: 'adv-demo-2',
+          title: 'At-Risk Student Detected',
+          message: `A learner in Grade 9 – Rizal has been identified as Moderate Risk due to declining grades and attendance.`,
+          timestamp: '15 mins',
+          created_at: new Date(now.getTime() - 15 * 60000).toISOString(),
+          unread: true,
+          type: 'AT_RISK',
+          action_link: '/adviser/performance',
+        },
+        {
+          id: 'adv-demo-3',
+          title: 'SF9 Report Generated',
+          message: `SF9 records for Grade 8 – Mabini were successfully generated and validated.`,
+          timestamp: '1 hour',
+          created_at: new Date(now.getTime() - 60 * 60000).toISOString(),
+          unread: true,
+          type: 'SUMMARY',
+          action_link: '/adviser/master-sheet',
+        },
+        {
+          id: 'adv-demo-4',
+          title: 'Grade Submission Completed',
+          message: `All subject teachers for Grade 10 – Bonifacio have submitted their Quarter 2 grades.`,
+          timestamp: 'Yesterday',
+          created_at: yesterdayDate.toISOString(),
+          unread: true,
+          type: 'SUBMISSION',
+          action_link: '/adviser/master-sheet',
+        },
+        {
+          id: 'adv-demo-5',
+          title: 'Intervention Record Updated',
+          message: `An intervention record for an at-risk learner has been successfully updated.`,
+          timestamp: 'Yesterday',
+          created_at: yesterdayDate.toISOString(),
+          unread: true,
+          type: 'GENERAL',
+          action_link: '/adviser/sections',
+        },
+        {
+          id: 'adv-demo-6',
+          title: 'SF10 Report Generated',
+          message: `SF10 permanent records for Grade 9 – Rizal were successfully generated.`,
+          timestamp: 'Yesterday',
+          created_at: yesterdayDate.toISOString(),
+          unread: true,
+          type: 'SUMMARY',
+          action_link: '/adviser/master-sheet',
+        }
+      );
+    }
+
+    // 4. Merge, deduplicate by ID, and group into today / yesterday
+    const formattedDb = dbNotifs.map(formatNotification);
+    const seenIds = new Set();
+    const merged = [];
+
+    for (const item of [...formattedDb, ...synthesized]) {
+      const key = String(item.id);
+      if (!seenIds.has(key)) {
+        seenIds.add(key);
+        merged.push(item);
+      }
+    }
+
+    const today = [];
+    const yesterday = [];
+    for (const item of merged) {
+      if (isCreatedToday(item.created_at)) {
+        today.push(item);
+      } else {
+        yesterday.push(item);
+      }
+    }
+
+    res.json({
+      success: true,
+      unreadCount: merged.filter(n => n.unread).length,
+      totalCount: merged.length,
+      notifications: { today, yesterday },
+      all: merged,
+    });
+  } catch (err) {
+    console.error('[GET /api/notifications/adviser]', err.message);
     res.status(500).json({ success: false, error: err.message });
   }
 });

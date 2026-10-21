@@ -6,7 +6,7 @@
     "postinstall": "node scripts/model-runtime.js setup",
     "model:setup": "node scripts/model-runtime.js setup",
     "model:check": "node scripts/model-runtime.js check",
-    "test": "node --test test/GradeComputationService.test.js test/MasterSheetWorkbookService.test.js test/MasterSheetService.test.js test/SectionDetailsService.test.js test/GradingPeriodService.test.js test/sf10Report.test.js test/studentSf9Routes.test.js test/EnglishRiskFeatures.test.js test/atRiskPredictionRoutes.test.js test/PhilIriScreening.test.js test/PhilIriAssessment.test.js test/AtRiskPrediction.test.js test/AttendanceDayService.test.js test/AttendanceRiskFeatures.test.js test/userManagementOptionsRoutes.test.js test/ModelRuntime.test.js test/EnglishRiskModel.test.js"
+    "test": "node --test test/GradeComputationService.test.js test/MasterSheetWorkbookService.test.js test/MasterSheetService.test.js test/SectionDetailsService.test.js test/GradingPeriodService.test.js test/sf10Report.test.js test/studentSf9Routes.test.js test/EnglishRiskFeatures.test.js test/atRiskPredictionRoutes.test.js test/PhilIriScreening.test.js test/PhilIriAssessment.test.js test/AtRiskPrediction.test.js test/AttendanceDayService.test.js test/AttendanceRiskFeatures.test.js test/userManagementOptionsRoutes.test.js test/ModelRuntime.test.js test/EnglishRiskModel.test.js test/adviserNotifications.test.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

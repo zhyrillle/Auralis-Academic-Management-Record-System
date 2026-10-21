@@ -40,6 +40,30 @@ export async function fetchDeptHeadNotifications(userId = null) {
 }
 
 /**
+ * Fetches notifications for the Class Adviser.
+ * @param {string|number} [userId]
+ */
+export async function fetchAdviserNotifications(userId = null) {
+  try {
+    const resolvedUserId = userId ?? getStoredUser()?.user_id ?? getStoredUser()?.id ?? null;
+    const url = resolvedUserId
+      ? `${API_BASE_URL}/notifications/adviser?user_id=${encodeURIComponent(resolvedUserId)}`
+      : `${API_BASE_URL}/notifications/adviser`;
+    const headers = resolvedUserId ? { "x-auralis-user-id": String(resolvedUserId) } : {};
+    const res = await fetch(url, {
+      queueOffline: false,
+      headers,
+      cacheRead: false,
+      force: true,
+    });
+    return await parseResponse(res);
+  } catch (error) {
+    console.warn("Could not fetch adviser notifications:", error);
+    return null;
+  }
+}
+
+/**
  * Marks a notification as read.
  * @param {string|number} notificationId
  */

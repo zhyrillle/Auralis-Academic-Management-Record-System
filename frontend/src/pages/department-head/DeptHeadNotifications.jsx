@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import "../../styles/adviserNotifications.css";
 import {
   fetchDeptHeadNotifications,
@@ -6,6 +7,36 @@ import {
   markAllNotificationsAsRead,
 } from "../../services/notificationApi";
 import { getStoredUser } from "../../utils/auth";
+
+export function resolveDeptHeadNotificationPath(notification) {
+  if (notification.action_link) return notification.action_link;
+  const type = String(notification.type || "").toUpperCase();
+  const text = `${notification.title || ""} ${notification.message || ""}`.toLowerCase();
+
+  if (type === "PHIL_IRI" || text.includes("phil-iri") || text.includes("reading")) {
+    return "/department-head/phil-iri";
+  }
+  if (
+    type === "SUBMISSION" ||
+    type === "REQUEST" ||
+    type === "DEADLINE" ||
+    text.includes("submission") ||
+    text.includes("reopen") ||
+    text.includes("class record")
+  ) {
+    return "/department-head/class-records";
+  }
+  if (
+    type === "AT_RISK" ||
+    type === "SUMMARY" ||
+    text.includes("summary") ||
+    text.includes("risk") ||
+    text.includes("analytics")
+  ) {
+    return "/department-head/dashboard";
+  }
+  return "/department-head/dashboard";
+}
 
 const defaultFallbackNotifications = {
   today: [
@@ -17,6 +48,7 @@ const defaultFallbackNotifications = {
       timestamp: "5 mins",
       unread: true,
       type: "grade_submission",
+      action_link: "/department-head/class-records",
     },
     {
       id: "dept-2",
@@ -26,6 +58,7 @@ const defaultFallbackNotifications = {
       timestamp: "30 mins",
       unread: true,
       type: "at_risk_alert",
+      action_link: "/department-head/dashboard",
     },
     {
       id: "dept-3",
@@ -35,6 +68,7 @@ const defaultFallbackNotifications = {
       timestamp: "2 hours",
       unread: true,
       type: "deadline_reminder",
+      action_link: "/department-head/class-records",
     },
   ],
   yesterday: [
@@ -46,6 +80,7 @@ const defaultFallbackNotifications = {
       timestamp: "Yesterday",
       unread: false,
       type: "reopen_request",
+      action_link: "/department-head/class-records",
     },
     {
       id: "dept-5",
@@ -55,18 +90,27 @@ const defaultFallbackNotifications = {
       timestamp: "Yesterday",
       unread: false,
       type: "summary",
+      action_link: "/department-head/dashboard",
     },
   ],
 };
 
-function NotificationCard({ notification, onToggleRead }) {
+function NotificationCard({ notification, onClick }) {
   return (
     <div
       className={`notification-card ${
         notification.unread ? "notification-unread" : ""
       }`}
-      onClick={() => onToggleRead(notification.id, notification.unread)}
+      onClick={() => onClick(notification)}
       style={{ cursor: "pointer" }}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick(notification);
+        }
+      }}
     >
       <div className="notification-content">
         <h3 className="notification-item-title">{notification.title}</h3>
@@ -79,6 +123,7 @@ function NotificationCard({ notification, onToggleRead }) {
 }
 
 export default function DeptHeadNotifications() {
+  const navigate = useNavigate();
   const [activeFilter, setActiveFilter] = useState("all");
   const [items, setItems] = useState(defaultFallbackNotifications);
   const [loading, setLoading] = useState(true);
@@ -117,8 +162,18 @@ export default function DeptHeadNotifications() {
       ),
     }));
 
-    if (isCurrentlyUnread && typeof id === "number") {
+    if (isCurrentlyUnread && (typeof id === "number" || /^\d+$/.test(String(id)))) {
       await markNotificationAsRead(id);
+    }
+  };
+
+  const handleCardClick = (notification) => {
+    if (notification.unread) {
+      handleToggleRead(notification.id, true);
+    }
+    const targetPath = resolveDeptHeadNotificationPath(notification);
+    if (targetPath) {
+      navigate(targetPath);
     }
   };
 
@@ -150,8 +205,17 @@ export default function DeptHeadNotifications() {
 
   return (
     <div className="notifications-page-container">
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-        <h1 className="notifications-title" style={{ margin: 0 }}>Your Notifications</h1>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: "16px",
+        }}
+      >
+        <h1 className="notifications-title" style={{ margin: 0 }}>
+          Your Notifications
+        </h1>
         {totalUnread > 0 && (
           <button
             type="button"
@@ -202,7 +266,7 @@ export default function DeptHeadNotifications() {
               <NotificationCard
                 key={notification.id}
                 notification={notification}
-                onToggleRead={handleToggleRead}
+                onClick={handleCardClick}
               />
             ))}
           </>
@@ -215,7 +279,7 @@ export default function DeptHeadNotifications() {
               <NotificationCard
                 key={notification.id}
                 notification={notification}
-                onToggleRead={handleToggleRead}
+                onClick={handleCardClick}
               />
             ))}
           </>
@@ -223,11 +287,14 @@ export default function DeptHeadNotifications() {
 
         {!hasToday && !hasYesterday && (
           <div className="notifications-empty-state">
-            <p>{loading ? "Loading notifications..." : "No unread notifications."}</p>
+            <p>
+              {loading
+                ? "Loading notifications..."
+                : "No unread notifications."}
+            </p>
           </div>
         )}
       </div>
     </div>
   );
 }
-

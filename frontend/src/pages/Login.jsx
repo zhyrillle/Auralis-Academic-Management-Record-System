@@ -1,9 +1,12 @@
-import { apiFetch as fetch } from "../services/navigationCache";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import AuthLayout from "../components/AuthLayout";
 import logo from "../assets/auralis-logo.png";
 import { setStoredUser, getRoleDefaultPath } from "../utils/auth";
+
+const API_BASE_URL = (
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api"
+).replace(/\/$/, "");
 
 export default function Login({ user, onLoginSuccess }) {
   const [email, setEmail] = useState("");
@@ -24,7 +27,7 @@ export default function Login({ user, onLoginSuccess }) {
     setError("");
 
     try {
-      const response = await fetch("http://localhost:5000/api/users/login", {
+      const response = await fetch(`${API_BASE_URL}/users/login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -32,10 +35,10 @@ export default function Login({ user, onLoginSuccess }) {
         body: JSON.stringify({ email, password }),
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        throw new Error(data.error || data.message || "Login failed");
+        throw new Error(data.error || data.message || "Invalid email or password.");
       }
 
       // Handle response structure (whether response is { user: {...} } or directly {...})
