@@ -31,6 +31,7 @@ import {
   DEFAULT_JHS_WEIGHTS,
   setTransmutationConfig,
   initTransmutationConfig,
+  getActiveTransmutationConfig,
 } from "../../utils/depedTransmutation";
 import { triggerClassRecordPrint } from "../../utils/exportClassRecordPdf";
 import { getStoredUser } from "../../utils/auth";
@@ -54,9 +55,14 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
   const params = useParams();
   const currentUserId = getStoredUser()?.user_id;
   const [recordSession] = useState(() => getSessionScope());
+  const [transmutationConfig, setTransmutationConfigState] = useState(() => getActiveTransmutationConfig());
 
   useEffect(() => {
-    initTransmutationConfig().catch(() => {});
+    initTransmutationConfig()
+      .then((cfg) => {
+        if (cfg) setTransmutationConfigState(cfg);
+      })
+      .catch(() => {});
   }, []);
 
   // Dynamic Class Context Resolution (from prop or router location state)
@@ -483,6 +489,7 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
 
     if (data.transmutation_config) {
       setTransmutationConfig(data.transmutation_config);
+      setTransmutationConfigState(data.transmutation_config);
     }
 
     const isSheetLocked = Boolean(
@@ -1022,6 +1029,7 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
         weights: effectiveWeights,
         isMapeh: Boolean(isMapeh),
         isMapehSubject: Boolean(isMapeh),
+        transmutationConfig,
       });
 
       const qg = rowCalc.termGrade !== "-" ? rowCalc.termGrade : (rowCalc.quarterlyGrade !== "-" ? rowCalc.quarterlyGrade : "");
@@ -1030,7 +1038,7 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
       if (student.lrn) map[student.lrn] = qg;
     });
     return map;
-  }, [students, grades, writtenWorkColumns, performanceTaskColumns, examConfig, effectiveWeights, isMapeh]);
+  }, [students, grades, writtenWorkColumns, performanceTaskColumns, examConfig, effectiveWeights, isMapeh, transmutationConfig]);
 
   useEffect(() => {
     if (isRecordReady && typeof onUpdateQuarterlyGrades === "function" && Object.keys(studentQuarterlyGradesMap).length > 0) {
@@ -1625,6 +1633,7 @@ const formatToISODate = (val) => {
       grades,
       depedLogoUrl,
       depedWordmarkLogoUrl,
+      transmutationConfig,
     });
   };
 
@@ -2321,6 +2330,7 @@ const formatToISODate = (val) => {
                               handleGradeChange={handleGradeChange}
                               handleExamScoreChange={handleExamScoreChange}
                               handleScoreBlur={handleScoreBlur}
+                              transmutationConfig={transmutationConfig}
                             />
                           ))}
 
@@ -2349,6 +2359,7 @@ const formatToISODate = (val) => {
                               handleGradeChange={handleGradeChange}
                               handleExamScoreChange={handleExamScoreChange}
                               handleScoreBlur={handleScoreBlur}
+                              transmutationConfig={transmutationConfig}
                             />
                           ))}
                         </>
@@ -2487,6 +2498,7 @@ function StudentRow({
   handleGradeChange,
   handleExamScoreChange,
   handleScoreBlur,
+  transmutationConfig,
 }) {
   const studentGrades = grades[student.id] || EMPTY_SCORES;
   const studentWW = studentGrades.writtenWorks || EMPTY_SCORES;
@@ -2511,8 +2523,9 @@ function StudentRow({
       weights,
       isMapeh: Boolean(isMapeh),
       isMapehSubject: Boolean(isMapeh),
+      transmutationConfig,
     });
-  }, [studentWW, studentPT, studentEX, studentGrades.savedSummary, writtenWorkColumns, performanceTaskColumns, examConfig, weights, isMapeh]);
+  }, [studentWW, studentPT, studentEX, studentGrades.savedSummary, writtenWorkColumns, performanceTaskColumns, examConfig, weights, isMapeh, transmutationConfig]);
 
   return (
     <tr className="student-row">

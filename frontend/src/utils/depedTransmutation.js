@@ -106,7 +106,7 @@ export async function initTransmutationConfig(baseUrl = "http://localhost:5000/a
  * @param {Array|null} customTiers
  * @returns {number|null}
  */
-export function getTransmutedGrade(initialGrade, customTiers = null) {
+export function getTransmutedGrade(initialGrade, customTiers = null, config = null) {
   if (initialGrade === null || initialGrade === undefined || initialGrade === "") {
     return null;
   }
@@ -114,31 +114,44 @@ export function getTransmutedGrade(initialGrade, customTiers = null) {
   const numericGrade = Number(initialGrade);
   if (isNaN(numericGrade)) return null;
 
-  // 1. If explicit tiers are passed by the caller
-  if (Array.isArray(customTiers) && customTiers.length > 0) {
-    if (numericGrade >= 100) return 100;
-    if (numericGrade <= 0) return 60;
-    const roundedInitial = Math.round(numericGrade * 100) / 100;
-    for (const tier of customTiers) {
-      const tMin = Number(tier.min);
-      const tMax = Number(tier.max);
-      if (roundedInitial >= tMin && roundedInitial <= tMax) {
-        const val = tier.transmuted !== undefined ? tier.transmuted : tier.grade;
-        return Number(val);
-      }
-    }
-    return 60;
+  // Resolve config and tiers if passed
+  let resolvedConfig = null;
+  let resolvedTiers = null;
+
+  if (customTiers && typeof customTiers === "object" && !Array.isArray(customTiers)) {
+    resolvedConfig = customTiers;
+  } else if (config && typeof config === "object") {
+    resolvedConfig = config;
   }
 
-  // 2. Option B: When custom transmutation is OFF, grades are NOT transmuted!
-  if (!activeTransmutationConfig.isCustomEnabled) {
+  let isCustomEnabled = null;
+  if (resolvedConfig) {
+    if (resolvedConfig.is_custom_enabled !== undefined || resolvedConfig.isCustomEnabled !== undefined) {
+      isCustomEnabled = Boolean(resolvedConfig.is_custom_enabled ?? resolvedConfig.isCustomEnabled);
+    }
+    if (Array.isArray(resolvedConfig.ranges || resolvedConfig.tiers)) {
+      resolvedTiers = resolvedConfig.ranges || resolvedConfig.tiers;
+    }
+  }
+
+  if (Array.isArray(customTiers) && customTiers.length > 0) {
+    resolvedTiers = customTiers;
+    if (isCustomEnabled === null) isCustomEnabled = true;
+  }
+
+  // Fallback to activeTransmutationConfig if not explicitly overridden
+  if (isCustomEnabled === null) {
+    isCustomEnabled = activeTransmutationConfig.isCustomEnabled;
+  }
+  if (!resolvedTiers && isCustomEnabled) {
+    resolvedTiers = activeTransmutationConfig.tiers;
+  }
+
+  // Option B: When custom transmutation is OFF, grades are NOT transmuted!
+  // The quarterly grade is simply the rounded initial grade (clamped between 0 and 100).
+  if (!isCustomEnabled || !resolvedTiers || resolvedTiers.length === 0) {
     return Math.min(100, Math.max(0, Math.round(numericGrade)));
   }
-
-  // 3. Custom transmutation is ON:
-  const table = (Array.isArray(activeTransmutationConfig.tiers) && activeTransmutationConfig.tiers.length > 0)
-    ? activeTransmutationConfig.tiers
-    : TRANSMUTATION_TABLE;
 
   if (numericGrade >= 100) return 100;
   if (numericGrade <= 0) return 60;
@@ -146,7 +159,7 @@ export function getTransmutedGrade(initialGrade, customTiers = null) {
   // Preserve decimal precision up to 2 places without premature truncation
   const roundedInitial = Math.round(numericGrade * 100) / 100;
 
-  for (const tier of table) {
+  for (const tier of resolvedTiers) {
     const tMin = Number(tier.min);
     const tMax = Number(tier.max);
     if (roundedInitial >= tMin && roundedInitial <= tMax) {
@@ -228,6 +241,7 @@ export function calculateStudentGrades({
   isMapeh = false,
   isMapehSubject = false,
   savedSummary,
+  transmutationConfig = null,
 }) {
   const effectiveIsMapeh = Boolean(
     isMapeh ||
@@ -393,7 +407,7 @@ export function calculateStudentGrades({
   const initialGrade = savedSummary !== undefined ? savedSummary.initialGrade
     : !resolved.error && hasAnyInput ? parseFloat((wwWS + ptWS + exWS).toFixed(2)) : null;
   const termGrade = savedSummary !== undefined ? savedSummary.termGrade
-    : initialGrade !== null ? transmuteGrade(initialGrade) : null;
+    : initialGrade !== null ? transmuteGrade(initialGrade, null, transmutationConfig) : null;
   const descriptor = termGrade !== null ? getGradeDescriptor(termGrade) : "-";
 
   return {

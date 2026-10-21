@@ -539,6 +539,7 @@ export async function exportClassRecordExcel({
   },
   students = [],
   grades = {},
+  transmutationConfig = null,
 }) {
   const wwCols = writtenWorkColumns.length > 0 ? writtenWorkColumns : [
     { id: "ww1", label: "1", max_score: 25 },
@@ -1016,7 +1017,7 @@ export async function exportClassRecordExcel({
       const hasAny = hasWw || hasPt || hasEx;
       const totalWS = parseFloat((wwWS + ptWS + exWS).toFixed(2));
       const initialGrade = hasAny ? totalWS.toFixed(2) : "-";
-      const termGrade = hasAny ? getTransmutedGrade(totalWS) : "-";
+      const termGrade = hasAny ? getTransmutedGrade(totalWS, null, transmutationConfig) : "-";
       const descriptor = typeof termGrade === "number" ? getGradeDescriptor(termGrade) : "-";
       const isFailing = typeof termGrade === "number" && termGrade < 75;
 

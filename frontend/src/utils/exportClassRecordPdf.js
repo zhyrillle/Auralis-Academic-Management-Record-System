@@ -19,6 +19,7 @@ export function formatClassRecordData({
   quarterlyAssessmentHPS = 50,
   students = [],
   grades = {},
+  transmutationConfig = null,
 }) {
   const isMapehSubject = Boolean(
     metadata.isMapeh ||
@@ -143,7 +144,7 @@ export function formatClassRecordData({
     const hasAnyInput = hasWwInput || hasPtInput || hasExInput;
     const totalWS = parseFloat((wwWS + ptWS + exWS).toFixed(2));
     const initialGrade = hasAnyInput ? totalWS.toFixed(2) : "";
-    const termGrade = hasAnyInput && initialGrade !== "" ? transmuteGrade(totalWS) : "";
+    const termGrade = hasAnyInput && initialGrade !== "" ? transmuteGrade(totalWS, null, transmutationConfig) : "";
     const descriptor = termGrade !== "" ? getGradeDescriptor(termGrade) : "";
     const isFailing = typeof termGrade === "number" && termGrade < 75;
 
@@ -237,6 +238,7 @@ export function triggerClassRecordPrint({
   grades,
   depedLogoUrl,
   depedWordmarkLogoUrl,
+  transmutationConfig = null,
 }) {
   const formattedData = formatClassRecordData({
     metadata,
@@ -247,6 +249,7 @@ export function triggerClassRecordPrint({
     quarterlyAssessmentHPS,
     students,
     grades,
+    transmutationConfig,
   });
 
   const {
