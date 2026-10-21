@@ -88,6 +88,32 @@ async function resolveDeptHeadsForOffering(subjectOfferingId, connection = db) {
 }
 
 /**
+ * Resolves the user_id(s) of the Section Adviser assigned to the section
+ * of the given subject_offering_id.
+ *
+ * @param {number} subjectOfferingId
+ * @param {object} [connection=db]
+ * @returns {Promise<Array<{ user_id: number, section_id: number, section_name: string }>>}
+ */
+async function resolveAdvisersForOffering(subjectOfferingId, connection = db) {
+  try {
+    const [rows] = await connection.execute(
+      `SELECT DISTINCT u.user_id, sec.section_id, sec.section_name
+       FROM SUBJECT_OFFERING so
+       JOIN SECTION sec ON so.section_id = sec.section_id
+       JOIN SECTION_ADVISER_ASSIGNMENT saa ON saa.section_id = sec.section_id
+       JOIN USER u ON saa.user_id = u.user_id
+       WHERE so.subject_offering_id = ?`,
+      [subjectOfferingId]
+    );
+    return rows;
+  } catch (err) {
+    console.warn('[NotificationService] resolveAdvisersForOffering error:', err.message);
+    return [];
+  }
+}
+
+/**
  * Resolves all active Department Heads across the system.
  * Used for DEADLINE and SUMMARY events that are system-wide.
  *
@@ -183,11 +209,12 @@ const NotificationService = {
    * @returns {Promise<number[]>} inserted notification_ids
    */
   async notifyGradeSubmission({ subjectOfferingId, gradeSheetId, teacherName, submitterRole, subjectName, sectionName, termName, connection }) {
-    const recipients = await resolveDeptHeadsForOffering(subjectOfferingId, connection);
-    const ids        = [];
-
+    const ids = [];
     const roleSuffix = submitterRole ? ` (${submitterRole})` : '';
-    for (const recipient of recipients) {
+
+    // 1. Notify Department Heads for this subject
+    const deptHeadRecipients = await resolveDeptHeadsForOffering(subjectOfferingId, connection);
+    for (const recipient of deptHeadRecipients) {
       const id = await _persist({
         user_id:             recipient.user_id,
         title:               `Grade Submission Received — ${subjectName}`,
@@ -200,10 +227,57 @@ const NotificationService = {
       ids.push(id);
     }
 
+    // 2. Notify Section Adviser(s) for the advisory section
+    const adviserRecipients = await resolveAdvisersForOffering(subjectOfferingId, connection);
+    for (const adviser of adviserRecipients) {
+      const id = await _persist({
+        user_id:             adviser.user_id,
+        title:               `Grade Submission Received — ${subjectName}`,
+        message:             `${teacherName}${roleSuffix} submitted ${termName} final grades for ${sectionName} (${subjectName}).`,
+        type:                NOTIFICATION_TYPES.SUBMISSION,
+        related_entity_type: 'GRADE_SHEET',
+        related_entity_id:   gradeSheetId,
+        is_read:             false,
+      }, connection);
+      ids.push(id);
+
+      // Check if all subject offerings in this advisory section have now been submitted for this term
+      try {
+        const [statusRows] = await (connection || db).execute(
+          `SELECT
+             COUNT(DISTINCT so.subject_offering_id) AS total_subjects,
+             COUNT(DISTINCT CASE WHEN gs.workflow_status = 'SUBMITTED' THEN so.subject_offering_id END) AS submitted_subjects
+           FROM SUBJECT_OFFERING so
+           JOIN GRADE_SHEET gs_current ON gs_current.grade_sheet_id = ?
+           LEFT JOIN GRADE_SHEET gs ON gs.subject_offering_id = so.subject_offering_id
+                                   AND gs.term_id = gs_current.term_id
+                                   AND gs.workflow_status = 'SUBMITTED'
+           WHERE so.section_id = ?`,
+          [gradeSheetId, adviser.section_id]
+        );
+        const total = statusRows[0]?.total_subjects || 0;
+        const submitted = statusRows[0]?.submitted_subjects || 0;
+        if (total > 0 && submitted >= total) {
+          const completionId = await _persist({
+            user_id:             adviser.user_id,
+            title:               `Grade Submission Completed — ${sectionName}`,
+            message:             `All ${total} subject teachers for ${sectionName} have submitted their ${termName} grades. Master Sheet is ready.`,
+            type:                NOTIFICATION_TYPES.SUMMARY,
+            related_entity_type: 'SECTION',
+            related_entity_id:   adviser.section_id,
+            is_read:             false,
+          }, connection);
+          ids.push(completionId);
+        }
+      } catch (chkErr) {
+        console.warn('[NotificationService] check section completion error:', chkErr.message);
+      }
+    }
+
     if (ids.length === 0) {
-      console.warn(`[NotificationService] SUBMISSION – no dept heads resolved for offering ${subjectOfferingId}`);
+      console.warn(`[NotificationService] SUBMISSION – no dept heads or advisers resolved for offering ${subjectOfferingId}`);
     } else {
-      console.log(`[NotificationService] SUBMISSION – notified ${ids.length} dept head(s) for offering ${subjectOfferingId}`);
+      console.log(`[NotificationService] SUBMISSION – notified ${ids.length} recipient(s) for offering ${subjectOfferingId}`);
     }
 
     return ids;

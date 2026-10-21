@@ -182,7 +182,7 @@ export async function apiFetch(input, init = {}) {
   if (scope) assertCurrentSession(scope);
   if (response.ok && mutation) await clearNavigationCache();
   if (scope) assertCurrentSession(scope);
-  if ([401, 403].includes(response.status)) {
+  if ([401, 403].includes(response.status) && requestInit.throwOnAuthError !== false && !url.includes('/login')) {
     const error = new Error('You no longer have access to this data. Please sign in again.');
     error.status = response.status;
     throw error;
