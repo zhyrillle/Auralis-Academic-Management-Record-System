@@ -1,12 +1,36 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { apiFetch, cacheKey, clearNavigationCache, getCachedData, loadCached } from '../src/services/navigationCache.js';
+import { apiFetch, cachedApiFetch, cacheKey, clearNavigationCache, getCachedData, loadCached } from '../src/services/navigationCache.js';
 import { filterRiskPreview } from '../src/utils/filterRiskPreview.js';
 
 let user = { user_id: 1, role: 'principal' };
 const storage = new Map();
 globalThis.localStorage = { getItem: key => key === 'user' ? JSON.stringify(user) : storage.get(key) ?? null,
   setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) };
+
+test('concurrent file and unsuccessful JSON reads each receive an independent response body', async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    for (const [status, type, body] of [
+      [200, 'image/png', 'synthetic-logo-bytes'],
+      [200, 'application/json', 'malformed-json'],
+      [403, 'application/json', '{"error":"Department access denied"}'],
+      [500, 'application/json', '{"error":"Synthetic server failure"}'],
+    ]) {
+      await clearNavigationCache();
+      let requests = 0;
+      globalThis.fetch = async () => {
+        requests++;
+        return new Response(body, { status, headers: { 'Content-Type': type } });
+      };
+      const responses = await Promise.all([0, 1].map(() => cachedApiFetch('/synthetic-file', { throwOnAuthError: false })));
+      assert.equal(requests, 1, 'Simultaneous reads share the network request');
+      assert.notEqual(responses[0], responses[1], 'Consumers must not share a one-shot response body');
+      assert.deepEqual(await Promise.all(responses.map(response => response.text())), [body, body]);
+      assert(responses.every(response => response.status === status));
+    }
+  } finally { globalThis.fetch = originalFetch; }
+});
 
 test('loaded terms are reused, filters have distinct keys and concurrent reads are shared', async () => {
   clearNavigationCache();
