@@ -6,7 +6,7 @@ import depedLogo from "../../assets/deped_logo.png";
 import gccnhsLogo from "../../assets/gccnhs_logo.png";
 import backIconUrl from "../../assets/backButton.svg";
 import { getStoredUser, normalizeRole } from "../../utils/auth";
-import { getStudentSF9Details } from "../../services/studentSf9Service";
+import { getStudentSF9Details, downloadStudentSf9Pdf, fetchEphemeralLrn } from "../../services/studentSf9Service";
 import { getStudentSF10Details } from "../../services/reportService";
 import Toast from "../../components/common/Toast.jsx";
 import { exportSf9Pdf } from "../../utils/exportSf9Pdf";
@@ -235,8 +235,50 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
     if (loading || loadError || !sf9Data) return;
     try {
       showToast(`Generating PDF for ${studentProfile.name || "Student"}...`, "info", CheckCircle2);
+
+      // Attempt 1: Native Vector PDF via Backend (Razor-sharp, 100% crisp vector fonts, zero blur)
+      try {
+        const syId = schoolYearId || studentProfile.schoolYearId || studentProfile.school_year_id;
+        const pdfBlob = await downloadStudentSf9Pdf(identifier, {
+          schoolYearId: syId,
+          comments,
+        });
+
+        if (pdfBlob && pdfBlob.size > 1000) {
+          const lastName = getResolvedLastName();
+          const fileName = `${lastName}_SF9.pdf`;
+          const blobUrl = window.URL.createObjectURL(pdfBlob);
+          const link = document.createElement("a");
+          link.href = blobUrl;
+          link.download = fileName;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          setTimeout(() => window.URL.revokeObjectURL(blobUrl), 1000);
+
+          showToast(`Downloaded official PDF SF9 for ${studentProfile.name}`, "success", CheckCircle2);
+          return;
+        }
+      } catch (backendErr) {
+        console.warn("Backend PDF generation unavailable, falling back to high-res client renderer:", backendErr);
+      }
+
+      // Attempt 2: Fallback to high-resolution client-side PDF (4x scale, 384 DPI)
+      let exportLrn = studentProfile.lrn;
+      try {
+        const fetchedLrn = await fetchEphemeralLrn(identifier);
+        if (fetchedLrn) exportLrn = fetchedLrn;
+      } catch (fetchErr) {
+        console.warn("Could not fetch ephemeral LRN, falling back to current:", fetchErr);
+      }
+
+      const temporaryProfile = {
+        ...studentProfile,
+        lrn: exportLrn,
+      };
+
       await exportSf9Pdf({
-        studentProfile,
+        studentProfile: temporaryProfile,
         grades,
         performanceDescriptors,
         attendanceData,
@@ -244,6 +286,11 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
         depedLogo,
         gccnhsLogo,
       });
+
+      // Clear ephemeral LRN immediately from function scope
+      temporaryProfile.lrn = null;
+      exportLrn = null;
+
       showToast(`Downloaded PDF SF9 Performance Report for ${studentProfile.name}`, "success", CheckCircle2);
     } catch (err) {
       console.error("Failed to export SF9 PDF:", err);
@@ -251,19 +298,112 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
     }
   };
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
     if (loading || loadError || !sf9Data) return;
-    const originalTitle = document.title;
-    const lastName = getStudentLastName();
-    const fileName = `${lastName}_SF9`;
+    try {
+      showToast(`Preparing print document for ${studentProfile.name || "Student"}...`, "info", Printer);
 
-    showToast(`Opening Print Preview for ${studentProfile.name || "Student"}...`, "info", Printer);
+      // Attempt 1: Native Vector PDF via Backend for crystal-clear print
+      try {
+        const syId = schoolYearId || studentProfile.schoolYearId || studentProfile.school_year_id;
+        const pdfBlob = await downloadStudentSf9Pdf(identifier, {
+          schoolYearId: syId,
+          comments,
+        });
 
-    setTimeout(() => {
-      document.title = fileName;
-      window.print();
-      document.title = originalTitle;
-    }, 100);
+        if (pdfBlob && pdfBlob.size > 1000) {
+          const blobUrl = window.URL.createObjectURL(pdfBlob);
+          const iframe = document.createElement("iframe");
+          iframe.style.position = "fixed";
+          iframe.style.right = "0";
+          iframe.style.bottom = "0";
+          iframe.style.width = "0";
+          iframe.style.height = "0";
+          iframe.style.border = "none";
+          iframe.src = blobUrl;
+          document.body.appendChild(iframe);
+
+          iframe.onload = () => {
+            try {
+              iframe.contentWindow.focus();
+              iframe.contentWindow.print();
+            } catch {
+              window.open(blobUrl, "_blank");
+            } finally {
+              setTimeout(() => {
+                if (document.body.contains(iframe)) {
+                  document.body.removeChild(iframe);
+                }
+                window.URL.revokeObjectURL(blobUrl);
+              }, 60000);
+            }
+          };
+          return;
+        }
+      } catch (backendErr) {
+        console.warn("Backend print PDF unavailable, falling back to high-res client renderer:", backendErr);
+      }
+
+      // Attempt 2: Fallback to high-res client PDF
+      let exportLrn = studentProfile.lrn;
+      try {
+        const fetchedLrn = await fetchEphemeralLrn(identifier);
+        if (fetchedLrn) exportLrn = fetchedLrn;
+      } catch (fetchErr) {
+        console.warn("Could not fetch ephemeral LRN, falling back to current:", fetchErr);
+      }
+
+      const temporaryProfile = {
+        ...studentProfile,
+        lrn: exportLrn,
+      };
+
+      const sf9Result = await exportSf9Pdf({
+        studentProfile: temporaryProfile,
+        grades,
+        performanceDescriptors,
+        attendanceData,
+        comments,
+        depedLogo,
+        gccnhsLogo,
+        skipDownload: true,
+      });
+
+      temporaryProfile.lrn = null;
+      exportLrn = null;
+
+      if (sf9Result?.blob) {
+        const blobUrl = window.URL.createObjectURL(sf9Result.blob);
+        const iframe = document.createElement("iframe");
+        iframe.style.position = "fixed";
+        iframe.style.right = "0";
+        iframe.style.bottom = "0";
+        iframe.style.width = "0";
+        iframe.style.height = "0";
+        iframe.style.border = "none";
+        iframe.src = blobUrl;
+        document.body.appendChild(iframe);
+
+        iframe.onload = () => {
+          try {
+            iframe.contentWindow.focus();
+            iframe.contentWindow.print();
+          } catch {
+            window.open(blobUrl, "_blank");
+          } finally {
+            setTimeout(() => {
+              if (document.body.contains(iframe)) {
+                document.body.removeChild(iframe);
+              }
+              window.URL.revokeObjectURL(blobUrl);
+            }, 60000);
+          }
+        };
+      }
+    } catch (err) {
+      console.error("Failed to print SF9 PDF:", err);
+      showToast("Failed to prepare SF9 document for printing.", "error");
+    }
   };
 
   const sf10StudentProp = useMemo(() => ({
@@ -347,8 +487,21 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
       const lastName = getStudentLastName();
 
       showToast("Generating SF9 Performance Report PDF...", "info");
+      let exportLrn = studentProfile.lrn;
+      try {
+        const fetchedLrn = await fetchEphemeralLrn(identifier);
+        if (fetchedLrn) exportLrn = fetchedLrn;
+      } catch (fetchErr) {
+        console.warn("Could not fetch ephemeral LRN:", fetchErr);
+      }
+
+      const temporaryProfile = {
+        ...studentProfile,
+        lrn: exportLrn,
+      };
+
       const sf9Result = await exportSf9Pdf({
-        studentProfile,
+        studentProfile: temporaryProfile,
         grades,
         performanceDescriptors,
         attendanceData,
@@ -357,6 +510,12 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
         gccnhsLogo,
         skipDownload: true,
       });
+
+      temporaryProfile.lrn = null;
+      exportLrn = null;
+
+      const sf9FileName = sf9Result?.fileName || `${lastName}_SF9.pdf`;
+      const sf9Blob = sf9Result?.blob;
 
       showToast("Generating Form 10 Excel (.xlsx)...", "info");
       const sf10FileName = `${lastName}_SF10.xlsx`;
@@ -369,8 +528,6 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
 
       showToast("Bundling documents into ZIP...", "info");
       const zip = new JSZip();
-      const sf9FileName = sf9Result?.fileName || `${lastName}_SF9.pdf`;
-      const sf9Blob = sf9Result?.blob;
       const sf10Blob = sf10Result?.blob || sf10Result?.buffer;
 
       if (sf9Blob) {
@@ -609,8 +766,8 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
                   <span className="sf9-field-underline">
                     <MaskedLrn
                       lrn={studentProfile.lrn}
-                      showToggle={true}
-                      allowCopy={true}
+                      showToggle={false}
+                      allowCopy={false}
                       badge={false}
                     />
                   </span>
@@ -810,7 +967,7 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
               </div>
             </div>
 
-            {/* Section 3: PARENTS/GUARDIAN'S SIGNATURE (Full-Width Lined Block) */}
+            {/* Section 3: PARENTS/GUARDIAN'S SIGNATURE (Indented & Compact) */}
             <div className="sf9-section-block sf9-parent-signatures-full">
               <div className="sf9-table-heading">PARENTS/GUARDIAN'S SIGNATURE</div>
               <div className="sf9-parent-sig-stack">
@@ -837,11 +994,11 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
               </p>
 
               <div className="sf9-cert-form-lines">
-                <div className="sf9-cert-line">
+                <div className="sf9-cert-line admitted-line">
                   <span className="sf9-cert-label">Admitted to Grade:</span>
                   <span className="sf9-cert-underline">{studentProfile.admittedToGrade || ""}</span>
                 </div>
-                <div className="sf9-cert-line">
+                <div className="sf9-cert-line eligible-line">
                   <span className="sf9-cert-label">Eligible for Admission to Grade:</span>
                   <span className="sf9-cert-underline">{studentProfile.eligibleForAdmission || ""}</span>
                 </div>
@@ -849,14 +1006,16 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
 
               <div className="sf9-approved-block">
                 <div className="sf9-approved-title font-bold">Approved:</div>
-                <div className="sf9-transfer-signatures-row">
-                  <div className="sf9-sig-signatory-col school-head-sig">
-                    <div className="sf9-signatory-line font-bold">{studentProfile.principalName}, Ph.D.</div>
-                    <div className="sf9-signatory-role">School Head</div>
-                  </div>
+                <div className="sf9-adviser-sig-wrap">
                   <div className="sf9-sig-signatory-col adviser-sig">
-                    <div className="sf9-signatory-line font-bold">{studentProfile.adviserName}</div>
+                    <div className="sf9-signatory-line font-bold">{studentProfile.adviserName || ""}</div>
                     <div className="sf9-signatory-role">Adviser</div>
+                  </div>
+                </div>
+                <div className="sf9-schoolhead-sig-wrap">
+                  <div className="sf9-sig-signatory-col school-head-sig">
+                    <div className="sf9-signatory-line font-bold">{studentProfile.principalName ? `${studentProfile.principalName}, Ph.D.` : ""}</div>
+                    <div className="sf9-signatory-role">School Head</div>
                   </div>
                 </div>
               </div>
@@ -878,7 +1037,7 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
 
               <div className="sf9-cancel-signatory-row">
                 <div className="sf9-sig-signatory-col school-head-sig">
-                  <div className="sf9-signatory-line font-bold">{studentProfile.principalName}, Ph.D.</div>
+                  <div className="sf9-signatory-line font-bold">{studentProfile.principalName ? `${studentProfile.principalName}, Ph.D.` : ""}</div>
                   <div className="sf9-signatory-role">School Head</div>
                 </div>
               </div>
