@@ -3,7 +3,8 @@ const router = express.Router();
 const db = require('../config/db');
 const MasterSheetService = require('../services/MasterSheetService');
 const { excludedDates, monthlyNoClassCounts } = require('../services/AttendanceSummaryService');
-const { decryptLrn, hashLrn } = require('../utils/encryption');
+const { decryptLrn, hashLrn, maskLrn } = require('../utils/encryption');
+const { generateSf9Pdf } = require('../services/Sf9PdfService');
 
 const MONTH_NAMES = ["Jun", "Jul", "Aug", "Sept", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr"];
 const MONTH_INDEX_MAP = {
@@ -124,55 +125,47 @@ function formatAddress(st) {
   return parts.length > 0 ? parts.join(", ") : "";
 }
 
-router.get('/student/:identifier', async (req, res) => {
-  try {
-    const { identifier } = req.params;
-    const cleanId = String(identifier).trim();
-    const schoolYearId = req.query.schoolYearId;
-    if (schoolYearId !== undefined && (typeof schoolYearId !== 'string' || !/^[1-9]\d*$/.test(schoolYearId))) {
-      return res.status(400).json({ error: "Invalid school year" });
-    }
+async function fetchStudentSf9Data(cleanId, schoolYearId) {
+  // 1. Find Student record
+  let student = null;
+  let studentSectionId = null;
 
-    // 1. Find Student record
-    let student = null;
-    let studentSectionId = null;
+  const lrnHash = hashLrn(cleanId);
+  const [stRows] = await db.execute(
+    `SELECT st.*, p.program_code, p.program_name, COALESCE(p.is_specialized, 0) AS is_specialized
+     FROM STUDENT st
+     LEFT JOIN PROGRAM p ON p.program_id = st.program_id
+     WHERE st.student_id = ? OR st.LRN = ? OR st.lrn_hash = ? LIMIT 1`,
+    [cleanId, cleanId, lrnHash]
+  );
 
-    const lrnHash = hashLrn(cleanId);
-    const [stRows] = await db.execute(
-      `SELECT st.*, p.program_code, p.program_name, COALESCE(p.is_specialized, 0) AS is_specialized
-       FROM STUDENT st
+  if (stRows.length > 0) {
+    student = stRows[0];
+  } else {
+    const [ssCheck] = await db.execute(
+      `SELECT st.*, p.program_code, p.program_name, COALESCE(p.is_specialized, 0) AS is_specialized, ss.student_section_id
+       FROM STUDENT_SECTION ss
+       JOIN STUDENT st ON ss.student_id = st.student_id
        LEFT JOIN PROGRAM p ON p.program_id = st.program_id
-       WHERE st.student_id = ? OR st.LRN = ? OR st.lrn_hash = ? LIMIT 1`,
-      [cleanId, cleanId, lrnHash]
+       WHERE ss.student_section_id = ? LIMIT 1`,
+      [cleanId]
     );
-
-    if (stRows.length > 0) {
-      student = stRows[0];
-    } else {
-      const [ssCheck] = await db.execute(
-        `SELECT st.*, p.program_code, p.program_name, COALESCE(p.is_specialized, 0) AS is_specialized, ss.student_section_id
-         FROM STUDENT_SECTION ss
-         JOIN STUDENT st ON ss.student_id = st.student_id
-         LEFT JOIN PROGRAM p ON p.program_id = st.program_id
-         WHERE ss.student_section_id = ? LIMIT 1`,
-        [cleanId]
-      );
-      if (ssCheck.length > 0) {
-        student = ssCheck[0];
-        studentSectionId = ssCheck[0].student_section_id;
-      }
+    if (ssCheck.length > 0) {
+      student = ssCheck[0];
+      studentSectionId = ssCheck[0].student_section_id;
     }
+  }
 
-    if (!student) {
-      return res.status(404).json({ error: "Student not found" });
-    }
+  if (!student) {
+    return null;
+  }
 
-    // Decrypt LRN for official DepEd SF9 report
-    student.LRN = decryptLrn(student.LRN);
-    student.lrn = student.LRN;
+  // Decrypt LRN in backend memory for official DepEd document generation
+  student.LRN = decryptLrn(student.LRN);
+  student.lrn = student.LRN;
 
-    // 2. Find Student Section & Section details
-    let sectionInfo = null;
+  // 2. Find Student Section & Section details
+  let sectionInfo = null;
     if (studentSectionId && schoolYearId === undefined) {
       const [secRows] = await db.execute(
         `SELECT ss.student_section_id, ss.section_id, ss.school_year_id,
@@ -214,7 +207,7 @@ router.get('/student/:identifier', async (req, res) => {
     }
 
     if (schoolYearId !== undefined && !sectionInfo) {
-      return res.status(404).json({ error: "Student is not enrolled in the selected school year" });
+      return { notFoundSection: true };
     }
 
     // 3. Resolve Section Adviser & Principal Details
@@ -540,15 +533,165 @@ router.get('/student/:identifier', async (req, res) => {
     }
     studentProfile.missingActivities = missingActivities;
 
-    return res.json({
+    return {
       studentProfile,
       grades: gradesList,
       attendanceData
-    });
+    };
+}
 
+// GET /student/:identifier - General UI endpoint (LRN is strictly masked for data privacy)
+router.get('/student/:identifier', async (req, res) => {
+  try {
+    const { identifier } = req.params;
+    const cleanId = String(identifier).trim();
+    const schoolYearId = req.query.schoolYearId;
+    if (schoolYearId !== undefined && (typeof schoolYearId !== 'string' || !/^[1-9]\d*$/.test(schoolYearId))) {
+      return res.status(400).json({ error: "Invalid school year" });
+    }
+
+    const data = await fetchStudentSf9Data(cleanId, schoolYearId);
+    if (!data) {
+      return res.status(404).json({ error: "Student not found" });
+    }
+    if (data.notFoundSection) {
+      return res.status(404).json({ error: "Student is not enrolled in the selected school year" });
+    }
+
+    // Mask LRN for all UI displays (e.g. "123456******") so plaintext LRN never enters browser state or DOM
+    const maskedProfile = {
+      ...data.studentProfile,
+      lrn: maskLrn(data.studentProfile.lrn),
+    };
+
+    return res.json({
+      studentProfile: maskedProfile,
+      grades: data.grades,
+      attendanceData: data.attendanceData,
+    });
   } catch (error) {
     console.error("Error fetching SF9 details:", error);
     return res.status(500).json({ error: "Failed to fetch student SF9 details", message: error.message });
+  }
+});
+
+// POST /student/:identifier/export-pdf - Official DepEd SF9 PDF generation with unmasked LRN
+router.post('/student/:identifier/export-pdf', async (req, res) => {
+  try {
+    const { identifier } = req.params;
+    const cleanId = String(identifier).trim();
+    const schoolYearId = req.query.schoolYearId;
+    if (schoolYearId !== undefined && (typeof schoolYearId !== 'string' || !/^[1-9]\d*$/.test(schoolYearId))) {
+      return res.status(400).json({ error: "Invalid school year" });
+    }
+
+    const data = await fetchStudentSf9Data(cleanId, schoolYearId);
+    if (!data) {
+      return res.status(404).json({ error: "Student not found" });
+    }
+    if (data.notFoundSection) {
+      return res.status(404).json({ error: "Student is not enrolled in the selected school year" });
+    }
+
+    const comments = (req.body && typeof req.body.comments === 'object') ? req.body.comments : {};
+
+    // Plaintext 12-digit LRN is used strictly in backend memory to compile the official DepEd PDF
+    const pdfBuffer = await generateSf9Pdf({
+      studentProfile: data.studentProfile,
+      grades: data.grades,
+      attendanceData: data.attendanceData,
+      comments,
+    });
+
+    const nameParts = (data.studentProfile.name || "STUDENT").split(',');
+    const lastName = nameParts[0].trim().toUpperCase().replace(/[^A-Z0-9_-]/gi, "");
+    const fileName = `${lastName || 'STUDENT'}_SF9.pdf`;
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    return res.send(pdfBuffer);
+  } catch (error) {
+    console.error("Error generating SF9 PDF:", error);
+    return res.status(500).json({ error: "Failed to generate SF9 PDF", message: error.message });
+  }
+});
+
+// GET /student/:identifier/export-pdf - Direct browser preview / print endpoint
+router.get('/student/:identifier/export-pdf', async (req, res) => {
+  try {
+    const { identifier } = req.params;
+    const cleanId = String(identifier).trim();
+    const schoolYearId = req.query.schoolYearId;
+    if (schoolYearId !== undefined && (typeof schoolYearId !== 'string' || !/^[1-9]\d*$/.test(schoolYearId))) {
+      return res.status(400).json({ error: "Invalid school year" });
+    }
+
+    const data = await fetchStudentSf9Data(cleanId, schoolYearId);
+    if (!data) {
+      return res.status(404).json({ error: "Student not found" });
+    }
+    if (data.notFoundSection) {
+      return res.status(404).json({ error: "Student is not enrolled in the selected school year" });
+    }
+
+    const comments = {
+      term1: req.query.term1 || "",
+      term2: req.query.term2 || "",
+      term3: req.query.term3 || "",
+    };
+
+    const pdfBuffer = await generateSf9Pdf({
+      studentProfile: data.studentProfile,
+      grades: data.grades,
+      attendanceData: data.attendanceData,
+      comments,
+    });
+
+    const nameParts = (data.studentProfile.name || "STUDENT").split(',');
+    const lastName = nameParts[0].trim().toUpperCase().replace(/[^A-Z0-9_-]/gi, "");
+    const fileName = `${lastName || 'STUDENT'}_SF9.pdf`;
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${fileName}"`);
+    return res.send(pdfBuffer);
+  } catch (error) {
+    console.error("Error generating SF9 PDF:", error);
+    return res.status(500).json({ error: "Failed to generate SF9 PDF", message: error.message });
+  }
+});
+
+// POST /student/:identifier/ephemeral-lrn - Ephemeral on-demand fetch of decrypted LRN strictly for document export
+router.post('/student/:identifier/ephemeral-lrn', async (req, res) => {
+  try {
+    const { identifier } = req.params;
+    const cleanId = String(identifier).trim();
+    const lrnHash = hashLrn(cleanId);
+    const [stRows] = await db.execute(
+      `SELECT student_id, LRN FROM STUDENT WHERE student_id = ? OR LRN = ? OR lrn_hash = ? LIMIT 1`,
+      [cleanId, cleanId, lrnHash]
+    );
+
+    if (stRows.length > 0) {
+      const decrypted = decryptLrn(stRows[0].LRN);
+      return res.json({ lrn: decrypted });
+    }
+
+    const [ssRows] = await db.execute(
+      `SELECT st.student_id, st.LRN FROM STUDENT_SECTION ss
+       JOIN STUDENT st ON ss.student_id = st.student_id
+       WHERE ss.student_section_id = ? LIMIT 1`,
+      [cleanId]
+    );
+
+    if (ssRows.length > 0) {
+      const decrypted = decryptLrn(ssRows[0].LRN);
+      return res.json({ lrn: decrypted });
+    }
+
+    return res.status(404).json({ error: "Student not found" });
+  } catch (error) {
+    console.error("Error in ephemeral LRN fetch:", error);
+    return res.status(500).json({ error: "Failed to fetch export credential" });
   }
 });
 

@@ -8,7 +8,10 @@ const vm = require('node:vm');
 function routeHarness({ missingEnrollment = false, attendanceSheets = [], attendanceRows = [] } = {}) {
   const calls = [];
   let handler;
-  const router = { get: (_path, route) => { handler = route; } };
+  const router = {
+    get: (path, route) => { if (path === '/student/:identifier') handler = route; },
+    post: () => {},
+  };
   const db = {
     execute: async (sql, params = []) => {
       calls.push({ sql, params: Array.from(params) });
@@ -34,6 +37,8 @@ function routeHarness({ missingEnrollment = false, attendanceSheets = [], attend
       if (name === '../config/db') return db;
       if (name === '../services/MasterSheetService') return {};
       if (name === '../services/AttendanceSummaryService') return require('../services/AttendanceSummaryService');
+      if (name === '../utils/encryption') return require('../utils/encryption');
+      if (name === '../services/Sf9PdfService') return { generateSf9Pdf: async () => Buffer.from('%PDF-1.4') };
       throw new Error(`Unexpected dependency: ${name}`);
     },
   });
@@ -106,3 +111,11 @@ test('SF9 excludes holiday attendance and deducts duplicate-marked dates only on
   assert.match(sheetQuery.sql, /school_year_id = \?/);
   assert.match(sheetQuery.sql, /attendance_scope = 'SECTION'/);
 });
+
+test('SF9 general UI response masks student LRN for data privacy', async () => {
+  const harness = routeHarness();
+  const response = await harness.run({ schoolYearId: '2' });
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.studentProfile.lrn, '100000******');
+});
+
