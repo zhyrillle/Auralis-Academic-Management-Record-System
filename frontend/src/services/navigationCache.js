@@ -233,7 +233,7 @@ export async function cachedApiFetch(input, init = {}) {
     const snapshot = await waitForCachedRead(pending, callerSignal);
     return new Response(snapshot.body, { status: snapshot.status, statusText: snapshot.statusText, headers: snapshot.headers });
   } catch (error) {
-    if (error.response) return error.response;
+    if (error.response) return error.response.clone();
     throw error;
   }
 }
