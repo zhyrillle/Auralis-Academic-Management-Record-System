@@ -1,5 +1,4 @@
-import useCachedQuery from "../../services/useCachedQuery";
-import { cacheKey } from "../../services/navigationCache";
+import { usePrincipalQuery } from "../../services/principalData";
 import { useState } from "react";
 import {
   AlertTriangle,
@@ -23,11 +22,11 @@ import PerformanceProgressTable, {
 } from "./performance-level/PerformanceProgressTable";
 import RankedProgressList from "./performance-level/RankedProgressList";
 import PerformanceSearch from "./performance-level/PerformanceSearch";
+import { mutedSeriesStyles } from "./analytics/principalChartStyles";
 import SubjectLegend from "./analytics/SubjectLegend";
 import "../../styles/principalAnalytics.css";
 import "../../styles/principalPerformance.css";
 
-const DEFAULT_YEAR = "2026-2027";
 const matchesTeacher = (teacher, query) => {
   const normalizedQuery = query.trim().toLowerCase();
   if (!normalizedQuery) return true;
@@ -41,10 +40,9 @@ const matchesTeacher = (teacher, query) => {
 
 export default function PerformanceTeachers() {
   const [term, setTerm] = useState("overall");
-  const [schoolYear, setSchoolYear] = useState(DEFAULT_YEAR);
-  const { data, loading, refreshing, error, refresh } = useCachedQuery(
-    cacheKey("performance:teachers", { term, schoolYear }), () => getTeacherPerformance({ term, schoolYear }),
-    { keepPreviousData: true },
+  const [requestedYear, setSchoolYear] = useState("");
+  const { data, loading, refreshing, error, refresh, schoolYear, schoolYears } = usePrincipalQuery(
+    "performance:teachers", { term, schoolYear: requestedYear }, getTeacherPerformance,
   );
   const [rankingQuery, setRankingQuery] = useState("");
   const [submissionQuery, setSubmissionQuery] = useState("");
@@ -56,7 +54,7 @@ export default function PerformanceTeachers() {
   const retry = refresh;
 
   if (loading && !data) return <AnalyticsSkeleton table />;
-  if (!data && error)
+  if (!data)
     return (
       <main className="pa-page pp-page">
         <section className="pa-state-panel">
@@ -76,17 +74,18 @@ export default function PerformanceTeachers() {
 
   const isFiltering = refreshing;
   // Render the full layout whenever a payload exists; charts/tables show their own empty states.
-  const hasData = Array.isArray(data.teachers);
-  const schoolYearOptions = data.availableSchoolYears.map((year) => ({
+  const hasData = data.teachers.length > 0;
+  const schoolYearOptions = schoolYears.map((year) => ({
     value: year.value,
     label: year.label,
   }));
   const rankedTeachers = data.teachers
-    .filter((teacher) => matchesTeacher(teacher, rankingQuery))
+    .filter((teacher) => teacher.hasGrades && matchesTeacher(teacher, rankingQuery))
     .sort((a, b) => b.averageGrade - a.averageGrade);
   const submissionTeachers = data.teachers.filter((teacher) =>
     matchesTeacher(teacher, submissionQuery),
   );
+  const teacherStyles = mutedSeriesStyles(data.teachers);
   const chartTeachers = data.teachers.filter((teacher) =>
     matchesTeacher(teacher, chartQuery),
   );
@@ -110,7 +109,7 @@ export default function PerformanceTeachers() {
     },
     {
       label: "Overall Fail Rate",
-      value: `${data.summary.failRate}%`,
+      value: data.teachers.some(teacher => teacher.hasGrades) ? `${data.summary.failRate}%` : "—",
       description: "Across assigned classes",
       icon: AlertTriangle,
       tone: "red",
@@ -160,9 +159,6 @@ export default function PerformanceTeachers() {
         <div>
           <div className="pa-title-row">
             <h1>Performance by Teacher</h1>
-            {import.meta.env.DEV && (
-              <span className="pa-preview-badge">Preview data</span>
-            )}
           </div>
           <p>
             Review class performance and grading-report completion by teacher.
@@ -223,14 +219,7 @@ export default function PerformanceTeachers() {
                   id: teacher.id,
                   label: teacher.name,
                   value: teacher.averageGrade,
-                  tone:
-                    teacher.averageGrade <= 0
-                      ? "neutral"
-                      : teacher.averageGrade < 75
-                        ? "danger"
-                        : teacher.averageGrade < 80
-                          ? "warning"
-                          : "success",
+                  tone: "blue",
                 }))}
               maxItems={10}
               viewportItems={Math.min(data.teachers.length, 10)}
@@ -279,15 +268,15 @@ export default function PerformanceTeachers() {
                   />
                 </div>
               </div>
-              {chartTeachers.some((t) => t.termAverages?.some((v) => v > 0)) && (
+              {chartTeachers.some((t) => t.termGradeCounts.some(count => count > 0)) && (
                 <SubjectLegend
                   className="pp-teacher-legend"
                   subjects={chartTeachers
-                    .filter((t) => t.termAverages?.some((v) => v > 0))
+                    .filter((t) => t.termGradeCounts.some(count => count > 0))
                     .map((teacher) => ({
                       id: teacher.id,
                       code: teacher.name,
-                      color: teacher.color,
+                      ...teacherStyles.get(teacher.id),
                     }))}
                   selectedIds={selectedTeacherIds ?? data.teachers.map(teacher => teacher.id)}
                   onToggle={(id) =>
@@ -306,7 +295,7 @@ export default function PerformanceTeachers() {
                   onNone={() => setSelectedTeacherIds([])}
                 />
               )}
-              {selectedChartTeachers.filter((t) => t.termAverages?.some((v) => v > 0)).length ? (
+              {selectedChartTeachers.filter((t) => t.termGradeCounts.some(count => count > 0)).length ? (
                 <LineChart
                   labels={["Term 1", "Term 2", "Term 3"]}
                   selectedIndex={
@@ -314,13 +303,13 @@ export default function PerformanceTeachers() {
                   }
                   ariaLabel="Class average grade trend by teacher"
                   series={selectedChartTeachers
-                    .filter((t) => t.termAverages?.some((v) => v > 0))
+                    .filter((t) => t.termGradeCounts.some(count => count > 0))
                     .map((teacher) => ({
                       id: teacher.id,
                       label: teacher.name,
-                      color: teacher.color,
-                      values: teacher.termAverages.map((value) => ({
-                        value,
+                      ...teacherStyles.get(teacher.id),
+                      values: teacher.termAverages.map((value, index) => ({
+                        value: teacher.termGradeCounts[index] > 0 ? value : null,
                         detail: `${teacher.learnerCount} learners`,
                       })),
                     }))}

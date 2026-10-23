@@ -1,5 +1,4 @@
-import useCachedQuery from "../../services/useCachedQuery";
-import { cacheKey } from "../../services/navigationCache";
+import { usePrincipalQuery } from "../../services/principalData";
 import { useState } from "react";
 import {
   AlertTriangle,
@@ -22,19 +21,18 @@ import PerformanceProgressTable, {
   PerformanceInlineProgress,
   PerformanceStatusBadge,
 } from "./performance-level/PerformanceProgressTable";
+import { hasRecordedGrades } from "./analytics/principalChartStyles";
 import RankedProgressList from "./performance-level/RankedProgressList";
 import "../../styles/principalAnalytics.css";
 import "../../styles/principalPerformance.css";
 
-const DEFAULT_YEAR = "2026-2027";
 
 export default function PerformanceSubjects() {
   const [term, setTerm] = useState("overall");
-  const [schoolYear, setSchoolYear] = useState(DEFAULT_YEAR);
+  const [requestedYear, setSchoolYear] = useState("");
   const [gradeLevel, setGradeLevel] = useState("all");
-  const { data, loading, refreshing, error, refresh } = useCachedQuery(
-    cacheKey("performance:subjects", { term, schoolYear, gradeLevel }), () => getSubjectPerformance({ term, schoolYear, gradeLevel }),
-    { keepPreviousData: true },
+  const { data, loading, refreshing, error, refresh, schoolYear, schoolYears } = usePrincipalQuery(
+    "performance:subjects", { term, schoolYear: requestedYear, gradeLevel }, getSubjectPerformance,
   );
 
 
@@ -42,7 +40,7 @@ export default function PerformanceSubjects() {
   const retry = refresh;
 
   if (loading && !data) return <AnalyticsSkeleton table />;
-  if (!data && error)
+  if (!data)
     return (
       <main className="pa-page pp-page">
         <section className="pa-state-panel">
@@ -62,8 +60,8 @@ export default function PerformanceSubjects() {
 
   const isFiltering = refreshing;
   // Render the full layout whenever a payload exists; charts/tables show their own empty states.
-  const hasData = Array.isArray(data.subjects);
-  const schoolYearOptions = data.availableSchoolYears.map((year) => ({
+  const hasData = data.subjects.some(hasRecordedGrades);
+  const schoolYearOptions = schoolYears.map((year) => ({
     value: year.value,
     label: year.label,
   }));
@@ -113,11 +111,11 @@ export default function PerformanceSubjects() {
   ];
   const columns = [
     { key: "label", label: "Subject" },
-    { key: "averageGrade", label: "Average Grade" },
+    { key: "averageGrade", label: "Average Grade", render: row => hasRecordedGrades(row) ? row.averageGrade : "—" },
     {
       key: "passRate",
       label: "Pass Rate",
-      render: (row) => <PerformanceInlineProgress value={row.passRate} />,
+      render: (row) => hasRecordedGrades(row) ? <PerformanceInlineProgress value={row.passRate} /> : "—",
     },
     {
       key: "highestSection",
@@ -158,9 +156,6 @@ export default function PerformanceSubjects() {
         <div>
           <div className="pa-title-row">
             <h1>Performance by Subject</h1>
-            {import.meta.env.DEV && (
-              <span className="pa-preview-badge">Preview data</span>
-            )}
           </div>
           <p>
             Compare average grades and passing outcomes across Junior High
@@ -237,13 +232,15 @@ export default function PerformanceSubjects() {
                     id: subject.id,
                     label: subject.label,
                     shortLabel: subject.code,
-                    value: subject.averageGrade,
-                    color: subject.color,
+                    value: hasRecordedGrades(subject) ? subject.averageGrade : null,
+                    color: "#123062",
                     detail: `${subject.passRate}% pass rate`,
                   }))}
                   minimum={60}
                   maximum={100}
                   height={420}
+                  fillContainer
+                  hoverColor="#C27C20"
                   ariaLabel="Average grade per subject"
                 />
               </section>
@@ -251,17 +248,13 @@ export default function PerformanceSubjects() {
                 title="Subject Performance Ranking"
                 subtitle="Pass-rate comparison from strongest to weakest subject."
                 items={[...data.subjects]
+                  .filter(hasRecordedGrades)
                   .sort((a, b) => b.passRate - a.passRate)
                   .map((subject) => ({
                     id: subject.id,
                     label: subject.label,
                     value: subject.passRate,
-                    tone:
-                      subject.status === "Needs attention"
-                        ? "danger"
-                        : subject.status === "Monitor"
-                          ? "warning"
-                          : "success",
+                    tone: "blue",
                   }))}
                 valueLabel="Pass rate"
                 suffix="%"

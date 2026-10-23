@@ -9,7 +9,7 @@ router.get('/summary', async (req, res) => {
     const summary = await Feedback.getPrincipalFeedbackSummary(schoolYear);
     res.json(summary);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Unable to load Principal feedback. Please retry.' });
   }
 });
 
@@ -20,7 +20,7 @@ router.get('/likert-results', async (req, res) => {
     const data = await Feedback.getPrincipalLikertResults(schoolYear);
     res.json(data);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Unable to load Principal feedback. Please retry.' });
   }
 });
 
@@ -31,7 +31,7 @@ router.get('/comments', async (req, res) => {
     const data = await Feedback.getPrincipalFeedbackComments(schoolYear, query);
     res.json(data);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Unable to load Principal feedback. Please retry.' });
   }
 });
 

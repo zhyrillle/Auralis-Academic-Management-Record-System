@@ -1,387 +1,92 @@
-import React, { useState, useEffect, useMemo } from "react";
-import {
-  Users,
-  LayoutGrid,
-  CheckCircle2,
-  Target,
-  Search,
-  ChevronDown,
-  MessageSquareOff,
-  Filter,
-} from "lucide-react";
-
-// Services
-import {
-  getTeacherFeedbackSummary,
-  getLikertEvaluationResults,
-  getTeacherFeedbackComments,
-  getSchoolYears,
-} from "../../services/principalFeedbackService";
-
-// Scoped Styling
+import { useMemo, useState } from "react";
+import { AlertTriangle, CheckCircle2, LayoutGrid, MessageSquareOff, RefreshCw, Target, Users } from "lucide-react";
+import { getPrincipalFeedback } from "../../services/principalFeedbackService";
+import { usePrincipalQuery } from "../../services/principalData";
+import DropdownSelect from "../../components/common/DropdownSelect";
+import EmptyState from "../../components/common/EmptyState";
+import FilterToolbar from "../../components/common/FilterToolbar";
+import SearchBar from "../../components/common/SearchBar";
+import ProgressBar from "../../components/charts/ProgressBar";
+import AnalyticsSkeleton from "./analytics/AnalyticsSkeleton";
+import AnalyticsStatCard from "./analytics/AnalyticsStatCard";
+import PerformanceProgressTable from "./performance-level/PerformanceProgressTable";
+import "../../styles/principalAnalytics.css";
+import "../../styles/principalPerformance.css";
 import "./TeacherFeedback.css";
 
+const categories = [
+  { value: "All", label: "All categories" },
+  { value: "Strengths & Contributions", label: "Strengths & Contributions" },
+  { value: "Areas for Improvement", label: "Areas for Improvement" },
+];
+const categoryKind = value => {
+  const text = String(value || "").toLowerCase();
+  return /strength|praise/.test(text) ? "strengths" : /improvement|suggestion|area/.test(text) ? "improvements" : "general";
+};
+
 export default function TeacherFeedback() {
-  // Controls state
-  const [selectedYear, setSelectedYear] = useState("2026-2027");
+  const [requestedYear, setSchoolYear] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
-  const [yearDropdownOpen, setYearDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [schoolYears, setSchoolYears] = useState([]);
+  const { data, loading, refreshing, error, refresh, schoolYear, schoolYears } = usePrincipalQuery(
+    "principal:feedback", { schoolYear: requestedYear }, getPrincipalFeedback,
+  );
+  const filteredComments = useMemo(() => (data?.comments || []).filter(comment => {
+    const categoryMatches = selectedCategory === "All" || categoryKind(comment.category) === categoryKind(selectedCategory);
+    const query = searchQuery.trim().toLowerCase();
+    return categoryMatches && (!query || comment.text.toLowerCase().includes(query) || comment.category.toLowerCase().includes(query));
+  }), [data, selectedCategory, searchQuery]);
 
-  // Data states (Zero / Empty initial states)
-  const [summary, setSummary] = useState({
-    totalResponses: 0,
-    overallRating: 0.0,
-    ratingDiff: "+0.0",
-    wouldRecommendPercent: 0,
-    belowTargetCount: 0,
-  });
+  if (loading && !data) return <AnalyticsSkeleton table />;
+  if (!data) return <main className="pa-page tf-page">
+    <section className="pa-state-panel" role="alert">
+      <EmptyState icon={AlertTriangle} title="Unable to load feedback" description={error || "Feedback records are unavailable."} />
+      <button type="button" className="pa-retry-button" onClick={refresh}><RefreshCw size={16} />Retry</button>
+    </section>
+  </main>;
 
-  const [likertResults, setLikertResults] = useState([]);
-  const [comments, setComments] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  // Fetch available school years dynamically on mount
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadSchoolYears() {
-      const years = await getSchoolYears();
-      if (isMounted && Array.isArray(years) && years.length > 0) {
-        setSchoolYears(years);
-        setSelectedYear((prev) => (years.includes(prev) ? prev : years[0]));
-      }
-    }
-
-    loadSchoolYears();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  // Fetch feedback data on school year change
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadFeedbackData() {
-      setLoading(true);
-      try {
-        const [sumRes, likertRes, commentsRes] = await Promise.all([
-          getTeacherFeedbackSummary(selectedYear),
-          getLikertEvaluationResults(selectedYear),
-          getTeacherFeedbackComments(selectedYear, searchQuery),
-        ]);
-
-        if (isMounted) {
-          setSummary(sumRes || {});
-          setLikertResults(
-            Array.isArray(likertRes)
-              ? likertRes
-              : likertRes?.results || []
-          );
-          setComments(
-            Array.isArray(commentsRes)
-              ? commentsRes
-              : commentsRes?.comments || []
-          );
-        }
-      } catch (error) {
-        console.error("Error loading teacher feedback:", error);
-      } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
-      }
-    }
-
-    loadFeedbackData();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [selectedYear]);
-
-  // Filter comments locally with search query and category selector
-  const filteredComments = useMemo(() => {
-    let list = comments;
-
-    if (selectedCategory && selectedCategory !== "All") {
-      list = list.filter((c) => {
-        const cat = (c.category || "").toLowerCase();
-        const sel = selectedCategory.toLowerCase();
-        if (sel.includes("strength")) return cat.includes("strength") || cat.includes("praise");
-        if (sel.includes("improvement")) return cat.includes("improvement") || cat.includes("area") || cat.includes("suggestion");
-        return cat === sel;
-      });
-    }
-
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      list = list.filter(
-        (c) => c.text?.toLowerCase().includes(q) || c.category?.toLowerCase().includes(q)
-      );
-    }
-
-    return list;
-  }, [comments, selectedCategory, searchQuery]);
-
-  return (
-    <div className="tf-container">
-      {/* 1. Page Header */}
-      <header className="tf-header">
-        <div>
-          <h1 className="tf-title">Teacher Feedback</h1>
-          <p className="tf-subtitle">
-            Anonymous teacher evaluation of principal leadership
-          </p>
-        </div>
-      </header>
-
-      {/* 2. Controls Filter Bar (School Year Selector) */}
-      <section className="tf-controls-bar">
-        {/* School Year Dropdown */}
-        <div className="tf-dropdown-wrap">
-          <button
-            type="button"
-            className="tf-dropdown-btn"
-            onClick={() => setYearDropdownOpen((prev) => !prev)}
-          >
-            <span>School Year: {selectedYear}</span>
-            <ChevronDown size={16} />
-          </button>
-          {yearDropdownOpen && (
-            <div className="tf-dropdown-menu">
-              {schoolYears.map((yr) => (
-                <button
-                  key={yr}
-                  type="button"
-                  className={`tf-dropdown-item ${selectedYear === yr ? "active" : ""}`}
-                  onClick={() => {
-                    setSelectedYear(yr);
-                    setYearDropdownOpen(false);
-                  }}
-                >
-                  {yr}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      </section>
-
-      {/* 3. 4 Stat Summary Cards */}
-      <section className="tf-stats-grid">
-        {/* Card 1: Total Responses */}
-        <div className="tf-stat-card">
-          <div className="tf-stat-header">
-            <span className="tf-stat-label">Total Responses</span>
-            <div className="tf-stat-icon-wrap">
-              <Users size={18} />
-            </div>
-          </div>
-          <div className="tf-stat-body">
-            <span className="tf-stat-value">{summary.totalResponses ?? 0}</span>
-            <span className="tf-stat-sub">SY {selectedYear}</span>
+  const { summary, likertResults } = data;
+  const rated = summary.totalResponses > 0 && Number(summary.overallRating) > 0;
+  const cards = [
+    { label: "Total Responses", value: summary.totalResponses, description: `SY ${schoolYear}`, icon: Users, tone: "navy" },
+    { label: "Overall Rating", value: rated ? summary.overallRating : "Not rated", description: rated ? `Out of 5.0${summary.ratingDiff != null ? ` · ${summary.ratingDiff} vs reference` : ""}` : "No recorded ratings", icon: LayoutGrid, tone: "gold" },
+    { label: "Comments Received", value: summary.totalComments, description: "Anonymous teacher comments", icon: CheckCircle2, tone: "green" },
+    { label: "Below Target", value: summary.belowTargetCount, description: "Rated questions under 3.0", icon: Target, tone: "red" },
+  ];
+  const columns = [
+    { key: "number", label: "No.", render: row => likertResults.indexOf(row) + 1 },
+    { key: "description", label: "Description" },
+    { key: "rate", label: "Rate", render: row => Number(row.rate) > 0
+      ? <div className="tf-rating"><ProgressBar value={Number(row.rate)} maximum={5} tone={Number(row.rate) >= 4 ? "blue" : "gold"} ariaLabel={`${row.description}: ${row.rate} of 5`} /><span>{row.rate}</span></div>
+      : <span className="tf-not-rated">Not rated</span> },
+  ];
+  return <main className="pa-page tf-page">
+    <header className="pa-page-header"><div><h1>Teacher Feedback</h1><p>Anonymous teacher evaluation of principal leadership</p></div></header>
+    <FilterToolbar className="pa-navigation" label="Feedback filters" end={
+      <DropdownSelect label="School year" value={schoolYear} options={schoolYears} onChange={setSchoolYear} disabled={refreshing} />
+    }><span className="tf-filter-caption">Leadership evaluation</span></FilterToolbar>
+    {error && <div className="pa-inline-error" role="alert"><span>Unable to load updates. {error}</span><button type="button" onClick={refresh}>Retry</button></div>}
+    <div className={`pa-content${refreshing ? " is-busy" : ""}`} aria-busy={refreshing}>
+      {refreshing && <div className="pa-busy-overlay" role="status" aria-label="Updating feedback"><span className="pa-spinner pa-spinner--large" /></div>}
+      <section className="pa-stat-grid" aria-label="Feedback overview">{cards.map(card => <AnalyticsStatCard key={card.label} {...card} />)}</section>
+      {Number(summary.totalResponses) === 0 && <section className="pa-panel tf-empty"><EmptyState icon={MessageSquareOff} title="No feedback yet" description="No saved teacher submissions for this school year." /></section>}
+      <PerformanceProgressTable title="Likert Scale Result - Leadership Evaluation" subtitle="Recorded question ratings on a five-point scale." columns={columns} data={likertResults} emptyMessage="No survey questions are configured." />
+      <section className="pa-panel">
+        <div className="pa-panel__header"><div><h2>Comment Explorer</h2><p>Anonymous open-ended responses from teachers</p></div>
+          <div className="tf-comment-controls">
+            <DropdownSelect label="Comment category" value={selectedCategory} options={categories} onChange={setSelectedCategory} />
+            <SearchBar query={searchQuery} setQuery={setSearchQuery} placeholder="Search comments" />
           </div>
         </div>
-
-        {/* Card 2: Overall Rating */}
-        <div className="tf-stat-card">
-          <div className="tf-stat-header">
-            <span className="tf-stat-label">Overall Rating</span>
-            <div className="tf-stat-icon-wrap tf-icon--yellow">
-              <LayoutGrid size={18} />
-            </div>
-          </div>
-          <div className="tf-stat-body">
-            <span className="tf-stat-value">
-              {Number(summary.overallRating || 0).toFixed(1)}
-            </span>
-            <span className="tf-stat-sub">
-              {Number(summary.overallRating || 0) > 0 && summary.ratingDiff != null && (
-                <span className={`tf-stat-sub-diff ${String(summary.ratingDiff).startsWith('-')
-                  ? 'tf-stat-sub-diff--down'
-                  : 'tf-stat-sub-diff--up'
-                  }`}>
-                  {String(summary.ratingDiff).startsWith('-') ? '↘' : String(summary.ratingDiff) === '+0.0' || String(summary.ratingDiff) === '0.0' ? '→' : '↗'} {summary.ratingDiff}
-                </span>
-              )}
-              <span>out of 5.0</span>
-            </span>
-          </div>
-        </div>
-
-        {/* Card 3: Comments Received */}
-        <div className="tf-stat-card">
-          <div className="tf-stat-header">
-            <span className="tf-stat-label">Comments Received</span>
-            <div className="tf-stat-icon-wrap tf-icon--green">
-              <CheckCircle2 size={18} />
-            </div>
-          </div>
-          <div className="tf-stat-body">
-            <span className="tf-stat-value">
-              {summary.totalComments ?? comments.length ?? 0}
-            </span>
-            <span className="tf-stat-sub">Total teacher comments</span>
-          </div>
-        </div>
-
-        {/* Card 4: Below Target */}
-        <div className="tf-stat-card">
-          <div className="tf-stat-header">
-            <span className="tf-stat-label">Below Target</span>
-            <div className="tf-stat-icon-wrap">
-              <Target size={18} />
-            </div>
-          </div>
-          <div className="tf-stat-body">
-            <span className="tf-stat-value">
-              {summary.belowTargetCount ?? 0}
-            </span>
-            <span className="tf-stat-sub">questions under 3.0</span>
-          </div>
-        </div>
-      </section>
-
-      {/* 4. Likert Scale Result - Leadership Evaluation */}
-      <section className="tf-section-card">
-        <div className="tf-section-title-wrap">
-          <h2 className="tf-section-title">
-            Likert Scale Result - Leadership Evaluation
-          </h2>
-          <div className="tf-section-divider" />
-        </div>
-
-        <div className="tf-likert-table-wrap">
-          <table className="tf-likert-table">
-            <thead>
-              <tr>
-                <th className="tf-likert-th">NO.</th>
-                <th className="tf-likert-th">DESCRIPTION</th>
-                <th className="tf-likert-th tf-th-rate">RATE</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(Array.isArray(likertResults) ? likertResults : []).map((item, idx) => {
-                const rate = Number(item.rate) || 0;
-                const percent = Math.min(100, Math.max(0, (rate / 5) * 100));
-
-                let fillClass = "tf-rate-fill--empty";
-                if (rate >= 4.0) {
-                  fillClass = "tf-rate-fill--high";
-                } else if (rate > 0) {
-                  fillClass = "tf-rate-fill--medium";
-                }
-
-                return (
-                  <tr key={item.id || idx} className="tf-likert-tr">
-                    <td className="tf-likert-td tf-likert-td-no">{idx + 1}.</td>
-                    <td className="tf-likert-td tf-likert-td-desc">
-                      {item.description}
-                    </td>
-                    <td className="tf-likert-td tf-likert-td-rate">
-                      <div className="tf-rate-bar-wrap">
-                        <div className="tf-rate-track">
-                          <div
-                            className={`tf-rate-fill ${fillClass}`}
-                            style={{ width: `${percent}%` }}
-                          />
-                        </div>
-                        <span className="tf-rate-score">
-                          {rate > 0 ? rate.toFixed(1) : "0.0"}
-                        </span>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      {/* 5. Comment Explorer with Category Filter Dropdown & Category Badges */}
-      <section className="tf-section-card">
-        <div className="tf-comments-header">
-          <div className="tf-comments-title-wrap">
-            <h2 className="tf-section-title">Comment Explorer</h2>
-            <p className="tf-subtitle">Open-ended responses from teachers</p>
-          </div>
-
-          <div className="tf-comments-controls">
-            {/* Category Filter Dropdown */}
-            <div className="tf-category-dropdown">
-              <Filter size={15} className="tf-filter-icon" />
-              <select
-                className="tf-category-select"
-                value={selectedCategory}
-                onChange={(e) => setSelectedCategory(e.target.value)}
-              >
-                <option value="All">All Categories</option>
-                <option value="Strengths & Contributions">Strengths & Contributions</option>
-                <option value="Areas for Improvement">Areas for Improvement</option>
-              </select>
-            </div>
-
-            {/* Search Box */}
-            <div className="tf-search-box">
-              <Search size={16} className="tf-search-icon" />
-              <input
-                type="text"
-                className="tf-search-input"
-                placeholder="Search comments"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="tf-comments-list">
-          {filteredComments.length > 0 ? (
-            filteredComments.map((comment, idx) => {
-              const catLower = (comment.category || "").toLowerCase();
-              let badgeClass = "tf-comment-tag--general";
-              if (catLower.includes("strength") || catLower.includes("praise")) {
-                badgeClass = "tf-comment-tag--strengths";
-              } else if (catLower.includes("improvement") || catLower.includes("suggestion") || catLower.includes("area")) {
-                badgeClass = "tf-comment-tag--improvements";
-              }
-
-              return (
-                <div key={comment.id || idx} className="tf-comment-card">
-                  <div className="tf-comment-card-header">
-                    <span className={`tf-comment-tag ${badgeClass}`}>
-                      {comment.category || "Comment"}
-                    </span>
-                    {comment.created_at && (
-                      <span className="tf-comment-date">
-                        {new Date(comment.created_at).toLocaleDateString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                          year: "numeric",
-                        })}
-                      </span>
-                    )}
-                  </div>
-                  <p className="tf-comment-text">"{comment.text}"</p>
-                </div>
-              );
-            })
-          ) : (
-            <div className="tf-empty-comments">
-              <MessageSquareOff size={32} />
-              <span className="tf-empty-text">
-                No teacher comments available for the selected filters.
-              </span>
-            </div>
-          )}
+        <div className="tf-comment-list">
+          {filteredComments.length ? filteredComments.map((comment, index) => <article key={comment.id || index} className="tf-comment">
+            <header><span className={`tf-tag tf-tag--${categoryKind(comment.category)}`}>{comment.category || "Comment"}</span>
+              {comment.created_at && <time dateTime={comment.created_at}>{new Date(comment.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</time>}
+            </header><p>{comment.text}</p>
+          </article>) : <EmptyState icon={MessageSquareOff} title="No matching comments" description="No saved comments match the selected filters." />}
         </div>
       </section>
     </div>
-  );
+  </main>;
 }
 

@@ -390,7 +390,8 @@ try {
       for (const [name, modulePath, method, args] of cases) {
         await nav.clearNavigationCache();
         let calls = 0;
-        window.fetch = async url => { calls++; return json(String(url).includes('/sections/adviser/') || String(url).endsWith('/users') ? []
+        window.fetch = async url => { calls++; return json(String(url).includes('/principal/feedback/summary') ? { recordsVersion: 2, totalResponses: 0, overallRating: 0, totalComments: 0, belowTargetCount: 0 }
+          : String(url).includes('/sections/adviser/') || String(url).endsWith('/users') ? []
           : { tableReady: true, records: [], assignments: [], sections: [], subjects: [], notifications: { today: [], yesterday: [] } }); };
         const api = await import(modulePath);
         await api[method](...args);

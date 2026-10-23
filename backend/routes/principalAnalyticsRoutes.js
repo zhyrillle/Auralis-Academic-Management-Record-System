@@ -6,17 +6,6 @@ const db = require('../config/db');
    CONSTANTS & HELPERS
    ========================================================================== */
 
-const DEFAULT_SUBJECTS = [
-  { id: 'filipino', code: 'FIL', label: 'Filipino', color: '#8b5cf6' },
-  { id: 'english', code: 'ENG', label: 'English', color: '#2563eb' },
-  { id: 'mathematics', code: 'MATH', label: 'Mathematics', color: '#ef4444' },
-  { id: 'science', code: 'SCI', label: 'Science', color: '#10b981' },
-  { id: 'ap', code: 'AP', label: 'Araling Panlipunan', color: '#6366f1' },
-  { id: 'tle', code: 'TLE', label: 'TLE', color: '#f59e0b' },
-  { id: 'mapeh', code: 'MAPEH', label: 'MAPEH', color: '#ec4899' },
-  { id: 'esp', code: 'ESP', label: 'Edukasyon sa Pagpapakatao', color: '#64748b' },
-];
-
 const SUBJECT_COLORS = {
   FIL: '#8b5cf6',
   ENG: '#2563eb',
@@ -73,7 +62,7 @@ const safeQuery = async (sql, params = [], label = 'query') => {
     return rows;
   } catch (err) {
     console.warn(`[principalAnalytics] ${label} failed:`, err.message);
-    return [];
+    throw err;
   }
 };
 
@@ -98,13 +87,7 @@ async function loadAvailableSchoolYears() {
     seen.add(value);
     years.push({ id: `sy-${value}`, label: `SY ${start}–${end}`, value });
   });
-  return years.length
-    ? years
-    : [
-        { id: 'sy-2026-2027', label: 'SY 2026–2027', value: '2026-2027' },
-        { id: 'sy-2025-2026', label: 'SY 2025–2026', value: '2025-2026' },
-        { id: 'sy-2024-2025', label: 'SY 2024–2025', value: '2024-2025' },
-      ];
+  return years;
 }
 
 async function loadGradeLevels() {
@@ -113,12 +96,7 @@ async function loadGradeLevels() {
     [],
     'grade levels'
   );
-  return (rows.length ? rows : [
-    { grade_level_id: 7, grade_level_name: 'Grade 7' },
-    { grade_level_id: 8, grade_level_name: 'Grade 8' },
-    { grade_level_id: 9, grade_level_name: 'Grade 9' },
-    { grade_level_id: 10, grade_level_name: 'Grade 10' },
-  ]).map((gl) => {
+  return rows.map((gl) => {
     const num = parseGradeNum(gl.grade_level_name, gl.grade_level_id);
     return {
       id: `g-${num}`,
@@ -159,23 +137,6 @@ async function querySubjectAnalytics({ schoolYearValue, gradeLevelValue }) {
     });
   });
 
-  // If no subjects found in DB, populate default subjects
-  if (subjectMap.size === 0) {
-    DEFAULT_SUBJECTS.forEach((subj, idx) => {
-      subjectMap.set(idx + 1, {
-        subjectId: idx + 1,
-        id: subj.id,
-        code: subj.code,
-        label: subj.label,
-        color: subj.color,
-        t1Grades: [],
-        t2Grades: [],
-        t3Grades: [],
-        studentIds: new Set(),
-      });
-    });
-  }
-
   // 2. Fetch Grades with joins
   const sql = `
     SELECT 
@@ -207,7 +168,7 @@ async function querySubjectAnalytics({ schoolYearValue, gradeLevelValue }) {
     if (!entry) return;
 
     const grade = Number(r.grade);
-    if (!Number.isFinite(grade) || grade <= 0) return;
+    if (!Number.isFinite(grade) || grade < 0) return;
 
     entry.studentIds.add(r.student_id);
     allActiveStudentIds.add(r.student_id);
@@ -218,73 +179,23 @@ async function querySubjectAnalytics({ schoolYearValue, gradeLevelValue }) {
     else if (termIdx === 2) entry.t3Grades.push(grade);
   });
 
-  // Fallback baseline for prior school years not yet populated in the database
-  const HISTORICAL_BASELINES = {
-    MATH: { terms: [76.5, 78.2, 80.0], pass: [80, 84, 88], count: 28 },
-    SCI: { terms: [78.2, 79.5, 80.8], pass: [82, 86, 89], count: 28 },
-    ENG: { terms: [81.5, 82.8, 83.5], pass: [90, 92, 95], count: 28 },
-    FIL: { terms: [78.8, 80.0, 80.5], pass: [86, 88, 90], count: 28 },
-    AP: { terms: [79.2, 80.5, 81.0], pass: [87, 89, 91], count: 28 },
-    MAPEH: { terms: [83.5, 84.8, 85.2], pass: [93, 95, 96], count: 28 },
-    TLE: { terms: [79.0, 80.6, 81.8], pass: [86, 89, 92], count: 28 },
-    ESP: { terms: [83.0, 84.0, 84.5], pass: [92, 94, 95], count: 28 },
-  };
-
-  const hasDbData = allActiveStudentIds.size > 0;
-
-  const subjects = Array.from(subjectMap.values()).map((s) => {
-    if (hasDbData) {
-      const avgT1 = round(average(s.t1Grades));
-      const avgT2 = round(average(s.t2Grades));
-      const avgT3 = round(average(s.t3Grades));
-
-      const passT1 = s.t1Grades.length
-        ? round((s.t1Grades.filter((g) => g >= 75).length / s.t1Grades.length) * 100)
-        : 0;
-      const passT2 = s.t2Grades.length
-        ? round((s.t2Grades.filter((g) => g >= 75).length / s.t2Grades.length) * 100)
-        : 0;
-      const passT3 = s.t3Grades.length
-        ? round((s.t3Grades.filter((g) => g >= 75).length / s.t3Grades.length) * 100)
-        : 0;
-
-      return {
-        id: s.id,
-        code: s.code,
-        label: s.label,
-        color: s.color,
-        learnerCount: s.studentIds.size,
-        termAverages: [avgT1, avgT2, avgT3],
-        termPassRates: [passT1, passT2, passT3],
-      };
-    } else {
-      const baseline = HISTORICAL_BASELINES[s.code] || {
-        terms: [80, 80, 80],
-        pass: [85, 85, 85],
-        count: 28,
-      };
-      return {
-        id: s.id,
-        code: s.code,
-        label: s.label,
-        color: s.color,
-        learnerCount: baseline.count,
-        termAverages: baseline.terms,
-        termPassRates: baseline.pass,
-      };
-    }
+  // Catalog rows are configuration, not evidence that a term has grades.
+  const subjects = Array.from(subjectMap.values()).map(subject => {
+    const grades = [subject.t1Grades, subject.t2Grades, subject.t3Grades];
+    return {
+      id: subject.id, code: subject.code, label: subject.label, color: subject.color,
+      learnerCount: subject.studentIds.size,
+      termAverages: grades.map(values => round(average(values))),
+      termPassRates: grades.map(values => values.length ? round(values.filter(grade => grade >= 75).length / values.length * 100) : 0),
+      termGradeCounts: grades.map(values => values.length),
+    };
+  }).filter(subject => subject.termGradeCounts.some(count => count > 0));
+  const schoolWideGradeCounts = [0, 1, 2].map(index => subjects.reduce((total, subject) => total + subject.termGradeCounts[index], 0));
+  const schoolWideAverages = [0, 1, 2].map(index => {
+    const values = subjects.filter(subject => subject.termGradeCounts[index] > 0).map(subject => subject.termAverages[index]);
+    return round(average(values));
   });
-
-  const schoolWideAverages = [0, 1, 2].map((idx) => {
-    const vals = subjects.map((s) => s.termAverages[idx]).filter((v) => v > 0);
-    return vals.length ? round(average(vals)) : 0;
-  });
-
-  return {
-    subjects,
-    totalLearners: hasDbData ? allActiveStudentIds.size : 28,
-    schoolWideAverages,
-  };
+  return { subjects, totalLearners: allActiveStudentIds.size, schoolWideAverages, schoolWideGradeCounts };
 }
 
 /* ==========================================================================
@@ -302,6 +213,7 @@ router.get('/options', async (req, res) => {
     ]);
 
     res.json({
+      recordsVersion: 2,
       schoolYears,
       gradeLevels: [
         { id: 'g-all', label: 'All Grade Levels', value: 'all' },
@@ -310,7 +222,7 @@ router.get('/options', async (req, res) => {
     });
   } catch (err) {
     console.error('Error fetching analytics options:', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Unable to load Principal analytics. Please retry.' });
   }
 });
 
@@ -331,11 +243,13 @@ router.get('/subject-trend', async (req, res) => {
     ]);
 
     res.json({
+      recordsVersion: 2,
       schoolYear: schoolYearLabel(schoolYear),
       gradeLevel,
       term,
       subjects: analytics.subjects,
       schoolWideAverages: analytics.schoolWideAverages,
+      schoolWideGradeCounts: analytics.schoolWideGradeCounts,
       totalLearners: analytics.totalLearners,
       availableSchoolYears,
       availableGradeLevels: [
@@ -345,7 +259,7 @@ router.get('/subject-trend', async (req, res) => {
     });
   } catch (err) {
     console.error('Error in subject-trend route:', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Unable to load Principal analytics. Please retry.' });
   }
 });
 
@@ -367,27 +281,33 @@ router.get('/historical-comparison', async (req, res) => {
     ]);
 
     const termIdx = normalizeTermIndex(term);
-    const getAvg = (termAverages) =>
-      termIdx === -1 ? round(average(termAverages.filter((v) => v > 0))) : termAverages[termIdx] || 0;
-    const getPass = (termPassRates) =>
-      termIdx === -1 ? round(average(termPassRates.filter((v) => v > 0))) : termPassRates[termIdx] || 0;
+    const hasGrades = counts => termIdx === -1 ? counts.some(count => count > 0) : counts[termIdx] > 0;
+    const periodAverage = (values, counts) => termIdx === -1
+      ? round(average(values.filter((_, index) => counts[index] > 0))) : values[termIdx] || 0;
 
     const comparisonMap = new Map(comparisonData.subjects.map((s) => [s.id, s]));
 
-    const comparedSubjects = primaryData.subjects.map((p) => {
+    const primaryMap = new Map(primaryData.subjects.map(subject => [subject.id, subject]));
+    const catalog = new Map([...primaryData.subjects, ...comparisonData.subjects].map(subject => [subject.id, subject]));
+    const comparedSubjects = Array.from(catalog.values()).map((subject) => {
+      const p = primaryMap.get(subject.id) || { ...subject, learnerCount: 0, termAverages: [0, 0, 0], termPassRates: [0, 0, 0], termGradeCounts: [0, 0, 0] };
       const c = comparisonMap.get(p.id) || {
         termAverages: [0, 0, 0],
         termPassRates: [0, 0, 0],
+        termGradeCounts: [0, 0, 0],
       };
 
-      const primaryAverage = getAvg(p.termAverages);
-      const comparisonAverage = getAvg(c.termAverages);
-      const difference = round(primaryAverage - comparisonAverage);
-      const passRate = getPass(p.termPassRates);
+      const hasPrimaryData = hasGrades(p.termGradeCounts);
+      const hasComparisonData = hasGrades(c.termGradeCounts);
+      const canCompare = hasPrimaryData && hasComparisonData;
+      const primaryAverage = periodAverage(p.termAverages, p.termGradeCounts);
+      const comparisonAverage = periodAverage(c.termAverages, c.termGradeCounts);
+      const difference = canCompare ? round(primaryAverage - comparisonAverage) : null;
+      const passRate = periodAverage(p.termPassRates, p.termGradeCounts);
 
-      let status = 'On track';
-      if (primaryAverage < 75 || difference <= -3) status = 'Needs attention';
-      else if (primaryAverage < 80 || (difference < -1 && difference > -3)) status = 'Monitor';
+      let status = hasPrimaryData ? 'On track' : 'No data';
+      if (hasPrimaryData && (primaryAverage < 75 || (canCompare && difference <= -3))) status = 'Needs attention';
+      else if (hasPrimaryData && (primaryAverage < 80 || (canCompare && difference < -1))) status = 'Monitor';
 
       return {
         id: p.id,
@@ -400,7 +320,10 @@ router.get('/historical-comparison', async (req, res) => {
         difference,
         passRate,
         status,
-        improved: difference >= 0,
+        improved: canCompare ? difference >= 0 : null,
+        hasPrimaryData, hasComparisonData,
+        primaryTermGradeCounts: p.termGradeCounts,
+        comparisonTermGradeCounts: c.termGradeCounts,
         primaryTermAverages: p.termAverages,
         comparisonTermAverages: c.termAverages,
         primaryTermPassRates: p.termPassRates,
@@ -409,20 +332,26 @@ router.get('/historical-comparison', async (req, res) => {
     });
 
     const primaryOverallAverage = round(
-      average(comparedSubjects.map((s) => s.primaryAverage).filter((v) => v > 0))
+      average(comparedSubjects.filter(s => s.hasPrimaryData).map(s => s.primaryAverage))
     );
     const comparisonOverallAverage = round(
-      average(comparedSubjects.map((s) => s.comparisonAverage).filter((v) => v > 0))
+      average(comparedSubjects.filter(s => s.hasComparisonData).map(s => s.comparisonAverage))
     );
-    const overallDifference = round(primaryOverallAverage - comparisonOverallAverage);
+    const hasPrimaryData = comparedSubjects.some(subject => subject.hasPrimaryData);
+    const hasComparisonData = comparedSubjects.some(subject => subject.hasComparisonData);
+    const overallDifference = hasPrimaryData && hasComparisonData ? round(primaryOverallAverage - comparisonOverallAverage) : null;
 
     res.json({
+      recordsVersion: 2,
       primarySchoolYear: schoolYearLabel(primarySchoolYear),
       comparisonSchoolYear: schoolYearLabel(comparisonSchoolYear),
       term,
       totalStudents: primaryData.totalLearners,
       subjects: comparedSubjects,
       primaryTrend: primaryData.schoolWideAverages,
+      primaryTrendGradeCounts: primaryData.schoolWideGradeCounts,
+      comparisonTrendGradeCounts: comparisonData.schoolWideGradeCounts,
+      hasPrimaryData, hasComparisonData,
       comparisonTrend: comparisonData.schoolWideAverages,
       primaryOverallAverage,
       comparisonOverallAverage,
@@ -431,7 +360,7 @@ router.get('/historical-comparison', async (req, res) => {
     });
   } catch (err) {
     console.error('Error in historical-comparison route:', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Unable to load Principal analytics. Please retry.' });
   }
 });
 

@@ -9,18 +9,6 @@ const db = require('../config/db');
 const PASSING_GRADE = 75;
 const TARGET_GRADE = 80;
 
-const DEFAULT_GRADE_LEVEL_ROWS = [
-  { grade_level_id: 7, grade_level_name: 'Grade 7' },
-  { grade_level_id: 8, grade_level_name: 'Grade 8' },
-  { grade_level_id: 9, grade_level_name: 'Grade 9' },
-  { grade_level_id: 10, grade_level_name: 'Grade 10' },
-];
-
-const DEFAULT_SCHOOL_YEARS = [
-  { id: 'sy-2026-2027', label: 'SY 2026–2027', value: '2026-2027' },
-  { id: 'sy-2025-2026', label: 'SY 2025–2026', value: '2025-2026' },
-];
-
 const SUBJECT_COLORS = {
   FIL: '#8b5cf6',
   ENG: '#2563eb',
@@ -81,7 +69,7 @@ const safeQuery = async (sql, params = [], label = 'query') => {
     return rows;
   } catch (err) {
     console.warn(`[principalPerformance] ${label} failed:`, err.message);
-    return [];
+    throw err;
   }
 };
 
@@ -116,7 +104,7 @@ async function loadAvailableSchoolYears() {
     seen.add(value);
     years.push({ id: `sy-${value}`, label: `SY ${start}–${end}`, value });
   });
-  return years.length ? years : DEFAULT_SCHOOL_YEARS;
+  return years;
 }
 
 async function loadGradeLevels() {
@@ -125,7 +113,7 @@ async function loadGradeLevels() {
     [],
     'grade levels'
   );
-  return (rows.length ? rows : DEFAULT_GRADE_LEVEL_ROWS).map((gl) => {
+  return rows.map((gl) => {
     const gradeLevel = parseGradeNum(gl.grade_level_name, gl.grade_level_id);
     const name = String(gl.grade_level_name || '').trim();
     return {
@@ -208,7 +196,7 @@ async function loadGradeRecords(schoolYear) {
       sectionId: r.section_id,
       gradeLevel: parseGradeNum(r.grade_level_name, r.grade_level_id),
     }))
-    .filter((r) => Number.isFinite(r.grade) && r.grade > 0);
+    .filter((r) => Number.isFinite(r.grade) && r.grade >= 0);
 }
 
 /**
@@ -314,6 +302,7 @@ function buildSectionStats(sections, students) {
       section: sec.section,
       gradeLevel: sec.gradeLevel,
       learners: Math.max(sec.enrolled, stats.total),
+      gradedLearners: stats.total,
       averageGrade: stats.averageGrade,
       passRate: stats.passRate,
       failRate: stats.failRate,
@@ -354,6 +343,7 @@ function buildSubjectStats(subjects, sections, entries) {
       passRate,
       failRate: hasData ? round1(100 - passRate) : 0,
       learners: new Set(group.map((e) => e.studentId)).size,
+      gradedLearners: group.length,
       status: statusFor(averageGrade, passRate, hasData),
       highestSection: sectionAverages[0] || null,
       lowestSection: sectionAverages.length > 1 ? sectionAverages[sectionAverages.length - 1] : null,
@@ -389,6 +379,7 @@ router.get('/grade-levels', async (req, res) => {
     const overall = summarizeStudents(students);
 
     res.json({
+      recordsVersion: 2,
       term,
       schoolYear: schoolYearLabel(schoolYear),
       gradeLevels,
@@ -408,7 +399,7 @@ router.get('/grade-levels', async (req, res) => {
     });
   } catch (err) {
     console.error('Error in grade-levels route:', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Unable to load Principal performance. Please retry.' });
   }
 });
 
@@ -438,6 +429,7 @@ router.get('/sections', async (req, res) => {
     });
 
     res.json({
+      recordsVersion: 2,
       term,
       gradeLevel,
       schoolYear: schoolYearLabel(schoolYear),
@@ -462,7 +454,7 @@ router.get('/sections', async (req, res) => {
     });
   } catch (err) {
     console.error('Error in sections route:', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Unable to load Principal performance. Please retry.' });
   }
 });
 
@@ -486,6 +478,7 @@ router.get('/subjects', async (req, res) => {
     const subjectStats = buildSubjectStats(subjects, sections, entries);
 
     res.json({
+      recordsVersion: 2,
       term,
       gradeLevel,
       schoolYear: schoolYearLabel(schoolYear),
@@ -501,7 +494,7 @@ router.get('/subjects', async (req, res) => {
     });
   } catch (err) {
     console.error('Error in subjects route:', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Unable to load Principal performance. Please retry.' });
   }
 });
 
@@ -621,12 +614,14 @@ router.get('/teachers', async (req, res) => {
         color: PALETTE[index % PALETTE.length],
         learnerCount: new Set(mine.map((e) => e.studentId)).size,
         termAverages,
+        termGradeCounts: termEntries.map((list) => list.filter((entry) => t.offeringIds.has(entry.offeringId)).length),
         progress: { completed: submitted, total: expected },
         hasGrades: hasData,
       };
     });
 
     res.json({
+      recordsVersion: 2,
       term,
       gradeLevel,
       schoolYear: schoolYearLabel(schoolYear),
@@ -644,7 +639,7 @@ router.get('/teachers', async (req, res) => {
     });
   } catch (err) {
     console.error('Error in teachers route:', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Unable to load Principal performance. Please retry.' });
   }
 });
 
@@ -682,6 +677,7 @@ router.get('/lowest-performers', async (req, res) => {
     const subjectStats = buildSubjectStats(subjects, sections, entries).sort(ascending);
 
     res.json({
+      recordsVersion: 2,
       term,
       gradeLevel,
       schoolYear: schoolYearLabel(schoolYear),
@@ -701,7 +697,7 @@ router.get('/lowest-performers', async (req, res) => {
     });
   } catch (err) {
     console.error('Error in lowest-performers route:', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Unable to load Principal performance. Please retry.' });
   }
 });
 

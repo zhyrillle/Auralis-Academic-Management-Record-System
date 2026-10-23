@@ -1,5 +1,4 @@
-import useCachedQuery from "../../services/useCachedQuery";
-import { cacheKey } from "../../services/navigationCache";
+import { usePrincipalQuery } from "../../services/principalData";
 import { useState } from "react";
 import {
   AlertTriangle,
@@ -25,14 +24,12 @@ import PerformanceProgressTable, {
 import "../../styles/principalAnalytics.css";
 import "../../styles/principalPerformance.css";
 
-const DEFAULT_YEAR = "2026-2027";
 
 export default function PerformanceGradeLevels() {
   const [term, setTerm] = useState("overall");
-  const [schoolYear, setSchoolYear] = useState(DEFAULT_YEAR);
-  const { data, loading, refreshing, error, refresh } = useCachedQuery(
-    cacheKey("performance:grades", { term, schoolYear }), () => getGradeLevelPerformance({ term, schoolYear }),
-    { keepPreviousData: true },
+  const [requestedYear, setSchoolYear] = useState("");
+  const { data, loading, refreshing, error, refresh, schoolYear, schoolYears } = usePrincipalQuery(
+    "performance:grades", { term, schoolYear: requestedYear }, getGradeLevelPerformance,
   );
 
 
@@ -40,7 +37,7 @@ export default function PerformanceGradeLevels() {
   const retry = refresh;
 
   if (loading && !data) return <AnalyticsSkeleton table />;
-  if (!data && error) {
+  if (!data) {
     return (
       <main className="pa-page pp-page">
         <section className="pa-state-panel">
@@ -60,29 +57,29 @@ export default function PerformanceGradeLevels() {
   }
 
   const isFiltering = refreshing;
-  const hasData = data.gradeLevels.length > 0;
-  const schoolYearOptions = data.availableSchoolYears.map((year) => ({
+  const hasData = data.gradeLevels.some(row => row.gradedLearners > 0);
+  const schoolYearOptions = schoolYears.map((year) => ({
     value: year.value,
     label: year.label,
   }));
   const statCards = [
     {
       label: "School-wide Average",
-      value: data.summary.averageGrade,
+      value: data.summary.totalLearners > 0 ? data.summary.averageGrade : "—",
       description: "Across all grade levels",
       icon: GraduationCap,
       tone: "navy",
     },
     {
       label: "Overall Pass Rate",
-      value: `${data.summary.passRate}%`,
+      value: data.summary.totalLearners > 0 ? `${data.summary.passRate}%` : "—",
       description: `${data.summary.passingLearners} of ${data.summary.totalLearners} learners`,
       icon: CheckCircle2,
       tone: "green",
     },
     {
       label: "Overall Fail Rate",
-      value: `${data.summary.failRate}%`,
+      value: data.summary.totalLearners > 0 ? `${data.summary.failRate}%` : "—",
       description: `${data.summary.failingLearners} learners below passing`,
       icon: AlertTriangle,
       tone: "red",
@@ -98,11 +95,11 @@ export default function PerformanceGradeLevels() {
   const columns = [
     { key: "label", label: "Grade Level" },
     { key: "learners", label: "Learners" },
-    { key: "averageGrade", label: "Average Grade" },
+    { key: "averageGrade", label: "Average Grade", render: row => row.gradedLearners > 0 ? row.averageGrade : "—" },
     {
       key: "passRate",
       label: "Pass Rate",
-      render: (row) => <PerformanceInlineProgress value={row.passRate} />,
+      render: (row) => row.gradedLearners > 0 ? <PerformanceInlineProgress value={row.passRate} /> : "—",
     },
     {
       key: "status",
@@ -117,9 +114,6 @@ export default function PerformanceGradeLevels() {
         <div>
           <div className="pa-title-row">
             <h1>Performance by Grade Level</h1>
-            {import.meta.env.DEV && (
-              <span className="pa-preview-badge">Preview data</span>
-            )}
           </div>
           <p>
             Compare learner performance and passing outcomes across grade
@@ -186,7 +180,8 @@ export default function PerformanceGradeLevels() {
                     id: item.id,
                     label: item.label,
                     shortLabel: item.shortLabel,
-                    value: item.averageGrade,
+                    value: item.gradedLearners > 0 ? item.averageGrade : null,
+                    color: "#123062",
                     detail: `${item.learners} learners`,
                   }))}
                   minimum={60}

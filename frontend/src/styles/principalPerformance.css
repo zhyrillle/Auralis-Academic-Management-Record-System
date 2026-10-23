@@ -7,6 +7,17 @@
   padding-bottom: 34px;
 }
 
+.pp-page .progress-bar__fill--blue, .pp-page .progress-bar__fill--primary { background: #123062; }
+.pp-page .progress-bar__fill--gold, .pp-page .progress-bar__fill--warning { background: #C27C20; }
+.pp-page .progress-bar__fill--success { background: #168449; }
+.pp-page .progress-bar__fill--danger { background: #C62828; }
+.pp-subject-chart-panel { display: flex; flex-direction: column; min-height: 440px; }
+@media(min-width:821px) and (max-width:1600px) {
+  .pp-page .pp-table td, .pp-page .pp-table th, .pp-page .pp-inline-progress > span,
+  .pp-page .pp-ranked-list__value { font-size: 12px; }
+  .pp-page .pa-stat-card__value { font-size: 27px; }
+}
+
 .pp-page .pa-content { gap: var(--pp-section-gap); }
 
 .pp-filter-bar {

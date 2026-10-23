@@ -277,6 +277,7 @@ class Feedback {
       }
     } catch (e) {
       console.warn("[WARN] getDateRange DB query error:", e.message);
+      throw e;
     }
 
     return {
@@ -385,6 +386,7 @@ class Feedback {
       }
 
       return {
+        recordsVersion: 2,
         totalResponses,
         overallRating,
         ratingDiff,
@@ -393,13 +395,7 @@ class Feedback {
       };
     } catch (err) {
       console.error("[ERROR] getPrincipalFeedbackSummary:", err);
-      return {
-        totalResponses: 0,
-        overallRating: 0.0,
-        ratingDiff: "+0.0",
-        totalComments: 0,
-        belowTargetCount: 0,
-      };
+      throw err;
     }
   }
 
@@ -453,10 +449,10 @@ class Feedback {
         };
       });
 
-      return { results };
+      return { recordsVersion: 2, results };
     } catch (err) {
       console.error("[ERROR] getPrincipalLikertResults:", err);
-      return { results: [] };
+      throw err;
     }
   }
 
@@ -510,10 +506,10 @@ class Feedback {
         }
       });
 
-      return { comments };
+      return { recordsVersion: 2, comments };
     } catch (err) {
       console.error("[ERROR] getPrincipalFeedbackComments:", err);
-      return { comments: [] };
+      throw err;
     }
   }
 }
