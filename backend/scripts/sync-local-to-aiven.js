@@ -32,6 +32,27 @@ async function pushLocalToAiven() {
   });
 
   try {
+    // 0. Sync local users to Aiven Cloud
+    const [localUsers] = await localConn.query('SELECT * FROM USER;');
+    console.log(`👤 Checking ${localUsers.length} local users...`);
+    for (const u of localUsers) {
+      await aivenConn.query(
+        `INSERT INTO USER (user_id, role, department_id, first_name, middle_name, last_name, extension_name, email, password, account_status, pfp_url, last_login_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE
+           role = VALUES(role),
+           department_id = VALUES(department_id),
+           first_name = VALUES(first_name),
+           middle_name = VALUES(middle_name),
+           last_name = VALUES(last_name),
+           extension_name = VALUES(extension_name),
+           account_status = VALUES(account_status),
+           pfp_url = VALUES(pfp_url);`,
+        [u.user_id, u.role, u.department_id, u.first_name, u.middle_name, u.last_name, u.extension_name, u.email, u.password, u.account_status, u.pfp_url, u.last_login_at]
+      );
+    }
+    console.log('✅ Users verified and synced to Aiven.');
+
     // 1. Check max score_id on Aiven
     const [aivenStats] = await aivenConn.query('SELECT MAX(score_id) as max_id, COUNT(*) as count FROM SCORE;');
     const aivenMaxId = aivenStats[0].max_id || 0;
