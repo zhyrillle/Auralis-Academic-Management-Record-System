@@ -1,5 +1,4 @@
-import useCachedQuery from "../../services/useCachedQuery";
-import { cacheKey } from "../../services/navigationCache";
+import { usePrincipalQuery } from "../../services/principalData";
 import { useState } from "react";
 import {
   AlertTriangle,
@@ -18,21 +17,18 @@ import AnalyticsSkeleton from "./analytics/AnalyticsSkeleton";
 import AnalyticsStatCard from "./analytics/AnalyticsStatCard";
 import BarChart from "../../components/charts/BarChart";
 import PerformanceFilters from "./performance-level/PerformanceFilters";
+import { hasRecordedGrades } from "./analytics/principalChartStyles";
 import RankedProgressList from "./performance-level/RankedProgressList";
 import "../../styles/principalAnalytics.css";
 import "../../styles/principalPerformance.css";
 
-const DEFAULT_YEAR = "2026-2027";
-const toneFor = (value) =>
-  value < 75 ? "danger" : value < 80 ? "warning" : "neutral";
 
 export default function PerformanceLowest() {
   const [term, setTerm] = useState("overall");
-  const [schoolYear, setSchoolYear] = useState(DEFAULT_YEAR);
+  const [requestedYear, setSchoolYear] = useState("");
   const [gradeLevel, setGradeLevel] = useState("all");
-  const { data, loading, refreshing, error, refresh } = useCachedQuery(
-    cacheKey("performance:lowest", { term, schoolYear, gradeLevel }), () => getLowestPerformers({ term, schoolYear, gradeLevel }),
-    { keepPreviousData: true },
+  const { data, loading, refreshing, error, refresh, schoolYear, schoolYears } = usePrincipalQuery(
+    "performance:lowest", { term, schoolYear: requestedYear, gradeLevel }, getLowestPerformers,
   );
 
 
@@ -40,7 +36,7 @@ export default function PerformanceLowest() {
   const retry = refresh;
 
   if (loading && !data) return <AnalyticsSkeleton table />;
-  if (!data && error)
+  if (!data)
     return (
       <main className="pa-page pp-page">
         <section className="pa-state-panel">
@@ -59,12 +55,10 @@ export default function PerformanceLowest() {
     );
 
   const isFiltering = refreshing;
-  // Render the full layout whenever a payload exists; lists fall back to placeholder slots.
+  // Empty results never generate placeholder rankings.
   const hasData =
-    Array.isArray(data.gradeLevels) &&
-    Array.isArray(data.sections) &&
-    Array.isArray(data.subjects);
-  const schoolYearOptions = data.availableSchoolYears.map((year) => ({
+    [...data.gradeLevels, ...data.sections, ...data.subjects].some(hasRecordedGrades);
+  const schoolYearOptions = schoolYears.map((year) => ({
     value: year.value,
     label: year.label,
   }));
@@ -108,35 +102,21 @@ export default function PerformanceLowest() {
   ];
   const toRanked = (items) =>
     items
-      .filter((item) => item.averageGrade > 0)
+      .filter(hasRecordedGrades)
       .map((item) => ({
         id: item.id,
         label: item.label,
         value: item.averageGrade,
-        tone: toneFor(item.averageGrade),
+        tone: "blue",
       }));
-  const placeholderSlots = (prefix, count) =>
-    Array.from({ length: count }, (_, i) => ({
-      id: `${prefix}-slot-${i + 1}`,
-      label: "—",
-      value: 0,
-      tone: "neutral",
-    }));
-
   const gradedGradeLevels = toRanked(data.gradeLevels);
-  const rankedGradeLevels = gradedGradeLevels.length
-    ? gradedGradeLevels
-    : placeholderSlots("gl", 4);
+  const rankedGradeLevels = gradedGradeLevels;
 
   const gradedSections = toRanked(data.sections);
-  const rankedSections = gradedSections.length
-    ? gradedSections
-    : placeholderSlots("sec", 5);
+  const rankedSections = gradedSections;
 
   const gradedSubjects = toRanked(data.subjects);
-  const rankedSubjects = gradedSubjects.length
-    ? gradedSubjects
-    : placeholderSlots("subj", 5);
+  const rankedSubjects = gradedSubjects;
 
   return (
     <main className="pa-page pp-page">
@@ -144,9 +124,6 @@ export default function PerformanceLowest() {
         <div>
           <div className="pa-title-row">
             <h1>Lowest Performers</h1>
-            {import.meta.env.DEV && (
-              <span className="pa-preview-badge">Preview data</span>
-            )}
           </div>
           <p>
             Identify grade levels, sections, and subjects requiring immediate
@@ -243,7 +220,8 @@ export default function PerformanceLowest() {
                     id: item.id,
                     label: item.label,
                     shortLabel: `G${item.gradeLevel}`,
-                    value: Number(item.failRate ?? 0),
+                    value: hasRecordedGrades(item) ? Number(item.failRate) : null,
+                    color: "#C27C20",
                   }))}
                   minimum={0}
                   maximum={Math.max(
@@ -270,8 +248,8 @@ export default function PerformanceLowest() {
                     id: item.id,
                     label: item.label,
                     shortLabel: item.code,
-                    value: item.averageGrade,
-                    color: item.color,
+                    value: hasRecordedGrades(item) ? item.averageGrade : null,
+                    color: "#123062",
                   }))}
                   minimum={60}
                   maximum={100}

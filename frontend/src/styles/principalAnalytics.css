@@ -14,6 +14,14 @@
   font-family: var(--font-inter, "Inter", sans-serif);
 }
 
+.pa-navigation { margin-bottom: 18px; }
+.pa-navigation > .filter-toolbar__controls > .pa-filter-controls { margin-left: auto; }
+.pa-navigation .pa-filter-controls { padding: 0; }
+.pa-legend-swatch { width: 28px; height: 14px; flex: 0 0 28px; }
+.pa-availability-note { padding: 12px 16px; margin: 0; background: #f0f5fc; border: 1px solid #dce6f3; border-radius: 10px; color: #526580; font-size: 13px; line-height: 1.6; }
+.pa-status--no-data { background: #edf1f6; color: #607089; }
+@media(max-width:640px) { .pa-navigation .pa-filter-controls { width: 100%; margin-left: 0; } }
+
 .pa-page *,
 .pa-page *::before,
 .pa-page *::after {
@@ -252,6 +260,13 @@
   font-family: var(--font-dm-sans, "DM Sans", sans-serif);
   font-size: 1.65rem;
   line-height: 1;
+}
+
+/* Names and labels should not use the oversized numeric-counter typography. */
+.pa-stat-card .pa-stat-card__value.pa-stat-card__value--text {
+  font-size: clamp(18px, 1.5vw, 24px);
+  line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
 .pa-stat-card__description {

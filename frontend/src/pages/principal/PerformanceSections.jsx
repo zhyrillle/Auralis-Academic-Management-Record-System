@@ -1,5 +1,4 @@
-import useCachedQuery from "../../services/useCachedQuery";
-import { cacheKey } from "../../services/navigationCache";
+import { usePrincipalQuery } from "../../services/principalData";
 import { useState } from "react";
 import {
   AlertTriangle,
@@ -26,16 +25,15 @@ import StackedBarChart from "../../components/charts/StackedBarChart";
 import "../../styles/principalAnalytics.css";
 import "../../styles/principalPerformance.css";
 
-const DEFAULT_YEAR = "2026-2027";
 const PERFORMANCE_BANDS = [
-  { id: "needsAttention", label: "Needs Attention", color: "#ef5350" },
-  { id: "satisfactory", label: "Satisfactory", color: "#f6b91b" },
+  { id: "needsAttention", label: "Needs Attention", color: "#C62828" },
+  { id: "satisfactory", label: "Satisfactory", color: "#C27C20" },
   {
     id: "verySatisfactory",
     label: "Very Satisfactory",
-    color: "#2db783",
+    color: "#168449",
   },
-  { id: "outstanding", label: "Outstanding", color: "#6366e8" },
+  { id: "outstanding", label: "Outstanding", color: "#123062" },
 ];
 const matchesSearch = (section, query) => {
   const normalizedQuery = query.trim().toLowerCase();
@@ -47,10 +45,9 @@ const matchesSearch = (section, query) => {
 
 export default function PerformanceSections() {
   const [term, setTerm] = useState("overall");
-  const [schoolYear, setSchoolYear] = useState(DEFAULT_YEAR);
-  const { data, loading, refreshing, error, refresh } = useCachedQuery(
-    cacheKey("performance:sections", { term, schoolYear }), () => getSectionPerformance({ term, schoolYear }),
-    { keepPreviousData: true },
+  const [requestedYear, setSchoolYear] = useState("");
+  const { data, loading, refreshing, error, refresh, schoolYear, schoolYears } = usePrincipalQuery(
+    "performance:sections", { term, schoolYear: requestedYear }, getSectionPerformance,
   );
   const [distributionQuery, setDistributionQuery] = useState("");
   const [distributionGradeLevel, setDistributionGradeLevel] = useState("all");
@@ -84,8 +81,8 @@ export default function PerformanceSections() {
 
   const isFiltering = refreshing;
   // Render the full layout whenever a payload exists; charts/tables show their own empty states.
-  const hasData = Array.isArray(data.sections);
-  const schoolYearOptions = data.availableSchoolYears.map((year) => ({
+  const hasData = data.sections.some(row => row.gradedLearners > 0);
+  const schoolYearOptions = schoolYears.map((year) => ({
     value: year.value,
     label: year.label,
   }));
@@ -111,21 +108,21 @@ export default function PerformanceSections() {
   const cards = [
     {
       label: "School-wide Average",
-      value: data.summary.averageGrade,
+      value: data.summary.totalLearners > 0 ? data.summary.averageGrade : "—",
       description: "Across all sections",
       icon: LayoutGrid,
       tone: "navy",
     },
     {
       label: "Overall Pass Rate",
-      value: `${data.summary.passRate}%`,
+      value: data.summary.totalLearners > 0 ? `${data.summary.passRate}%` : "—",
       description: `${data.summary.passingLearners} learners passing`,
       icon: CheckCircle2,
       tone: "green",
     },
     {
       label: "Overall Fail Rate",
-      value: `${data.summary.failRate}%`,
+      value: data.summary.totalLearners > 0 ? `${data.summary.failRate}%` : "—",
       description: `${data.summary.failingLearners} learners below passing`,
       icon: AlertTriangle,
       tone: "red",
@@ -146,11 +143,11 @@ export default function PerformanceSections() {
     },
     { key: "section", label: "Section" },
     { key: "learners", label: "Learners" },
-    { key: "averageGrade", label: "Average Grade" },
+    { key: "averageGrade", label: "Average Grade", render: row => row.gradedLearners > 0 ? row.averageGrade : "—" },
     {
       key: "passRate",
       label: "Pass Rate",
-      render: (row) => `${row.passRate}%`,
+      render: (row) => row.gradedLearners > 0 ? `${row.passRate}%` : "—",
     },
     {
       key: "status",
@@ -165,9 +162,6 @@ export default function PerformanceSections() {
         <div>
           <div className="pa-title-row">
             <h1>Performance by Section</h1>
-            {import.meta.env.DEV && (
-              <span className="pa-preview-badge">Preview data</span>
-            )}
           </div>
           <p>
             Compare average grades and performance bands across school sections.

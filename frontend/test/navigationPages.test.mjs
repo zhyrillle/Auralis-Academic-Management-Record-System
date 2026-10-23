@@ -24,22 +24,23 @@ const server = await createServer({
 });
 try {
   const { cacheKey, loadCached } = await server.ssrLoadModule('/src/services/navigationCache.js');
-  const performance = await server.ssrLoadModule('/src/services/principalPerformanceService.js');
+  const { principalCacheKey } = await server.ssrLoadModule('/src/services/principalData.js');
   const year = { value: '2026-2027', label: 'SY 2026–2027' };
   const years = [year, { value: '2025-2026', label: 'SY 2025–2026' }];
-  const seed = (name, filters, data) => loadCached(cacheKey(name, filters), async () => data);
+  const seed = (name, filters, data) => loadCached(name.startsWith('performance:') || name.startsWith('analytics:') || name === 'principal:school-years' ? principalCacheKey(name, filters) : cacheKey(name, filters), async () => data);
+  await seed('principal:school-years', {}, years);
   const common = { term: 'overall', schoolYear: year, availableSchoolYears: years, availableGradeLevels: [] };
-  await seed('performance:grades', { term: 'overall', schoolYear: year.value }, await performance.getGradeLevelPerformance({}));
-  await seed('performance:subjects', { term: 'overall', schoolYear: year.value, gradeLevel: 'all' }, await performance.getSubjectPerformance({}));
-  await seed('performance:teachers', { term: 'overall', schoolYear: year.value }, await performance.getTeacherPerformance({}));
-  await seed('performance:lowest', { term: 'overall', schoolYear: year.value, gradeLevel: 'all' }, await performance.getLowestPerformers({}));
+  await seed('performance:grades', { term: 'overall', schoolYear: year.value }, { ...common, gradeLevels: [], summary: {} });
+  await seed('performance:subjects', { term: 'overall', schoolYear: year.value, gradeLevel: 'all' }, { ...common, subjects: [], summary: {} });
+  await seed('performance:teachers', { term: 'overall', schoolYear: year.value }, { ...common, teachers: [], summary: {} });
+  await seed('performance:lowest', { term: 'overall', schoolYear: year.value, gradeLevel: 'all' }, { ...common, gradeLevels: [], subjects: [], sections: [], summary: {} });
   await seed('performance:sections', { term: 'overall', schoolYear: year.value }, { ...common,
     summary: { averageGrade: 0, passRate: 0, failRate: 0, totalLearners: 0, needsAttention: 0 }, sections: [], bands: [] });
   await seed('analytics:historical', { term: 'overall', primarySchoolYear: year.value, comparisonSchoolYear: '2025-2026' },
-    { ...common, primarySchoolYear: year, comparisonSchoolYear: years[1], subjects: [], totalStudents: 0 });
-  const analytics = await server.ssrLoadModule('/src/services/principalAnalyticsService.js');
+    { ...common, primarySchoolYear: year, comparisonSchoolYear: years[1], subjects: [], totalStudents: 0,
+      primaryTrend: [0, 0, 0], comparisonTrend: [0, 0, 0], primaryTrendGradeCounts: [0, 0, 0], comparisonTrendGradeCounts: [0, 0, 0], hasPrimaryData: false, hasComparisonData: false });
   await seed('analytics:subject-trend', { term: 'overall', schoolYear: year.value, gradeLevel: 'all' },
-    await analytics.getSubjectPerformanceTrend({}));
+    { ...common, subjects: [], schoolWideAverages: [0, 0, 0], schoolWideGradeCounts: [0, 0, 0], totalLearners: 0 });
   await seed('reports:catalog', {}, { students: [], sections: [], enrollments: [], grades: [], years: [] });
   await seed('admin:account-summary', {}, { totalAccounts: 0, activeAccounts: 0, inactiveAccounts: 0, roles: {} });
   await seed('admin:audit-events', {}, []);

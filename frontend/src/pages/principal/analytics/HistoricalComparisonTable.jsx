@@ -23,13 +23,13 @@ export default function HistoricalComparisonTable({ rows, primaryLabel, comparis
             return (
               <tr key={row.id}>
                 <th scope="row">{row.label}<span>{row.code}</span></th>
-                <td>{row.primaryAverage}</td>
-                <td>{row.comparisonAverage}</td>
+                <td>{row.primaryAverage ?? "Unavailable"}</td>
+                <td>{row.comparisonAverage ?? "Unavailable"}</td>
                 <td>
-                  <span className={`pa-difference ${row.difference > 0 ? "is-positive" : row.difference < 0 ? "is-negative" : ""}`}>
+                  {row.difference == null ? "Unavailable" : <span className={`pa-difference ${row.difference > 0 ? "is-positive" : row.difference < 0 ? "is-negative" : ""}`}>
                     <DifferenceIcon size={15} aria-hidden="true" />
                     {row.difference > 0 ? "+" : ""}{row.difference}
-                  </span>
+                  </span>}
                 </td>
                 <td>{row.passRate == null ? "—" : `${row.passRate}%`}</td>
                 <td><span className={`pa-status pa-status--${statusClass(row.status)}`}>{row.status}</span></td>

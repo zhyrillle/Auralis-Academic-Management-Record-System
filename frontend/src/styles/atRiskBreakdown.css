@@ -296,6 +296,22 @@
   padding: 8px 0;
 }
 
+.ar-connected-donut .ar-overall-donut-svg { width: min(100%, 420px); height: auto; aspect-ratio: 7 / 6; }
+.ar-connected-donut .ar-donut-connector { opacity: 0; stroke-dasharray: 1; stroke-dashoffset: 1; transition: stroke-dashoffset 260ms ease-out, opacity 180ms ease-out; }
+.ar-connected-donut .ar-donut-connector.is-active { opacity: 1; stroke-dashoffset: 0; }
+.ar-connected-donut .ar-risk-segment { cursor: pointer; transition: opacity 180ms ease; }
+.ar-connected-donut .ar-svg-badge { cursor: pointer; }
+.ar-connected-donut .ar-svg-badge text { fill: #fff; font-size: 12px; font-weight: 700; pointer-events: none; }
+.ar-connected-donut .ar-svg-badge.is-active rect { filter: drop-shadow(0 2px 4px #12306240); }
+.ar-connected-donut .ar-risk-segment:focus-visible, .ar-connected-donut .ar-svg-badge:focus-visible rect { outline: 2px solid #123062; outline-offset: 3px; }
+.ar-chart-legend-top button.ar-legend-dot-item { border: 0; background: none; font: inherit; color: inherit; padding: 3px; cursor: pointer; }
+.ar-chart-legend-top button:focus-visible { outline: 2px solid #123062; border-radius: 4px; }
+.ar-donut-center-percent { font-size: 11px; color: #64748b; }
+@media(prefers-reduced-motion:reduce) {
+  .ar-connected-donut .ar-risk-segment, .ar-connected-donut .ar-svg-badge { transition: none; }
+  .ar-connected-donut .ar-donut-connector { transition: none; }
+}
+
 .ar-overall-donut-svg {
   width: 210px;
   height: 210px;

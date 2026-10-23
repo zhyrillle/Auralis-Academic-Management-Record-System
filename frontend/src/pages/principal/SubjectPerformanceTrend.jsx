@@ -1,5 +1,6 @@
-import useCachedQuery from "../../services/useCachedQuery";
-import { cacheKey } from "../../services/navigationCache";
+import { usePrincipalQuery } from "../../services/principalData";
+import FilterToolbar from "../../components/common/FilterToolbar";
+import { mutedSeriesStyles } from "./analytics/principalChartStyles";
 import { useMemo, useState } from "react";
 import {
   AlertTriangle,
@@ -24,7 +25,6 @@ import GroupedBarChart from "../../components/charts/GroupedBarChart";
 import SubjectLegend from "./analytics/SubjectLegend";
 import "../../styles/principalAnalytics.css";
 
-const DEFAULT_YEAR = "2026-2027";
 const ANALYTICS_MODES = [
   { id: "trend", label: "Trend" },
   { id: "ranking", label: "Ranking" },
@@ -36,13 +36,12 @@ const round = (value) => Math.round(value * 10) / 10;
 const termIndex = (term) => Number(term.split("-")[1]) - 1;
 
 export default function SubjectPerformanceTrend() {
-  const [schoolYear, setSchoolYear] = useState(DEFAULT_YEAR);
+  const [requestedYear, setSchoolYear] = useState("");
   const [gradeLevel, setGradeLevel] = useState("all");
   const [viewMode, setViewMode] = useState("trend");
   const [rankingTerm, setRankingTerm] = useState("term-1");
-  const { data, loading, refreshing, error, refresh } = useCachedQuery(
-    cacheKey("analytics:subject-trend", { schoolYear, gradeLevel, term: viewMode === "trend" ? "overall" : rankingTerm }), () => getSubjectPerformanceTrend({ schoolYear, gradeLevel, term: viewMode === "trend" ? "overall" : rankingTerm }),
-    { keepPreviousData: true },
+  const { data, loading, refreshing, error, refresh, schoolYear, schoolYears } = usePrincipalQuery(
+    "analytics:subject-trend", { schoolYear: requestedYear, gradeLevel, term: viewMode === "trend" ? "overall" : rankingTerm }, getSubjectPerformanceTrend,
   );
   const [selectedSubjectIds, setSelectedSubjectIds] = useState(null);
 
@@ -54,7 +53,7 @@ export default function SubjectPerformanceTrend() {
   const statistics = useMemo(() => {
     if (!data?.subjects.length) return [];
     if (data.term === "overall") {
-      const changes = data.subjects.map(
+      const changes = data.subjects.filter(subject => subject.termGradeCounts[0] > 0 && subject.termGradeCounts[2] > 0).map(
         (subject) => subject.termAverages[2] - subject.termAverages[0],
       );
       return [
@@ -90,14 +89,14 @@ export default function SubjectPerformanceTrend() {
     }
 
     const index = termIndex(data.term);
-    const averages = data.subjects.map(
+    const averages = data.subjects.filter(subject => subject.termGradeCounts[index] > 0).map(
       (subject) => subject.termAverages[index],
     );
     return [
       {
         label: "Total Subjects",
-        value: data.subjects.length,
-        description: `Included in Term ${index + 1}`,
+        value: averages.length,
+        description: `With recorded grades in Term ${index + 1}`,
         icon: BookOpenCheck,
         tone: "navy",
       },
@@ -117,9 +116,7 @@ export default function SubjectPerformanceTrend() {
       },
       {
         label: "Term Average",
-        value: round(
-          averages.reduce((sum, value) => sum + value, 0) / averages.length,
-        ),
+        value: averages.length ? round(averages.reduce((sum, value) => sum + value, 0) / averages.length) : "—",
         description: `School-wide Term ${index + 1}`,
         icon: Scale,
         tone: "gold",
@@ -129,7 +126,7 @@ export default function SubjectPerformanceTrend() {
 
   if (loading && !data) return <AnalyticsSkeleton />;
 
-  if (!data && error) {
+  if (!data) {
     return (
       <main className="pa-page">
         <section className="pa-state-panel">
@@ -152,15 +149,11 @@ export default function SubjectPerformanceTrend() {
     );
   }
 
+  const subjectStyles = mutedSeriesStyles(data.subjects);
   const selectedSubjects = data.subjects.filter((subject) =>
     (selectedSubjectIds === null || selectedSubjectIds.includes(subject.id)),
   );
-  const schoolYearOptions = Array.isArray(data.availableSchoolYears)
-    ? data.availableSchoolYears.map((year) => ({
-        value: typeof year === "object" && year !== null ? year.value : String(year),
-        label: typeof year === "object" && year !== null ? year.label : `SY ${year}`,
-      }))
-    : [];
+  const schoolYearOptions = schoolYears;
 
   const rawGradeLevels = Array.isArray(data.availableGradeLevels)
     ? data.availableGradeLevels
@@ -203,10 +196,7 @@ export default function SubjectPerformanceTrend() {
         </div>
       </header>
 
-      <section
-        className="pa-filter-bar"
-        aria-label="Subject performance filters"
-      >
+      <FilterToolbar className="pa-navigation" label="Subject performance filters">
         <AnalyticsTermTabs
           options={ANALYTICS_MODES}
           value={viewMode}
@@ -235,7 +225,7 @@ export default function SubjectPerformanceTrend() {
             />
           </label>
         </div>
-      </section>
+      </FilterToolbar>
 
       {error && data && (
         <div className="pa-inline-error" role="alert">
@@ -299,9 +289,9 @@ export default function SubjectPerformanceTrend() {
                       {
                         id: "school-wide",
                         label: "School-wide average",
-                        color: "#17376d",
-                        values: data.schoolWideAverages.map((value) => ({
-                          value,
+                        color: "#123062",
+                        values: data.schoolWideAverages.map((value, index) => ({
+                          value: data.schoolWideGradeCounts[index] > 0 ? value : null,
                           detail: `${data.totalLearners} learners`,
                         })),
                       },
@@ -319,7 +309,7 @@ export default function SubjectPerformanceTrend() {
                     </div>
                   </div>
                   <SubjectLegend
-                    subjects={data.subjects}
+                    subjects={data.subjects.map(subject => ({ ...subject, ...subjectStyles.get(subject.id) }))}
                     selectedIds={selectedSubjectIds ?? data.subjects.map(subject => subject.id)}
                     onToggle={(id) =>
                       setSelectedSubjectIds((current) => {
@@ -342,8 +332,9 @@ export default function SubjectPerformanceTrend() {
                       labels={["Term 1", "Term 2", "Term 3"]}
                       series={selectedSubjects.map((subject) => ({
                         ...subject,
-                        values: subject.termAverages.map((value) => ({
-                          value,
+                        ...subjectStyles.get(subject.id),
+                        values: subject.termAverages.map((value, index) => ({
+                          value: subject.termGradeCounts[index] > 0 ? value : null,
                           detail: `${subject.learnerCount} learners`,
                         })),
                       }))}
@@ -385,9 +376,10 @@ export default function SubjectPerformanceTrend() {
                     />
                   </div>
                 </div>
-                <GroupedBarChart
+                {data.subjects.some(subject => subject.termGradeCounts[termIndex(displayedTerm)] > 0) ? <GroupedBarChart
                   ariaLabel={`Subject average grades for Term ${termIndex(displayedTerm) + 1}`}
                   groups={[...data.subjects]
+                    .filter(subject => subject.termGradeCounts[termIndex(displayedTerm)] > 0)
                     .sort(
                       (a, b) =>
                         b.termAverages[termIndex(displayedTerm)] -
@@ -403,11 +395,11 @@ export default function SubjectPerformanceTrend() {
                           label: `Term ${termIndex(displayedTerm) + 1}`,
                           value: subject.termAverages[termIndex(displayedTerm)],
                           detail: `${subject.learnerCount} learners`,
-                          color: subject.color,
+                          color: "#123062",
                         },
                       ],
                     }))}
-                />
+                /> : <EmptyState className="pa-empty-state" icon={BookOpenCheck} title="No recorded grades for this term" description="Choose a term with saved grades to view its ranking." />}
               </section>
             )}
           </>

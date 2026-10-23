@@ -1,5 +1,5 @@
-import useCachedQuery from "../../services/useCachedQuery";
-import { cacheKey } from "../../services/navigationCache";
+import { usePrincipalQuery } from "../../services/principalData";
+import FilterToolbar from "../../components/common/FilterToolbar";
 import { useMemo, useState } from "react";
 import {
   AlertTriangle,
@@ -33,20 +33,13 @@ const termIndex = (term) => {
   return isNaN(num) ? 0 : num - 1;
 };
 
-const getStatus = (currentAverage, difference) => {
-  if (currentAverage < 75 || difference <= -3) return "Needs attention";
-  if (currentAverage < 80 || (difference < -1 && difference > -3))
-    return "Monitor";
-  return "On track";
-};
 
 export default function HistoricalComparison() {
-  const [primarySchoolYear, setPrimarySchoolYear] = useState("2026-2027");
-  const [comparisonSchoolYear, setComparisonSchoolYear] = useState("2025-2026");
+  const [requestedPrimaryYear, setPrimarySchoolYear] = useState("");
+  const [requestedComparisonYear, setComparisonSchoolYear] = useState("");
   const [term, setTerm] = useState("overall");
-  const { data, loading, refreshing, error, refresh } = useCachedQuery(
-    cacheKey("analytics:historical", { primarySchoolYear, comparisonSchoolYear, term }), () => getHistoricalComparison({ primarySchoolYear, comparisonSchoolYear, term }),
-    { keepPreviousData: true },
+  const { data, loading, refreshing, error, refresh, primarySchoolYear, comparisonSchoolYear, schoolYears } = usePrincipalQuery(
+    "analytics:historical", { primarySchoolYear: requestedPrimaryYear, comparisonSchoolYear: requestedComparisonYear, term }, getHistoricalComparison, { comparison: true },
   );
 
 
@@ -54,48 +47,19 @@ export default function HistoricalComparison() {
 
   const handleRetry = refresh;
 
-  const rows = useMemo(() => {
-    if (!data?.subjects?.length) return [];
-    const selectedTermIndex =
-      data.term === "overall" ? null : termIndex(data.term);
-    return data.subjects.map((subject) => {
-      const primaryAverages = subject.primaryTermAverages;
-      const comparisonAverages = subject.comparisonTermAverages;
-      const primaryPassRates = subject.primaryTermPassRates;
-
-      const primaryAverage = round(
-        !Array.isArray(primaryAverages) ? subject.primaryAverage : selectedTermIndex === null
-          ? average(primaryAverages)
-          : primaryAverages[selectedTermIndex] || 0,
-      );
-      const comparisonAverage = round(
-        !Array.isArray(comparisonAverages) ? subject.comparisonAverage : selectedTermIndex === null
-          ? average(comparisonAverages)
-          : comparisonAverages[selectedTermIndex] || 0,
-      );
-      const passRate = Array.isArray(primaryPassRates) ? round(
-        selectedTermIndex === null
-          ? average(primaryPassRates)
-          : primaryPassRates[selectedTermIndex] || 0,
-      ) : subject.passRate == null ? null : round(subject.passRate);
-      const difference = round(primaryAverage - comparisonAverage);
-      return {
-        ...subject,
-        primaryAverage,
-        comparisonAverage,
-        difference,
-        passRate,
-        status: getStatus(primaryAverage, difference),
-      };
-    });
-  }, [data]);
+  const rows = useMemo(() => (data?.subjects || []).map(subject => ({
+    ...subject,
+    primaryAverage: subject.hasPrimaryData ? subject.primaryAverage : null,
+    comparisonAverage: subject.hasComparisonData ? subject.comparisonAverage : null,
+    passRate: subject.hasPrimaryData ? subject.passRate : null,
+  })), [data]);
 
   const statistics = useMemo(() => {
     if (!rows.length || !data) return [];
     const passRates = rows.map((row) => row.passRate).filter((value) => value !== null);
     const passRate = passRates.length ? round(average(passRates)) : null;
     const currentAverage = round(
-      average(rows.map((row) => row.primaryAverage)),
+      average(rows.filter(row => row.hasPrimaryData).map((row) => row.primaryAverage)),
     );
     return [
       {
@@ -125,7 +89,7 @@ export default function HistoricalComparison() {
       },
       {
         label: "Average Grade",
-        value: currentAverage,
+        value: data.hasPrimaryData ? currentAverage : "—",
         description: data.primarySchoolYear?.label || "Primary SY",
         icon: ChartNoAxesCombined,
         tone: "gold",
@@ -158,9 +122,7 @@ export default function HistoricalComparison() {
     );
   }
 
-  const allYears = Array.isArray(data.availableSchoolYears)
-    ? data.availableSchoolYears
-    : [];
+  const allYears = schoolYears;
   const primaryOptions = allYears
     .filter((year) => year.value !== comparisonSchoolYear)
     .map((year) => ({ value: year.value, label: year.label }));
@@ -175,9 +137,7 @@ export default function HistoricalComparison() {
   const comparisonLabel = data.comparisonSchoolYear?.label || comparisonSchoolYear;
   const primaryTrend = data.primaryTrend;
   const comparisonTrend = data.comparisonTrend;
-  const hasTrends = [data.primaryTrend, data.comparisonTrend].every((values) =>
-    Array.isArray(values) && values.length === 3 && values.every((value) => value != null && Number.isFinite(Number(value))),
-  );
+  const hasTrends = data.primaryTrendGradeCounts.some(count => count > 0) || data.comparisonTrendGradeCounts.some(count => count > 0);
 
   return (
     <main className="pa-page">
@@ -190,10 +150,7 @@ export default function HistoricalComparison() {
         </div>
       </header>
 
-      <section
-        className="pa-filter-bar"
-        aria-label="Historical comparison filters"
-      >
+      <FilterToolbar className="pa-navigation" label="Historical comparison filters">
         <AnalyticsTermTabs
           options={principalAnalyticsTerms}
           value={term}
@@ -223,7 +180,7 @@ export default function HistoricalComparison() {
             />
           </label>
         </div>
-      </section>
+      </FilterToolbar>
 
       {error && data && (
         <div className="pa-inline-error" role="alert">
@@ -267,6 +224,9 @@ export default function HistoricalComparison() {
               ))}
             </section>
 
+            {(!data.hasPrimaryData || !data.hasComparisonData) && <p className="pa-availability-note" role="status">
+              {!data.hasPrimaryData && !data.hasComparisonData ? "Neither school year has recorded grades for this period." : `No recorded grades for ${!data.hasPrimaryData ? primaryLabel : comparisonLabel} in this period.`} Comparisons and differences are unavailable where either result is missing.
+            </p>}
             <section className="pa-panel">
               <div className="pa-panel__header">
                 <div>
@@ -287,11 +247,11 @@ export default function HistoricalComparison() {
                   aria-label="Compared school years"
                 >
                   <span>
-                    <i style={{ "--series-color": "#17376d" }} />
+                    <i style={{ "--series-color": "#123062" }} />
                     {primaryLabel}
                   </span>
                   <span>
-                    <i style={{ "--series-color": "#d4a017" }} />
+                    <i style={{ "--series-color": "#C27C20" }} />
                     {comparisonLabel}
                   </span>
                 </div>
@@ -304,18 +264,19 @@ export default function HistoricalComparison() {
                     {
                       id: "primary",
                       label: primaryLabel,
-                      color: "#17376d",
-                      values: primaryTrend.map((value) => ({
-                        value,
+                      color: "#123062",
+                      values: primaryTrend.map((value, index) => ({
+                        value: data.primaryTrendGradeCounts[index] > 0 ? value : null,
                         detail: data.totalStudents == null ? undefined : `${data.totalStudents} learners`,
                       })),
                     },
                     {
                       id: "comparison",
                       label: comparisonLabel,
-                      color: "#d4a017",
-                      values: comparisonTrend.map((value) => ({
-                        value,
+                      color: "#C27C20",
+                      dash: "8 4", marker: "square",
+                      values: comparisonTrend.map((value, index) => ({
+                        value: data.comparisonTrendGradeCounts[index] > 0 ? value : null,
                         detail: data.totalStudents == null ? undefined : `${data.totalStudents} learners`,
                       })),
                     },
@@ -334,14 +295,14 @@ export default function HistoricalComparison() {
                         label: primaryLabel,
                         value: row.primaryAverage,
                         detail: row.learnerCount == null ? undefined : `${row.learnerCount} learners`,
-                        color: "#17376d",
+                        color: "#123062",
                       },
                       {
                         id: `${row.id}-comparison`,
                         label: comparisonLabel,
                         value: row.comparisonAverage,
                         detail: row.learnerCount == null ? undefined : `${row.learnerCount} learners`,
-                        color: "#d4a017",
+                        color: "#C27C20",
                       },
                     ],
                   }))}

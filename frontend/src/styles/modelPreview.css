@@ -4,6 +4,9 @@
 .ar-preview-error button { min-height: 36px; padding: 6px 14px; border: 1px solid #cbd5e1; background: #fff; color: #243e68; border-radius: 8px; cursor: pointer; }
 
 .ar-page { --pa-border: #dce4ef; --pa-navy: #123062; }
+.ar-page .pa-stat-card--green { --card-tone: #168449; }
+.ar-page .pa-stat-card--gold { --card-tone: #C27C20; }
+.ar-page .pa-stat-card--red { --card-tone: #C62828; }
 .ar-page .pa-stat-card { min-height: 126px; padding: 18px; }
 .ar-page .pa-stat-card__value { font-size: 30px; margin-top: 10px; }
 .ar-page .pa-stat-card__description { margin-top: 18px; font-size: 12px; }
@@ -139,7 +142,7 @@
 .ar-review-period-controls { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 12px; }
 .ar-review-nav-field { display: flex; flex-direction: column; gap: 6px; min-width: 150px; width: 180px; }
 .ar-review-nav-field > span { color: #64748b; font-size: 12px; }
-.ar-review-nav-field > .dropdown-select { width: 100%; }
+.ar-review-nav-field > .dropdown-select { width: 100%; flex: 0 0 auto; }
 .ar-review-navigation .ar-filter-group { align-items: flex-end; }
 .ar-review-target-field { width: 200px; }
 .ar-review-target-field .dropdown-select__trigger { font-weight: 600; color: #123062; }

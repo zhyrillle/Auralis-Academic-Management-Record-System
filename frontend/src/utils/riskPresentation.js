@@ -5,13 +5,13 @@ export const TERM_OPTIONS = [
   { id: 'T3', label: 'Predict Term 3' },
 ];
 export const RISK_BANDS = [
-  { level: 'low', key: 'lowRisk', label: 'Low Risk', caption: 'Continue regular monitoring', tone: 'green', color: '#16a34a', icon: AlertCircle,
+  { level: 'low', key: 'lowRisk', label: 'Low Risk', caption: 'Continue regular monitoring', tone: 'green', color: '#168449', icon: AlertCircle,
     meaning: 'The model indicates a lower risk of next-term English failure. This does not guarantee a passing grade.',
     action: 'Continue regular monitoring and check any missing or substituted records.' },
-  { level: 'medium', key: 'mediumRisk', label: 'Medium Risk', caption: 'Review and monitor closely', tone: 'gold', color: '#d97706', icon: MinusCircle,
+  { level: 'medium', key: 'mediumRisk', label: 'Medium Risk', caption: 'Review and monitor closely', tone: 'gold', color: '#C27C20', icon: MinusCircle,
     meaning: 'The model indicates an intermediate risk of next-term English failure. A closer review may help identify support needs.',
     action: 'Review recent English work with the teacher and adviser, and monitor progress.' },
-  { level: 'high', key: 'highRisk', label: 'High Risk', caption: 'Prioritize a record review', tone: 'red', color: '#dc2626', icon: AlertTriangle,
+  { level: 'high', key: 'highRisk', label: 'High Risk', caption: 'Prioritize a record review', tone: 'red', color: '#C62828', icon: AlertTriangle,
     meaning: 'The model indicates a higher risk of next-term English failure. This is a signal for review, not a confirmed outcome.',
     action: 'Prioritize a teacher–adviser review and agree on appropriate support.' },
 ];

@@ -15,6 +15,10 @@ export default function GroupedBarChart({
   showZeroValues = true,
 }) {
   const [activeBar, setActiveBar] = useState(null);
+  const recordedValues = groups.flatMap(group => group.values).filter(bar => bar.value != null && bar.value !== "" && Number.isFinite(Number(bar.value))).map(bar => Number(bar.value));
+  minimum = Math.min(minimum, ...recordedValues);
+  maximum = Math.max(maximum, ...recordedValues);
+  ticks = [...new Set([minimum, ...ticks, maximum, benchmark])].filter(value => value != null && value >= minimum && value <= maximum).sort((a, b) => a - b);
   const chartWidth = WIDTH - PADDING.left - PADDING.right;
   const groupWidth = chartWidth / Math.max(groups.length, 1);
   const seriesCount = Math.max(groups[0]?.values.length || 1, 1);
@@ -68,6 +72,7 @@ export default function GroupedBarChart({
           return (
             <g key={group.id}>
               {group.values.map((bar, barIndex) => {
+                if (bar.value == null || bar.value === "" || !Number.isFinite(Number(bar.value))) return null;
                 const x =
                   centerX - (seriesCount * barWidth) / 2 + barIndex * barWidth;
                 const safeValue = bar.value <= 0 ? minimum : Math.max(bar.value, minimum);
