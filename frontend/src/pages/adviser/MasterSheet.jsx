@@ -5,12 +5,12 @@ import {
   FileSpreadsheet,
   LoaderCircle,
   RefreshCw,
-  Send,
 } from "lucide-react";
 import DropdownSelect from "../../components/common/DropdownSelect.jsx";
 import EmptyState from "../../components/common/EmptyState.jsx";
 import SearchBar from "../../components/common/SearchBar.jsx";
 import Toast from "../../components/common/Toast.jsx";
+import GradeSubmissionStatusPanel from "../../components/common/GradeSubmissionStatus.jsx";
 import MasterSheetSkeleton from "./MasterSheetSkeleton.jsx";
 import {
   downloadMasterSheet,
@@ -19,34 +19,14 @@ import {
   normalizeMasterSheetError,
 } from "../../services/masterSheetService.js";
 import { getStoredUser } from "../../utils/auth.js";
+import { SESSION_CHANGED_EVENT } from "../../offline/syncManager.js";
 import { maskLrn } from "../../utils/lrnHelper.js";
 import "../../styles/masterSheet.css";
 
 const getUserId = (user) => user?.user_id || user?.id || null;
 const emptyToast = { message: "", variant: "success", icon: null };
-
-const formatSubmissionDeadline = (terms = []) => {
-  const deadlines = terms
-    .map((term) => ({
-      deadline: term.submissionDeadlineAt,
-      timestamp: new Date(term.submissionDeadlineAt).getTime(),
-    }))
-    .filter((term) => term.deadline && Number.isFinite(term.timestamp))
-    .sort((a, b) => a.timestamp - b.timestamp);
-
-  if (!deadlines.length) return "Not set";
-
-  const now = Date.now();
-  const relevantDeadline =
-    deadlines.find((term) => term.timestamp >= now) ||
-    deadlines[deadlines.length - 1];
-
-  return new Date(relevantDeadline.deadline).toLocaleDateString("en-US", {
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  });
-};
+const API = (import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api").replace(/\/$/, "");
+const FOCUS_REFRESH_INTERVAL_MS = 60_000;
 
 const triggerBrowserDownload = (blob, filename) => {
   const url = URL.createObjectURL(blob);
@@ -72,6 +52,8 @@ export default function MasterSheet() {
   const [requestError, setRequestError] = useState("");
   const [toast, setToast] = useState(emptyToast);
   const masterSheetRef = useRef(null);
+  const lastSheetReadAtRef = useRef(0);
+  const readGenerationRef = useRef(0);
   const lastLoadedAssignmentIdRef = useRef("");
   const skipNextAssignmentLoadRef = useRef(false);
   const [isTableScrolling, setIsTableScrolling] = useState(false);
@@ -194,9 +176,12 @@ export default function MasterSheet() {
     }
     setIsLoadingSheet(true);
     setRequestError("");
+    const generation = ++readGenerationRef.current;
     try {
       const response = await getMasterSheet(selectedAssignmentId, userId, { force: true });
+      if (generation !== readGenerationRef.current) return;
       masterSheetRef.current = response;
+      lastSheetReadAtRef.current = Date.now();
       lastLoadedAssignmentIdRef.current = String(selectedAssignmentId);
       setMasterSheet(response);
       if (response.warnings?.length) {
@@ -207,16 +192,18 @@ export default function MasterSheet() {
         );
       }
     } catch (error) {
+      if (generation !== readGenerationRef.current) return;
       masterSheetRef.current = null;
       setMasterSheet(null);
       setRequestError(normalizeMasterSheetError(error));
     } finally {
-      setIsLoadingSheet(false);
+      if (generation === readGenerationRef.current) setIsLoadingSheet(false);
     }
   };
 
   useEffect(() => {
     let cancelled = false;
+    const generation = ++readGenerationRef.current;
     if (!selectedAssignmentId || !userId)
       return () => {
         cancelled = true;
@@ -232,8 +219,9 @@ export default function MasterSheet() {
 
     getMasterSheet(selectedAssignmentId, userId)
       .then((response) => {
-        if (cancelled) return;
+        if (cancelled || generation !== readGenerationRef.current) return;
         masterSheetRef.current = response;
+        lastSheetReadAtRef.current = Date.now();
         lastLoadedAssignmentIdRef.current = String(selectedAssignmentId);
         setMasterSheet(response);
         setRequestError("");
@@ -246,7 +234,7 @@ export default function MasterSheet() {
         }
       })
       .catch((error) => {
-        if (cancelled) return;
+        if (cancelled || generation !== readGenerationRef.current) return;
         const message = normalizeMasterSheetError(error);
         if (masterSheetRef.current && lastLoadedAssignmentIdRef.current) {
           setToast({ message, variant: "error", icon: AlertTriangle });
@@ -263,13 +251,89 @@ export default function MasterSheet() {
         }
       })
       .finally(() => {
-        if (!cancelled) setIsLoadingSheet(false);
+        if (!cancelled && generation === readGenerationRef.current) setIsLoadingSheet(false);
       });
 
     return () => {
       cancelled = true;
     };
   }, [selectedAssignmentId, userId]);
+
+  useEffect(() => {
+    if (!userId || !selectedAssignmentId || !selectedAssignment) return undefined;
+    let cancelled = false, timer, inFlight = false, refreshPending = false, lastAttemptAt = 0;
+    const sameOwner = () => String(getUserId(getStoredUser())) === String(userId);
+    const refresh = (force = false) => {
+      if (cancelled || !sameOwner()) return;
+      // The assignment loader owns first loads and section/year changes.
+      if (!masterSheetRef.current || lastLoadedAssignmentIdRef.current !== String(selectedAssignmentId)) return;
+      if (!force && Date.now() - Math.max(lastSheetReadAtRef.current, lastAttemptAt) < FOCUS_REFRESH_INTERVAL_MS) return;
+      if (inFlight) {
+        refreshPending ||= force;
+        return;
+      }
+      window.clearTimeout(timer);
+      timer = window.setTimeout(async () => {
+        if (cancelled || !sameOwner()) return;
+        inFlight = true;
+        lastAttemptAt = Date.now();
+        // Background checks must not cancel a foreground assignment/retry read.
+        const generation = readGenerationRef.current;
+        try {
+          const response = await getMasterSheet(selectedAssignmentId, userId, { force: true });
+          if (cancelled || !sameOwner() || generation !== readGenerationRef.current) return;
+          masterSheetRef.current = response;
+          lastSheetReadAtRef.current = Date.now();
+          lastLoadedAssignmentIdRef.current = String(selectedAssignmentId);
+          setMasterSheet(response);
+          setRequestError("");
+        } catch (error) {
+          if (!cancelled && sameOwner() && generation === readGenerationRef.current) {
+            setToast({ message: `Unable to refresh submitted grades. ${normalizeMasterSheetError(error)}`, variant: "error", icon: AlertTriangle });
+          }
+        } finally {
+          inFlight = false;
+          // A submission arriving during a read still needs a fresh snapshot.
+          if (refreshPending) {
+            refreshPending = false;
+            refresh(true);
+          }
+        }
+      }, 150);
+    };
+    const source = new EventSource(`${API}/notifications/stream?user_id=${encodeURIComponent(userId)}`);
+    const onSessionChanged = () => {
+      if (sameOwner()) return;
+      cancelled = true;
+      window.clearTimeout(timer);
+      source.close();
+    };
+    source.addEventListener("connected", () => refresh(true)); // Also catches missed events after reconnect.
+    source.onmessage = event => {
+      let notification;
+      try { notification = JSON.parse(event.data); } catch { return; }
+      if (notification.type !== "SUBMISSION" || notification.related_entity_type !== "GRADE_SHEET") return;
+      if (notification.section_id && Number(notification.section_id) !== Number(selectedAssignment.sectionId)) return;
+      if (notification.school_year_id && Number(notification.school_year_id) !== Number(selectedAssignment.schoolYearId)) return;
+      refresh(true);
+    };
+    const onVisible = () => { if (document.visibilityState === "visible") refresh(); };
+    const onFocus = () => refresh();
+    const onOnline = () => refresh(true);
+    window.addEventListener("focus", onFocus);
+    window.addEventListener("online", onOnline);
+    window.addEventListener(SESSION_CHANGED_EVENT, onSessionChanged);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+      source.close();
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener(SESSION_CHANGED_EVENT, onSessionChanged);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [userId, selectedAssignmentId, selectedAssignment]);
 
   const handleSchoolYearChange = (schoolYearId) => {
     const matchingAssignment = assignments.find(
@@ -323,7 +387,6 @@ export default function MasterSheet() {
   const subjects = masterSheet?.subjects || [];
   const notOfferedSubjects = masterSheet?.subjectSetup?.notOfferedSubjects || [];
   const dataWarnings = masterSheet?.warnings || [];
-  const submissionDeadline = formatSubmissionDeadline(masterSheet?.terms);
   const totalColumns = 2 + subjects.length * 4;
 
   const renderGroupHeader = (label, tone) => (
@@ -504,6 +567,7 @@ export default function MasterSheet() {
               </span>
             </div>
             <div className="ms-control-actions">
+              <GradeSubmissionStatusPanel adviserAssignmentId={selectedAssignmentId} refreshKey={masterSheet.submissionRevision} disabled={isRefreshingSheet} />
               <fieldset
                 className="ms-search-fieldset"
                 disabled={isRefreshingSheet}
@@ -623,25 +687,6 @@ export default function MasterSheet() {
             </table>
           </div>
 
-          <footer className="ms-submission-footer">
-            <div className="ms-submission-footer__copy">
-              <span className="ms-submission-footer__icon" aria-hidden="true">
-                <FileSpreadsheet size={19} />
-              </span>
-              <div>
-                <strong>Deadline: {submissionDeadline}</strong>
-              </div>
-            </div>
-            <button
-              type="button"
-              className="ms-submit-btn"
-              disabled
-              title="Master Sheet submission is not available yet"
-            >
-              <Send size={16} aria-hidden="true" />
-              Submit
-            </button>
-          </footer>
         </div>
       )}
 

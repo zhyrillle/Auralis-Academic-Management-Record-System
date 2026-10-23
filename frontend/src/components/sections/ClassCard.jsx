@@ -2,7 +2,7 @@ import { Eye, FileSpreadsheet, Edit2, Star } from "lucide-react";
 import "../../styles/themes.css";
 import "../../styles/sectionCard.css";
 
-export default function ClassCard({ cls, onView, onGradingSheet, onEdit, children, hideClassType = false, showSecondaryActions = true, className = '', viewAriaLabel, gradeId }) {
+export default function ClassCard({ cls, onView, onGradingSheet, onEdit, children, hideClassType = false, showSecondaryActions = true, secondaryActionsDisabled = false, secondaryActionsDisabledReason = '', className = '', viewAriaLabel, gradeId }) {
   const isSpecialized = Boolean(
     cls?.is_specialized == 1 ||
     cls?.is_specialized === true ||
@@ -196,20 +196,23 @@ export default function ClassCard({ cls, onView, onGradingSheet, onEdit, childre
 
         {showSecondaryActions && <>{/* Grading Sheet */}
         <button
-          title="Grading Sheet"
+          type="button"
+          title={secondaryActionsDisabled ? `Grading Sheet: ${secondaryActionsDisabledReason}` : "Grading Sheet"}
+          aria-label={secondaryActionsDisabled ? `Grading Sheet: ${secondaryActionsDisabledReason}` : "Grading Sheet"}
+          aria-disabled={secondaryActionsDisabled || undefined}
           style={{
             width: "40px",
             height: "40px",
             borderRadius: "13px",
             border: "none",
             backgroundColor: "#f1f5f9",
-            color: "#886C14",
+            color: secondaryActionsDisabled ? "#94a3b8" : "#886C14",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            cursor: "pointer",
+            cursor: secondaryActionsDisabled ? "not-allowed" : "pointer",
           }}
-          onClick={() => onGradingSheet(cls)}
+          onClick={() => { if (!secondaryActionsDisabled) onGradingSheet(cls); }}
         >
           <FileSpreadsheet size={18} />
         </button>
@@ -217,20 +220,23 @@ export default function ClassCard({ cls, onView, onGradingSheet, onEdit, childre
 
         {/* Edit */}
         <button
-          title="Class Record"
+          type="button"
+          title={secondaryActionsDisabled ? `Class Record: ${secondaryActionsDisabledReason}` : "Class Record"}
+          aria-label={secondaryActionsDisabled ? `Class Record: ${secondaryActionsDisabledReason}` : "Class Record"}
+          aria-disabled={secondaryActionsDisabled || undefined}
           style={{
             width: "40px",
             height: "40px",
             borderRadius: "13px",
             border: "none",
             backgroundColor: "#f1f5f9",
-            color: "#886C14",
+            color: secondaryActionsDisabled ? "#94a3b8" : "#886C14",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            cursor: "pointer",
+            cursor: secondaryActionsDisabled ? "not-allowed" : "pointer",
           }}
-          onClick={() => onEdit(cls)}
+          onClick={() => { if (!secondaryActionsDisabled) onEdit(cls); }}
         >
           <Edit2 size={16} />
         </button>

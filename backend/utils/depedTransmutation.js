@@ -386,15 +386,15 @@ function isProtectedGradeSheet(sheet) {
   return workflow === 'SUBMITTED' || !['EDITABLE', 'OPEN', 'TEMPORARILY_REOPENED'].includes(lock);
 }
 
-function selectSavedSummary(savedGrade) {
+function selectSavedSummary(savedGrade, allowTermOnly = false) {
   const initialGrade = savedGrade?.initial_grade == null || savedGrade.initial_grade === '' ? null : Number(savedGrade.initial_grade);
   const termGrade = savedGrade?.quarterly_grade == null || savedGrade.quarterly_grade === '' ? null : Number(savedGrade.quarterly_grade);
-  const valid = Number.isFinite(initialGrade) && initialGrade >= 0 && initialGrade <= 100
-    && Number.isFinite(termGrade) && termGrade >= 0 && termGrade <= 100;
-  return { initialGrade: valid ? initialGrade : null, termGrade: valid ? termGrade : null,
+  const validInitial = Number.isFinite(initialGrade) && initialGrade >= 0 && initialGrade <= 100;
+  const valid = (validInitial || allowTermOnly) && Number.isFinite(termGrade) && termGrade >= 0 && termGrade <= 100;
+  return { initialGrade: valid && validInitial ? initialGrade : null, termGrade: valid ? termGrade : null,
     quarterlyGrade: valid ? termGrade : null, remarks: valid ? savedGrade.remarks : null,
     isFailing: valid && termGrade < 75,
-    calculationError: valid ? null : 'SAVED_GRADE_REVIEW_REQUIRED' };
+    calculationError: valid && validInitial ? null : 'SAVED_GRADE_REVIEW_REQUIRED' };
 }
 
 const calculateStudentSummary = calculateStudentGrades;

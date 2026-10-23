@@ -44,10 +44,6 @@ export default function MasterSheetSkeleton() {
             </tbody>
           </table>
         </div>
-        <footer className="ms-submission-footer ms-skeleton-footer">
-          <span className="ms-skeleton-block ms-skeleton-block--deadline" />
-          <span className="ms-skeleton-block ms-skeleton-block--submit" />
-        </footer>
       </div>
     </div>
   );

@@ -40,10 +40,9 @@ class StudentGrade {
     return rows;
   }
 
-  static async upsert({ subject_offering_id, student_id, student_section_id, term, mapeh_component = null, initial_grade, quarterly_grade, remarks }) {
-    await this.initTable();
+  static async upsert({ subject_offering_id, student_id, student_section_id, term, mapeh_component = null, initial_grade, quarterly_grade, remarks }, connection = db) {
     const finalComp = (mapeh_component && mapeh_component !== 'ALL') ? mapeh_component : null;
-    const [result] = await db.execute(
+    const [result] = await connection.execute(
       `INSERT INTO STUDENT_GRADE (
         subject_offering_id,
         student_id,
@@ -74,16 +73,15 @@ class StudentGrade {
     return result;
   }
 
-  static async upsertGrade(params) {
-    return this.upsert(params);
+  static async upsertGrade(params, connection = db) {
+    return this.upsert(params, connection);
   }
 
-  static async upsertBatch(records) {
+  static async upsertBatch(records, connection = db) {
     if (!Array.isArray(records) || records.length === 0) return;
-    await this.initTable();
 
     for (const record of records) {
-      await this.upsert(record);
+      await this.upsert(record, connection);
     }
   }
 }

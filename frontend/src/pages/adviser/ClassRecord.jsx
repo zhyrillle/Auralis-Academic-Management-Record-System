@@ -86,19 +86,18 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
     );
   }, [effectiveClass, params, location]);
 
-  // Subject offering ID resolution (falls back to sectionId if offering is not explicitly assigned)
+  // A section, subject, or teaching assignment ID cannot stand in for an offering.
   const subjectOfferingId = useMemo(() => {
-    return (
+    const offeringId = Number(
       effectiveClass?.subject_offering_id ||
       effectiveClass?.offering_id ||
       params.subjectOfferingId ||
       params.offeringId ||
       location.state?.subject_offering_id ||
-      (effectiveClass?.subject_id && !effectiveClass?.section_id ? effectiveClass.subject_id : null) ||
-      sectionId ||
-      1
+      null
     );
-  }, [effectiveClass, params, location, sectionId]);
+    return Number.isInteger(offeringId) && offeringId > 0 ? offeringId : null;
+  }, [effectiveClass, params, location]);
 
   const effectiveSubjectId = useMemo(() => {
     return effectiveClass?.subject_id || params.subjectId || null;
@@ -755,6 +754,9 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
       setModalState(previous => ({ ...previous, isOpen: false }));
 
       try {
+        if (!subjectOfferingId) {
+          throw new Error("No subject teaching assignment is selected. Open a Class Record from an assigned subject class.");
+        }
         const data = await getClassRecord(subjectOfferingId, termToLoad, sectionId, activeComp, effectiveSubjectId, { force });
         if (requestId !== recordRequestRef.current) return;
         if (!data?.class_context || !Array.isArray(data.students) || !Array.isArray(data.assessments)) {
@@ -934,9 +936,7 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
   }, [subjectOfferingId, effectiveClass]);
 
   useEffect(() => {
-    if (subjectOfferingId || sectionId) {
-      loadClassRecordRef.current(activeTerm, mapehComponentRef.current);
-    }
+    loadClassRecordRef.current(activeTerm, mapehComponentRef.current);
     return () => { recordRequestRef.current += 1; };
   }, [subjectOfferingId, sectionId, effectiveSubjectId, activeTerm]);
 
@@ -1647,7 +1647,14 @@ const formatToISODate = (val) => {
       ============================================================ */}
       <div className="class-record-header">
         <div className="class-record-title-area">
-          <button className="class-record-back-btn" onClick={onBack || (() => navigate(-1))} type="button" aria-label="Back">
+          <button className="class-record-back-btn" onClick={async () => {
+            await flushPendingScores();
+            if (isFlushingRef.current || pendingQueueRef.current.size > 0) {
+              setTermSwitchError("Scores are still saving. Please wait or retry before leaving the class record.");
+              return;
+            }
+            (onBack || (() => navigate(-1)))();
+          }} type="button" aria-label="Back">
             <img src={backIconUrl} alt="Back" />
           </button>
           <h1>Assigned Classes</h1>

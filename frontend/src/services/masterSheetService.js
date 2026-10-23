@@ -32,7 +32,7 @@ export const getMasterSheetOptions = async (userId, { force = false } = {}) => {
 
 export const getMasterSheet = async (adviserAssignmentId, userId, { force = false } = {}) => {
   const response = await fetch(
-    `${API_BASE_URL}/master-sheets/${encodeURIComponent(adviserAssignmentId)}?user_id=${encodeURIComponent(userId)}`,
+    `${API_BASE_URL}/master-sheets/${encodeURIComponent(adviserAssignmentId)}?user_id=${encodeURIComponent(userId)}&gradeFlowVersion=2`,
     { force },
   );
   return parseJsonResponse(response);

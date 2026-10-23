@@ -1,13 +1,20 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-
-const db = require('../config/db');
+const Module = require('node:module');
+// Never construct a real database pool, including late notification callbacks.
+const db = { execute: async () => { throw Error('School database forbidden in tests'); },
+  getConnection: async () => { throw Error('School database forbidden in tests'); } };
+const originalModuleLoad = Module._load;
+Module._load = function (request, parent, isMain) {
+  if (request === '../config/db') return db;
+  return originalModuleLoad.call(this, request, parent, isMain);
+};
 const GradingPeriodService = require('../services/GradingPeriodService');
 const GradeSheet = require('../models/GradeSheet');
 const GradeReopenRequest = require('../models/GradeReopenRequest');
 const TemporaryReopening = require('../models/TemporaryReopening');
-const Module = require('node:module');
 const AcademicTerm = require('../models/AcademicTerm');
+test.after(() => { Module._load = originalModuleLoad; });
 
 test('term status uses start/deadline boundaries independently of a stale stored label', () => {
   const { computedTermStatus } = GradingPeriodService.__test;
@@ -300,6 +307,7 @@ test('valid in-window requests can be approved later with an independent custom 
   const expires = new Date(Date.now() + 14 * 86400000).toISOString();
   await GradingPeriodService.approveRequest(1, { expires_at: expires }, admin);
   assert(fixture.changes.includes('OPEN_ACCESS'));
+  assert(!fixture.queries.some(q => /(?:INSERT INTO|UPDATE|DELETE FROM) STUDENT_GRADE/.test(q.sql)), 'Opening a correction must not alter accepted grades');
   const insert = fixture.queries.find(query => query.sql.includes('INSERT INTO TEMPORARY_REOPENING'));
   assert.equal(new Date(insert.params[1] + 'Z').toISOString(), expires);
   assert(fixture.changes.includes('COMMIT'));

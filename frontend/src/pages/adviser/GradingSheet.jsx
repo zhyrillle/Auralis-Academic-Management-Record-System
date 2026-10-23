@@ -1,10 +1,11 @@
-import { cachedApiFetch as fetch } from "../../services/navigationCache.js";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { Download, Printer, Check, Calendar, CheckCircle2 } from "lucide-react";
 import backIconUrl from "../../assets/backButton.svg";
 import SearchBar from "../../components/common/SearchBar.jsx";
 import SelectFilter from "../../components/common/SelectFilter.jsx";
 import SubmissionFooter from "../../components/common/SubmissionFooter.jsx";
+import { GradeSubmissionBadge } from "../../components/common/GradeSubmissionStatus.jsx";
+import { useGradeSubmissionStatus } from "../../services/gradeSubmissionStatus.js";
 import Toast from "../../components/common/Toast.jsx";
 import { exportGradingSheetPdf } from "../../utils/exportGradingSheetPdf";
 import { getStoredUser } from "../../utils/auth";
@@ -12,14 +13,31 @@ import "../../styles/gradingSheet.css";
 
 const emptyToast = { message: "", variant: "success", icon: null };
 
+const getDescriptor = (finalGrade) => {
+    if (finalGrade === "" || finalGrade === null || finalGrade === undefined || isNaN(finalGrade)) return "";
+    const score = parseFloat(finalGrade);
+    if (score >= 90) return "Advancing";
+    if (score >= 80) return "Benchmarking";
+    if (score >= 75) return "Connecting";
+    if (score >= 65) return "Developing";
+    return "Emerging";
+};
+
+const getRemark = (finalGrade) => {
+    if (finalGrade === "" || finalGrade === null || finalGrade === undefined || isNaN(finalGrade)) return "";
+    const score = parseFloat(finalGrade);
+    return score >= 75 ? "Passed" : "Failed";
+};
+
 export default function GradingSheet({
     activeSelectedClass,
     students = [],
     onBack,
-    triggerToast,
     calculateFinalGrade,
     onSubmit,
     userRole = "teacher",
+    recordError,
+    onRetry,
 }) {
     const [searchStudentQuery, setSearchStudentQuery] = useState("");
     const [filterDescriptor, setFilterDescriptor] = useState("All");
@@ -36,45 +54,13 @@ export default function GradingSheet({
         return () => window.clearTimeout(timer);
     }, [toast.message]);
 
-    const sectionId = useMemo(() => {
-        return (
-            activeSelectedClass?.section_id ||
-            activeSelectedClass?.sectionId ||
-            (typeof activeSelectedClass?.id === "number" ? activeSelectedClass.id : null) ||
-            (typeof activeSelectedClass?.id === "string" && !isNaN(Number(activeSelectedClass.id)) ? Number(activeSelectedClass.id) : null) ||
-            (typeof activeSelectedClass?.id === "string" && activeSelectedClass.id.startsWith("sec-") ? Number(activeSelectedClass.id.replace("sec-", "")) : null) ||
-            null
-        );
-    }, [activeSelectedClass]);
-
-    const subjectOfferingId = useMemo(() => {
-        return (
-            activeSelectedClass?.subject_offering_id ||
-            activeSelectedClass?.offering_id ||
-            (activeSelectedClass?.subject_id && !activeSelectedClass?.section_id ? activeSelectedClass.subject_id : null) ||
-            sectionId ||
-            1
-        );
-    }, [activeSelectedClass, sectionId]);
-
-    // Term state (follows ClassRecord logic: checks sessionStorage, activeSelectedClass, class-record API, and date-range matching)
-    const [currentTermCode, setCurrentTermCode] = useState(() => {
-        try {
-            const stored = sessionStorage.getItem(`classRecord_activeTerm_${subjectOfferingId}`) || sessionStorage.getItem("activeTerm");
-            if (stored && ["T1", "T2", "T3"].includes(stored)) {
-                return stored;
-            }
-        } catch (_) {}
-
-        const raw = activeSelectedClass?.activeTerm || activeSelectedClass?.term || activeSelectedClass?.active_term || activeSelectedClass?.currentTerm;
-        if (raw) {
-            const str = String(raw).toUpperCase();
-            if (str.includes("3") || str.includes("T3") || str.includes("3RD")) return "T3";
-            if (str.includes("2") || str.includes("T2") || str.includes("2ND")) return "T2";
-            if (str.includes("1") || str.includes("T1") || str.includes("1ST")) return "T1";
-        }
-        return null;
-    });
+    // The parent loads the current period from this class's saved school-year configuration.
+    const activeTermCode = /^T[123]$/.test(activeSelectedClass?.active_term) ? activeSelectedClass.active_term : null;
+    const [submissionTermChoice, setSubmissionTermChoice] = useState(null);
+    const submissionTerms = activeSelectedClass?.submissionTerms || [];
+    const currentTermCode = submissionTerms.some(t => t.term === submissionTermChoice) ? submissionTermChoice
+        : submissionTerms.some(t => t.term === activeTermCode) ? activeTermCode : submissionTerms[0]?.term || activeTermCode;
+    const submissionWindow = submissionTerms.find(t => t.term === currentTermCode);
 
     const currentTermLabel = useMemo(() => {
         if (currentTermCode === "T2") return "Term 2";
@@ -83,73 +69,19 @@ export default function GradingSheet({
         return "";
     }, [currentTermCode]);
 
+    const statusOfferingId = activeSelectedClass?.subject_offering_id || activeSelectedClass?.offering_id;
+    const submissionStatus = useGradeSubmissionStatus({ subjectOfferingId: statusOfferingId }, {
+        enabled: Boolean(statusOfferingId), refreshKey: activeSelectedClass?.submissionRefresh,
+    });
+    const currentSubmission = submissionStatus.data?.subjects.find(subject => Number(subject.subjectOfferingId) === Number(statusOfferingId))
+        ?.terms.find(term => term.term === currentTermCode);
+
     // MAPEH Tab State: 'MA' (Music & Arts), 'PEH' (PE & Health), 'COMBINED' (Combined MAPEH)
     const [activeMapehTab, setActiveMapehTab] = useState("MA");
     // Combined Sheet Term Selector: 'T1', 'T2', 'T3', 'All' (defaults to current term or T1)
-    const [combinedTermFilter, setCombinedTermFilter] = useState(() => currentTermCode || "T1");
+    const [combinedTermChoice, setCombinedTermFilter] = useState(null);
+    const combinedTermFilter = combinedTermChoice || currentTermCode || "T1";
 
-    // Synchronize current term using ClassRecord API and Academic Terms date range logic
-    useEffect(() => {
-        let isMounted = true;
-        async function fetchClassRecordTerm() {
-            try {
-                // 1. Fetch from class-record API endpoint (returns server resolved active_term matching ClassRecord logic)
-                const res = await fetch(`http://localhost:5000/api/class-record/${subjectOfferingId}`);
-                if (res.ok) {
-                    const data = await res.json();
-                    if (data && data.active_term && isMounted) {
-                        const code = data.active_term.toUpperCase();
-                        if (["T1", "T2", "T3"].includes(code)) {
-                            setCurrentTermCode(code);
-                            setCombinedTermFilter(code);
-                            try {
-                                sessionStorage.setItem(`classRecord_activeTerm_${subjectOfferingId}`, code);
-                            } catch (_) {}
-                            return;
-                        }
-                    }
-                }
-            } catch (e) {
-                console.warn("ClassRecord API term fetch error:", e);
-            }
-
-            // 2. Fallback: Query academic-terms and match date range (CURRENT_TIMESTAMP between starts_at and ends_at)
-            try {
-                const resTerms = await fetch("http://localhost:5000/api/academic-terms");
-                if (resTerms.ok) {
-                    const terms = await resTerms.json();
-                    if (Array.isArray(terms) && terms.length > 0 && isMounted) {
-                        const now = new Date();
-                        // Find term where current date falls between starts_at and ends_at
-                        const activeObj = terms.find((t) => {
-                            if (!t.starts_at || !t.ends_at) return false;
-                            const start = new Date(t.starts_at);
-                            const end = new Date(t.ends_at);
-                            return now >= start && now <= end;
-                        }) || terms.find((t) => String(t.status).toLowerCase() === "ongoing" || String(t.status).toLowerCase() === "open") || terms[0];
-
-                        if (activeObj) {
-                            const name = String(activeObj.term_name || "").toLowerCase();
-                            let code = "T1";
-                            if (name.includes("2") || name.includes("2nd") || name.includes("t2")) code = "T2";
-                            else if (name.includes("3") || name.includes("3rd") || name.includes("t3")) code = "T3";
-
-                            setCurrentTermCode(code);
-                            setCombinedTermFilter(code);
-                            try {
-                                sessionStorage.setItem(`classRecord_activeTerm_${subjectOfferingId}`, code);
-                            } catch (_) {}
-                        }
-                    }
-                }
-            } catch (e) {
-                console.warn("Academic terms date-range fetch error:", e);
-            }
-        }
-
-        fetchClassRecordTerm();
-        return () => { isMounted = false; };
-    }, [activeSelectedClass, subjectOfferingId]);
 
     const currentUser = useMemo(() => getStoredUser(), []);
     const teacherName = useMemo(() => {
@@ -175,24 +107,9 @@ export default function GradingSheet({
         );
     }, [activeSelectedClass]);
 
-    const getDescriptor = (finalGrade) => {
-        if (finalGrade === "" || finalGrade === null || finalGrade === undefined || isNaN(finalGrade)) return "";
-        const score = parseFloat(finalGrade);
-        if (score >= 90) return "Advancing";
-        if (score >= 80) return "Benchmarking";
-        if (score >= 75) return "Connecting";
-        if (score >= 65) return "Developing";
-        return "Emerging";
-    };
-
-    const getRemark = (finalGrade) => {
-        if (finalGrade === "" || finalGrade === null || finalGrade === undefined || isNaN(finalGrade)) return "";
-        const score = parseFloat(finalGrade);
-        return score >= 75 ? "Passed" : "Failed";
-    };
 
     // Calculate processed term & final grades for a student depending on active tab
-    const resolveStudentGrades = (s) => {
+    const resolveStudentGrades = useCallback((s) => {
         if (!isMapeh) {
             const final = calculateFinalGrade(s.term1, s.term2, s.term3);
             return {
@@ -271,7 +188,7 @@ export default function GradingSheet({
             descriptor: getDescriptor(final),
             remark: getRemark(final),
         };
-    };
+    }, [isMapeh, activeMapehTab, calculateFinalGrade]);
 
     const activeClassStudentsList = useMemo(() => {
         const filtered = students.filter((s) => {
@@ -298,7 +215,7 @@ export default function GradingSheet({
             females: filtered.filter((s) => s.sex === "F"),
             totalCount: filtered.length,
         };
-    }, [students, searchStudentQuery, filterDescriptor, filterRemark, isMapeh, activeMapehTab, combinedTermFilter, calculateFinalGrade]);
+    }, [students, searchStudentQuery, filterDescriptor, filterRemark, isMapeh, activeMapehTab, combinedTermFilter, resolveStudentGrades]);
 
     const handleDownloadPDF = async () => {
         let downloadSubject = activeSelectedClass.subject;
@@ -351,17 +268,23 @@ export default function GradingSheet({
         showToast(`Opening Print Preview for ${activeSelectedClass.gradeLevel} - ${activeSelectedClass.sectionName} (${printSubject})`, "success", CheckCircle2);
     };
 
-    const handleFooterSubmitTrigger = () => {
-        if (onSubmit) {
-            onSubmit(activeSelectedClass.id);
-        }
-        showToast(`Grades for ${activeSelectedClass.gradeLevel} - ${activeSelectedClass.sectionName} submitted successfully!`, "success", CheckCircle2);
+    const handleFooterSubmitTrigger = async () => {
+        if (!onSubmit || !/^T[123]$/.test(currentTermCode)) throw new Error("Load the current class and term before submitting.");
+        const result = await onSubmit(activeSelectedClass.id, currentTermCode);
+        if (result?.submitted !== true || result.term !== currentTermCode) throw new Error("The server did not confirm this term submission.");
+        submissionStatus.retry();
+        showToast(`${currentTermLabel} grades for ${activeSelectedClass.gradeLevel} - ${activeSelectedClass.sectionName} submitted successfully!`, "success", CheckCircle2);
+        return result;
     };
 
     // Calculate submit button disabled state and hover reason
     const { isSubmitDisabled, submitDisabledReason } = useMemo(() => {
-        if (activeSelectedClass?.submitted) {
+        if (currentSubmission?.state === "SUBMITTED") {
             return { isSubmitDisabled: true, submitDisabledReason: "Grades already submitted (Locked)" };
+        }
+
+        if (!currentSubmission || currentSubmission.state === "UNAVAILABLE") {
+            return { isSubmitDisabled: true, submitDisabledReason: "Load the current term's submission status before submitting." };
         }
 
         if (!currentTermCode) {
@@ -437,7 +360,7 @@ export default function GradingSheet({
         }
 
         return { isSubmitDisabled: false, submitDisabledReason: "" };
-    }, [activeSelectedClass, currentTermCode, currentTermLabel, isMapeh, activeMapehTab, combinedTermFilter, students, resolveStudentGrades]);
+    }, [currentSubmission, currentTermCode, currentTermLabel, isMapeh, activeMapehTab, combinedTermFilter, students, resolveStudentGrades]);
 
     const getDescriptorClass = (desc) => {
         switch (desc) {
@@ -481,6 +404,7 @@ export default function GradingSheet({
 
     return (
         <div className="grading-sheet-container">
+            {recordError && <div role="alert" className="grade-submission-feedback"><p>{recordError}</p><button type="button" onClick={onRetry}>Retry grading sheet</button></div>}
             <div className="grading-sheet-header-bar">
                 <div className="grading-sheet-title-area">
                     <button className="back-btn" onClick={onBack} title="Back to Classes">
@@ -536,7 +460,7 @@ export default function GradingSheet({
                 {currentTermLabel ? (
                     <div className="current-term-badge" title="Currently Active Grading Term">
                         <Calendar size={15} />
-                        <span>Current Term: <strong>{currentTermLabel}</strong></span>
+                        <span>{submissionWindow?.correction ? "Correction term" : "Current Term"}: <strong>{currentTermLabel}</strong></span>
                     </div>
                 ) : null}
             </div>
@@ -895,12 +819,21 @@ export default function GradingSheet({
 
             {/* Sticky Bottom Submission Action Bar */}
             <SubmissionFooter
-                deadline={activeSelectedClass.deadline}
-                isSubmitted={activeSelectedClass.submitted}
+                deadline={submissionWindow?.deadline || activeSelectedClass.deadline}
+                isSubmitted={currentSubmission?.state === "SUBMITTED"}
                 onSubmit={handleFooterSubmitTrigger}
                 userRole={userRole}
                 disabled={isSubmitDisabled}
                 disabledReason={submitDisabledReason}
+                modalTitle={`Submit ${currentTermLabel || "term"} grades to adviser?`}
+                statusContent={<>
+                    {submissionTerms.some(t => t.correction) && <label>Submission term: <SelectFilter value={currentTermCode || ""}
+                        onChange={setSubmissionTermChoice} options={submissionTerms.map(t => ({ value: t.term,
+                            label: `Term ${t.term.slice(1)}${t.correction ? " · Correction" : ""}` }))} /></label>}
+                    <GradeSubmissionBadge record={currentSubmission} term={currentTermCode}
+                    loading={Boolean(statusOfferingId) && submissionStatus.loading}
+                    error={!statusOfferingId ? "Subject offering unavailable" : submissionStatus.error}
+                    retry={statusOfferingId ? submissionStatus.retry : undefined} /></>}
             />
 
             {/* Bottom-Right Toast Alert Notification (Exact Master Sheet Styling) */}

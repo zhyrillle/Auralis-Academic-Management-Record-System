@@ -1,9 +1,32 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const express = require('express');
-const notificationRoutes = require('../routes/notificationRoutes');
-const NotificationService = require('../services/NotificationService');
-const db = require('../config/db');
+const Module = require('node:module');
+const calls = [];
+const fixture = {
+  notification_id: 91000, user_id: 999999, title: 'Fixture grade submission',
+  message: 'Synthetic notification for isolated testing.', type: 'SUBMISSION', is_read: 0,
+  created_at: new Date().toISOString(), action_link: '/adviser/master-sheet',
+};
+const database = { async execute(sql) {
+  calls.push(sql);
+  assert.match(sql, /^\s*SELECT\b/i, 'Notification feed tests must never write records.');
+  if (sql.includes('FROM NOTIFICATION')) return [[fixture]];
+  if (/FROM (SECTION_ADVISER_ASSIGNMENT|TEACHER_ASSIGNMENT|ACADEMIC_TERM)/.test(sql)) return [[]];
+  throw new Error('Unexpected notification query in test.');
+} };
+const originalLoad = Module._load;
+let notificationRoutes, NotificationService;
+try {
+  Module._load = function (request, parent, isMain) {
+    if (request === '../config/db') return database;
+    return originalLoad.call(this, request, parent, isMain);
+  };
+  notificationRoutes = require('../routes/notificationRoutes');
+  NotificationService = require('../services/NotificationService');
+} finally {
+  Module._load = originalLoad;
+}
 
 function createTestApp() {
   const app = express();
@@ -12,11 +35,9 @@ function createTestApp() {
   return app;
 }
 
-test.after(async () => {
-  try {
-    if (db && typeof db.end === 'function') await db.end();
-    if (db && db.cloudPool && typeof db.cloudPool.end === 'function') await db.cloudPool.end();
-  } catch (_) {}
+test.after(() => {
+  assert(calls.length > 0);
+  assert(calls.every(sql => /^\s*SELECT\b/i.test(sql)), 'No write may be hidden by route error handling.');
 });
 
 test('GET /api/notifications/adviser returns structured notification feed', async (t) => {
@@ -42,6 +63,7 @@ test('GET /api/notifications/adviser returns structured notification feed', asyn
   // Verify notification structure
   const allNotifications = [...data.notifications.today, ...data.notifications.yesterday];
   assert.ok(allNotifications.length > 0, 'Should have at least 1 notification returned');
+  assert.ok(allNotifications.some(n => n.id === fixture.notification_id), 'The feed must include the substituted database record.');
   for (const n of allNotifications) {
     assert.ok(n.id, 'Notification must have an id');
     assert.ok(n.title, 'Notification must have a title');

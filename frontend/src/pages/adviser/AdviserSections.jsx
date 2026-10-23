@@ -1,6 +1,5 @@
-import { cachedApiFetch as fetch } from "../../services/navigationCache";
 import { useState, useMemo, useEffect } from "react";
-import { Check, FileSpreadsheet, ArrowDownNarrowWide, Loader2 } from "lucide-react";
+import { ArrowDownNarrowWide, Loader2 } from "lucide-react";
 import { useLocation } from "react-router-dom";
 
 // Components
@@ -16,6 +15,7 @@ import Toast from "../../components/common/Toast.jsx";
 // Auth & Services
 import { getStoredUser } from "../../utils/auth";
 import { getAdviserSections, getStudentsBySection } from "../../services/sectionService";
+import { getTeacherGradingSummary, submitTeacherGrades } from "../../services/classRecordApi.js";
 
 // Style
 import "../../styles/sections.css";
@@ -32,6 +32,8 @@ export default function AdviserSections({ userRole: propUserRole }) {
   const [classes, setClasses] = useState([]);
   const [studentsBySection, setStudentsBySection] = useState({});
   const [loading, setLoading] = useState(true);
+  const [recordReadVersion, setRecordReadVersion] = useState(0);
+  const [recordReadError, setRecordReadError] = useState("");
 
   // Fetch sections from backend
   useEffect(() => {
@@ -68,6 +70,7 @@ export default function AdviserSections({ userRole: propUserRole }) {
 
   // Fetch students when a section is opened
   useEffect(() => {
+    let cancelled = false;
     async function fetchSectionStudents() {
       if (!activeSelectedClass) return;
       const sectionId = activeSelectedClass.section_id || activeSelectedClass.id;
@@ -76,15 +79,25 @@ export default function AdviserSections({ userRole: propUserRole }) {
       const offeringId = activeSelectedClass.subject_offering_id || activeSelectedClass.offering_id || null;
       const subjectId = activeSelectedClass.subject_id || null;
       const subjectName = activeSelectedClass.subject || activeSelectedClass.subject_name || null;
+      setRecordReadError("");
 
       try {
-        const studentList = await getStudentsBySection(sectionId, offeringId, subjectId, subjectName);
-        if (studentList && Array.isArray(studentList) && studentList.length > 0) {
+        const schoolYearId = activeSelectedClass.school_year_id || activeSelectedClass.schoolYearId;
+        const summary = offeringId && schoolYearId ? await getTeacherGradingSummary({
+          subject_offering_id: offeringId, section_id: sectionId, school_year_id: schoolYearId,
+        }, { force: recordReadVersion > 0 }) : null;
+        const studentList = summary ? summary.students : await getStudentsBySection(sectionId, offeringId, subjectId, subjectName);
+        if (cancelled) return;
+        if (summary) setactiveSelectedClass(prev => prev && prev.id === classKey && (prev.active_term !== summary.context.activeTerm
+          || JSON.stringify(prev.submissionTerms) !== JSON.stringify(summary.context.submissionTerms))
+          ? { ...prev, active_term: summary.context.activeTerm, submissionTerms: summary.context.submissionTerms } : prev);
+        if (Array.isArray(studentList)) {
           setStudentsBySection((prev) => ({
             ...prev,
             [classKey]: studentList.map((s) => ({
               id: s.id,
               student_id: s.student_id || s.id,
+              student_section_id: s.student_section_id,
               lrn: s.lrn,
               firstName: s.firstName || s.first_name,
               lastName: s.lastName || s.last_name,
@@ -103,12 +116,16 @@ export default function AdviserSections({ userRole: propUserRole }) {
           }));
         }
       } catch (err) {
+        if (cancelled) return;
         console.error("Error fetching students for section:", err);
+        setRecordReadError(err.message || "Unable to load this grading sheet.");
+        setStudentsBySection(prev => ({ ...prev, [classKey]: [] }));
       }
     }
 
     fetchSectionStudents();
-  }, [activeSelectedClass]);
+    return () => { cancelled = true; };
+  }, [activeSelectedClass, recordReadVersion]);
 
   // Controls Filters and Sorting
   const [filterSubject, setFilterSubject] = useState("All");
@@ -214,60 +231,35 @@ export default function AdviserSections({ userRole: propUserRole }) {
     });
   };
 
-  const handleGradeSubmit = async (classId) => {
-    const classObj = classes.find((c) => c.id === classId) || activeSelectedClass;
-    const studentsForClass = studentsBySection[classId] || [];
-
-    try {
-      const rawSecId = classObj?.section_id || classObj?.sectionId || (typeof classId === 'string' && classId.startsWith('sec-') ? Number(classId.replace('sec-', '')) : null);
-      const rawOffId = classObj?.subject_offering_id || classObj?.offering_id;
-
-      const user = getStoredUser();
-      const currentUserId = user?.user_id || user?.id || null;
-
-      await fetch("http://localhost:5000/api/class-record/submit", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(currentUserId ? { "x-auralis-user-id": String(currentUserId) } : {}),
-        },
-        body: JSON.stringify({
-          subject_offering_id: rawOffId,
-          section_id: rawSecId,
-          term: "T1",
-          students: studentsForClass,
-          user_id: currentUserId,
-        }),
-      });
-    } catch (e) {
-      console.warn("Backend submit notice:", e.message);
+  const handleGradeSubmit = async (classId, term) => {
+    const classObj = classes.find(c => c.id === classId) || activeSelectedClass;
+    const context = {
+      subject_offering_id: classObj?.subject_offering_id || classObj?.offering_id,
+      section_id: classObj?.section_id || classObj?.sectionId,
+      school_year_id: classObj?.school_year_id || classObj?.schoolYearId,
+      term,
+    };
+    if (!/^T[123]$/.test(term) || !context.subject_offering_id || !context.section_id || !context.school_year_id) {
+      throw new Error('Load a valid class, school year, and term before submitting.');
     }
-
-    setClasses((prev) =>
-      prev.map((c) =>
-        c.id === classId
-          ? { ...c, submitted: true }
-          : c
-      )
-    );
-
-    // ⭐ THIS IS THE IMPORTANT PART ⭐
-    setactiveSelectedClass((prev) => ({
-      ...prev,
-      submitted: true,
-    }));
-
-    triggerToast(
-      `Grading sheet for ${activeSelectedClass?.gradeLevel || ""} - ${activeSelectedClass?.sectionName || ""} has been submitted!`
-    );
+    const result = await submitTeacherGrades(context);
+    setactiveSelectedClass(prev => prev?.id === classId ? { ...prev, submissionRevision: result.revision, submissionRefresh: Date.now() } : prev);
+    // A failed follow-up read must not pretend the already committed submission failed.
+    try {
+      const summary = await getTeacherGradingSummary(context, { force: true });
+      setStudentsBySection(prev => ({ ...prev, [classId]: summary.students }));
+      setactiveSelectedClass(prev => prev?.id === classId ? { ...prev, submissionTerms: summary.context.submissionTerms } : prev);
+    } catch {
+      triggerToast('Submission confirmed. Reload the grading sheet to retrieve its latest grades.', 'warning');
+    }
+    return result;
   };
 
   const activeactiveSelectedClass = useMemo(() => {
     if (!activeSelectedClass) return null;
 
     return (
-      classes.find((c) => c.id === activeSelectedClass.id) ||
-      activeSelectedClass
+      { ...(classes.find((c) => c.id === activeSelectedClass.id) || {}), ...activeSelectedClass }
     );
   }, [classes, activeSelectedClass]);
 
@@ -383,6 +375,9 @@ export default function AdviserSections({ userRole: propUserRole }) {
               {filteredAndSortedClasses.map((cls) => (
                 <ClassCard
                   key={cls.id} cls={cls}
+                  secondaryActionsDisabled={!(Number.isInteger(Number(cls.subject_offering_id || cls.offering_id))
+                    && Number(cls.subject_offering_id || cls.offering_id) > 0)}
+                  secondaryActionsDisabledReason="No teaching subject is assigned to you for this class. Use View to see the advisory section."
                   onView={(c) => { setactiveSelectedClass(c); setCurrentView("section-details"); }}
                   onGradingSheet={(c) => { setactiveSelectedClass(c); setCurrentView("grading-sheet"); }}
                   onEdit={(c) => { setactiveSelectedClass(c); setCurrentView("class-record"); }}
@@ -436,6 +431,8 @@ export default function AdviserSections({ userRole: propUserRole }) {
             triggerToast={triggerToast}
             calculateFinalGrade={calculateFinalGrade}
             onSubmit={handleGradeSubmit}
+            recordError={recordReadError}
+            onRetry={() => setRecordReadVersion(version => version + 1)}
           />
         )
       )}
