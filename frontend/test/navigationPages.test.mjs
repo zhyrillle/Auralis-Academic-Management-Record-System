@@ -108,5 +108,16 @@ try {
     globalThis.fetch = async () => ({ ok: true, json: async () => ({ recovered: true }) });
     assert.equal((await getSectionDetails({ ...request, userId: 20 })).recovered, true);
     process.stdout.write('PASS failed adviser reads remain retryable\n');
+
+    const { getClassRecord } = await server.ssrLoadModule('/src/services/classRecordApi.js');
+    globalThis.fetch = async (url, options) => {
+      assert.equal(new URL(url).searchParams.get('read_only'), '1');
+      assert.equal(options.headers['X-Auralis-User-Id'], '20');
+      return new Response(JSON.stringify({ error: 'You can only review class records for your assigned department.' }),
+        { status: 403, headers: { 'Content-Type': 'application/json' } });
+    };
+    await assert.rejects(getClassRecord(131, 'T2', 18, null, 3, { force: true, readOnly: true }),
+      error => error.status === 403 && /assigned department/.test(error.message));
+    process.stdout.write('PASS Class Record preserves the department access error instead of requesting another sign-in\n');
   } finally { globalThis.fetch = originalFetch; }
 } finally { await server.close(); }

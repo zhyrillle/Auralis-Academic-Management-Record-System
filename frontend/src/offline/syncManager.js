@@ -208,7 +208,12 @@ export async function processOutbox() {
       if (!await db.outbox.get(item.id)) continue;
       try {
         assertCurrentSession(scope);
-        const response = await fetch(item.url, { method: item.method, headers: item.headers,
+        // Older queued score drafts predate the assignment checks. Replay only as
+        // their matching current owner; never migrate or adopt another user's drafts.
+        const scoreBatch = /\/(?:class-record\/)?scores\/batch(?:\?|$)/.test(item.url);
+        const replayHeaders = scoreBatch ? new Headers(item.headers) : item.headers;
+        if (scoreBatch) replayHeaders.set('X-Auralis-User-Id', scope.ownerId);
+        const response = await fetch(item.url, { method: item.method, headers: replayHeaders,
           body: item.body, credentials: item.credentials, signal: task.controller.signal });
         if (!isCurrentSession(scope)) break;
         if (!response.ok) {
@@ -242,6 +247,7 @@ export async function saveOfflineScores({ subject_offering_id, term, scores, map
   await db.transaction('rw', db.offlineScores, db.outbox, async () => {
     assertCurrentSession(scope);
     const mutationId = apiUrl ? await db.outbox.add(mutationRecord({ url: apiUrl,
+      headers: { 'X-Auralis-User-Id': scope.ownerId },
       body: { subject_offering_id: offeringId, term, scores, mapeh_component, examConfig },
       label: 'Batch Scores (Offering ' + offeringId + ', ' + term + ', ' + scores.length + ' scores)' }, scope)) : null;
     for (const score of scores) {
@@ -261,13 +267,13 @@ export async function saveOfflineScores({ subject_offering_id, term, scores, map
   return true;
 }
 
-export async function getPendingOfflineScores(subject_offering_id, term, scope = getSessionScope()) {
+export async function getPendingOfflineScores(subject_offering_id, term, scope = getSessionScope(), { strict = false } = {}) {
   if (!isCurrentSession(scope)) return [];
   try {
     const records = await db.offlineScores.where('[subject_offering_id+term]').equals([Number(subject_offering_id), term])
       .filter(record => record.ownerId === scope.ownerId && record.ownerIdentity === scope.identity && record.status === 'pending').toArray();
     return isCurrentSession(scope) ? records : [];
-  } catch { return []; }
+  } catch (error) { if (strict) throw error; return []; }
 }
 
 export async function clearOfflineScores(subject_offering_id, term, { scope = getSessionScope(), mutationId } = {}) {

@@ -197,6 +197,17 @@ try {
       check(rejected && await db.outbox.count() === 0 && await db.offlineScores.count() === 0, 'partial offline save committed');
     });
 
+    await test('old queued score drafts replay with exactly one matching owner header', async () => {
+      await sync.saveOfflineScores(scorePayload(10));
+      const queued = (await db.outbox.toArray())[0];
+      await db.outbox.update(queued.id, { headers: { 'content-type': 'application/json', 'x-auralis-user-id': 'outdated' } });
+      let owner;
+      window.fetch = async (_url, options) => { owner = new Headers(options.headers).get('x-auralis-user-id'); return success(); };
+      await sync.processOutbox();
+      check(owner === String(accountA.user_id), 'owner header duplicated, missing, or copied from another account');
+      check(await db.offlineScores.count() === 0, 'confirmed original-owner draft did not sync');
+    });
+
     await test('HTTP 409 retains the rejected edit and its overlay, and stops later writes', async () => {
       await sync.saveOfflineScores(scorePayload(10));
       await sync.enqueueMutation({ url: '/later', body: '{}' });
@@ -394,7 +405,7 @@ try {
     return passed;
   });
   results.forEach(name => console.log('PASS ' + name));
-  assert.equal(results.length, 23);
+  assert.equal(results.length, 24);
 
   const otherTab = await page.context().newPage();
   await otherTab.goto(server.resolvedUrls.local[0] + '__cache_test__');

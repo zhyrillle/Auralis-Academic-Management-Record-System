@@ -7,6 +7,7 @@ export default function SubmissionFooter({
     onSubmit,
     disabled = false,
     disabledReason = "",
+    statusContent,
 
     userRole = "teacher",
     customDeadlineLabel,
@@ -64,6 +65,7 @@ export default function SubmissionFooter({
     const [showModal, setShowModal] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
     const [isSubmittingState, setIsSubmittingState] = useState(false);
+    const [submissionError, setSubmissionError] = useState("");
 
     const getDeadlineLabel = () => {
         if (customDeadlineLabel) return customDeadlineLabel;
@@ -81,6 +83,7 @@ export default function SubmissionFooter({
     const handleConfirm = async () => {
         if (isSubmittingState) return;
         setIsSubmittingState(true);
+        setSubmissionError("");
         try {
             if (onSubmit) {
                 await onSubmit();
@@ -95,6 +98,7 @@ export default function SubmissionFooter({
             }, 1500);
         } catch (err) {
             console.error("Submission error:", err);
+            setSubmissionError(err.message || "Submission failed. Please retry.");
             setIsSubmittingState(false);
         }
     };
@@ -147,10 +151,13 @@ export default function SubmissionFooter({
                     </span>
                 </div>
 
+                <div className="submission-footer__actions">
+                {statusContent}
                 <button
                     disabled={isSubmitted || disabled || isSubmittingState}
                     onClick={() => {
                         if (!isSubmitted && !disabled && !isSubmittingState) {
+                            setSubmissionError("");
                             setShowModal(true);
                         }
                     }}
@@ -197,6 +204,7 @@ export default function SubmissionFooter({
                         </>
                     )}
                 </button>
+                </div>
             </div>
 
             {showModal && (
@@ -249,6 +257,7 @@ export default function SubmissionFooter({
                                 >
                                     {resolvedDescription}
                                 </p>
+                                {submissionError && <p role="alert" style={{ color: "#b91c1c", fontSize: "0.85rem", lineHeight: 1.5 }}>{submissionError}</p>}
 
                                 <div
                                     style={{

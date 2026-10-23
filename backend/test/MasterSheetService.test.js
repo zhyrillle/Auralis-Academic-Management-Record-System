@@ -1,7 +1,17 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const MasterSheetService = require("../services/MasterSheetService");
-const GradeComputationService = require("../services/GradeComputationService");
+const fs = require('node:fs');
+const vm = require('node:vm');
+const moduleFixture = { exports: {} };
+vm.runInNewContext(fs.readFileSync(require.resolve('../services/MasterSheetService'), 'utf8'), {
+  module: moduleFixture, Set, Map, Date, require(name) {
+    if (name === '../config/db') return { execute() { throw Error('School database access forbidden'); } };
+    if (name === '../utils/encryption') return { decryptLrn: value => value };
+    throw Error('Unexpected dependency: ' + name);
+  },
+});
+const MasterSheetService = moduleFixture.exports;
+const build = data => JSON.parse(JSON.stringify(MasterSheetService.buildResponse(data)));
 
 const input = () => ({
   assignment: {
@@ -13,18 +23,15 @@ const input = () => ({
   offeringRows: [{ subject_offering_id: 130, subject_id: 2, subject_code: "ENG", subject_name: "English" }],
   studentRows: [{ student_section_id: 501, student_id: 41, lrn: "100000000001", first_name: "Example", last_name: "Learner", sex: "M" }],
   weightRows: [{ subject_id: 2, component_type_id: 1, percentage: 100 }],
-  gradeRows: [],
+  gradeSheetRows: [], savedGradeRows: [],
 });
 
-const gradeRow = (term, sheetId = term) => ({
-  grade_sheet_id: sheetId, subject_offering_id: 130, subject_id: 2, term_id: term,
-  activity_id: sheetId, component_type_id: 1, highest_possible_score: 100,
-  activity_status: "ACTIVE", score_id: sheetId, student_section_id: 501,
-  raw_score: 84, score_status: "ENCODED",
-});
-
+const gradeRow = (term, sheetId = term) => ({ grade_sheet_id: sheetId, subject_offering_id: 130, term_id: term,
+  workflow_status: 'SUBMITTED', lock_status: 'TERM_LOCKED', submitted_at: '2026-10-04T12:00:00Z' });
+const saved = (term, value) => ({ subject_offering_id: 130, student_id: 41, student_section_id: 501,
+  term: `T${term}`, initial_grade: value, quarterly_grade: value, mapeh_component: null });
 test("one configured subject produces ten setup notices, not ten data warnings", () => {
-  const result = MasterSheetService.buildResponse(input());
+  const result = build(input());
   assert.deepEqual(result.warnings, []);
   assert.equal(result.subjectSetup.configuredSubjectCount, 1);
   assert.equal(result.subjectSetup.templateSubjectCount, 11);
@@ -41,7 +48,7 @@ test("missing setup notices never remove duplicate-record or learner-profile war
   data.termRows.push({ term_id: 4, term_name: "Term 1" });
   data.offeringRows.push({ ...data.offeringRows[0], subject_offering_id: 131 });
   data.studentRows[0].sex = null;
-  const result = MasterSheetService.buildResponse(data);
+  const result = build(data);
   assert.deepEqual(result.warnings, [
     "Term 1 has duplicate academic-period records.",
     "English has duplicate subject offerings.",
@@ -54,22 +61,18 @@ test("missing setup notices never remove duplicate-record or learner-profile war
 
 test("duplicate official grade sheets remain an explicit warning and blank grade", () => {
   const data = input();
-  data.gradeRows = [gradeRow(1), gradeRow(1, 4)];
-  const result = MasterSheetService.buildResponse(data);
+  data.gradeSheetRows = [gradeRow(1), gradeRow(1, 4)];
+  const result = build(data);
   assert.deepEqual(result.warnings, ["English Term 1 has duplicate official grade sheets."]);
   assert.equal(result.students[0].grades.english.terms[0], null);
 });
 
-test("classifying absent subjects does not change calculated grades or general-average policy", () => {
+test("accepted grades are copied without recalculation; final/completeness policies stay unchanged", () => {
   const data = input();
-  data.gradeRows = [1, 2, 3].map(term => gradeRow(term));
-  const expected = GradeComputationService.computeTermGrade({
-    weights: data.weightRows,
-    activities: [{ activity_id: 1, component_type_id: 1, highest_possible_score: 100,
-      status: "ACTIVE", scores: [{ student_section_id: 501, raw_score: 84, score_status: "ENCODED" }] }],
-    studentSectionId: 501,
-  }).termGrade;
-  const result = MasterSheetService.buildResponse(data);
+  data.gradeSheetRows = [1, 2, 3].map(term => gradeRow(term));
+  data.savedGradeRows = [1, 2, 3].map(term => saved(term, 98));
+  const expected = 98;
+  const result = build(data);
   assert.deepEqual(result.students[0].grades.english, { terms: [expected, expected, expected], finalGrade: expected });
   assert.equal(result.completeness.completedTermGrades, 3);
   assert.equal(result.completeness.completedSubjectFinals, 1);
@@ -79,9 +82,48 @@ test("classifying absent subjects does not change calculated grades or general-a
 test("empty subject setup stays explicit without fabricating grades or warnings", () => {
   const data = input();
   data.offeringRows = [];
-  const result = MasterSheetService.buildResponse(data);
+  const result = build(data);
   assert.equal(result.subjectSetup.configuredSubjectCount, 0);
   assert.equal(result.subjectSetup.notOfferedSubjects.length, 11);
   assert.equal(result.completeness.completedTermGrades, 0);
   assert.deepEqual(result.warnings, []);
+});
+
+test('a term-locked draft is not published', () => {
+  const data = input();
+  data.gradeSheetRows = [{ ...gradeRow(1), workflow_status: 'DRAFT', submitted_at: null }];
+  data.savedGradeRows = [saved(1, 100)];
+  assert.equal(build(data).students[0].grades.english.terms[0], null);
+});
+
+test('reopening and draft edits retain the previous accepted grade until resubmission', () => {
+  const data = input();
+  data.gradeSheetRows = [{ ...gradeRow(1), workflow_status: 'DRAFT', lock_status: 'TEMPORARILY_REOPENED' }];
+  data.savedGradeRows = [saved(1, 98)];
+  assert.equal(build(data).students[0].grades.english.terms[0], 98);
+  const beforeRevision = build(data).submissionRevision;
+  data.savedGradeRows = [saved(1, 99)];
+  data.gradeSheetRows[0].workflow_status = 'SUBMITTED';
+  data.gradeSheetRows[0].submitted_at = '2026-10-23T06:00:00Z';
+  assert.equal(build(data).students[0].grades.english.terms[0], 99);
+  assert.notEqual(build(data).submissionRevision, beforeRevision);
+});
+
+test('legacy accepted quarterly grades remain as saved even when their old initial grade is invalid', () => {
+  const data = input();
+  data.gradeSheetRows = [gradeRow(1)]; data.savedGradeRows = [{ ...saved(1, 98), initial_grade: 102.92 }];
+  assert.equal(build(data).students[0].grades.english.terms[0], 98);
+  data.gradeSheetRows[0].workflow_status = 'DRAFT';
+  assert.equal(build(data).students[0].grades.english.terms[0], 98, 'Corrections retain the last accepted value');
+});
+
+test('wrong enrollment, duplicate saved values, and invalid grades never become published numbers', () => {
+  const data = input(); data.gradeSheetRows = [gradeRow(1)];
+  for (const savedGradeRows of [[{ ...saved(1, 98), student_section_id: 999 }], [saved(1, 98), saved(1, 99)], [saved(1, null)], [saved(1, 101)]]) {
+    assert.equal(build({ ...data, savedGradeRows }).students[0].grades.english.terms[0], null);
+  }
+  data.savedGradeRows = [saved(1, 0)];
+  assert.equal(build(data).students[0].grades.english.terms[0], 0, 'A genuine zero is a recorded grade');
+  data.savedGradeRows[0].student_section_id = 999;
+  assert.equal(build(data).students[0].grades.english.terms[0], null);
 });

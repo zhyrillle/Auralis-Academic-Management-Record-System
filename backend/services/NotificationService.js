@@ -48,7 +48,7 @@ notificationEmitter.setMaxListeners(200); // allow many concurrent SSE connectio
  * @param {object} [connection=db]
  * @returns {Promise<Array<{ user_id: number, department_id: number|null }>>}
  */
-async function resolveDeptHeadsForOffering(subjectOfferingId, connection = db) {
+async function resolveDeptHeadsForOffering(subjectOfferingId, connection = db, strict = false) {
   try {
     const [rows] = await connection.execute(
       `SELECT DISTINCT u.user_id
@@ -82,6 +82,7 @@ async function resolveDeptHeadsForOffering(subjectOfferingId, connection = db) {
 
     return rows;
   } catch (err) {
+    if (strict) throw err;
     console.warn('[NotificationService] resolveDeptHeadsForOffering error:', err.message);
     return [];
   }
@@ -190,6 +191,30 @@ const NotificationService = {
 
   // ── Expose type constants for convenience ──────────────────────────────
   TYPES: NOTIFICATION_TYPES,
+
+  async prepareGradePublicationNotifications({ offering, sheetId, term, correction, teacherName }, connection) {
+    const heads = await resolveDeptHeadsForOffering(offering.subject_offering_id, connection, true);
+    const [advisers] = await connection.execute(`SELECT DISTINCT saa.user_id FROM SECTION_ADVISER_ASSIGNMENT saa
+        JOIN USER u ON u.user_id = saa.user_id
+        WHERE saa.section_id = ? AND saa.school_year_id = ? AND LOWER(u.account_status) = 'active'
+          AND (saa.assigned_from IS NULL OR saa.assigned_from <= UTC_DATE())
+          AND (saa.assigned_until IS NULL OR saa.assigned_until >= UTC_DATE())`, [offering.section_id, offering.school_year_id]);
+    const recipients = [...new Set([...heads, ...advisers].map(row => Number(row.user_id)))];
+    const notifications = [];
+    for (const userId of recipients) {
+      const record = { user_id: userId, title: correction ? 'Submitted grades updated' : 'Grade submission received',
+        message: `${teacherName || 'The subject teacher'} ${correction ? 'resubmitted' : 'submitted'} ${offering.subject_name} ${term.replace('T', 'Term ')} grades for ${offering.section_name}.`,
+        type: NOTIFICATION_TYPES.SUBMISSION, related_entity_type: 'GRADE_SHEET', related_entity_id: sheetId, is_read: false };
+      const notificationId = await Notification.create(record, connection);
+      notifications.push({ ...record, notification_id: notificationId, section_id: Number(offering.section_id),
+        school_year_id: Number(offering.school_year_id), subject_offering_id: Number(offering.subject_offering_id) });
+    }
+    return notifications;
+  },
+
+  emitCommittedGradePublications(notifications) {
+    for (const record of notifications) notificationEmitter.emit(`notification:${record.user_id}`, record);
+  },
 
   // ─────────────────────────────────────────────────────────────────────────
   /**

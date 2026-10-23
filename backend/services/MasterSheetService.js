@@ -1,5 +1,4 @@
 const db = require("../config/db");
-const GradeComputationService = require("./GradeComputationService");
 const { decryptLrn } = require("../utils/encryption");
 
 const SUBJECT_DEFINITIONS = [
@@ -220,62 +219,23 @@ class MasterSheetService {
       [assignment.section_id, assignment.school_year_id],
     );
 
-    const [weightRows] = await db.execute(
-      `SELECT
-         scw.subj_comp_weight_id,
-         scw.subject_id,
-         scw.component_type_id,
-         scw.percentage,
-         ct.component_code,
-         ct.component_name
-       FROM SUBJECT_COMPONENT_WEIGHT scw
-       INNER JOIN COMPONENT_TYPE ct ON ct.component_type_id = scw.component_type_id
-       WHERE scw.school_year_id = ?`,
-      [assignment.school_year_id],
-    );
-
-    const [gradeRows] = await db.execute(
-      `SELECT
-         gs.grade_sheet_id,
-         gs.subject_offering_id,
-         gs.term_id,
-         gs.workflow_status,
-         gs.lock_status,
-         so.subject_id,
-         ga.activity_id,
-         ga.subj_comp_weight_id,
-         ga.highest_possible_score,
-         ga.status AS activity_status,
-         scw.component_type_id,
-         sc.score_id,
-         sc.student_section_id,
-         sc.raw_score,
-         sc.score_status
-       FROM GRADE_SHEET gs
-       INNER JOIN SUBJECT_OFFERING so ON so.subject_offering_id = gs.subject_offering_id
-       LEFT JOIN GRADE_ACTIVITY ga ON ga.grade_sheet_id = gs.grade_sheet_id
-       LEFT JOIN SUBJECT_COMPONENT_WEIGHT scw
-         ON scw.subj_comp_weight_id = ga.subj_comp_weight_id
-       LEFT JOIN SCORE sc ON sc.activity_id = ga.activity_id
-       WHERE so.section_id = ?
-         AND so.school_year_id = ?
-         AND (gs.workflow_status = 'SUBMITTED' OR gs.lock_status = 'TERM_LOCKED')
-         AND gs.lock_status <> 'TEMPORARILY_REOPENED'
-       ORDER BY gs.grade_sheet_id, ga.activity_id, sc.score_id`,
+    const [gradeSheetRows] = await db.execute(
+      `SELECT gs.grade_sheet_id, gs.subject_offering_id, gs.term_id, gs.workflow_status, gs.lock_status, gs.submitted_at
+       FROM GRADE_SHEET gs JOIN SUBJECT_OFFERING so ON so.subject_offering_id = gs.subject_offering_id
+       WHERE so.section_id = ? AND so.school_year_id = ?`,
       [assignment.section_id, assignment.school_year_id],
     );
-
+    const [savedGradeRows] = await db.execute(
+      `SELECT sg.* FROM STUDENT_GRADE sg JOIN SUBJECT_OFFERING so ON so.subject_offering_id = sg.subject_offering_id
+       WHERE so.section_id = ? AND so.school_year_id = ?`,
+      [assignment.section_id, assignment.school_year_id],
+    );
     return this.buildResponse({
-      assignment,
-      termRows,
-      offeringRows,
-      studentRows,
-      weightRows,
-      gradeRows,
+      assignment, termRows, offeringRows, studentRows, gradeSheetRows, savedGradeRows,
     });
   }
 
-  static buildResponse({ assignment, termRows, offeringRows, studentRows, weightRows, gradeRows }) {
+  static buildResponse({ assignment, termRows, offeringRows, studentRows, gradeSheetRows = [], savedGradeRows = [] }) {
     const warnings = new Set();
     const terms = [1, 2, 3].map((position) => {
       const matches = termRows.filter((term) => getTermPosition(term.term_name) === position);
@@ -283,7 +243,7 @@ class MasterSheetService {
       const term = matches[0];
       return {
         position,
-        termId: term ? Number(term.term_id) : null,
+        termId: matches.length === 1 ? Number(term.term_id) : null,
         label: `Term ${position}`,
         status: term?.status || null,
         startsAt: term?.starts_at || null,
@@ -298,54 +258,11 @@ class MasterSheetService {
       if (definition) offeringsBySubjectKey.get(definition.key).push(offering);
     }
 
-    const weightsBySubjectId = new Map();
-    for (const weight of weightRows) {
-      const subjectId = Number(weight.subject_id);
-      if (!weightsBySubjectId.has(subjectId)) weightsBySubjectId.set(subjectId, []);
-      weightsBySubjectId.get(subjectId).push(weight);
-    }
-
     const sheetsByOfferingAndTerm = new Map();
-    const sheetMap = new Map();
-    for (const row of gradeRows) {
-      const sheetId = Number(row.grade_sheet_id);
-      if (!sheetMap.has(sheetId)) {
-        const sheet = {
-          gradeSheetId: sheetId,
-          subjectOfferingId: Number(row.subject_offering_id),
-          subjectId: Number(row.subject_id),
-          termId: Number(row.term_id),
-          activities: [],
-          activityMap: new Map(),
-        };
-        sheetMap.set(sheetId, sheet);
-        const key = `${sheet.subjectOfferingId}:${sheet.termId}`;
-        if (!sheetsByOfferingAndTerm.has(key)) sheetsByOfferingAndTerm.set(key, []);
-        sheetsByOfferingAndTerm.get(key).push(sheet);
-      }
-
-      if (!row.activity_id) continue;
-      const sheet = sheetMap.get(sheetId);
-      const activityId = Number(row.activity_id);
-      if (!sheet.activityMap.has(activityId)) {
-        const activity = {
-          activity_id: activityId,
-          component_type_id: Number(row.component_type_id),
-          highest_possible_score: row.highest_possible_score,
-          status: row.activity_status,
-          scores: [],
-        };
-        sheet.activityMap.set(activityId, activity);
-        sheet.activities.push(activity);
-      }
-      if (row.score_id) {
-        sheet.activityMap.get(activityId).scores.push({
-          score_id: Number(row.score_id),
-          student_section_id: Number(row.student_section_id),
-          raw_score: row.raw_score,
-          score_status: row.score_status,
-        });
-      }
+    for (const sheet of gradeSheetRows) {
+      const key = `${sheet.subject_offering_id}:${sheet.term_id}`;
+      if (!sheetsByOfferingAndTerm.has(key)) sheetsByOfferingAndTerm.set(key, []);
+      sheetsByOfferingAndTerm.get(key).push(sheet);
     }
 
     const notOfferedSubjects = [];
@@ -379,15 +296,20 @@ class MasterSheetService {
             return null;
           }
 
-          const weights = weightsBySubjectId.get(Number(offering.subject_id)) || [];
-          const result = GradeComputationService.computeTermGrade({
-            weights,
-            activities: sheets[0].activities,
-            studentSectionId: student.student_section_id,
-          });
-          if (!result.complete) return null;
+          const sheet = sheets[0];
+          // Reopening retains submitted_at and the last accepted STUDENT_GRADE values.
+          // A locked first draft is not a submission.
+          const accepted = sheet.workflow_status === 'SUBMITTED'
+            || (sheet.workflow_status === 'DRAFT' && Boolean(sheet.submitted_at));
+          if (!accepted) return null;
+          const candidates = savedGradeRows.filter(g => Number(g.subject_offering_id) === Number(offering.subject_offering_id)
+            && Number(g.student_id) === Number(student.student_id) && getTermPosition(g.term) === term.position
+            && (!g.mapeh_component || g.mapeh_component === 'ALL')
+            && (!g.student_section_id || Number(g.student_section_id) === Number(student.student_section_id)))
+            .map(g => ({ termGrade: g.quarterly_grade == null || g.quarterly_grade === '' ? null : Number(g.quarterly_grade) }));
+          if (candidates.length !== 1 || !Number.isFinite(candidates[0].termGrade) || candidates[0].termGrade < 0 || candidates[0].termGrade > 100) return null;
           completedTermGrades += 1;
-          return result.termGrade;
+          return candidates[0].termGrade;
         });
 
         const finalGrade = termGrades.every((grade) => Number.isFinite(grade))
@@ -469,6 +391,8 @@ class MasterSheetService {
         completedGeneralAverages: students.filter((student) => student.generalAverage !== null).length,
       },
       warnings: [...warnings],
+      gradeFlowVersion: 2,
+      submissionRevision: gradeSheetRows.map(s => `${s.grade_sheet_id}:${s.workflow_status}:${s.submitted_at || ''}`).sort().join('|'),
     };
   }
 }

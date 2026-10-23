@@ -181,7 +181,8 @@ export default function DeptClassRecord({ selection, onBack }) {
           activeTerm,
           selectedSectionId,
           isMapeh ? mapehComponent : null,
-          selectedSubjectId
+          selectedSubjectId,
+          { readOnly: true }
         );
 
         if (isCancelled) return;

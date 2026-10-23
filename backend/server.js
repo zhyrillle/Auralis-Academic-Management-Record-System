@@ -47,6 +47,7 @@ const masterSheetRoutes = require('./routes/masterSheetRoutes');
 const sectionDetailsRoutes = require('./routes/sectionDetailsRoutes');
 const studentSf9Routes = require('./routes/studentSf9Routes');
 const reportRoutes = require('./routes/reportRoutes');
+const gradeSubmissionStatusRoutes = require('./routes/gradeSubmissionStatusRoutes');
 const GradingPeriodService = require('./services/GradingPeriodService');
 const adviserDashboardRoutes = require('./routes/adviserDashboardRoutes');
 const philIriRoutes = require('./routes/philIriRoutes');
@@ -55,6 +56,7 @@ const GradeTransmutationConfig = require('./models/GradeTransmutationConfig');
 
 app.use('/api', classRecordRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/grade-submission-status', gradeSubmissionStatusRoutes);
 app.use('/api/schools', schoolRoutes);
 app.use('/api/school-years', schoolYearRoutes);
 app.use('/api/academic-terms', academicTermRoutes);

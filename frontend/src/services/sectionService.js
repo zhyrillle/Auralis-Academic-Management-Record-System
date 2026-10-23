@@ -32,7 +32,7 @@ export const getAdviserSections = async (userId) => {
 
 
   try {
-    const response = await fetch(`${API_BASE_URL}/sections/adviser/${userId}`);
+    const response = await fetch(`${API_BASE_URL}/sections/adviser/${userId}?classContextVersion=2`);
     if (response.ok) {
       const data = await response.json();
       if (Array.isArray(data) && data.length > 0) {
@@ -90,12 +90,14 @@ export const getAdviserSections = async (userId) => {
 
           // Find if teacher teaches a specific subject in this advisory section
           const advisoryTa = assignments.find((ta) => Number(ta.section_id) === Number(secId));
-          const subjectName = advisoryTa?.subject_name || "Mathematics";
+          const subjectName = advisoryTa?.subject_name || "All subjects";
           const isSpecialized = checkIsSpecialized(targetUser.is_specialized) || checkIsSpecialized(advisoryTa?.is_specialized);
 
           combinedClasses.push({
             id: `sec-${secId}`,
             section_id: secId,
+            subject_id: advisoryTa?.subject_id || null,
+            subject_offering_id: advisoryTa?.subject_offering_id || null,
             sectionName: targetUser.adviser_section_name || targetUser.section,
             gradeLevel: formatGradeLevel(targetUser.adviser_grade_level_name || targetUser.gradeLevel),
             grade_level_name: targetUser.adviser_grade_level_name || targetUser.gradeLevel,

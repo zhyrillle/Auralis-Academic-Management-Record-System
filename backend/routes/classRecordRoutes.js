@@ -1,21 +1,18 @@
-const express             = require('express');
-const router              = express.Router();
-const db                  = require('../config/db');
-const StudentGrade        = require('../models/StudentGrade');
-const AuditEvent          = require('../models/AuditEvent');
+const express = require('express');
+const router = express.Router();
+const db = require('../config/db');
+const GradeSheet = require('../models/GradeSheet');
+const StudentGrade = require('../models/StudentGrade');
+const AuditEvent = require('../models/AuditEvent');
 const NotificationService = require('../services/NotificationService');
+const GradeComputationService = require('../services/GradeComputationService');
+const { termCode, problem } = GradeComputationService;
 const GradeTransmutationConfig = require('../models/GradeTransmutationConfig');
-const { decryptLrn }      = require('../utils/encryption');
+const { resolveCurrentUser } = require('../middleware/resolveCurrentUser');
+const { decryptLrn } = require('../utils/encryption');
 const {
-  DEFAULT_JHS_WEIGHTS,
-  weightsFromRows,
-  isProtectedGradeSheet,
-  selectSavedSummary,
-  calculateStudentSummary,
-  calculateStudentGrades,
-  transmuteGrade,
-  getTransmutedGrade,
-  getGradeDescriptor,
+  TRANSMUTATION_TABLE, DEFAULT_JHS_WEIGHTS, weightsFromRows, selectSavedSummary,
+  calculateStudentSummary, calculateStudentGrades, transmuteGrade, getTransmutedGrade, getGradeDescriptor,
 } = require('../utils/depedTransmutation');
 
 /**
@@ -219,120 +216,35 @@ async function resolveActiveAcademicTerm(schoolYearId) {
 /**
  * Ensures GRADE_SHEET entry exists for the offering and term.
  */
-async function ensureGradeSheet(subjectOfferingId, schoolYearId, termName) {
-  const shortName = String(termName || '').replace(/\s*Term/i, '').trim(); // e.g. "1st", "2nd", "3rd"
-
-  let [termRows] = await db.execute(
-    `SELECT term_id, term_name FROM ACADEMIC_TERM 
-     WHERE school_year_id = ? AND (term_name = ? OR term_name = ? OR term_name LIKE ?) 
-     ORDER BY term_id ASC LIMIT 1`,
-    [schoolYearId, termName, shortName, `${shortName}%`]
-  );
-
-  let termId = termRows.length > 0 ? termRows[0].term_id : null;
-  let resolvedTermName = termRows.length > 0 ? termRows[0].term_name : termName;
-
-  if (!termId) {
-    const [anyTerm] = await db.execute(
-      `SELECT term_id, term_name FROM ACADEMIC_TERM 
-       WHERE term_name = ? OR term_name = ? OR term_name LIKE ? 
-       ORDER BY term_id ASC LIMIT 1`,
-      [termName, shortName, `${shortName}%`]
-    );
-    if (anyTerm.length > 0) {
-      termId = anyTerm[0].term_id;
-      resolvedTermName = anyTerm[0].term_name;
-    } else {
-      const [allTerms] = await db.execute('SELECT term_id, term_name FROM ACADEMIC_TERM ORDER BY term_id ASC LIMIT 1');
-      if (allTerms.length > 0) {
-        termId = allTerms[0].term_id;
-        resolvedTermName = allTerms[0].term_name;
-      }
-    }
+async function ensureGradeSheet(subjectOfferingId, schoolYearId, termName, connection = db, { create = true } = {}) {
+  const selected = selectSubmissionTerm(await loadClassTerms({ school_year_id: schoolYearId }, connection), termCode(termName));
+  const [sheets] = await connection.execute(
+    'SELECT * FROM GRADE_SHEET WHERE subject_offering_id = ? AND term_id = ?',
+    [subjectOfferingId, selected.term_id]);
+  if (sheets.length > 1) throw problem('DUPLICATE_GRADE_SHEET', 'This class and term have duplicate grade sheets. Please request a configuration review.');
+  let sheet = sheets[0];
+  if (!sheet && !create) {
+    return { gradeSheetId: null, termId: selected.term_id, termName: selected.term_name,
+      lockStatus: 'NOT_CREATED', workflowStatus: 'DRAFT' };
   }
-
-  let [sheetRows] = await db.execute(
-    `SELECT gs.grade_sheet_id, gs.term_id, gs.lock_status, gs.workflow_status,
-            at.grade_submission_deadline_at
-     FROM GRADE_SHEET gs
-     LEFT JOIN ACADEMIC_TERM at ON at.term_id = gs.term_id
-     WHERE gs.subject_offering_id = ? AND gs.term_id = ? LIMIT 1`,
-    [subjectOfferingId, termId || 1]
-  );
-
-  if (sheetRows.length > 0) {
-    const currentLockStatus = sheetRows[0].lock_status || 'EDITABLE';
-
-    return {
-      gradeSheetId: sheetRows[0].grade_sheet_id,
-      lockStatus: currentLockStatus,
-      workflowStatus: sheetRows[0].workflow_status || 'DRAFT',
-      termId: sheetRows[0].term_id || termId || 1,
-      termName: resolvedTermName,
-    };
+  if (!sheet) {
+    const [result] = await connection.execute(
+      'INSERT INTO GRADE_SHEET (subject_offering_id, term_id, lock_status, workflow_status) VALUES (?, ?, ?, ?)',
+      [subjectOfferingId, selected.term_id, 'EDITABLE', 'DRAFT']);
+    sheet = { grade_sheet_id: result.insertId, term_id: selected.term_id, lock_status: 'EDITABLE', workflow_status: 'DRAFT' };
   }
-
-  // If missing locally, check if Aiven Cloud already has this grade sheet
-  if (db.cloudPool) {
-    try {
-      const [cloudSheetRows] = await db.cloudPool.query(
-        `SELECT grade_sheet_id, subject_offering_id, term_id, lock_status, workflow_status
-         FROM GRADE_SHEET
-         WHERE subject_offering_id = ? AND term_id = ? LIMIT 1`,
-        [subjectOfferingId, termId || 1]
-      );
-      if (cloudSheetRows && cloudSheetRows.length > 0) {
-        const cs = cloudSheetRows[0];
-        await db.execute(
-          `INSERT INTO GRADE_SHEET (grade_sheet_id, subject_offering_id, term_id, lock_status, workflow_status)
-           VALUES (?, ?, ?, ?, ?)
-           ON DUPLICATE KEY UPDATE lock_status = VALUES(lock_status), workflow_status = VALUES(workflow_status)`,
-          [cs.grade_sheet_id, cs.subject_offering_id, cs.term_id, cs.lock_status || 'EDITABLE', cs.workflow_status || 'DRAFT']
-        );
-        return {
-          gradeSheetId: cs.grade_sheet_id,
-          lockStatus: cs.lock_status || 'EDITABLE',
-          workflowStatus: cs.workflow_status || 'DRAFT',
-          termId: cs.term_id || termId || 1,
-          termName: resolvedTermName,
-        };
-      }
-    } catch (e) {
-      // cloud lookup bypassed if unreachable
-    }
-  }
-
-  const [insertRes] = await db.execute(
-    'INSERT INTO GRADE_SHEET (subject_offering_id, term_id, lock_status, workflow_status) VALUES (?, ?, ?, ?)',
-    [subjectOfferingId, termId || 1, 'EDITABLE', 'DRAFT']
-  );
-
-  if (db.cloudPool) {
-    db.cloudPool.query(
-      `INSERT INTO GRADE_SHEET (grade_sheet_id, subject_offering_id, term_id, lock_status, workflow_status)
-       VALUES (?, ?, ?, ?, ?)
-       ON DUPLICATE KEY UPDATE lock_status = VALUES(lock_status), workflow_status = VALUES(workflow_status)`,
-      [insertRes.insertId, subjectOfferingId, termId || 1, 'EDITABLE', 'DRAFT']
-    ).catch(() => {});
-  }
-
-  return {
-    gradeSheetId: insertRes.insertId,
-    lockStatus: 'EDITABLE',
-    workflowStatus: 'DRAFT',
-    termId: termId || 1,
-    termName: resolvedTermName,
-  };
+  return { gradeSheetId: sheet.grade_sheet_id, termId: sheet.term_id, termName: selected.term_name,
+    lockStatus: sheet.lock_status, workflowStatus: sheet.workflow_status };
 }
 
 /**
  * Ensures default assessment columns exist for a grade sheet so every column
  * (Written Work, Performance Task, and Quarterly Assessment) always has a valid assessment_id in DB.
  */
-async function ensureDefaultActivitiesForSheet(gradeSheetId, subjectId, schoolYearId, mapehComponent = null) {
+async function ensureDefaultActivitiesForSheet(gradeSheetId, subjectId, schoolYearId, mapehComponent = null, connection = db) {
   if (mapehComponent) {
     // Safeguard: backfill any legacy unassigned activities for this grade sheet to 'MA'
-    await db.execute(
+    await connection.execute(
       `UPDATE GRADE_ACTIVITY SET mapeh_component = 'MA' WHERE grade_sheet_id = ? AND mapeh_component IS NULL`,
       [gradeSheetId]
     );
@@ -341,7 +253,7 @@ async function ensureDefaultActivitiesForSheet(gradeSheetId, subjectId, schoolYe
   const compCondition = mapehComponent ? 'ga.mapeh_component = ?' : 'ga.mapeh_component IS NULL';
   const compParams = mapehComponent ? [gradeSheetId, mapehComponent] : [gradeSheetId];
 
-  const [existing] = await db.execute(
+  const [existing] = await connection.execute(
     `SELECT ga.activity_id, ga.activity_name, ct.component_code
      FROM GRADE_ACTIVITY ga
      LEFT JOIN SUBJECT_COMPONENT_WEIGHT scw ON scw.subj_comp_weight_id = ga.subj_comp_weight_id
@@ -375,7 +287,7 @@ async function ensureDefaultActivitiesForSheet(gradeSheetId, subjectId, schoolYe
     }
   });
 
-  const [weights] = await db.execute(
+  const [weights] = await connection.execute(
     `SELECT scw.subj_comp_weight_id, ct.component_code
      FROM SUBJECT_COMPONENT_WEIGHT scw
      JOIN COMPONENT_TYPE ct ON ct.component_type_id = scw.component_type_id
@@ -402,7 +314,7 @@ async function ensureDefaultActivitiesForSheet(gradeSheetId, subjectId, schoolYe
       { name: 'Written Work 1', max: 20 },
     ];
     for (const ww of defaultWW) {
-      await db.execute(
+      await connection.execute(
         `INSERT INTO GRADE_ACTIVITY (grade_sheet_id, subj_comp_weight_id, mapeh_component, activity_name, highest_possible_score, activity_date, status)
          VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE')`,
         [gradeSheetId, wwWeightId, mapehComponent || null, ww.name, ww.max, today]
@@ -416,7 +328,7 @@ async function ensureDefaultActivitiesForSheet(gradeSheetId, subjectId, schoolYe
       { name: 'Performance Task 1', max: 50 },
     ];
     for (const pt of defaultPT) {
-      await db.execute(
+      await connection.execute(
         `INSERT INTO GRADE_ACTIVITY (grade_sheet_id, subj_comp_weight_id, mapeh_component, activity_name, highest_possible_score, activity_date, status)
          VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE')`,
         [gradeSheetId, ptWeightId, mapehComponent || null, pt.name, pt.max, today]
@@ -426,7 +338,7 @@ async function ensureDefaultActivitiesForSheet(gradeSheetId, subjectId, schoolYe
 
   // If a legacy QA activity exists (e.g. "Quarterly Assessment 1") and we don't have a TE yet, migrate/rename it to "Term Exam"
   if (legacyQAActivity && !hasTE) {
-    await db.execute(
+    await connection.execute(
       `UPDATE GRADE_ACTIVITY SET activity_name = 'Term Exam' WHERE activity_id = ?`,
       [legacyQAActivity.activity_id]
     );
@@ -439,7 +351,7 @@ async function ensureDefaultActivitiesForSheet(gradeSheetId, subjectId, schoolYe
 
   // Ensure ST1, ST2, and TE all exist individually
   if (!hasST1) {
-    await db.execute(
+    await connection.execute(
       `INSERT INTO GRADE_ACTIVITY (grade_sheet_id, subj_comp_weight_id, mapeh_component, activity_name, highest_possible_score, activity_date, status)
        VALUES (?, ?, ?, 'Summative Test 1', ?, ?, 'ACTIVE')`,
       [gradeSheetId, qaWeightId, mapehComponent || null, defaultSt1Hps, today]
@@ -447,7 +359,7 @@ async function ensureDefaultActivitiesForSheet(gradeSheetId, subjectId, schoolYe
   }
 
   if (!hasST2) {
-    await db.execute(
+    await connection.execute(
       `INSERT INTO GRADE_ACTIVITY (grade_sheet_id, subj_comp_weight_id, mapeh_component, activity_name, highest_possible_score, activity_date, status)
        VALUES (?, ?, ?, 'Summative Test 2', ?, ?, 'ACTIVE')`,
       [gradeSheetId, qaWeightId, mapehComponent || null, defaultSt2Hps, today]
@@ -455,7 +367,7 @@ async function ensureDefaultActivitiesForSheet(gradeSheetId, subjectId, schoolYe
   }
 
   if (!hasTE) {
-    await db.execute(
+    await connection.execute(
       `INSERT INTO GRADE_ACTIVITY (grade_sheet_id, subj_comp_weight_id, mapeh_component, activity_name, highest_possible_score, activity_date, status)
        VALUES (?, ?, ?, 'Term Exam', ?, ?, 'ACTIVE')`,
       [gradeSheetId, qaWeightId, mapehComponent || null, defaultTeHps, today]
@@ -467,7 +379,208 @@ async function ensureDefaultActivitiesForSheet(gradeSheetId, subjectId, schoolYe
  * GET /api/class-record/:subject_offering_id?term=T1
  * Requirement 1: Data Retrieval Endpoint for JHS Class Record
  */
-router.get('/class-record/:subject_offering_id', async (req, res) => {
+const id = value => Number.isSafeInteger(Number(value)) && Number(value) > 0;
+const httpError = (statusCode, code, message) => Object.assign(new Error(message), { statusCode, code });
+
+async function submissionContext(input, user, connection) {
+  if (!id(user?.user_id)) throw httpError(401, 'SIGN_IN_REQUIRED', 'Sign in before loading or submitting grades.');
+  if (![input.subject_offering_id, input.section_id, input.school_year_id].every(id)) throw httpError(400, 'INVALID_CLASS_CONTEXT', 'Select a valid subject offering, section, and school year.');
+  const [rows] = await connection.execute(`SELECT so.subject_offering_id, so.subject_id, so.section_id, so.school_year_id,
+      s.subject_name, s.subject_code, sec.section_name, ta.teacher_assignment_id
+      FROM SUBJECT_OFFERING so JOIN SUBJECT s ON s.subject_id = so.subject_id
+      JOIN SECTION sec ON sec.section_id = so.section_id
+      JOIN TEACHER_ASSIGNMENT ta ON ta.subject_offering_id = so.subject_offering_id
+      WHERE so.subject_offering_id = ? AND so.section_id = ? AND so.school_year_id = ? AND ta.user_id = ?
+        AND (ta.assigned_from IS NULL OR ta.assigned_from <= UTC_DATE())
+        AND (ta.assigned_until IS NULL OR ta.assigned_until >= UTC_DATE())`,
+    [Number(input.subject_offering_id), Number(input.section_id), Number(input.school_year_id), Number(user.user_id)]);
+  if (rows.length !== 1) throw httpError(403, 'CLASS_ASSIGNMENT_REQUIRED', 'This subject class is not uniquely assigned to your account.');
+  return rows[0];
+}
+
+// Monitoring access is read-only and must never authorize teacher mutations.
+async function classRecordReadAccess(input, user, connection, { readOnly = false } = {}) {
+  if (!readOnly || user?.normalized_role !== 'department_head') {
+    try {
+      await submissionContext(input, user, connection);
+      return { teacher: !readOnly };
+    } catch (error) {
+      if (error.code !== 'CLASS_ASSIGNMENT_REQUIRED' || user?.normalized_role !== 'department_head') throw error;
+    }
+  }
+  const [rows] = await connection.execute(`SELECT so.subject_offering_id
+      FROM SUBJECT_OFFERING so JOIN SUBJECT s ON s.subject_id = so.subject_id
+      WHERE so.subject_offering_id = ? AND so.section_id = ? AND so.school_year_id = ?
+        AND s.department_id = COALESCE(
+          (SELECT dh.department_id FROM DEPARTMENT_HEAD dh WHERE dh.user_id = ?
+            AND (dh.appointed_from IS NULL OR dh.appointed_from <= CURDATE())
+            AND (dh.appointed_until IS NULL OR dh.appointed_until >= CURDATE())
+            ORDER BY dh.department_head_id DESC LIMIT 1), ?)`,
+    [input.subject_offering_id, input.section_id, input.school_year_id, user.user_id, user.department_id || null]);
+  if (rows.length !== 1) throw httpError(403, 'DEPARTMENT_CLASS_ACCESS_REQUIRED',
+    'You can only review class records for your assigned department.');
+  return { teacher: false };
+}
+async function loadGradeInputs(offering, sheetId, connection, lock = false) {
+  const suffix = lock ? ' FOR UPDATE' : '';
+  const [students] = await connection.execute(`SELECT ss.student_section_id, st.student_id, st.first_name, st.middle_name,
+      st.last_name, st.extension_name, st.sex, st.LRN AS lrn
+      FROM STUDENT_SECTION ss JOIN STUDENT st ON st.student_id = ss.student_id
+      WHERE ss.section_id = ? AND ss.school_year_id = ? AND (st.status = 'ACTIVE' OR st.status IS NULL)
+      ORDER BY st.last_name, st.first_name${suffix}`, [offering.section_id, offering.school_year_id]);
+  const [weights] = await connection.execute(`SELECT scw.percentage, ct.component_code
+      FROM SUBJECT_COMPONENT_WEIGHT scw JOIN COMPONENT_TYPE ct ON ct.component_type_id = scw.component_type_id
+      WHERE scw.subject_id = ? AND scw.school_year_id = ?${suffix}`, [offering.subject_id, offering.school_year_id]);
+  const [activities] = await connection.execute(`SELECT ga.activity_id, ga.activity_name, ga.mapeh_component,
+      ga.highest_possible_score, ga.status, ct.component_code, scw.subject_id AS weight_subject_id, scw.school_year_id AS weight_school_year_id
+      FROM GRADE_ACTIVITY ga LEFT JOIN SUBJECT_COMPONENT_WEIGHT scw ON scw.subj_comp_weight_id = ga.subj_comp_weight_id
+      LEFT JOIN COMPONENT_TYPE ct ON ct.component_type_id = scw.component_type_id
+      WHERE ga.grade_sheet_id = ? AND (ga.status = 'ACTIVE' OR ga.status IS NULL)
+        ORDER BY ga.activity_id${suffix}`, [sheetId]);
+  if (activities.some(a => Object.hasOwn(a, 'weight_subject_id')
+    && (Number(a.weight_subject_id) !== Number(offering.subject_id) || Number(a.weight_school_year_id) !== Number(offering.school_year_id)))) {
+    throw problem('INVALID_ACTIVITY_WEIGHT', 'An assessment is linked to another subject or school-year configuration.');
+  }
+  const [scores] = await connection.execute(`SELECT sc.activity_id, sc.student_section_id, sc.raw_score, sc.score_status
+      FROM SCORE sc JOIN GRADE_ACTIVITY ga ON ga.activity_id = sc.activity_id
+      WHERE ga.grade_sheet_id = ? ORDER BY sc.score_id${suffix}`, [sheetId]);
+  const [configs] = await connection.execute(`SELECT is_custom_enabled, ranges_json, updated_at
+      FROM GRADE_TRANSMUTATION_CONFIG WHERE config_id = 1${suffix}`);
+  if (configs.length !== 1) throw problem('TRANSMUTATION_NOT_CONFIGURED', 'Save the transmutation configuration before submitting.');
+  let ranges = TRANSMUTATION_TABLE;
+  if (configs[0].ranges_json) {
+    try { ranges = JSON.parse(configs[0].ranges_json); }
+    catch { throw problem('INVALID_TRANSMUTATION', 'The saved transmutation configuration needs review.'); }
+  }
+  if (!Array.isArray(ranges) || !ranges.length || ranges.some(r => ![r.min, r.max, r.transmuted ?? r.grade].every(v => Number.isFinite(Number(v))))) {
+    throw problem('INVALID_TRANSMUTATION', 'The saved transmutation configuration needs review.');
+  }
+  return { offering, students, weights, activities, scores,
+    config: { is_custom_enabled: Boolean(Number(configs[0].is_custom_enabled)), ranges: ranges.map(r => ({ min: Number(r.min), max: Number(r.max), transmuted: Number(r.transmuted ?? r.grade) })),
+      updated_at: configs[0].updated_at || null } };
+}
+async function loadClassTerms(offering, connection) {
+  const [rows] = await connection.execute(`SELECT term_id, term_name, starts_at, ends_at, grade_submission_deadline_at, status
+      FROM ACADEMIC_TERM WHERE school_year_id = ? ORDER BY starts_at, term_id`, [offering.school_year_id]);
+  return rows;
+}
+function selectSubmissionTerm(rows, code) {
+  if (!/^T[123]$/.test(String(code))) throw httpError(400, 'INVALID_TERM', 'Choose Term 1, Term 2, or Term 3 explicitly.');
+  const matches = rows.filter(row => termCode(row.term_name) === code);
+  if (matches.length !== 1) throw problem('AMBIGUOUS_TERM', 'This school year does not have a unique matching term.');
+  return matches[0];
+}
+function submissionPublicContext(offering) {
+  return { subjectOfferingId: Number(offering.subject_offering_id), sectionId: Number(offering.section_id), schoolYearId: Number(offering.school_year_id) };
+}
+
+async function submitClassGrades(input, user, database = db) {
+  const connection = await database.getConnection();
+  try {
+    await connection.beginTransaction();
+    const offering = await submissionContext(input, user, connection);
+    const selected = selectSubmissionTerm(await loadClassTerms(offering, connection), input.term);
+    const [sheets] = await connection.execute(`SELECT * FROM GRADE_SHEET
+        WHERE subject_offering_id = ? AND term_id = ? FOR UPDATE`, [offering.subject_offering_id, selected.term_id]);
+    if (sheets.length !== 1) throw problem('GRADE_SHEET_REQUIRED', 'Open a uniquely configured class record before submitting.');
+    const sheet = sheets[0];
+    if (sheet.workflow_status === 'SUBMITTED') {
+      await connection.commit();
+      return { submitted: true, submissionVersion: 2, term: input.term, ...submissionPublicContext(offering),
+        submittedAt: sheet.submitted_at, alreadySubmitted: true };
+    }
+    const window = await GradeSheet.editingWindow(sheet, user, connection, { lock: true });
+    if (!window.editable) throw httpError(403, 'SUBMISSION_WINDOW_CLOSED', 'This sheet is not open for your account. Use the approved reopening process.');
+    const data = await loadGradeInputs(offering, sheet.grade_sheet_id, connection, true);
+    const grades = GradeComputationService.calculateGrades(data);
+    const [clocks] = await connection.execute('SELECT UTC_TIMESTAMP(6) AS submitted_at');
+    const submittedAt = clocks[0].submitted_at;
+    for (const grade of grades) await StudentGrade.upsert({
+      subject_offering_id: offering.subject_offering_id, student_id: grade.studentId, student_section_id: grade.studentSectionId,
+      term: input.term, mapeh_component: grade.mapehComponent, initial_grade: grade.initialGrade, quarterly_grade: grade.termGrade,
+      remarks: grade.termGrade >= 75 ? 'Passed' : 'Failed',
+    }, connection);
+    await GradeSheet.update(sheet.grade_sheet_id, { workflow_status: 'SUBMITTED', submitted_at: submittedAt,
+      lock_status: window.correction ? 'TERM_LOCKED' : sheet.lock_status }, connection);
+    await AuditEvent.create({ user_id: user.user_id,
+      event_type: sheet.submitted_at ? 'GRADE_SHEET_CORRECTION_RESUBMITTED' : 'GRADE_SHEET_SUBMITTED',
+      module_name: 'GRADING', entity_type: 'GRADE_SHEET', entity_id: sheet.grade_sheet_id,
+      before_data: { workflow_status: sheet.workflow_status, submitted_at: sheet.submitted_at },
+      after_data: { workflow_status: 'SUBMITTED', submitted_at: submittedAt, term: input.term },
+      metadata: { subject: offering.subject_name, section: offering.section_name, term: input.term,
+        school_year_id: offering.school_year_id, learner_count: data.students.length } }, connection);
+    const notifications = await NotificationService.prepareGradePublicationNotifications({
+      offering, sheetId: sheet.grade_sheet_id, term: input.term, correction: Boolean(sheet.submitted_at),
+      teacherName: [user.first_name, user.last_name].filter(Boolean).join(' '),
+    }, connection);
+    await connection.commit();
+    try { NotificationService.emitCommittedGradePublications(notifications); }
+    catch (error) { console.warn('Submission saved; live notification delivery is unavailable:', error.message); }
+    return { submitted: true, submissionVersion: 2, term: input.term, ...submissionPublicContext(offering),
+      submittedAt, learnerCount: data.students.length, message: 'Term grades submitted to the adviser.' };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally { connection.release(); }
+}
+
+async function gradingSummary(input, user, database = db) {
+    const offering = await submissionContext(input, user, database);
+    const periods = await loadClassTerms(offering, database);
+    const [sheets] = await database.execute('SELECT * FROM GRADE_SHEET WHERE subject_offering_id = ? ORDER BY grade_sheet_id', [offering.subject_offering_id]);
+    const [roster] = await database.execute(`SELECT ss.student_section_id, st.student_id, st.first_name, st.middle_name, st.last_name,
+        st.extension_name, st.sex, st.LRN AS lrn FROM STUDENT_SECTION ss JOIN STUDENT st ON st.student_id = ss.student_id
+        WHERE ss.section_id = ? AND ss.school_year_id = ? AND (st.status = 'ACTIVE' OR st.status IS NULL) ORDER BY st.last_name, st.first_name`,
+      [offering.section_id, offering.school_year_id]);
+    const [saved] = await database.execute('SELECT * FROM STUDENT_GRADE WHERE subject_offering_id = ?', [offering.subject_offering_id]);
+    const result = roster.map(s => ({ id: Number(s.student_id), student_id: Number(s.student_id), student_section_id: Number(s.student_section_id),
+      firstName: s.first_name, middleName: s.middle_name || '', lastName: s.last_name, extensionName: s.extension_name || '', sex: s.sex,
+      lrn: decryptLrn(s.lrn), term1: '', term2: '', term3: '', term1_ma: '', term2_ma: '', term3_ma: '', term1_peh: '', term2_peh: '', term3_peh: '' }));
+    const warnings = [];
+    const submissionTerms = [];
+    for (const position of [1, 2, 3]) {
+      const code = `T${position}`, matchingTerms = periods.filter(t => termCode(t.term_name) === code);
+      if (matchingTerms.length !== 1) { warnings.push(`${code}: term configuration needs review.`); continue; }
+      const matchingSheets = sheets.filter(s => Number(s.term_id) === Number(matchingTerms[0].term_id));
+      if (!matchingSheets.length) continue;
+      if (matchingSheets.length !== 1) { warnings.push(`${code}: duplicate grade sheets need review.`); continue; }
+      const sheet = matchingSheets[0];
+      const window = await GradeSheet.editingWindow(sheet, user, database);
+      if (window.editable) submissionTerms.push({ term: code, deadline: window.deadline, correction: window.correction });
+      let grades;
+      if (sheet.workflow_status === 'SUBMITTED') {
+        grades = saved.filter(g => termCode(g.term) === code).map(g => ({ studentId: Number(g.student_id),
+          studentSectionId: g.student_section_id ? Number(g.student_section_id) : null,
+          mapehComponent: g.mapeh_component || null, termGrade: g.quarterly_grade == null || g.quarterly_grade === '' ? null : Number(g.quarterly_grade) }));
+      } else if (sheet.workflow_status === 'DRAFT') {
+        const data = await loadGradeInputs(offering, sheet.grade_sheet_id, database);
+        // An incomplete learner does not hide complete classmates' draft grades.
+        grades = data.students.flatMap(student => {
+          try { return GradeComputationService.calculateGrades({ ...data, students: [student] }); }
+          catch (error) {
+            if (!error.statusCode) throw error;
+            if (!GradeComputationService.isMapehSubject(offering)) return [];
+            return ['MA', 'PEH'].flatMap(componentOnly => {
+              try { return GradeComputationService.calculateGrades({ ...data, students: [student], componentOnly }); }
+              catch (componentError) { if (!componentError.statusCode) throw componentError; return []; }
+            });
+          }
+        });
+      } else { warnings.push(`${code}: grade workflow needs review.`); continue; }
+      for (const row of result) for (const component of [null, 'MA', 'PEH']) {
+        const candidates = grades.filter(g => g.studentId === row.student_id && (!g.studentSectionId || g.studentSectionId === row.student_section_id)
+          && (g.mapehComponent || null) === component);
+        if (candidates.length !== 1 || !Number.isFinite(candidates[0].termGrade) || candidates[0].termGrade < 0 || candidates[0].termGrade > 100) continue;
+        row[`term${position}${component ? `_${component.toLowerCase()}` : ''}`] = candidates[0].termGrade;
+      }
+    }
+    const now = Date.now();
+    const current = periods.filter(p => new Date(p.starts_at).getTime() <= now && new Date(p.ends_at).getTime() > now);
+    return { summaryVersion: 2, context: { ...submissionPublicContext(offering), activeTerm: current.length === 1 ? termCode(current[0].term_name) : null,
+      isMapeh: GradeComputationService.isMapehSubject(offering), submissionTerms }, students: result, warnings };
+  }
+
+router.get('/class-record/:subject_offering_id', resolveCurrentUser, async (req, res) => {
   try {
     await GradeTransmutationConfig.getActiveTiers();
     const subjectOfferingId = Number(req.params.subject_offering_id);
@@ -480,7 +593,7 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
     // Step A: Priority 1 - Match by subject_offering_id if valid
     if (subjectOfferingId && !isNaN(subjectOfferingId)) {
       const [offeringMatchRows] = await db.execute(
-        `SELECT 
+        `SELECT
            so.subject_offering_id,
            so.subject_id,
            so.section_id,
@@ -507,9 +620,15 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
          LEFT JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
          LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = so.school_year_id
          LEFT JOIN SCHOOL sch ON 1=1
-         LEFT JOIN TEACHER_ASSIGNMENT ta ON ta.subject_offering_id = so.subject_offering_id
+         LEFT JOIN TEACHER_ASSIGNMENT ta ON ta.teacher_assignment_id = (
+           SELECT MAX(ta2.teacher_assignment_id) FROM TEACHER_ASSIGNMENT ta2
+           WHERE ta2.subject_offering_id = so.subject_offering_id
+             AND (ta2.assigned_from IS NULL OR ta2.assigned_from <= UTC_DATE())
+             AND (ta2.assigned_until IS NULL OR ta2.assigned_until >= UTC_DATE()))
          LEFT JOIN USER u ON u.user_id = ta.user_id
-         LEFT JOIN SECTION_ADVISER_ASSIGNMENT saa ON saa.section_id = sec.section_id
+         LEFT JOIN SECTION_ADVISER_ASSIGNMENT saa ON saa.adviser_assignment_id = (
+           SELECT MAX(saa2.adviser_assignment_id) FROM SECTION_ADVISER_ASSIGNMENT saa2
+           WHERE saa2.section_id = sec.section_id AND saa2.school_year_id = so.school_year_id)
          LEFT JOIN USER u_adv ON u_adv.user_id = saa.user_id
          WHERE so.subject_offering_id = ?`,
         [subjectOfferingId]
@@ -519,138 +638,18 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
       }
     }
 
-    // Step B: If not found by offering ID, try matching by section (+ optional subject)
-    if (!contextRows || contextRows.length === 0) {
-      const targetSecId = requestedSectionId || subjectOfferingId;
-      if (requestedSubjectId) {
-        const [secSubjMatchRows] = await db.execute(
-          `SELECT 
-             so.subject_offering_id,
-             so.subject_id,
-             so.section_id,
-             so.school_year_id,
-             s.subject_name,
-             s.subject_code,
-             sec.section_name,
-             sec.grade_level_id,
-             gl.grade_level_name,
-             sy.starts_on AS sy_starts_on,
-             sy.ends_on AS sy_ends_on,
-             sch.school_name,
-             sch.school_code,
-             sch.region,
-             sch.division,
-             COALESCE(
-               NULLIF(TRIM(CONCAT_WS(' ', u.first_name, u.middle_name, u.last_name, u.extension_name)), ''),
-               NULLIF(TRIM(CONCAT_WS(' ', u_adv.first_name, u_adv.middle_name, u_adv.last_name, u_adv.extension_name)), ''),
-               NULLIF(TRIM(CONCAT_WS(' ', u.first_name, u.last_name)), '')
-             ) AS teacher_name
-           FROM SUBJECT_OFFERING so
-           LEFT JOIN SUBJECT s ON s.subject_id = so.subject_id
-           LEFT JOIN SECTION sec ON sec.section_id = so.section_id
-           LEFT JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
-           LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = so.school_year_id
-           LEFT JOIN SCHOOL sch ON 1=1
-           LEFT JOIN TEACHER_ASSIGNMENT ta ON ta.subject_offering_id = so.subject_offering_id
-           LEFT JOIN USER u ON u.user_id = ta.user_id
-           LEFT JOIN SECTION_ADVISER_ASSIGNMENT saa ON saa.section_id = sec.section_id
-           LEFT JOIN USER u_adv ON u_adv.user_id = saa.user_id
-           WHERE so.section_id = ? AND so.subject_id = ?
-           ORDER BY so.subject_offering_id DESC LIMIT 1`,
-          [targetSecId, requestedSubjectId]
-        );
-        if (secSubjMatchRows && secSubjMatchRows.length > 0) {
-          contextRows = secSubjMatchRows;
-        }
-      }
-
-      if (!contextRows || contextRows.length === 0) {
-        const [secFallbackRows] = await db.execute(
-          `SELECT 
-             so.subject_offering_id,
-             so.subject_id,
-             so.section_id,
-             so.school_year_id,
-             s.subject_name,
-             s.subject_code,
-             sec.section_name,
-             sec.grade_level_id,
-             gl.grade_level_name,
-             sy.starts_on AS sy_starts_on,
-             sy.ends_on AS sy_ends_on,
-             sch.school_name,
-             sch.school_code,
-             sch.region,
-             sch.division,
-             COALESCE(
-               NULLIF(TRIM(CONCAT_WS(' ', u.first_name, u.middle_name, u.last_name, u.extension_name)), ''),
-               NULLIF(TRIM(CONCAT_WS(' ', u_adv.first_name, u_adv.middle_name, u_adv.last_name, u_adv.extension_name)), ''),
-               NULLIF(TRIM(CONCAT_WS(' ', u.first_name, u.last_name)), '')
-             ) AS teacher_name
-           FROM SUBJECT_OFFERING so
-           LEFT JOIN SUBJECT s ON s.subject_id = so.subject_id
-           LEFT JOIN SECTION sec ON sec.section_id = so.section_id
-           LEFT JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
-           LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = so.school_year_id
-           LEFT JOIN SCHOOL sch ON 1=1
-           LEFT JOIN TEACHER_ASSIGNMENT ta ON ta.subject_offering_id = so.subject_offering_id
-           LEFT JOIN USER u ON u.user_id = ta.user_id
-           LEFT JOIN SECTION_ADVISER_ASSIGNMENT saa ON saa.section_id = sec.section_id
-           LEFT JOIN USER u_adv ON u_adv.user_id = saa.user_id
-           WHERE so.section_id = ?
-           ORDER BY so.subject_offering_id ASC LIMIT 1`,
-          [targetSecId]
-        );
-        if (secFallbackRows && secFallbackRows.length > 0) {
-          contextRows = secFallbackRows;
-        }
-      }
-    }
-
-    if (!contextRows || contextRows.length === 0) {
-      // Fallback: fetch section directly and create a subject offering if missing
-      const targetSecId = requestedSectionId || subjectOfferingId;
-      const [secRows] = await db.execute(
-        `SELECT sec.section_id, sec.section_name, sec.grade_level_id, gl.grade_level_name, sy.school_year_id
-         FROM SECTION sec
-         JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
-         LEFT JOIN SCHOOL_YEAR sy ON sy.status = 'ACTIVE' OR sy.is_active = 1
-         WHERE sec.section_id = ? LIMIT 1`,
-        [targetSecId]
-      );
-
-      if (secRows.length > 0) {
-        const sec = secRows[0];
-        const [subjRows] = await db.execute(`SELECT subject_id, subject_name FROM SUBJECT LIMIT 1`);
-        const subjId = subjRows[0]?.subject_id || 1;
-        const syId = sec.school_year_id || 1;
-
-        const [insSo] = await db.execute(
-          `INSERT INTO SUBJECT_OFFERING (subject_id, section_id, school_year_id) VALUES (?, ?, ?)`,
-          [subjId, sec.section_id, syId]
-        );
-        const newSoId = insSo.insertId;
-
-        contextRows = [{
-          subject_offering_id: newSoId,
-          subject_id: subjId,
-          section_id: sec.section_id,
-          school_year_id: syId,
-          subject_name: subjRows[0]?.subject_name || "Mathematics",
-          section_name: sec.section_name,
-          grade_level_id: sec.grade_level_id,
-          grade_level_name: sec.grade_level_name,
-        }];
-      }
-    }
-
-    if (!contextRows || contextRows.length === 0) {
-      return res.status(404).json({ error: 'Class / Subject Offering not found.' });
-    }
+    if (!contextRows?.length) return res.status(404).json({ error: 'Class / Subject Offering not found. No class was created.' });
 
     const classContext = contextRows[0];
     const actualOfferingId = classContext.subject_offering_id;
-    const schoolYearId = classContext.school_year_id || 1;
+    const schoolYearId = classContext.school_year_id;
+    if ((requestedSectionId && requestedSectionId !== Number(classContext.section_id))
+      || (requestedSubjectId && requestedSubjectId !== Number(classContext.subject_id))) {
+      throw httpError(409, 'CLASS_CONTEXT_MISMATCH', 'The selected section or subject does not match this class.');
+    }
+    const access = await classRecordReadAccess({ subject_offering_id: actualOfferingId,
+      section_id: classContext.section_id, school_year_id: schoolYearId }, req.currentUser, db,
+      { readOnly: req.query.read_only === '1' });
     const subjectId = classContext.subject_id;
     const sectionId = classContext.section_id;
 
@@ -661,27 +660,16 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
     const rawTerm = req.query.term || activeOngoingTermCode || 'T1';
     const { termCode, termName } = normalizeTerm(rawTerm);
 
-    // 2. Ensure GRADE_SHEET exists
-    const sheetData = await ensureGradeSheet(actualOfferingId, schoolYearId, termName);
+    // Only the assigned teacher may initialize a missing sheet while opening it.
+    const sheetData = await ensureGradeSheet(actualOfferingId, schoolYearId, termName, db, { create: access.teacher });
     const { gradeSheetId, lockStatus, termId: sheetTermId } = sheetData;
-
-    // Automatically sync latest activities, scores, and calculated grades from Aiven Cloud into local
-    await syncClassRecordFromCloud(gradeSheetId, actualOfferingId, termCode);
 
     // Validate GRADE_SHEET against Active Term
     // A grade sheet is considered ACTIVE / OPEN if grade_sheet.term_id === active_term.term_id AND grade_sheet.lock_status === 'EDITABLE' (or 'OPEN' or 'TEMPORARILY_REOPENED')
     const isTermActive = Boolean(activeTerm && Number(sheetTermId) === Number(activeTerm.term_id));
-    const isDeadlinePast = activeTerm?.grade_submission_deadline_at
-      ? new Date(activeTerm.grade_submission_deadline_at) <= new Date()
-      : false;
-    const isEditable = !isProtectedGradeSheet(sheetData) && isTermActive && (
-      !isDeadlinePast ||
-      lockStatus === 'EDITABLE' ||
-      lockStatus === 'OPEN' ||
-      lockStatus === 'TEMPORARILY_REOPENED'
-    );
+    const isEditable = access.teacher && await GradeSheet.canEdit(sheetData, req.currentUser, db);
     const isLocked = !isEditable;
-    const lockReason = !isTermActive
+    const lockReason = !access.teacher ? 'READ_ONLY_ACCESS' : !isEditable && !isTermActive
       ? 'CLOSED_TERM'
       : (isLocked ? (lockStatus === 'TERM_LOCKED' ? 'TERM_LOCKED' : 'LOCKED') : null);
 
@@ -692,7 +680,16 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
 
     // Ensure default assessment activities (WW, PT, QA) exist for this sheet
     if (isEditable) {
-      await ensureDefaultActivitiesForSheet(gradeSheetId, subjectId, schoolYearId, activeMapehComponent);
+      const setup = await db.getConnection();
+      try {
+        await setup.beginTransaction();
+        if (!await GradeSheet.canEdit({ gradeSheetId }, req.currentUser, setup, { lock: true })) {
+          throw httpError(409, 'SHEET_CHANGED', 'The submission status changed. Reload this class record.');
+        }
+        await ensureDefaultActivitiesForSheet(gradeSheetId, subjectId, schoolYearId, activeMapehComponent, setup);
+        await setup.commit();
+      } catch (error) { await setup.rollback(); throw error; }
+      finally { setup.release(); }
     }
 
     // 3. Fetch component weights from SUBJECT_COMPONENT_WEIGHT + COMPONENT_TYPE
@@ -700,7 +697,7 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
     let componentTypes = [];
 
     const [weightRows] = await db.execute(
-      `SELECT 
+      `SELECT
          scw.subj_comp_weight_id,
          scw.component_type_id,
          scw.percentage AS weight_percentage,
@@ -726,7 +723,7 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
     const activityParams = isMapeh ? [gradeSheetId, activeMapehComponent] : [gradeSheetId];
 
     const [activityRows] = await db.execute(
-      `SELECT 
+      `SELECT
          ga.activity_id,
          ga.activity_id AS assessment_id,
          ga.grade_sheet_id,
@@ -779,7 +776,7 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
 
     // 5. Fetch enrolled students from STUDENT_SECTION + STUDENT
     const [studentRows] = await db.execute(
-      `SELECT 
+      `SELECT
          ss.student_section_id,
          ss.student_id,
          s.LRN,
@@ -791,12 +788,12 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
          s.status AS student_status
        FROM STUDENT_SECTION ss
        JOIN STUDENT s ON s.student_id = ss.student_id
-       WHERE ss.section_id = ? AND (s.status = 'ACTIVE' OR s.status IS NULL)
-       ORDER BY 
+       WHERE ss.section_id = ? AND ss.school_year_id = ? AND (s.status = 'ACTIVE' OR s.status IS NULL)
+       ORDER BY
          CASE WHEN UPPER(s.sex) IN ('M', 'MALE') THEN 0 ELSE 1 END ASC,
          s.last_name ASC,
          s.first_name ASC`,
-      [sectionId]
+      [sectionId, schoolYearId]
     );
 
     // 6. Fetch student raw scores from SCORE
@@ -835,7 +832,9 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
     }
 
     // 7. Fetch existing grades from STUDENT_GRADE scoped to active sub-component
-    const savedGrades = await StudentGrade.findByOfferingAndTerm(actualOfferingId, termCode, activeMapehComponent);
+    const [allSavedGrades] = await db.execute('SELECT * FROM STUDENT_GRADE WHERE subject_offering_id = ? AND term = ?', [actualOfferingId, termCode]);
+    const savedForComponent = component => allSavedGrades.filter(g => (g.mapeh_component || null) === (component || null));
+    const savedGrades = savedForComponent(activeMapehComponent);
     const gradeMap = {};
     savedGrades.forEach((g) => {
       gradeMap[g.student_id] = g;
@@ -845,15 +844,18 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
     const combinedGradeMap = {};
     if (isMapeh) {
       const otherMapehComp = activeMapehComponent === 'MA' ? 'PEH' : 'MA';
-      const otherSaved = await StudentGrade.findByOfferingAndTerm(actualOfferingId, termCode, otherMapehComp);
+      const otherSaved = savedForComponent(otherMapehComp);
       otherSaved.forEach((g) => {
         otherGradeMap[g.student_id] = g;
       });
       if (!isEditable) {
-        const combinedSaved = await StudentGrade.findByOfferingAndTerm(actualOfferingId, termCode, null);
+        const combinedSaved = savedForComponent(null);
         combinedSaved.forEach((g) => { combinedGradeMap[g.student_id] = g; });
       }
     }
+
+    // Saved summaries are accepted output; draft previews never update them.
+    const readSavedSummary = grade => selectSavedSummary(grade, sheetData.workflowStatus === 'SUBMITTED');
 
     // Resolve specific activity IDs for ST1, ST2, and TE
     let st1ActId = null;
@@ -869,8 +871,12 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
       }
     });
 
-    // 8. Build student payload with computed DepEd grades
-    const gradesToAutoSync = [];
+    // Draft previews and Submit use the same validated saved inputs and configuration.
+    let previewInputs = null, previewError = null;
+    if (sheetData.workflowStatus !== 'SUBMITTED') {
+      try { previewInputs = await loadGradeInputs(classContext, gradeSheetId, db); }
+      catch (error) { if (!error.statusCode) throw error; previewError = error.code; }
+    }
     const computedStudents = studentRows.map((student) => {
       const studentSecId = student.student_section_id;
       const studentId = student.student_id;
@@ -886,69 +892,30 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
         te: (teActId && rawScores[teActId] !== undefined && rawScores[teActId] !== null) ? rawScores[teActId] : (rawScores.te ?? rawScores.qa ?? ''),
       };
 
-      const defaultExamConfig = isMapeh
-        ? { st1Weight: 25, st2Weight: 25, teWeight: 25, st1HPS: 25, st2HPS: 25, teHPS: 25 }
-        : { st1Weight: 30, st2Weight: 30, teWeight: 40 };
-
-      const calculated = isEditable ? calculateStudentSummary({
-        assessments,
-        scores: rawScores,
-        weights,
-        examConfig: defaultExamConfig,
-        isMapeh,
-      }) : null;
-
       const savedGrade = gradeMap[studentId];
-      const summary = calculated || {
-        ...selectSavedSummary(savedGrade),
-        descriptor: getGradeDescriptor(savedGrade?.quarterly_grade),
-      };
-      // Single Source of Truth Alignment: computed summary from component scores is authoritative
-      const initialGrade = summary.initialGrade;
-      const quarterlyGrade = summary.quarterlyGrade;
-      const remarks = summary.remarks;
-
-      if (
-        isEditable && summary.initialGrade !== null &&
-        (!savedGrade ||
-          Number(savedGrade.initial_grade) !== Number(summary.initialGrade) ||
-          Number(savedGrade.quarterly_grade) !== Number(summary.quarterlyGrade))
-      ) {
-        gradesToAutoSync.push({
-          subject_offering_id: actualOfferingId,
-          student_id: student.student_id,
-          student_section_id: student.student_section_id || null,
-          term: termCode,
-          mapeh_component: isMapeh ? activeMapehComponent : null,
-          initial_grade: summary.initialGrade,
-          quarterly_grade: summary.quarterlyGrade,
-          remarks: summary.remarks,
-        });
-      }
-
-      // Compute and auto-sync combined Final MAPEH Quarterly Grade if both components are available
-      let finalMapehQuarterly = isMapeh && !isEditable
-        ? selectSavedSummary(combinedGradeMap[studentId]).termGrade : null;
-      if (isMapeh && isEditable) {
-        const otherSaved = otherGradeMap[studentId];
-        if (quarterlyGrade !== null && otherSaved && otherSaved.quarterly_grade !== null && otherSaved.quarterly_grade !== undefined) {
-          finalMapehQuarterly = Math.round((Number(quarterlyGrade) + Number(otherSaved.quarterly_grade)) / 2);
-          const finalInitial = otherSaved.initial_grade !== null && otherSaved.initial_grade !== undefined
-            ? parseFloat(((Number(initialGrade) + Number(otherSaved.initial_grade)) / 2).toFixed(2))
-            : initialGrade;
-
-          gradesToAutoSync.push({
-            subject_offering_id: actualOfferingId,
-            student_id: student.student_id,
-            student_section_id: student.student_section_id || null,
-            term: termCode,
-            mapeh_component: null, // Scoped to ALL / NULL for MasterSheet & SF9
-            initial_grade: finalInitial,
-            quarterly_grade: finalMapehQuarterly,
-            remarks: finalMapehQuarterly >= 75 ? 'Passed' : 'Failed',
-          });
+      let summary, finalMapehQuarterly = null;
+      if (sheetData.workflowStatus === 'SUBMITTED') {
+        summary = { ...readSavedSummary(savedGrade), descriptor: getGradeDescriptor(savedGrade?.quarterly_grade) };
+        if (isMapeh) finalMapehQuarterly = readSavedSummary(combinedGradeMap[studentId]).termGrade;
+      } else {
+        let grades = [];
+        try {
+          if (previewInputs) grades = GradeComputationService.calculateGrades({ ...previewInputs, students: [student] });
+        } catch (error) {
+          if (!error.statusCode) throw error;
+          previewError = error.code;
+          if (isMapeh) {
+            try { grades = GradeComputationService.calculateGrades({ ...previewInputs, students: [student], componentOnly: activeMapehComponent }); }
+            catch (componentError) { if (!componentError.statusCode) throw componentError; }
+          }
         }
+        const grade = grades.find(g => (g.mapehComponent || null) === activeMapehComponent);
+        summary = grade ? { initialGrade: grade.initialGrade, quarterlyGrade: grade.termGrade, termGrade: grade.termGrade,
+          remarks: grade.termGrade >= 75 ? 'Passed' : 'Failed', descriptor: getGradeDescriptor(grade.termGrade) }
+          : { initialGrade: null, quarterlyGrade: null, termGrade: null, remarks: null, calculationError: previewError || 'INCOMPLETE_GRADES' };
+        if (isMapeh) finalMapehQuarterly = grades.find(g => !g.mapehComponent)?.termGrade ?? null;
       }
+      const initialGrade = summary.initialGrade, quarterlyGrade = summary.quarterlyGrade, remarks = summary.remarks;
 
       const plainLrn = decryptLrn(student.LRN);
       return {
@@ -964,7 +931,7 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
         scores: rawScores,
         examinations: studentExaminations,
         computed: summary,
-        saved_summary: !isEditable ? selectSavedSummary(savedGrade) : undefined,
+        saved_summary: sheetData.workflowStatus === 'SUBMITTED' ? readSavedSummary(savedGrade) : undefined,
         calculation_review: summary.calculationError || null,
         initial_grade: initialGrade,
         quarterly_grade: quarterlyGrade,
@@ -972,23 +939,6 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
         final_mapeh_quarterly_grade: finalMapehQuarterly,
       };
     });
-
-    if (isEditable && gradesToAutoSync.length > 0) {
-      for (const g of gradesToAutoSync) {
-        await db.execute(
-          `INSERT INTO STUDENT_GRADE (
-            subject_offering_id, student_id, student_section_id, term, mapeh_component, initial_grade, quarterly_grade, remarks, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(6), NOW(6))
-          ON DUPLICATE KEY UPDATE
-            student_section_id = VALUES(student_section_id),
-            initial_grade = VALUES(initial_grade),
-            quarterly_grade = VALUES(quarterly_grade),
-            remarks = VALUES(remarks),
-            updated_at = NOW(6)`,
-          [g.subject_offering_id, g.student_id, g.student_section_id, g.term, g.mapeh_component || null, g.initial_grade, g.quarterly_grade, g.remarks]
-        );
-      }
-    }
 
     res.json({
       subject_offering_id: subjectOfferingId,
@@ -1054,7 +1004,7 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
     });
   } catch (err) {
     console.error('Error in GET /api/class-record/:subject_offering_id:', err);
-    res.status(500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: err.message });
   }
 });
 
@@ -1063,7 +1013,11 @@ router.get('/class-record/:subject_offering_id', async (req, res) => {
  * Requirement 2: Assessment & Highest Possible Score (HPS) Setup
  */
 async function handleCreateAssessment(req, res) {
+  let connection;
+  let committed = false;
   try {
+    connection = await db.getConnection();
+    await connection.beginTransaction();
     const {
       subject_offering_id,
       term = 'T1',
@@ -1084,16 +1038,17 @@ async function handleCreateAssessment(req, res) {
 
     const effectiveMax = max_score !== undefined ? max_score : highest_possible_score;
     const numericMaxScore = Number(effectiveMax);
-    if (isNaN(numericMaxScore) || numericMaxScore <= 0) {
+    if (!Number.isFinite(numericMaxScore) || numericMaxScore <= 0) {
       return res.status(400).json({ error: 'max_score (Highest Possible Score) must be a positive number.' });
     }
 
+    if (!/^T[123]$/.test(String(term))) return res.status(400).json({ error: 'Choose the term explicitly.' });
     const { termCode, termName } = normalizeTerm(term);
     const { code, type: normalizedType, name: defaultTypeName } = normalizeAssessmentType(
       component_code || rawInputType || req.body.category
     );
 
-    const [offering] = await db.execute(
+    const [offering] = await connection.execute(
       `SELECT so.subject_id, so.section_id, so.school_year_id, s.subject_name, s.subject_code
        FROM SUBJECT_OFFERING so
        LEFT JOIN SUBJECT s ON s.subject_id = so.subject_id
@@ -1109,20 +1064,10 @@ async function handleCreateAssessment(req, res) {
     const isMapeh = isMapehSubject(offering[0].subject_name, offering[0].subject_code);
     const finalMapehComponent = isMapeh ? normalizeMapehComponent(mapeh_component || req.body.component) : null;
 
-    const activeTerm = await resolveActiveAcademicTerm(school_year_id);
-    const sheetData = await ensureGradeSheet(subject_offering_id, school_year_id, termName);
-    const { gradeSheetId, lockStatus, termId: sheetTermId } = sheetData;
-
-    const isTermActive = Boolean(activeTerm && Number(sheetTermId) === Number(activeTerm.term_id));
-    const isDeadlinePast = activeTerm?.grade_submission_deadline_at
-      ? new Date(activeTerm.grade_submission_deadline_at) <= new Date()
-      : false;
-    const isEditable = !isProtectedGradeSheet(sheetData) && isTermActive && (
-      !isDeadlinePast ||
-      lockStatus === 'EDITABLE' ||
-      lockStatus === 'OPEN' ||
-      lockStatus === 'TEMPORARILY_REOPENED'
-    );
+    await submissionContext({ subject_offering_id, section_id: offering[0].section_id, school_year_id }, req.currentUser, connection);
+    const sheetData = await ensureGradeSheet(subject_offering_id, school_year_id, termName, connection);
+    const { gradeSheetId } = sheetData;
+    const isEditable = await GradeSheet.canEdit(sheetData, req.currentUser, connection, { lock: true });
 
     if (!isEditable) {
       return res.status(403).json({
@@ -1137,9 +1082,9 @@ async function handleCreateAssessment(req, res) {
     if (!targetComponentTypeId) {
       let lookupCodes = [code];
       if (code === 'QA') lookupCodes.push('STE', 'EX');
-      const [ctRows] = await db.execute(
-        `SELECT component_type_id FROM COMPONENT_TYPE 
-         WHERE UPPER(component_code) IN (${lookupCodes.map(() => '?').join(',')}) 
+      const [ctRows] = await connection.execute(
+        `SELECT component_type_id FROM COMPONENT_TYPE
+         WHERE UPPER(component_code) IN (${lookupCodes.map(() => '?').join(',')})
             OR UPPER(component_name) LIKE ? LIMIT 1`,
         [...lookupCodes, `%${code}%`]
       );
@@ -1147,8 +1092,8 @@ async function handleCreateAssessment(req, res) {
     }
 
     if (targetComponentTypeId) {
-      const [weightRow] = await db.execute(
-        `SELECT subj_comp_weight_id FROM SUBJECT_COMPONENT_WEIGHT 
+      const [weightRow] = await connection.execute(
+        `SELECT subj_comp_weight_id FROM SUBJECT_COMPONENT_WEIGHT
          WHERE subject_id = ? AND component_type_id = ? AND school_year_id = ? LIMIT 1`,
         [subject_id, targetComponentTypeId, school_year_id]
       );
@@ -1158,8 +1103,8 @@ async function handleCreateAssessment(req, res) {
     }
 
     if (!targetSubjCompWeightId) {
-      const [allWeights] = await db.execute(
-        `SELECT scw.subj_comp_weight_id, ct.component_code 
+      const [allWeights] = await connection.execute(
+        `SELECT scw.subj_comp_weight_id, ct.component_code
          FROM SUBJECT_COMPONENT_WEIGHT scw
          JOIN COMPONENT_TYPE ct ON ct.component_type_id = scw.component_type_id
          WHERE scw.subject_id = ? AND scw.school_year_id = ?`,
@@ -1167,8 +1112,10 @@ async function handleCreateAssessment(req, res) {
       );
       const match = allWeights.find(w => normalizeAssessmentType(w.component_code).code === code);
       if (match) targetSubjCompWeightId = match.subj_comp_weight_id;
-      else if (allWeights.length > 0) targetSubjCompWeightId = allWeights[0].subj_comp_weight_id;
+
     }
+
+    if (!targetSubjCompWeightId) return res.status(409).json({ error: 'Configure the matching subject component weight before adding this assessment.' });
 
     // Component-Aware Activity Counter: filter count strictly by category (WW vs PT vs QA) and active mapeh_component ('MA' vs 'PEH')
     let componentActivityCount = 0;
@@ -1176,12 +1123,12 @@ async function handleCreateAssessment(req, res) {
     const actCompParams = isMapeh ? [gradeSheetId, finalMapehComponent] : [gradeSheetId];
 
     const activityCodes = code === 'QA' ? ['QA', 'STE', 'EX'] : [code];
-    const [countRows] = await db.execute(
-      `SELECT COUNT(*) AS total 
+    const [countRows] = await connection.execute(
+      `SELECT COUNT(*) AS total
        FROM GRADE_ACTIVITY ga
        LEFT JOIN SUBJECT_COMPONENT_WEIGHT scw ON scw.subj_comp_weight_id = ga.subj_comp_weight_id
        LEFT JOIN COMPONENT_TYPE ct ON ct.component_type_id = scw.component_type_id
-       WHERE ga.grade_sheet_id = ? 
+       WHERE ga.grade_sheet_id = ?
          AND ${actCompCondition}
          AND (UPPER(ct.component_code) IN (${activityCodes.map(() => '?').join(',')}) OR (ct.component_code IS NULL AND (ga.subj_comp_weight_id = ? OR ga.activity_name LIKE ?)))
          AND (ga.status = 'ACTIVE' OR ga.status IS NULL)
@@ -1199,14 +1146,14 @@ async function handleCreateAssessment(req, res) {
 
     const parsedDate = (activity_date && String(activity_date).trim() !== '') ? String(activity_date).trim() : null;
 
-    const [insertResult] = await db.execute(
+    const [insertResult] = await connection.execute(
       `INSERT INTO GRADE_ACTIVITY (
-        grade_sheet_id, 
-        subj_comp_weight_id, 
+        grade_sheet_id,
+        subj_comp_weight_id,
         mapeh_component,
-        activity_name, 
-        highest_possible_score, 
-        activity_date, 
+        activity_name,
+        highest_possible_score,
+        activity_date,
         status
       ) VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE')`,
       [gradeSheetId, targetSubjCompWeightId, finalMapehComponent, defaultTitle, numericMaxScore, parsedDate]
@@ -1214,33 +1161,13 @@ async function handleCreateAssessment(req, res) {
 
     const activityId = insertResult.insertId;
 
-    if (db.cloudPool) {
-      db.cloudPool.query(
-        `INSERT INTO GRADE_ACTIVITY (
-          activity_id,
-          grade_sheet_id, 
-          subj_comp_weight_id, 
-          mapeh_component,
-          activity_name, 
-          highest_possible_score, 
-          activity_date, 
-          status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE')
-        ON DUPLICATE KEY UPDATE
-          activity_name = VALUES(activity_name),
-          highest_possible_score = VALUES(highest_possible_score),
-          activity_date = VALUES(activity_date),
-          status = VALUES(status)`,
-        [activityId, gradeSheetId, targetSubjCompWeightId, finalMapehComponent, defaultTitle, numericMaxScore, parsedDate]
-      ).catch((err) => console.warn('[CloudDualWrite] Failed to dual-write activity creation to Aiven:', err.message));
-    }
 
     // Fetch updated component total HPS for the active sub-component
     const activityCondition = isMapeh ? 'ga.mapeh_component = ?' : 'ga.mapeh_component IS NULL';
     const activityParams = isMapeh ? [gradeSheetId, finalMapehComponent] : [gradeSheetId];
 
-    const [allActivities] = await db.execute(
-      `SELECT 
+    const [allActivities] = await connection.execute(
+      `SELECT
          ga.activity_id,
          ga.activity_name,
          ga.highest_possible_score AS max_score,
@@ -1259,6 +1186,29 @@ async function handleCreateAssessment(req, res) {
         totalHps[aCode] += Number(a.max_score || 0);
       }
     });
+
+    await connection.commit();
+    committed = true;
+    if (db.cloudPool) {
+      db.cloudPool.query(
+        `INSERT INTO GRADE_ACTIVITY (
+          activity_id,
+          grade_sheet_id,
+          subj_comp_weight_id,
+          mapeh_component,
+          activity_name,
+          highest_possible_score,
+          activity_date,
+          status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE')
+        ON DUPLICATE KEY UPDATE
+          activity_name = VALUES(activity_name),
+          highest_possible_score = VALUES(highest_possible_score),
+          activity_date = VALUES(activity_date),
+          status = VALUES(status)`,
+        [activityId, gradeSheetId, targetSubjCompWeightId, finalMapehComponent, defaultTitle, numericMaxScore, parsedDate]
+      ).catch((err) => console.warn('[CloudDualWrite] Failed to dual-write activity creation to Aiven:', err.message));
+    }
 
     res.status(201).json({
       message: 'Assessment created successfully',
@@ -1284,12 +1234,17 @@ async function handleCreateAssessment(req, res) {
     });
   } catch (err) {
     console.error('Error in handleCreateAssessment:', err);
-    res.status(500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: err.message });
+  } finally {
+    if (connection) {
+      if (!committed) await connection.rollback().catch(() => {});
+      connection.release();
+    }
   }
 }
 
-router.post('/assessments', handleCreateAssessment);
-router.post('/class-record/assessments', handleCreateAssessment);
+router.post('/assessments', resolveCurrentUser, handleCreateAssessment);
+router.post('/class-record/assessments', resolveCurrentUser, handleCreateAssessment);
 
 function sanitizeDateForSql(val) {
   if (!val) return null;
@@ -1315,12 +1270,16 @@ function sanitizeDateForSql(val) {
  * Supports updating Highest Possible Score (HPS) and activity details without requiring an activity date.
  */
 async function handleUpdateAssessment(req, res) {
+  let connection;
+  let committed = false;
   try {
+    connection = await db.getConnection();
+    await connection.beginTransaction();
     const assessmentId = Number(req.params.id);
     const { activity_name, max_score, highest_possible_score, activity_date, status } = req.body;
 
     // Check if the assessment belongs to a locked grade sheet
-    const [actSheetRows] = await db.execute(
+    const [actSheetRows] = await connection.execute(
       `SELECT ga.grade_sheet_id, gs.lock_status, gs.workflow_status, gs.term_id, so.school_year_id, at.term_name
        FROM GRADE_ACTIVITY ga
        JOIN GRADE_SHEET gs ON gs.grade_sheet_id = ga.grade_sheet_id
@@ -1330,19 +1289,10 @@ async function handleUpdateAssessment(req, res) {
       [assessmentId]
     );
 
-    if (actSheetRows.length > 0) {
+    if (actSheetRows.length !== 1) return res.status(404).json({ error: 'Assessment not found.' });
+    if (actSheetRows.length === 1) {
       const row = actSheetRows[0];
-      const activeTerm = await resolveActiveAcademicTerm(row.school_year_id);
-      const isTermActive = Boolean(activeTerm && Number(row.term_id) === Number(activeTerm.term_id));
-      const isDeadlinePast = activeTerm?.grade_submission_deadline_at
-        ? new Date(activeTerm.grade_submission_deadline_at) <= new Date()
-        : false;
-      const isEditable = !isProtectedGradeSheet(row) && isTermActive && (
-        !isDeadlinePast ||
-        row.lock_status === 'EDITABLE' ||
-        row.lock_status === 'OPEN' ||
-        row.lock_status === 'TEMPORARILY_REOPENED'
-      );
+      const isEditable = await GradeSheet.canEdit(row, req.currentUser, connection, { lock: true });
       if (!isEditable) {
         return res.status(403).json({
           error: `Cannot edit assessment. This class record belongs to a closed term (${row.term_name || 'Closed Term'}) and is read-only.`,
@@ -1362,7 +1312,7 @@ async function handleUpdateAssessment(req, res) {
 
     if (newMaxScore !== undefined && newMaxScore !== null) {
       const numMax = Number(newMaxScore);
-      if (isNaN(numMax) || numMax <= 0) {
+      if (!Number.isFinite(numMax) || numMax <= 0) {
         return res.status(400).json({ error: 'max_score must be a positive number.' });
       }
       updateFields.push('highest_possible_score = ?');
@@ -1373,9 +1323,9 @@ async function handleUpdateAssessment(req, res) {
     // If provided and valid YYYY-MM-DD, updates to it; otherwise preserves existing date or defaults to CURRENT_DATE
     if (activity_date !== undefined) {
       const dateVal = sanitizeDateForSql(activity_date);
-      updateFields.push(`activity_date = CASE 
-        WHEN ? IS NOT NULL AND ? != '' THEN ? 
-        ELSE COALESCE(activity_date, CURRENT_DATE) 
+      updateFields.push(`activity_date = CASE
+        WHEN ? IS NOT NULL AND ? != '' THEN ?
+        ELSE COALESCE(activity_date, CURRENT_DATE)
       END`);
       updateValues.push(dateVal, dateVal, dateVal);
     }
@@ -1396,21 +1346,24 @@ async function handleUpdateAssessment(req, res) {
     }
 
     updateValues.push(assessmentId);
-    await db.execute(
+    await connection.execute(
       `UPDATE GRADE_ACTIVITY SET ${updateFields.join(', ')}, updated_at = NOW(6) WHERE activity_id = ?`,
       updateValues
     );
 
+
+    const [rows] = await connection.execute('SELECT * FROM GRADE_ACTIVITY WHERE activity_id = ?', [assessmentId]);
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Assessment not found.' });
+    }
+
+    await connection.commit();
+    committed = true;
     if (db.cloudPool) {
       db.cloudPool.query(
         `UPDATE GRADE_ACTIVITY SET ${updateFields.join(', ')}, updated_at = NOW(6) WHERE activity_id = ?`,
         updateValues
       ).catch((err) => console.warn('[CloudDualWrite] Failed to dual-write activity update to Aiven:', err.message));
-    }
-
-    const [rows] = await db.execute('SELECT * FROM GRADE_ACTIVITY WHERE activity_id = ?', [assessmentId]);
-    if (rows.length === 0) {
-      return res.status(404).json({ error: 'Assessment not found.' });
     }
 
     res.status(200).json({
@@ -1428,24 +1381,33 @@ async function handleUpdateAssessment(req, res) {
     });
   } catch (err) {
     console.error('Error in handleUpdateAssessment:', err);
-    res.status(500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: err.message });
+  } finally {
+    if (connection) {
+      if (!committed) await connection.rollback().catch(() => {});
+      connection.release();
+    }
   }
 }
 
-router.put('/assessments/:id', handleUpdateAssessment);
-router.patch('/assessments/:id', handleUpdateAssessment);
-router.put('/class-record/assessments/:id', handleUpdateAssessment);
-router.patch('/class-record/assessments/:id', handleUpdateAssessment);
+router.put('/assessments/:id', resolveCurrentUser, handleUpdateAssessment);
+router.patch('/assessments/:id', resolveCurrentUser, handleUpdateAssessment);
+router.put('/class-record/assessments/:id', resolveCurrentUser, handleUpdateAssessment);
+router.patch('/class-record/assessments/:id', resolveCurrentUser, handleUpdateAssessment);
 
 /**
  * DELETE /api/assessments/:id
  */
-router.delete('/assessments/:id', async (req, res) => {
+router.delete('/assessments/:id', resolveCurrentUser, async (req, res) => {
+  let connection;
+  let committed = false;
   try {
+    connection = await db.getConnection();
+    await connection.beginTransaction();
     const assessmentId = Number(req.params.id);
 
     // Check if the assessment belongs to a locked grade sheet
-    const [actSheetRows] = await db.execute(
+    const [actSheetRows] = await connection.execute(
       `SELECT ga.grade_sheet_id, gs.lock_status, gs.workflow_status, gs.term_id, so.school_year_id, at.term_name
        FROM GRADE_ACTIVITY ga
        JOIN GRADE_SHEET gs ON gs.grade_sheet_id = ga.grade_sheet_id
@@ -1455,19 +1417,10 @@ router.delete('/assessments/:id', async (req, res) => {
       [assessmentId]
     );
 
-    if (actSheetRows.length > 0) {
+    if (actSheetRows.length !== 1) return res.status(404).json({ error: 'Assessment not found.' });
+    if (actSheetRows.length === 1) {
       const row = actSheetRows[0];
-      const activeTerm = await resolveActiveAcademicTerm(row.school_year_id);
-      const isTermActive = Boolean(activeTerm && Number(row.term_id) === Number(activeTerm.term_id));
-      const isDeadlinePast = activeTerm?.grade_submission_deadline_at
-        ? new Date(activeTerm.grade_submission_deadline_at) <= new Date()
-        : false;
-      const isEditable = !isProtectedGradeSheet(row) && isTermActive && (
-        !isDeadlinePast ||
-        row.lock_status === 'EDITABLE' ||
-        row.lock_status === 'OPEN' ||
-        row.lock_status === 'TEMPORARILY_REOPENED'
-      );
+      const isEditable = await GradeSheet.canEdit(row, req.currentUser, connection, { lock: true });
       if (!isEditable) {
         return res.status(403).json({
           error: `Cannot delete assessment. This class record belongs to a closed term (${row.term_name || 'Closed Term'}) and is read-only.`,
@@ -1476,12 +1429,15 @@ router.delete('/assessments/:id', async (req, res) => {
       }
     }
 
-    await db.execute('DELETE FROM SCORE WHERE activity_id = ?', [assessmentId]);
-    const [result] = await db.execute('DELETE FROM GRADE_ACTIVITY WHERE activity_id = ?', [assessmentId]);
+    await connection.execute('DELETE FROM SCORE WHERE activity_id = ?', [assessmentId]);
+    const [result] = await connection.execute('DELETE FROM GRADE_ACTIVITY WHERE activity_id = ?', [assessmentId]);
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'Assessment not found.' });
     }
 
+
+    await connection.commit();
+    committed = true;
     if (db.cloudPool) {
       db.cloudPool.query('DELETE FROM SCORE WHERE activity_id = ?', [assessmentId]).catch(() => {});
       db.cloudPool.query('DELETE FROM GRADE_ACTIVITY WHERE activity_id = ?', [assessmentId]).catch(() => {});
@@ -1490,140 +1446,19 @@ router.delete('/assessments/:id', async (req, res) => {
     res.json({ message: 'Assessment deleted successfully' });
   } catch (err) {
     console.error('Error in DELETE /api/assessments/:id:', err);
-    res.status(500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: err.message });
+  } finally {
+    if (connection) {
+      if (!committed) await connection.rollback().catch(() => {});
+      connection.release();
+    }
   }
 });
 
 /**
- * Automatically pull latest activities, scores, and calculated grades from Aiven Cloud
- * into local database so teammates immediately see shared updates with 0 manual steps.
+ * Asynchronously forward raw scores to Aiven Cloud (Dual-Write)
  */
-async function syncClassRecordFromCloud(gradeSheetId, subjectOfferingId, termCode) {
-  if (!db.cloudPool) return;
-
-  const timeoutPromise = new Promise((_, reject) =>
-    setTimeout(() => reject(new Error('Cloud sync timeout (2.5s exceeded)')), 2500)
-  );
-
-  const syncWork = (async () => {
-    // 1. Sync activities for this grade sheet
-    if (gradeSheetId) {
-      const [cloudActs] = await db.cloudPool.query(
-        `SELECT activity_id, grade_sheet_id, subj_comp_weight_id, mapeh_component, activity_name, highest_possible_score, activity_date, status
-         FROM GRADE_ACTIVITY
-         WHERE grade_sheet_id = ?`,
-        [gradeSheetId]
-      );
-
-      if (cloudActs && cloudActs.length > 0) {
-        for (const act of cloudActs) {
-          const actDate = act.activity_date ? String(act.activity_date).slice(0, 10) : null;
-          await db.execute(
-            `INSERT INTO GRADE_ACTIVITY (activity_id, grade_sheet_id, subj_comp_weight_id, mapeh_component, activity_name, highest_possible_score, activity_date, status)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-             ON DUPLICATE KEY UPDATE
-               activity_name = VALUES(activity_name),
-               highest_possible_score = VALUES(highest_possible_score),
-               activity_date = VALUES(activity_date),
-               status = VALUES(status)`,
-            [
-              act.activity_id,
-              act.grade_sheet_id,
-              act.subj_comp_weight_id,
-              act.mapeh_component,
-              act.activity_name,
-              act.highest_possible_score,
-              actDate,
-              act.status || 'ACTIVE',
-            ]
-          );
-        }
-
-        const actIds = cloudActs.map((a) => a.activity_id);
-        if (actIds.length > 0) {
-          const placeholders = actIds.map(() => '?').join(',');
-
-          // 2. Sync scores for these activities from Aiven into local
-          const [cloudScores] = await db.cloudPool.query(
-            `SELECT activity_id, student_section_id, raw_score, score_status, teacher_assignment_id
-             FROM SCORE
-             WHERE activity_id IN (${placeholders})`,
-            actIds
-          );
-
-          if (cloudScores && cloudScores.length > 0) {
-            for (const sc of cloudScores) {
-              await db.execute(
-                `INSERT INTO SCORE (activity_id, student_section_id, raw_score, score_status, teacher_assignment_id, created_at, updated_at)
-                 VALUES (?, ?, ?, ?, ?, NOW(6), NOW(6))
-                 ON DUPLICATE KEY UPDATE
-                   raw_score = VALUES(raw_score),
-                   score_status = VALUES(score_status),
-                   teacher_assignment_id = VALUES(teacher_assignment_id),
-                   updated_at = NOW(6)`,
-                [
-                  sc.activity_id,
-                  sc.student_section_id,
-                  sc.raw_score,
-                  sc.score_status,
-                  sc.teacher_assignment_id || null,
-                ]
-              );
-            }
-          }
-        }
-      }
-    }
-
-    // 3. Sync student grades for this offering and term
-    if (subjectOfferingId && termCode) {
-      const [cloudGrades] = await db.cloudPool.query(
-        `SELECT subject_offering_id, student_id, student_section_id, term, mapeh_component, mapeh_key, initial_grade, quarterly_grade, remarks
-         FROM STUDENT_GRADE
-         WHERE subject_offering_id = ? AND term = ?`,
-        [subjectOfferingId, termCode]
-      );
-
-      if (cloudGrades && cloudGrades.length > 0) {
-        for (const g of cloudGrades) {
-          await db.execute(
-            `INSERT INTO STUDENT_GRADE (
-              subject_offering_id, student_id, student_section_id, term, mapeh_component, mapeh_key, initial_grade, quarterly_grade, remarks, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(6), NOW(6))
-            ON DUPLICATE KEY UPDATE
-              student_section_id = VALUES(student_section_id),
-              initial_grade = VALUES(initial_grade),
-              quarterly_grade = VALUES(quarterly_grade),
-              remarks = VALUES(remarks),
-              updated_at = NOW(6)`,
-            [
-              g.subject_offering_id,
-              g.student_id,
-              g.student_section_id || null,
-              g.term,
-              g.mapeh_component || null,
-              g.mapeh_key || 'CORE',
-              g.initial_grade,
-              g.quarterly_grade,
-              g.remarks || null,
-            ]
-          );
-        }
-      }
-    }
-  })();
-
-  try {
-    await Promise.race([syncWork, timeoutPromise]);
-  } catch (err) {
-    console.log(`[CloudAutoSync] Bypassed cloud sync (${err.message}). Serving local database.`);
-  }
-}
-
-/**
- * Asynchronously forward batch scores and student grades to Aiven Cloud (Dual-Write)
- */
-async function forwardScoresToCloud(scoresToForward, gradesToForward) {
+async function forwardScoresToCloud(scoresToForward) {
   if (!db.cloudPool) return;
   try {
     for (const item of scoresToForward) {
@@ -1636,40 +1471,6 @@ async function forwardScoresToCloud(scoresToForward, gradesToForward) {
       );
     }
 
-    if (Array.isArray(gradesToForward)) {
-      for (const g of gradesToForward) {
-        await db.cloudPool.query(
-          `INSERT INTO STUDENT_GRADE (
-            subject_offering_id,
-            student_id,
-            student_section_id,
-            term,
-            mapeh_component,
-            initial_grade,
-            quarterly_grade,
-            remarks,
-            created_at,
-            updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(6), NOW(6))
-          ON DUPLICATE KEY UPDATE
-            student_section_id = VALUES(student_section_id),
-            initial_grade = VALUES(initial_grade),
-            quarterly_grade = VALUES(quarterly_grade),
-            remarks = VALUES(remarks),
-            updated_at = NOW(6)`,
-          [
-            g.subject_offering_id,
-            g.student_id,
-            g.student_section_id || null,
-            g.term,
-            g.mapeh_component || null,
-            g.initial_grade,
-            g.quarterly_grade,
-            g.remarks,
-          ]
-        );
-      }
-    }
     console.log(`☁️ [CloudSync] Dual-write: Successfully forwarded ${scoresToForward.length} score(s) to Aiven Cloud!`);
   } catch (err) {
     console.warn('⚠️ [CloudSync] Could not forward scores to Aiven Cloud (saved locally):', err.message);
@@ -1681,10 +1482,10 @@ async function forwardScoresToCloud(scoresToForward, gradesToForward) {
  * Requirement 3: Score Entry Endpoint & Requirement 4: Auto-Calculation & Persistence
  */
 async function handleBatchScores(req, res) {
-  await GradeTransmutationConfig.getActiveTiers();
   const connection = await db.getConnection();
   try {
-    const { subject_offering_id, term = 'T1', scores, examConfig } = req.body;
+    const { subject_offering_id, term, scores } = req.body;
+    if (!/^T[123]$/.test(String(term))) return res.status(400).json({ error: 'Choose the term explicitly.' });
 
     if (!subject_offering_id) {
       return res.status(400).json({ error: 'subject_offering_id is required.' });
@@ -1710,26 +1511,17 @@ async function handleBatchScores(req, res) {
     const rawComponent = req.body.mapeh_component || req.body.component;
     const activeMapehComponent = isMapeh ? normalizeMapehComponent(rawComponent) : null;
 
-    const activeTerm = await resolveActiveAcademicTerm(school_year_id);
-    const sheetData = await ensureGradeSheet(subject_offering_id, school_year_id, termName);
-    const { gradeSheetId, lockStatus, termId: sheetTermId } = sheetData;
-
-    const isTermActive = Boolean(activeTerm && Number(sheetTermId) === Number(activeTerm.term_id));
-    const isDeadlinePast = activeTerm?.grade_submission_deadline_at
-      ? new Date(activeTerm.grade_submission_deadline_at) <= new Date()
-      : false;
-    const isEditable = !isProtectedGradeSheet(sheetData) && isTermActive && (
-      !isDeadlinePast ||
-      lockStatus === 'EDITABLE' ||
-      lockStatus === 'OPEN' ||
-      lockStatus === 'TEMPORARILY_REOPENED'
-    );
-
-    if (!isEditable) {
-      return res.status(403).json({
-        error: `This class record belongs to a closed term (${termName}) and is read-only.`,
-        is_locked: true,
-      });
+    const [taRows] = await connection.execute(
+      `SELECT teacher_assignment_id FROM TEACHER_ASSIGNMENT WHERE subject_offering_id = ? AND user_id = ?
+        AND (assigned_from IS NULL OR assigned_from <= UTC_DATE()) AND (assigned_until IS NULL OR assigned_until >= UTC_DATE())`,
+      [subject_offering_id, req.currentUser.user_id]);
+    if (taRows.length !== 1) return res.status(403).json({ error: 'A unique current teacher assignment is required.' });
+    const teacherAssignmentId = taRows[0].teacher_assignment_id;
+    await connection.beginTransaction();
+    const sheetData = await ensureGradeSheet(subject_offering_id, school_year_id, termName, connection);
+    const { gradeSheetId } = sheetData;
+    if (!await GradeSheet.canEdit({ gradeSheetId }, req.currentUser, connection, { lock: true })) {
+      throw httpError(403, 'SHEET_CLOSED', 'This grade sheet is no longer open for editing. Reload its submission status.');
     }
 
     // Normalize scores input (handles flat array, student-keyed object, or nested categories)
@@ -1867,8 +1659,8 @@ async function handleBatchScores(req, res) {
     }
 
     const [secMapRows] = await connection.execute(
-      `SELECT student_section_id, student_id FROM STUDENT_SECTION WHERE section_id = ?`,
-      [section_id]
+      `SELECT student_section_id, student_id FROM STUDENT_SECTION WHERE section_id = ? AND school_year_id = ?`,
+      [section_id, school_year_id]
     );
 
     const secIdByStudentId = {};
@@ -1877,22 +1669,6 @@ async function handleBatchScores(req, res) {
       secIdByStudentId[r.student_id] = r.student_section_id;
       studentIdBySecId[r.student_section_id] = r.student_id;
     });
-
-    let teacherAssignmentId = null;
-    const [taRows] = await connection.execute(
-      `SELECT teacher_assignment_id FROM TEACHER_ASSIGNMENT WHERE subject_offering_id = ? ORDER BY teacher_assignment_id DESC LIMIT 1`,
-      [subject_offering_id]
-    );
-    if (taRows.length > 0) {
-      teacherAssignmentId = taRows[0].teacher_assignment_id;
-    } else {
-      const [anyTa] = await connection.execute(`SELECT teacher_assignment_id FROM TEACHER_ASSIGNMENT LIMIT 1`);
-      if (anyTa.length > 0) {
-        teacherAssignmentId = anyTa[0].teacher_assignment_id;
-      }
-    }
-
-    await connection.beginTransaction();
 
     for (const item of scoreEntries) {
       const rawAssId = String(item.assessment_id || item.activity_id || '').toLowerCase();
@@ -1926,27 +1702,12 @@ async function handleBatchScores(req, res) {
         studentId = studentIdBySecId[studentSectionId] || null;
       }
 
-      if (!studentSectionId && studentId) {
-        const [existingSS] = await connection.execute(
-          'SELECT student_section_id FROM STUDENT_SECTION WHERE student_id = ? AND section_id = ? LIMIT 1',
-          [studentId, section_id]
-        );
-        if (existingSS.length > 0) {
-          studentSectionId = existingSS[0].student_section_id;
-          secIdByStudentId[studentId] = studentSectionId;
-          studentIdBySecId[studentSectionId] = studentId;
-        } else {
-          const [newSS] = await connection.execute(
-            'INSERT INTO STUDENT_SECTION (student_id, section_id, school_year_id) VALUES (?, ?, ?)',
-            [studentId, section_id, school_year_id]
-          );
-          studentSectionId = newSS.insertId;
-          secIdByStudentId[studentId] = studentSectionId;
-          studentIdBySecId[studentSectionId] = studentId;
-        }
+      if (!studentSectionId || !studentId || Number(studentIdBySecId[studentSectionId]) !== studentId) {
+        throw httpError(400, 'INVALID_ENROLLMENT', 'The learner is not enrolled in this section and school year.');
       }
-
-      if (!assessmentId) continue;
+      if (!assessmentId || !Object.hasOwn(hpsByActivityId, assessmentId)) {
+        throw httpError(400, 'INVALID_ASSESSMENT', 'The assessment does not belong to this grade sheet.');
+      }
 
       const rawScore = item.raw_score !== null && item.raw_score !== undefined && item.raw_score !== ''
         ? Number(item.raw_score)
@@ -1954,7 +1715,7 @@ async function handleBatchScores(req, res) {
 
       // Backend Guard: Validate raw_score does not exceed highest_possible_score
       if (rawScore !== null) {
-        if (rawScore < 0) {
+        if (!Number.isFinite(rawScore) || rawScore < 0) {
           await connection.rollback();
           return res.status(400).json({
             error: `Score cannot be negative (received: ${rawScore}).`,
@@ -1970,7 +1731,7 @@ async function handleBatchScores(req, res) {
       }
 
       const scoreStatus = rawScore !== null ? 'ENCODED' : 'NOT_ENCODED';
-      const itemTeacherAssId = item.teacher_assignment_id || teacherAssignmentId;
+      const itemTeacherAssId = teacherAssignmentId;
 
       let existingScore = [];
       if (studentSectionId) {
@@ -1982,7 +1743,7 @@ async function handleBatchScores(req, res) {
 
       if (existingScore.length > 0) {
         await connection.execute(
-          `UPDATE SCORE 
+          `UPDATE SCORE
            SET raw_score = ?, score_status = ?, updated_at = NOW(6)
            WHERE score_id = ?`,
           [rawScore, scoreStatus, existingScore[0].score_id]
@@ -1999,290 +1760,38 @@ async function handleBatchScores(req, res) {
       scoresToForward.push({ assessmentId, studentSectionId, rawScore, scoreStatus, itemTeacherAssId });
     }
 
-    // Step 1: Commit score rows to database first so newly modified SCORE records are permanently committed
-    await connection.commit();
-
-    // Step 2: Begin transaction for recalculating and upserting STUDENT_GRADE summaries
-    await connection.beginTransaction();
-
-    let effectiveExamConfig = isMapeh
-      ? { st1Weight: 25, st2Weight: 25, teWeight: 25, st1HPS: 25, st2HPS: 25, teHPS: 25 }
-      : {
-          st1Weight: examConfig?.st1Weight !== undefined ? Number(examConfig.st1Weight) : 30,
-          st2Weight: examConfig?.st2Weight !== undefined ? Number(examConfig.st2Weight) : 30,
-          teWeight: examConfig?.teWeight !== undefined ? Number(examConfig.teWeight) : 40,
-        };
-    if (
-      !isMapeh &&
-      effectiveExamConfig.st1Weight === 20 &&
-      effectiveExamConfig.st2Weight === 20 &&
-      effectiveExamConfig.teWeight === 60
-    ) {
-      effectiveExamConfig = { st1Weight: 30, st2Weight: 30, teWeight: 40 };
-    }
-
-    let weights;
-    const [weightRows] = await connection.execute(
-      `SELECT scw.percentage AS weight_percentage, ct.component_code
-       FROM SUBJECT_COMPONENT_WEIGHT scw
-       JOIN COMPONENT_TYPE ct ON ct.component_type_id = scw.component_type_id
-       WHERE scw.subject_id = ? AND scw.school_year_id = ?`,
-      [subject_id, school_year_id]
-    );
-
-    weights = weightsFromRows(weightRows);
-
-    const actCondition = isMapeh ? 'ga.mapeh_component = ?' : '(ga.mapeh_component IS NULL OR ga.mapeh_component = \'\')';
-    const actParams = isMapeh ? [gradeSheetId, activeMapehComponent] : [gradeSheetId];
-
-    const [assessments] = await connection.execute(
-      `SELECT 
-         ga.activity_id AS assessment_id,
-         ga.activity_name,
-         ga.highest_possible_score AS max_score,
-         ct.component_code
-       FROM GRADE_ACTIVITY ga
-       LEFT JOIN SUBJECT_COMPONENT_WEIGHT scw ON scw.subj_comp_weight_id = ga.subj_comp_weight_id
-       LEFT JOIN COMPONENT_TYPE ct ON ct.component_type_id = scw.component_type_id
-       WHERE ga.grade_sheet_id = ? AND ${actCondition} AND (ga.status = 'ACTIVE' OR ga.status IS NULL) AND ga.status != 'ARCHIVED'`,
-      actParams
-    );
-
-    const [allStudents] = await connection.execute(
-      `SELECT s.student_id, ss.student_section_id
-       FROM STUDENT_SECTION ss
-       JOIN STUDENT s ON s.student_id = ss.student_id
-       WHERE ss.section_id = ? AND (s.status = 'ACTIVE' OR s.status IS NULL)`,
-      [section_id]
-    );
-
-    let allRawScores = {};
-    if (assessments.length > 0) {
-      const actIds = assessments.map((a) => a.assessment_id);
-      const ph = actIds.map(() => '?').join(',');
-      const [scoreData] = await connection.execute(
-        `SELECT sc.activity_id, sc.student_section_id, sc.raw_score, ss.student_id
-         FROM SCORE sc
-         LEFT JOIN STUDENT_SECTION ss ON ss.student_section_id = sc.student_section_id
-         WHERE sc.activity_id IN (${ph})`,
-        actIds
-      );
-
-      scoreData.forEach((s) => {
-        if (s.student_section_id) {
-          if (!allRawScores[s.student_section_id]) allRawScores[s.student_section_id] = {};
-          allRawScores[s.student_section_id][s.activity_id] = s.raw_score !== null ? Number(s.raw_score) : null;
-        }
-
-        const sId = s.student_id || studentIdBySecId[s.student_section_id];
-        if (sId) {
-          if (!allRawScores[`st_${sId}`]) allRawScores[`st_${sId}`] = {};
-          allRawScores[`st_${sId}`][s.activity_id] = s.raw_score !== null ? Number(s.raw_score) : null;
-        }
-      });
-    }
-
-    // For MAPEH, fetch other sub-component activities and scores to update STUDENT_GRADE with combined quarterly grade
-    let otherComponentAssessments = [];
-    let otherRawScores = {};
-    let otherGradeMap = {};
-    if (isMapeh) {
-      const otherComponent = activeMapehComponent === 'MA' ? 'PEH' : 'MA';
-      const [otherActs] = await connection.execute(
-        `SELECT ga.activity_id AS assessment_id, ga.activity_name, ga.highest_possible_score AS max_score, ct.component_code
-         FROM GRADE_ACTIVITY ga
-         LEFT JOIN SUBJECT_COMPONENT_WEIGHT scw ON scw.subj_comp_weight_id = ga.subj_comp_weight_id
-         LEFT JOIN COMPONENT_TYPE ct ON ct.component_type_id = scw.component_type_id
-         WHERE ga.grade_sheet_id = ? AND ga.mapeh_component = ? AND (ga.status = 'ACTIVE' OR ga.status IS NULL) AND ga.status != 'ARCHIVED'`,
-        [gradeSheetId, otherComponent]
-      );
-      otherComponentAssessments = otherActs;
-
-      if (otherActs.length > 0) {
-        const otherActIds = otherActs.map((a) => a.assessment_id);
-        const [otherScoreData] = await connection.execute(
-          `SELECT sc.activity_id, sc.student_section_id, sc.raw_score, ss.student_id
-           FROM SCORE sc
-           LEFT JOIN STUDENT_SECTION ss ON ss.student_section_id = sc.student_section_id
-           WHERE sc.activity_id IN (${otherActIds.map(() => '?').join(',')})`,
-          otherActIds
-        );
-        otherScoreData.forEach((s) => {
-          if (s.student_section_id) {
-            if (!otherRawScores[s.student_section_id]) otherRawScores[s.student_section_id] = {};
-            otherRawScores[s.student_section_id][s.activity_id] = s.raw_score !== null ? Number(s.raw_score) : null;
-          }
-
-          const sId = s.student_id || studentIdBySecId[s.student_section_id];
-          if (sId) {
-            if (!otherRawScores[`st_${sId}`]) otherRawScores[`st_${sId}`] = {};
-            otherRawScores[`st_${sId}`][s.activity_id] = s.raw_score !== null ? Number(s.raw_score) : null;
-          }
-        });
-      }
-
-      const [otherGradeRows] = await connection.execute(
-        `SELECT student_id, initial_grade, quarterly_grade, remarks
-         FROM STUDENT_GRADE
-         WHERE subject_offering_id = ? AND term = ? AND mapeh_component = ?`,
-        [subject_offering_id, termCode, otherComponent]
-      );
-      otherGradeRows.forEach((r) => {
-        otherGradeMap[r.student_id] = r;
-      });
-    }
-
-    const gradesToUpsert = [];
+    // A preview is returned for convenience; accepted STUDENT_GRADE rows only change on Submit.
     const calculatedResults = {};
-
-    allStudents.forEach((student) => {
-      const sSecId = student.student_section_id;
-      const sId = student.student_id;
-      const studentScores = {
-        ...(sSecId && allRawScores[sSecId] ? allRawScores[sSecId] : {}),
-        ...(sId && allRawScores[`st_${sId}`] ? allRawScores[`st_${sId}`] : {}),
-      };
-
-      const summary = calculateStudentSummary({
-        assessments: assessments.map((a) => ({
-          assessment_id: a.assessment_id,
-          activity_name: a.activity_name,
-          title: a.activity_name,
-          component_code: normalizeAssessmentType(a.component_code || a.activity_name).code,
-          max_score: Number(a.max_score || 0),
-        })),
-        scores: studentScores,
-        weights,
-        examConfig: effectiveExamConfig,
-        isMapeh,
-      });
-
-      const activeCKey = isMapeh ? activeMapehComponent : 'ALL';
-      const activeCMap = compExamMap[activeCKey] || compExamMap['ALL'] || {};
-      calculatedResults[sId] = {
-        ...summary,
-        examinations: {
-          st1: activeCMap.st1 && studentScores[activeCMap.st1] !== undefined ? studentScores[activeCMap.st1] : '',
-          st2: activeCMap.st2 && studentScores[activeCMap.st2] !== undefined ? studentScores[activeCMap.st2] : '',
-          te: activeCMap.te && studentScores[activeCMap.te] !== undefined ? studentScores[activeCMap.te] : '',
-        },
-      };
-
-      if (summary.initialGrade !== null) {
-        let otherQuarterly = null;
-        let otherInitial = null;
-
-        if (isMapeh) {
-          if (otherComponentAssessments.length > 0) {
-            const otherStudentScores = {
-              ...(sSecId && otherRawScores[sSecId] ? otherRawScores[sSecId] : {}),
-              ...(sId && otherRawScores[`st_${sId}`] ? otherRawScores[`st_${sId}`] : {}),
-            };
-            const otherSummary = calculateStudentSummary({
-              assessments: otherComponentAssessments.map((a) => ({
-                assessment_id: a.assessment_id,
-                activity_name: a.activity_name,
-                title: a.activity_name,
-                component_code: normalizeAssessmentType(a.component_code || a.activity_name).code,
-                max_score: Number(a.max_score || 0),
-              })),
-              scores: otherStudentScores,
-              weights,
-              examConfig: effectiveExamConfig,
-              isMapeh: true,
-            });
-
-            if (otherSummary.quarterlyGrade !== null && typeof otherSummary.quarterlyGrade === 'number') {
-              otherQuarterly = otherSummary.quarterlyGrade;
-              otherInitial = otherSummary.initialGrade;
-            }
-          }
-
-          if (otherQuarterly === null && otherGradeMap[sId]?.quarterly_grade !== null && otherGradeMap[sId]?.quarterly_grade !== undefined) {
-            otherQuarterly = Number(otherGradeMap[sId].quarterly_grade);
-            otherInitial = otherGradeMap[sId].initial_grade !== null && otherGradeMap[sId].initial_grade !== undefined
-              ? Number(otherGradeMap[sId].initial_grade)
-              : null;
-          }
-        }
-
-        // Sub-component row for MAPEH, or standard row for non-MAPEH
-        gradesToUpsert.push({
-          subject_offering_id,
-          student_id: sId,
-          student_section_id: sSecId,
-          term: termCode,
-          mapeh_component: isMapeh ? activeMapehComponent : null,
-          initial_grade: summary.initialGrade,
-          quarterly_grade: summary.quarterlyGrade,
-          remarks: summary.remarks,
-        });
-
-        // Combined summary row for MAPEH (mapeh_component = null)
-        if (isMapeh && otherQuarterly !== null) {
-          const finalQuarterly = Math.round((summary.quarterlyGrade + otherQuarterly) / 2);
-          const finalInitial = otherInitial !== null
-            ? parseFloat(((summary.initialGrade + otherInitial) / 2).toFixed(2))
-            : summary.initialGrade;
-          gradesToUpsert.push({
-            subject_offering_id,
-            student_id: sId,
-            student_section_id: sSecId,
-            term: termCode,
-            mapeh_component: null,
-            initial_grade: finalInitial,
-            quarterly_grade: finalQuarterly,
-            remarks: finalQuarterly >= 75 ? 'Passed' : 'Failed',
-          });
+    try {
+      const previewInputs = await loadGradeInputs({ ...offeringRows[0], subject_offering_id }, gradeSheetId, connection);
+      for (const student of previewInputs.students) {
+        try {
+          const grades = GradeComputationService.calculateGrades({ ...previewInputs, students: [student],
+            componentOnly: isMapeh ? activeMapehComponent : null });
+          const grade = grades.find(g => !isMapeh || g.mapehComponent === activeMapehComponent);
+          calculatedResults[student.student_id] = { initialGrade: grade.initialGrade, quarterlyGrade: grade.termGrade, termGrade: grade.termGrade };
+        } catch (error) {
+          if (!error.statusCode) throw error;
+          calculatedResults[student.student_id] = { initialGrade: null, quarterlyGrade: null, termGrade: null, calculationError: error.code };
         }
       }
-    });
-
-    for (const g of gradesToUpsert) {
-      await connection.execute(
-        `INSERT INTO STUDENT_GRADE (
-          subject_offering_id,
-          student_id,
-          student_section_id,
-          term,
-          mapeh_component,
-          initial_grade,
-          quarterly_grade,
-          remarks,
-          created_at,
-          updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(6), NOW(6))
-        ON DUPLICATE KEY UPDATE
-          student_section_id = VALUES(student_section_id),
-          initial_grade = VALUES(initial_grade),
-          quarterly_grade = VALUES(quarterly_grade),
-          remarks = VALUES(remarks),
-          updated_at = NOW(6)`,
-        [
-          g.subject_offering_id,
-          g.student_id,
-          g.student_section_id || null,
-          g.term,
-          g.mapeh_component || null,
-          g.initial_grade,
-          g.quarterly_grade,
-          g.remarks,
-        ]
-      );
+    } catch (error) {
+      if (!error.statusCode) throw error;
+      // Incomplete grading configuration must not discard valid autosaved scores.
     }
 
     await connection.commit();
 
-    // Dual-write: forward scores and student grades to Aiven Cloud (runs in background so response returns in 5ms)
-    forwardScoresToCloud(scoresToForward, gradesToUpsert);
+    // Keep existing raw-score mirroring separate from accepted grade submission.
+    forwardScoresToCloud(scoresToForward);
 
     res.json({
-      message: 'Scores batch saved and grades calculated successfully',
+      message: 'Scores saved. Grades remain a preview until submission.',
       subject_offering_id,
       is_mapeh: isMapeh,
       mapeh_component: activeMapehComponent,
       term: termCode,
-      recalculated_grades_count: gradesToUpsert.length,
+      recalculated_grades_count: 0,
       students: calculatedResults,
     });
   } catch (err) {
@@ -2290,25 +1799,25 @@ async function handleBatchScores(req, res) {
       await connection.rollback();
     } catch (_) {}
     console.error('Error in POST /api/scores/batch:', err);
-    res.status(500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: err.message });
   } finally {
     connection.release();
   }
 }
 
-router.post('/scores/batch', handleBatchScores);
-router.post('/class-record/scores/batch', handleBatchScores);
+router.post('/scores/batch', resolveCurrentUser, handleBatchScores);
+router.post('/class-record/scores/batch', resolveCurrentUser, handleBatchScores);
 
 /**
  * POST /api/class-record/calculate-and-save
  */
-router.post('/class-record/calculate-and-save', async (req, res) => {
+router.post('/class-record/calculate-and-save', resolveCurrentUser, async (req, res) => {
   try {
     const { subject_offering_id, term = 'T1' } = req.body;
     if (!subject_offering_id) {
       return res.status(400).json({ error: 'subject_offering_id is required.' });
     }
-    await handleBatchScores({ body: { subject_offering_id, term, scores: [] } }, res);
+    await handleBatchScores({ ...req, currentUser: req.currentUser, body: { ...req.body, subject_offering_id, term, scores: [] } }, res);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -2328,7 +1837,7 @@ router.get('/class-record/:subject_offering_id/export', async (req, res) => {
 
     // 1. Fetch class context & metadata
     const [contextRows] = await db.execute(
-      `SELECT 
+      `SELECT
          so.subject_offering_id,
          so.subject_id,
          so.section_id,
@@ -2402,7 +1911,7 @@ router.get('/class-record/:subject_offering_id/export', async (req, res) => {
     const actParams = isMapeh ? [gradeSheetId, activeMapehComponent] : [gradeSheetId];
 
     const [activityRows] = await db.execute(
-      `SELECT 
+      `SELECT
          ga.activity_id,
          ga.activity_name,
          ga.highest_possible_score AS max_score,
@@ -2466,7 +1975,7 @@ router.get('/class-record/:subject_offering_id/export', async (req, res) => {
 
     // 4. Fetch students & scores
     const [studentRows] = await db.execute(
-      `SELECT 
+      `SELECT
          s.student_id,
          ss.student_section_id,
          s.LRN,
@@ -2477,7 +1986,7 @@ router.get('/class-record/:subject_offering_id/export', async (req, res) => {
        FROM STUDENT_SECTION ss
        JOIN STUDENT s ON s.student_id = ss.student_id
        WHERE ss.section_id = ? AND (s.status = 'ACTIVE' OR s.status IS NULL)
-       ORDER BY 
+       ORDER BY
          CASE WHEN UPPER(s.sex) IN ('M', 'MALE') THEN 0 ELSE 1 END ASC,
          s.last_name ASC,
          s.first_name ASC`,
@@ -3035,216 +2544,26 @@ router.get('/class-record/:subject_offering_id/export', async (req, res) => {
  * Submits grades for a class / subject offering / section and term, setting GRADE_SHEET workflow_status = 'SUBMITTED'
  * and persisting student quarterly grades into STUDENT_GRADE so MasterSheetService reads them for the adviser's section.
  */
-router.post('/class-record/submit', async (req, res) => {
-  const connection = await db.getConnection();
+router.post('/class-record/submit', resolveCurrentUser, async (req, res) => {
   try {
-    const { subject_offering_id, section_id, term = 'T1', students = [] } = req.body;
-    const { termCode, termName } = normalizeTerm(term);
+    const result = await submitClassGrades(req.body, req.currentUser);
+    return res.json(result);
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({ code: error.code || 'GRADE_SUBMISSION_FAILED',
+      error: error.statusCode ? error.message : 'Grades could not be submitted. No submission was confirmed. Please retry.' });
+  }
+});
 
-    // Resolve subject offerings to submit
-    let offeringIds = [];
-    if (subject_offering_id) {
-      offeringIds.push(Number(subject_offering_id));
-    } else if (section_id) {
-      const [offerings] = await connection.execute(
-        'SELECT subject_offering_id FROM SUBJECT_OFFERING WHERE section_id = ?',
-        [section_id]
-      );
-      offerings.forEach((off) => {
-        if (!offeringIds.includes(off.subject_offering_id)) {
-          offeringIds.push(off.subject_offering_id);
-        }
-      });
-    }
-
-    if (offeringIds.length === 0 && (subject_offering_id || section_id)) {
-      const rawId = Number(String(subject_offering_id || section_id).replace(/\D/g, '')) || 1;
-      offeringIds.push(rawId);
-    }
-
-    for (const offId of offeringIds) {
-      // 1. Get school_year_id
-      const [offRows] = await connection.execute(
-        'SELECT school_year_id FROM SUBJECT_OFFERING WHERE subject_offering_id = ?',
-        [offId]
-      );
-      const schoolYearId = offRows.length > 0 ? offRows[0].school_year_id : 1;
-
-      // 2. Ensure GRADE_SHEET exists
-      const sheetData = await ensureGradeSheet(offId, schoolYearId, termName);
-      const gradeSheetId = sheetData.gradeSheetId;
-
-      // 3. Update GRADE_SHEET workflow_status to 'SUBMITTED'
-      await connection.execute(
-        `UPDATE GRADE_SHEET
-         SET workflow_status = 'SUBMITTED', submitted_at = NOW(6), updated_at = NOW(6)
-         WHERE grade_sheet_id = ?`,
-        [gradeSheetId]
-      );
-
-      // 4. Save student grades if provided
-      if (Array.isArray(students) && students.length > 0) {
-        for (const s of students) {
-          const sId = s.student_id || s.id;
-          const sSecId = s.student_section_id || null;
-          const cleanStudentId = typeof sId === 'string' ? Number(sId.replace(/\D/g, '')) || 1 : Number(sId);
-
-          const termGradePairs = [
-            { termCode: 'T1', val: s.term1 },
-            { termCode: 'T2', val: s.term2 },
-            { termCode: 'T3', val: s.term3 },
-          ];
-
-          for (const pair of termGradePairs) {
-            const qg = pair.val;
-            if (sId && qg !== undefined && qg !== null && qg !== "") {
-              const numericGrade = Number(qg);
-              if (!isNaN(numericGrade)) {
-                const remarks = numericGrade >= 75 ? 'Passed' : 'Failed';
-                await connection.execute(
-                  `INSERT INTO STUDENT_GRADE (
-                    subject_offering_id, student_id, student_section_id, term, quarterly_grade, remarks, created_at, updated_at
-                  ) VALUES (?, ?, ?, ?, ?, ?, NOW(6), NOW(6))
-                  ON DUPLICATE KEY UPDATE
-                    student_section_id = VALUES(student_section_id),
-                    quarterly_grade = VALUES(quarterly_grade),
-                    remarks = VALUES(remarks),
-                    updated_at = NOW(6)`,
-                  [offId, cleanStudentId, sSecId, pair.termCode, numericGrade, remarks]
-                );
-              }
-            }
-          }
-        }
-      }
-      // Resolve teacher, adviser, and offering info for audit and notifications
-      const actorUserId = req.headers['x-auralis-user-id'] || req.body.user_id || null;
-      let subjName = 'Subject';
-      let secName  = 'Section';
-      let syLabel  = null;
-      let teacherName = 'Subject Teacher';
-      let isAdviser = false;
-
-      try {
-        const [targetInfo] = await connection.execute(
-          `SELECT sub.subject_name, sec.section_name, sec.section_id, sy.starts_on, sy.ends_on
-           FROM SUBJECT_OFFERING so
-           LEFT JOIN SUBJECT sub ON so.subject_id = sub.subject_id
-           LEFT JOIN SECTION sec ON so.section_id = sec.section_id
-           LEFT JOIN SCHOOL_YEAR sy ON so.school_year_id = sy.school_year_id
-           WHERE so.subject_offering_id = ?`,
-          [offId]
-        );
-        subjName = targetInfo[0]?.subject_name || 'Subject';
-        secName  = targetInfo[0]?.section_name || 'Section';
-        syLabel  = targetInfo[0]?.starts_on && targetInfo[0]?.ends_on ? `${targetInfo[0].starts_on}–${targetInfo[0].ends_on}` : null;
-        const resolvedSecId = targetInfo[0]?.section_id || section_id;
-
-        if (actorUserId) {
-          const [uRows] = await connection.execute(
-            `SELECT CONCAT(first_name, ' ', last_name) AS full_name, role FROM USER WHERE user_id = ?`,
-            [actorUserId]
-          );
-          if (uRows.length && uRows[0].full_name && uRows[0].full_name.trim()) {
-            teacherName = uRows[0].full_name.trim();
-          }
-
-          if (resolvedSecId) {
-            const [advCheck] = await connection.execute(
-              `SELECT adviser_assignment_id FROM SECTION_ADVISER_ASSIGNMENT WHERE user_id = ? AND section_id = ? LIMIT 1`,
-              [actorUserId, resolvedSecId]
-            );
-            if (advCheck.length > 0) {
-              isAdviser = true;
-            }
-          }
-        } else {
-          // If no actorUserId in request, resolve assigned teacher or adviser for this class
-          const [taRows] = await connection.execute(
-            `SELECT CONCAT(u.first_name, ' ', u.last_name) AS full_name
-             FROM TEACHER_ASSIGNMENT ta
-             JOIN USER u ON ta.user_id = u.user_id
-             WHERE ta.subject_offering_id = ?
-             LIMIT 1`,
-            [offId]
-          );
-          if (taRows.length && taRows[0].full_name && taRows[0].full_name.trim()) {
-            teacherName = taRows[0].full_name.trim();
-          } else if (resolvedSecId) {
-            const [saaRows] = await connection.execute(
-              `SELECT CONCAT(u.first_name, ' ', u.last_name) AS full_name
-               FROM SECTION_ADVISER_ASSIGNMENT saa
-               JOIN USER u ON saa.user_id = u.user_id
-               WHERE saa.section_id = ?
-               LIMIT 1`,
-              [resolvedSecId]
-            );
-            if (saaRows.length && saaRows[0].full_name && saaRows[0].full_name.trim()) {
-              teacherName = saaRows[0].full_name.trim();
-              isAdviser = true;
-            }
-          }
-        }
-      } catch (infoErr) {
-        console.warn('Failed to resolve offering/actor info:', infoErr.message);
-      }
-
-      const submitterRoleLabel = isAdviser ? 'Adviser' : 'Subject Teacher';
-      const targetStr = `${subjName} — ${secName}`;
-
-      // Audit log the submission
-      try {
-        await AuditEvent.create({
-          user_id: actorUserId ? Number(actorUserId) : null,
-          actor_context: {
-            source: 'user',
-            acting_as: isAdviser ? 'Class Adviser' : 'Subject Teacher',
-            role: isAdviser ? 'adviser' : 'subject_teacher',
-          },
-          event_type: 'GRADE_SHEET_SUBMITTED',
-          module_name: 'GRADING',
-          entity_type: 'GRADE_SHEET',
-          entity_id: gradeSheetId,
-          after_data: { workflow_status: 'SUBMITTED', term: termName },
-          metadata: {
-            school_year: syLabel,
-            term: termName,
-            subject: subjName,
-            section: secName,
-            target: targetStr,
-            summary: `${teacherName} (${submitterRoleLabel}) submitted ${termName} ${subjName} grade sheet for ${secName}.`,
-          },
-        });
-      } catch (auditErr) {
-        console.error('Failed to log grade sheet submission audit:', auditErr.message);
-      }
-
-      // ── Notify Department Head of grade submission via NotificationService ──
-      try {
-        await NotificationService.notifyGradeSubmission({
-          subjectOfferingId: offId,
-          gradeSheetId,
-          teacherName,
-          submitterRole: isAdviser ? 'Adviser' : null,
-          subjectName: subjName,
-          sectionName: secName,
-          termName,
-          connection,   // reuse transaction connection so notifs are part of the same commit
-        });
-      } catch (notifErr) {
-        // Notification failure must never roll back the grade submission itself
-        console.warn('[classRecordRoutes] Failed to send dept-head notification:', notifErr.message);
-      }
-    }
-
-    await connection.commit();
-    res.json({ message: 'Grades submitted to adviser master sheet successfully', submitted: true });
-  } catch (err) {
-    await connection.rollback();
-    console.error('Error in POST /api/class-record/submit:', err);
-    res.status(500).json({ error: err.message });
-  } finally {
-    connection.release();
+router.get('/class-record/grading-summary/:subjectOfferingId', resolveCurrentUser, async (req, res) => {
+  try {
+    const result = await gradingSummary({
+      subject_offering_id: req.params.subjectOfferingId, section_id: req.query.section_id, school_year_id: req.query.school_year_id,
+    }, req.currentUser);
+    res.set('Cache-Control', 'no-store');
+    return res.json(result);
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({ code: error.code || 'GRADING_SUMMARY_FAILED',
+      error: error.statusCode ? error.message : 'The grading sheet could not be loaded. Please retry.' });
   }
 });
 
@@ -3256,7 +2575,7 @@ const GradingSheetWorkbookService = require('../services/GradingSheetWorkbookSer
 router.post('/class-record/export-grading-sheet', async (req, res) => {
   try {
     const { sectionName, gradeLevel, subjectName, teacherName, region, division, schoolId, schoolName, schoolYear, students } = req.body;
-    
+
     const workbook = await GradingSheetWorkbookService.generateWorkbook({
       sectionName,
       gradeLevel,
@@ -3282,35 +2601,5 @@ router.post('/class-record/export-grading-sheet', async (req, res) => {
   }
 });
 
-async function syncOfferingGradesInternal(subjectOfferingId, termCode = 'T1') {
-  if (!subjectOfferingId) return;
-  let cleanOfferingId = typeof subjectOfferingId === 'number' ? subjectOfferingId : (parseInt(String(subjectOfferingId).replace(/\D/g, ''), 10) || null);
-
-  if (!cleanOfferingId) {
-    try {
-      const rawSecId = parseInt(String(subjectOfferingId).replace(/\D/g, ''), 10) || subjectOfferingId;
-      const [offRows] = await db.execute(
-        `SELECT subject_offering_id FROM SUBJECT_OFFERING WHERE section_id = ? LIMIT 1`,
-        [rawSecId]
-      );
-      if (offRows.length > 0) {
-        cleanOfferingId = offRows[0].subject_offering_id;
-      }
-    } catch (_) {}
-  }
-
-  if (!cleanOfferingId) return;
-
-  try {
-    const fakeRes = {
-      status: () => ({ json: () => {} }),
-      json: () => {},
-    };
-    await handleBatchScores({ body: { subject_offering_id: cleanOfferingId, term: termCode, scores: [] } }, fakeRes);
-  } catch (err) {
-    console.warn('syncOfferingGradesInternal warning:', err.message);
-  }
-}
-
-router.syncOfferingGradesInternal = syncOfferingGradesInternal;
+router.__test = { submitClassGrades, gradingSummary, handleBatchScores };
 module.exports = router;

@@ -256,15 +256,16 @@ class Section {
       console.warn('Teacher sections query error:', err.message);
     }
 
-    // Map section_id -> subject_name taught in that section
+    // Keep teaching context tied to both the section and school year.
     const sectionSubjectMap = {};
     const sectionTeacherMap = {};
     teacherRows.forEach((row) => {
+      const sectionYearKey = `${row.section_id}:${row.school_year_id}`;
       if (row.section_id && row.subject_name) {
-        sectionSubjectMap[row.section_id] = row.subject_name;
+        sectionSubjectMap[sectionYearKey] = row.subject_name;
       }
-      if (row.section_id && !sectionTeacherMap[row.section_id]) {
-        sectionTeacherMap[row.section_id] = row;
+      if (row.section_id && !sectionTeacherMap[sectionYearKey]) {
+        sectionTeacherMap[sectionYearKey] = row;
       }
     });
 
@@ -284,8 +285,8 @@ class Section {
       if (!addedSectionAssignments.has(sectionAssignmentKey)) {
         addedSectionAssignments.add(sectionAssignmentKey);
         const gradeNum = parseInt(String(row.grade_level_name).replace(/\D/g, "")) || "";
-        const teacherMatch = sectionTeacherMap[row.section_id];
-        const subjectName = teacherMatch?.subject_name || sectionSubjectMap[row.section_id] || "Mathematics";
+        const teacherMatch = sectionTeacherMap[sectionAssignmentKey];
+        const subjectName = teacherMatch?.subject_name || sectionSubjectMap[sectionAssignmentKey] || "All subjects";
         const subjectOfferingId = teacherMatch?.subject_offering_id || null;
         const subjectId = teacherMatch?.subject_id || null;
         const isSpecialized = checkIsSpecialized(row.is_specialized);
@@ -323,7 +324,7 @@ class Section {
     // 2. Process Regular Teaching Classes for other section/year assignments.
     for (const row of teacherRows) {
       const teacherKey = `${row.section_id}:${row.school_year_id}:${row.subject_offering_id}`;
-      const teacherMatch = sectionTeacherMap[row.section_id];
+      const teacherMatch = sectionTeacherMap[`${row.section_id}:${row.school_year_id}`];
       const isRepresentedInAdvisory = advisoryRows.some(a => a.section_id === row.section_id && a.school_year_id === row.school_year_id)
         && teacherMatch?.subject_offering_id === row.subject_offering_id;
 

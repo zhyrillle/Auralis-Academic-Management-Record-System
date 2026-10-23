@@ -182,6 +182,7 @@ try {
   await page.waitForURL(/q=Carrots/);
   await page.locator('.section-card').filter({ has: page.getByRole('heading', { name: 'Carrots', exact: true }) }).getByRole('button', { name: 'View Class Records', exact: true }).click();
   await page.getByText('Learner, Demo', { exact: true }).waitFor();
+  assert(reads.some(read => read.path === '/class-record/88' && read.params.read_only === '1'));
   assert.equal(await page.getByRole('button', { name: /^Subject:/ }).count(), 0);
   await page.locator('.term-grade-cell').filter({ hasText: '87' }).first().waitFor();
   assert.equal(await page.getByText('123456789010', { exact: true }).count(), 0);
@@ -203,7 +204,7 @@ try {
   await page.getByRole('button', { name: /^Grade level:/ }).click();
   await page.getByRole('option', { name: 'G8', exact: true }).click();
   await page.waitForURL(/grade=2/);
-  assert.equal(await page.getByRole('heading', { name: 'Carrots', exact: true }).count(), 0);
+  await page.getByRole('heading', { name: 'Carrots', exact: true }).waitFor({ state: 'detached' });
   await page.getByRole('button', { name: /^Grade level:/ }).click();
   await page.getByRole('option', { name: 'All grade levels', exact: true }).click();
   await page.waitForURL(/grade=all/);

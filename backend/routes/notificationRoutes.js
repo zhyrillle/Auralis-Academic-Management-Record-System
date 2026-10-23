@@ -79,6 +79,9 @@ function formatNotification(n) {
     related_entity_type: n.related_entity_type || null,
     related_entity_id:   n.related_entity_id   || null,
     action_link:         n.action_link || null,
+    section_id:          n.section_id || null,
+    school_year_id:      n.school_year_id || null,
+    subject_offering_id: n.subject_offering_id || null,
   };
 }
 
