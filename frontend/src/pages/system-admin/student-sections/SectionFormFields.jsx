@@ -33,6 +33,9 @@ export default function SectionFormFields({
         <DropdownSelect id={`${id}-specialization`} label="Specialization" options={SECTION_PROGRAMS} value={value.program_id} onChange={program_id => update({
           program_id
         })} disabled={disabled} /></div>}
+      <p className="student-admin-hint" style={{ marginTop: 12 }}>
+        Standard curriculum subjects ({value.is_specialized ? "8 core + specialization" : "8 core subjects"}) will automatically be offered for this section and can be managed in the section workspace.
+      </p>
     </section>
   </div>;
 }

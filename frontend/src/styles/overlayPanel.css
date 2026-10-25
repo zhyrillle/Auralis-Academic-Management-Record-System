@@ -53,7 +53,13 @@ body:has(.app-overlay[open]) {
   height: auto;
   max-height: calc(100dvh - 48px);
   border-radius: 18px;
+  overflow: hidden;
   animation-name: overlay-modal-in;
+}
+
+.app-overlay--modal .app-overlay__footer {
+  border-bottom-left-radius: 18px;
+  border-bottom-right-radius: 18px;
 }
 
 .app-overlay--bottom[open] {

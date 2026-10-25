@@ -54,7 +54,7 @@ router.get('/:id', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     if (db.cloudPool) {
-      const { section_name, name, grade_level_id, level, program_id, is_specialized } = req.body;
+      const { section_name, name, grade_level_id, level, program_id, is_specialized, subject_ids, school_year_id } = req.body;
       const finalName = (section_name || name || '').trim();
       const finalGradeLevelId = await Section.resolveGradeLevelId(grade_level_id, level);
       const finalIsSpec = is_specialized ? 1 : 0;
@@ -79,11 +79,171 @@ router.post('/', async (req, res) => {
         [authoritativeId, finalName, finalGradeLevelId, finalProgId, finalIsSpec]
       );
 
+      // 3. Attach default subjects
+      try {
+        await Section.attachDefaultSubjects(authoritativeId, finalProgId, finalIsSpec, subject_ids, school_year_id);
+      } catch (soErr) {
+        console.warn('Failed to auto-attach subjects to cloud section:', soErr.message);
+      }
+
       return res.status(201).json({ message: 'Section created successfully', section_id: authoritativeId });
     }
 
     const id = await Section.create(req.body);
     res.status(201).json({ message: 'Section created successfully', section_id: id });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/sections/:id/subjects - Get all subjects offered for this section
+router.get('/:id/subjects', async (req, res) => {
+  try {
+    await cloudSync.syncAcademicAssignmentsFromCloud().catch(() => {});
+    const subjects = await Section.findSubjectsBySection(req.params.id);
+    res.json(subjects);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/sections/:id/subjects - Dynamically add subject(s) to a section
+router.post('/:id/subjects', async (req, res) => {
+  try {
+    const sectionId = req.params.id;
+    const { subject_id, subject_ids, school_year_id } = req.body;
+    const targetIds = Array.isArray(subject_ids) && subject_ids.length > 0 
+      ? subject_ids.map(Number) 
+      : (subject_id ? [Number(subject_id)] : []);
+
+    if (!targetIds.length) return res.status(400).json({ error: 'subject_id or subject_ids is required' });
+
+    let finalSchoolYearId = school_year_id;
+    if (!finalSchoolYearId) {
+      finalSchoolYearId = await Section.getActiveSchoolYearId();
+    }
+
+    const createdIds = [];
+    for (const subId of targetIds) {
+      // Check if offering already exists
+      const [existing] = await db.execute(
+        `SELECT subject_offering_id FROM SUBJECT_OFFERING WHERE section_id = ? AND subject_id = ? AND school_year_id = ? LIMIT 1`,
+        [sectionId, subId, finalSchoolYearId]
+      );
+      if (existing.length > 0) continue;
+
+      let cloudId = null;
+      if (db.cloudPool) {
+        try {
+          const [cloudSec] = await db.cloudPool.query(
+            `SELECT section_id FROM SECTION WHERE section_id = ? LIMIT 1`,
+            [sectionId]
+          );
+          if (cloudSec.length > 0) {
+            const [cloudRes] = await db.cloudPool.query(
+              `INSERT INTO SUBJECT_OFFERING (subject_id, section_id, school_year_id) VALUES (?, ?, ?)`,
+              [subId, sectionId, finalSchoolYearId]
+            );
+            cloudId = cloudRes.insertId;
+          }
+        } catch (cErr) {
+          console.warn('[CloudSection] Add subject offering cloud insert failed:', cErr.message);
+        }
+      }
+
+      let newId;
+      if (cloudId) {
+        await db.execute(
+          `INSERT INTO SUBJECT_OFFERING (subject_offering_id, subject_id, section_id, school_year_id)
+           VALUES (?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE
+             subject_id = VALUES(subject_id),
+             section_id = VALUES(section_id),
+             school_year_id = VALUES(school_year_id)`,
+          [cloudId, subId, sectionId, finalSchoolYearId]
+        );
+        newId = cloudId;
+      } else {
+        const [localRes] = await db.execute(
+          `INSERT INTO SUBJECT_OFFERING (subject_id, section_id, school_year_id) VALUES (?, ?, ?)`,
+          [subId, sectionId, finalSchoolYearId]
+        );
+        newId = localRes.insertId;
+      }
+      createdIds.push(newId);
+    }
+
+    res.status(201).json({
+      message: `Added ${createdIds.length} subject(s) to section successfully`,
+      count: createdIds.length,
+      subject_offering_ids: createdIds,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/sections/:id/subjects/default - Auto-assign default curriculum subjects to an existing section
+router.post('/:id/subjects/default', async (req, res) => {
+  try {
+    const section = await Section.findById(req.params.id);
+    if (!section) return res.status(404).json({ error: 'Section not found' });
+
+    const result = await Section.attachDefaultSubjects(
+      req.params.id,
+      section.program_id,
+      section.is_specialized,
+      req.body.subject_ids,
+      req.body.school_year_id
+    );
+
+    res.json({ message: `Assigned ${result.count} subjects to section.`, ...result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/sections/:id/subjects/:offeringId - Remove a subject offering from a section
+router.delete('/:id/subjects/:offeringId', async (req, res) => {
+  try {
+    const { id: sectionId, offeringId } = req.params;
+
+    // Safety check: check if any grades or scores exist for this subject offering
+    const [scoreCheck] = await db.execute(
+      `SELECT score_id FROM SCORE s
+       INNER JOIN TEACHER_ASSIGNMENT ta ON ta.teacher_assignment_id = s.teacher_assignment_id
+       WHERE ta.subject_offering_id = ? LIMIT 1`,
+      [offeringId]
+    ).catch(() => [[]]);
+
+    const [gradeCheck] = await db.execute(
+      `SELECT student_grade_id FROM STUDENT_GRADE WHERE subject_offering_id = ? LIMIT 1`,
+      [offeringId]
+    ).catch(() => [[]]);
+
+    if (scoreCheck.length > 0 || gradeCheck.length > 0) {
+      return res.status(400).json({
+        error: 'Cannot remove this subject offering because grades or scores are already recorded for it.'
+      });
+    }
+
+    if (db.cloudPool) {
+      try {
+        await db.cloudPool.query(`DELETE FROM TEACHER_ASSIGNMENT WHERE subject_offering_id = ?`, [offeringId]).catch(() => {});
+        await db.cloudPool.query(`DELETE FROM SUBJECT_OFFERING WHERE subject_offering_id = ? AND section_id = ?`, [offeringId, sectionId]).catch(() => {});
+      } catch (cErr) {
+        console.warn('[CloudSection] Delete subject offering cloud failed:', cErr.message);
+      }
+    }
+
+    await db.execute(`DELETE FROM TEACHER_ASSIGNMENT WHERE subject_offering_id = ?`, [offeringId]).catch(() => {});
+    const [result] = await db.execute(`DELETE FROM SUBJECT_OFFERING WHERE subject_offering_id = ? AND section_id = ?`, [offeringId, sectionId]);
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Subject offering not found for this section' });
+    }
+
+    res.json({ message: 'Subject removed from section successfully' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

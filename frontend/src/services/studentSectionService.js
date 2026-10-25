@@ -242,3 +242,56 @@ export const unassignStudent = async ({
   }
   return { message: "Student unassigned successfully" };
 };
+
+/**
+ * Fetch all subject offerings for a specific section
+ */
+export const fetchSectionSubjects = async (sectionId) => {
+  const response = await fetch(`${API_BASE_URL}/sections/${sectionId}/subjects`);
+  const data = await parseResponse(response);
+  return Array.isArray(data) ? data : [];
+};
+
+/**
+ * Add a subject offering to a section
+ */
+export const addSectionSubject = async (sectionId, { subject_id, school_year_id } = {}) => {
+  const response = await fetch(`${API_BASE_URL}/sections/${sectionId}/subjects`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ subject_id, school_year_id }),
+  });
+  return parseResponse(response);
+};
+
+/**
+ * Auto-assign default curriculum subjects to a section
+ */
+export const autoAssignSectionSubjects = async (sectionId) => {
+  const response = await fetch(`${API_BASE_URL}/sections/${sectionId}/subjects/default`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({}),
+  });
+  return parseResponse(response);
+};
+
+/**
+ * Remove a subject offering from a section
+ */
+export const removeSectionSubject = async (sectionId, offeringId) => {
+  const response = await fetch(`${API_BASE_URL}/sections/${sectionId}/subjects/${offeringId}`, {
+    method: "DELETE",
+  });
+  return parseResponse(response);
+};
+
+/**
+ * Fetch entire subject catalog
+ */
+export const fetchSubjectCatalog = async () => {
+  const response = await fetch(`${API_BASE_URL}/subjects`);
+  const data = await parseResponse(response);
+  return Array.isArray(data) ? data : [];
+};
+

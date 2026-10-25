@@ -100,8 +100,108 @@ class Section {
     return rows[0];
   }
 
+  static async getActiveSchoolYearId() {
+    const [rows] = await db.execute(`
+      SELECT school_year_id FROM SCHOOL_YEAR 
+      WHERE LOWER(status) IN ('active', 'ongoing') 
+      ORDER BY school_year_id DESC LIMIT 1
+    `);
+    if (rows.length > 0) return rows[0].school_year_id;
+    const [fallback] = await db.execute(`SELECT school_year_id FROM SCHOOL_YEAR ORDER BY school_year_id DESC LIMIT 1`);
+    return fallback[0]?.school_year_id || 1;
+  }
+
+  static async findSubjectsBySection(sectionId) {
+    const [rows] = await db.execute(`
+      SELECT 
+        so.subject_offering_id,
+        so.subject_id,
+        so.section_id,
+        so.school_year_id,
+        s.subject_name,
+        s.subject_code,
+        s.description,
+        COALESCE(p.program_code, 'EBEC') AS program_code,
+        ta.teacher_assignment_id,
+        u.user_id AS teacher_id,
+        CONCAT(u.first_name, ' ', u.last_name) AS teacher_name,
+        u.email AS teacher_email
+      FROM SUBJECT_OFFERING so
+      INNER JOIN SUBJECT s ON s.subject_id = so.subject_id
+      LEFT JOIN PROGRAM p ON p.program_id = s.program_id
+      LEFT JOIN TEACHER_ASSIGNMENT ta ON ta.subject_offering_id = so.subject_offering_id
+      LEFT JOIN USER u ON u.user_id = ta.user_id
+      WHERE so.section_id = ?
+      ORDER BY s.subject_name ASC
+    `, [sectionId]);
+    return rows;
+  }
+
+  static async attachDefaultSubjects(sectionId, programId, isSpecialized, customSubjectIds = null, targetSchoolYearId = null) {
+    const schoolYearId = targetSchoolYearId || await this.getActiveSchoolYearId();
+    let subjectIds = customSubjectIds;
+    if (!Array.isArray(subjectIds) || subjectIds.length === 0) {
+      const finalProgId = isSpecialized ? (programId ? Number(programId) : 1) : 4;
+      const [subjRows] = await db.execute(`
+        SELECT subject_id FROM SUBJECT 
+        WHERE (program_id = 4 OR program_id IS NULL)
+           OR (program_id = ?)
+        ORDER BY subject_id ASC
+      `, [isSpecialized ? finalProgId : 0]);
+      subjectIds = subjRows.map(r => r.subject_id);
+    }
+
+    const created = [];
+    for (const subId of subjectIds) {
+      const [existing] = await db.execute(
+        `SELECT subject_offering_id FROM SUBJECT_OFFERING WHERE section_id = ? AND subject_id = ? AND school_year_id = ? LIMIT 1`,
+        [sectionId, subId, schoolYearId]
+      );
+      if (existing.length > 0) continue;
+
+      let cloudSoId = null;
+      if (db.cloudPool) {
+        try {
+          const [cloudSec] = await db.cloudPool.query(
+            `SELECT section_id FROM SECTION WHERE section_id = ? LIMIT 1`,
+            [sectionId]
+          );
+          if (cloudSec.length > 0) {
+            const [cloudRes] = await db.cloudPool.query(
+              `INSERT INTO SUBJECT_OFFERING (subject_id, section_id, school_year_id) VALUES (?, ?, ?)`,
+              [subId, sectionId, schoolYearId]
+            );
+            cloudSoId = cloudRes.insertId;
+          }
+        } catch (cErr) {
+          console.warn('[CloudSection] Auto subject offering dual-write failed:', cErr.message);
+        }
+      }
+
+      if (cloudSoId) {
+        await db.execute(
+          `INSERT INTO SUBJECT_OFFERING (subject_offering_id, subject_id, section_id, school_year_id)
+           VALUES (?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE
+             subject_id = VALUES(subject_id),
+             section_id = VALUES(section_id),
+             school_year_id = VALUES(school_year_id)`,
+          [cloudSoId, subId, sectionId, schoolYearId]
+        );
+        created.push(cloudSoId);
+      } else {
+        const [localRes] = await db.execute(
+          `INSERT INTO SUBJECT_OFFERING (subject_id, section_id, school_year_id) VALUES (?, ?, ?)`,
+          [subId, sectionId, schoolYearId]
+        );
+        created.push(localRes.insertId);
+      }
+    }
+    return { schoolYearId, count: created.length, created };
+  }
+
   static async create(data) {
-    let { section_name, name, grade_level_id, level, program_id, is_specialized } = data;
+    let { section_name, name, grade_level_id, level, program_id, is_specialized, subject_ids, school_year_id } = data;
     const finalName = (section_name || name || '').trim();
     const finalGradeLevelId = await this.resolveGradeLevelId(grade_level_id, level);
     const finalIsSpec = is_specialized ? 1 : 0;
@@ -111,7 +211,15 @@ class Section {
       `INSERT INTO SECTION (section_name, grade_level_id, program_id, is_specialized) VALUES (?, ?, ?, ?)`,
       [finalName, finalGradeLevelId, finalProgId, finalIsSpec]
     );
-    return result.insertId;
+    const sectionId = result.insertId;
+
+    try {
+      await this.attachDefaultSubjects(sectionId, finalProgId, finalIsSpec, subject_ids, school_year_id);
+    } catch (soErr) {
+      console.warn('Failed to auto-attach subjects to section:', soErr.message);
+    }
+
+    return sectionId;
   }
 
   static async update(id, data) {

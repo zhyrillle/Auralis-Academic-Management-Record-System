@@ -835,7 +835,7 @@ router.get("/management-options", async (req, res) => {
       INNER JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
       INNER JOIN SUBJECT s ON s.subject_id = so.subject_id
       INNER JOIN SCHOOL_YEAR sy ON sy.school_year_id = so.school_year_id
-      WHERE sy.status IN ('ACTIVE', 'ONGOING')
+      WHERE LOWER(sy.status) IN ('active', 'ongoing')
       ORDER BY gl.grade_level_id ASC, sec.section_name ASC, s.subject_name ASC
     `);
 
