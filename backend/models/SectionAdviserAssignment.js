@@ -131,6 +131,19 @@ class SectionAdviserAssignment {
     return result.insertId;
   }
 
+  static async update(id, data, connection = db) {
+    const keys = Object.keys(data);
+    const values = Object.values(data);
+    const setClause = keys.map(k => `${k} = ?`).join(', ');
+    await connection.execute(`UPDATE SECTION_ADVISER_ASSIGNMENT SET ${setClause} WHERE adviser_assignment_id = ?`, [...values, id]);
+    return this.findById(id);
+  }
+
+  static async delete(id, connection = db) {
+    const [result] = await connection.execute('DELETE FROM SECTION_ADVISER_ASSIGNMENT WHERE adviser_assignment_id = ?', [id]);
+    return result.affectedRows > 0;
+  }
+
   static async deleteByUserId(userId, connection = db) {
     await connection.execute(
       `

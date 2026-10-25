@@ -1,10 +1,12 @@
 const express = require('express');
 const router = express.Router();
 const Feedback = require('../models/Feedback');
+const cloudSync = require('../services/cloudSyncService');
 
 // GET /api/principal/feedback/summary
 router.get('/summary', async (req, res) => {
   try {
+    await cloudSync.syncFeedbackFromCloud();
     const { schoolYear } = req.query;
     const summary = await Feedback.getPrincipalFeedbackSummary(schoolYear);
     res.json(summary);

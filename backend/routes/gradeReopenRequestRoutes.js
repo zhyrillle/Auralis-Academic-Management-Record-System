@@ -5,6 +5,7 @@ const NotificationService = require('../services/NotificationService');
 const { resolveCurrentUser, requireSystemAdmin } = require('../middleware/resolveCurrentUser');
 const uploadRequestFile = require('../middleware/uploadRequestFile');
 const { uploadRequestFile: uploadToCloudinary } = require('../services/requestFileStorage');
+const cloudSync = require('../services/cloudSyncService');
 const router = express.Router();
 
 router.use(resolveCurrentUser);
@@ -16,8 +17,10 @@ function handleError(error, res) {
 }
 
 router.get('/', requireSystemAdmin, async (_req, res) => {
-  try { return res.json(await GradeReopenRequest.findAll()); }
-  catch (error) { return handleError(error, res); }
+  try {
+    await cloudSync.syncGradeReopenRequestsFromCloud();
+    return res.json(await GradeReopenRequest.findAll());
+  } catch (error) { return handleError(error, res); }
 });
 
 router.get('/user/:userId', async (req, res) => {
@@ -25,12 +28,15 @@ router.get('/user/:userId', async (req, res) => {
       && req.currentUser.normalized_role !== 'system_admin') {
     return res.status(403).json({ error: 'You can only view your own requests.' });
   }
-  try { return res.json(await GradeReopenRequest.findByUserId(req.params.userId)); }
-  catch (error) { return handleError(error, res); }
+  try {
+    await cloudSync.syncGradeReopenRequestsFromCloud();
+    return res.json(await GradeReopenRequest.findByUserId(req.params.userId));
+  } catch (error) { return handleError(error, res); }
 });
 
 router.get('/:id', async (req, res) => {
   try {
+    await cloudSync.syncGradeReopenRequestsFromCloud();
     const request = req.currentUser.normalized_role === 'system_admin'
       ? await GradeReopenRequest.findById(req.params.id)
       : (await GradeReopenRequest.findByUserId(req.currentUser.user_id))
@@ -82,6 +88,7 @@ router.post('/', (req, res, next) => {
       console.warn('[gradeReopenRequestRoutes] Failed to send reopen notification:', notifErr.message);
     }
 
+    cloudSync.forwardReopenRequestToCloud(request).catch(() => {});
     return res.status(201).json({ message: 'Reopening request submitted.', request_id: request.request_id, request });
   } catch (error) { return handleError(error, res); }
 });
@@ -90,8 +97,11 @@ router.put('/:id', async (req, res) => {
   if (Object.keys(req.body).length !== 1 || req.body.status !== 'CANCELLED') {
     return res.status(409).json({ code: 'WORKFLOW_REQUIRED', error: 'Use the authorized approval or denial workflow. Only cancellation is supported here.' });
   }
-  try { return res.json(await GradingPeriodService.cancelReopeningRequest(req.params.id, req.currentUser)); }
-  catch (error) { return handleError(error, res); }
+  try {
+    const cancelled = await GradingPeriodService.cancelReopeningRequest(req.params.id, req.currentUser);
+    cloudSync.forwardReopenRequestStatusToCloud(req.params.id, 'CANCELLED', req.currentUser?.user_id).catch(() => {});
+    return res.json(cancelled);
+  } catch (error) { return handleError(error, res); }
 });
 
 router.delete('/:id', (_req, res) => res.status(405).json({

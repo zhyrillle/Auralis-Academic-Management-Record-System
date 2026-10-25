@@ -3,6 +3,7 @@ const router = express.Router();
 const SubjectComponentWeight = require('../models/SubjectComponentWeight');
 const SchoolYear = require('../models/SchoolYear');
 const AuditEvent = require('../models/AuditEvent');
+const cloudSync = require('../services/cloudSyncService');
 
 const isPositiveInteger = (value) => Number.isInteger(Number(value)) && Number(value) > 0;
 
@@ -53,6 +54,7 @@ router.get('/configuration/:schoolYearId', async (req, res) => {
   }
 
   try {
+    await cloudSync.syncSubjectComponentWeightsFromCloud(Number(req.params.schoolYearId));
     const rows = await SubjectComponentWeight.findConfiguration(
       Number(req.params.schoolYearId)
     );
@@ -71,6 +73,16 @@ router.post('/configuration/:schoolYearId/inherit', async (req, res) => {
     const result = await SubjectComponentWeight.inheritFromPreviousSchoolYear(
       Number(req.params.schoolYearId)
     );
+
+    if (result.inserted_count > 0) {
+      const configRows = await SubjectComponentWeight.findConfiguration(Number(req.params.schoolYearId));
+      const weights = configRows.filter((r) => r.percentage !== null).map((r) => ({
+        subject_id: r.subject_id,
+        component_type_id: r.component_type_id,
+        percentage: r.percentage,
+      }));
+      await cloudSync.forwardSubjectWeightsToCloud(Number(req.params.schoolYearId), weights);
+    }
 
     const actorId = req.headers['x-auralis-user-id'] ? Number(req.headers['x-auralis-user-id']) : null;
     await AuditEvent.create({
@@ -126,14 +138,18 @@ router.put('/configuration/:schoolYearId', async (req, res) => {
       });
     }
 
+    const sanitizedWeights = req.body.weights.map((weight) => ({
+      subject_id: Number(weight.subject_id),
+      component_type_id: Number(weight.component_type_id),
+      percentage: Number(weight.percentage),
+    }));
+
     const rows = await SubjectComponentWeight.saveConfiguration(
       Number(req.params.schoolYearId),
-      req.body.weights.map((weight) => ({
-        subject_id: Number(weight.subject_id),
-        component_type_id: Number(weight.component_type_id),
-        percentage: Number(weight.percentage),
-      }))
+      sanitizedWeights
     );
+
+    await cloudSync.forwardSubjectWeightsToCloud(Number(req.params.schoolYearId), sanitizedWeights);
 
     const actorId = req.headers['x-auralis-user-id'] ? Number(req.headers['x-auralis-user-id']) : null;
     await AuditEvent.create({

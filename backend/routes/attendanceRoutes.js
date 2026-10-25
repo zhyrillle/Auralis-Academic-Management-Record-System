@@ -3,9 +3,11 @@ const router = express.Router();
 const db = require('../config/db');
 const Attendance = require('../models/Attendance');
 const AuditEvent = require('../models/AuditEvent');
+const cloudSync = require('../services/cloudSyncService');
 
 router.get('/', async (req, res) => {
   try {
+    await cloudSync.syncAttendanceFromCloud();
     const records = await Attendance.findAll();
     res.json(records);
   } catch (err) {
@@ -16,6 +18,7 @@ router.get('/', async (req, res) => {
 // GET all attendance records for a specific sheet
 router.get('/sheet/:sheetId', async (req, res) => {
   try {
+    await cloudSync.syncAttendanceFromCloud();
     const records = await Attendance.findBySheetId(req.params.sheetId);
     res.json(records);
   } catch (err) {
@@ -26,6 +29,7 @@ router.get('/sheet/:sheetId', async (req, res) => {
 // GET all attendance records for a section (all sheets + all students)
 router.get('/section/:sectionId', async (req, res) => {
   try {
+    await cloudSync.syncAttendanceFromCloud();
     const schoolYearId = req.query.schoolYearId;
     if (schoolYearId !== undefined && !/^[1-9]\d*$/.test(String(schoolYearId))) return res.status(400).json({ error: 'Invalid school year.' });
     const records = await Attendance.findBySectionId(req.params.sectionId, schoolYearId);
@@ -44,6 +48,7 @@ router.post('/save-remarks', async (req, res) => {
       return res.status(400).json({ error: 'attendance_sheet_id and student_section_id are required' });
     }
     const id = await Attendance.saveRemarks(attendance_sheet_id, rawId, remarks, status);
+    cloudSync.forwardAttendanceSaveRemarksToCloud(attendance_sheet_id, rawId, remarks, status).catch(() => {});
     res.json({ message: 'Remarks saved successfully', attendance_id: id });
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: err.message });
@@ -58,6 +63,7 @@ router.post('/bulk-save', async (req, res) => {
       return res.status(400).json({ error: 'records array is required' });
     }
     const ids = await Attendance.bulkUpsert(records);
+    cloudSync.forwardAttendanceBulkSaveToCloud(records).catch(() => {});
 
     // Audit log attendance record
     try {
