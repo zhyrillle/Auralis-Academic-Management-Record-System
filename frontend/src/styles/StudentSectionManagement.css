@@ -4,7 +4,7 @@
   margin: 12px 0 19px;
 }
 
-.section-capacity > div:first-child {
+.section-capacity>div:first-child {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -21,7 +21,7 @@
   overflow: hidden;
 }
 
-.section-capacity__bar > span {
+.section-capacity__bar>span {
   display: block;
   height: 100%;
   background: #16a34a;
@@ -29,11 +29,11 @@
   transition: width .3s ease;
 }
 
-.section-capacity--target .section-capacity__bar > span {
+.section-capacity--target .section-capacity__bar>span {
   background: #eab308;
 }
 
-.section-capacity--over .section-capacity__bar > span {
+.section-capacity--over .section-capacity__bar>span {
   background: #dc2626;
 }
 
@@ -47,7 +47,7 @@
 
 .section-card--skeleton {
   height: 260px;
-  background: linear-gradient(110deg,#f6f8fb 20%,#eaf0f7 40%,#f6f8fb 60%);
+  background: linear-gradient(110deg, #f6f8fb 20%, #eaf0f7 40%, #f6f8fb 60%);
 }
 
 .section-card--skeleton::before {
@@ -125,7 +125,7 @@
   background: #fcfdff;
 }
 
-.section-student-row > div {
+.section-student-row>div {
   display: flex;
   flex: 1;
   min-width: 0;
@@ -153,7 +153,8 @@
   min-width: 800px;
 }
 
-.section-assignment-table th:nth-child(n+5):not(:last-child), .section-assignment-table td:nth-child(n+5):not(:last-child) {
+.section-assignment-table th:nth-child(n+5):not(:last-child),
+.section-assignment-table td:nth-child(n+5):not(:last-child) {
   padding-left: 4px;
   padding-right: 6px;
 }
@@ -198,7 +199,7 @@
   width: min(700px, calc(100vw - 150px));
 }
 
-.student-selection-tray__bar > div {
+.student-selection-tray__bar>div {
   flex: 1;
   min-width: 0;
 }
@@ -234,7 +235,7 @@
   border-bottom: 1px solid #e9edf4;
 }
 
-.student-selection-tray__list > span {
+.student-selection-tray__list>span {
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -273,7 +274,7 @@
   margin-bottom: 22px;
 }
 
-.section-assignment-review > span {
+.section-assignment-review>span {
   padding: 10px 12px;
   background: #f6f8fc;
   border-radius: 8px;
@@ -332,11 +333,308 @@
 
 @media (prefers-reduced-motion: reduce) {
 
-  .section-card, .section-capacity__bar > span {
+  .section-card,
+  .section-capacity__bar>span {
     transition: none;
   }
 
-  .section-drawer-content, .student-selection-tray {
+  .section-drawer-content,
+  .student-selection-tray {
     animation: none;
   }
+}
+
+/* Section Subjects Tab */
+.section-subject-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 15px;
+  border: 1px solid #e6ecf5;
+  border-radius: 10px;
+  background: #fcfdff;
+  transition: all 0.15s ease;
+}
+
+.section-subject-row:hover {
+  border-color: #cbd5e1;
+  background: #ffffff;
+}
+
+.section-subject-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.section-subject-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.section-subject-code {
+  font-weight: 700;
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: #eef2ff;
+  color: #4338ca;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.section-subject-name {
+  font-weight: 600;
+  color: #1e293b;
+  font-size: 13.5px;
+}
+
+.section-subject-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+.section-teacher-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 12px;
+}
+
+.section-teacher-badge--assigned {
+  background: #ecfdf5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+}
+
+.section-teacher-badge--unassigned {
+  background: #fffbeb;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+
+.section-subject-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.section-subject-toolbar .student-admin-button {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.section-subject-empty-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+
+/* Add Subject Modal UI */
+.add-subject-modal .app-overlay__panel {
+  width: min(580px, calc(100vw - 32px));
+  border-radius: 18px;
+  overflow: hidden;
+}
+
+.add-subject-modal .app-overlay__footer {
+  border-bottom-left-radius: 18px;
+  border-bottom-right-radius: 18px;
+}
+
+.add-subject-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.add-subject-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.add-subject-filter-chips {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.add-subject-chip {
+  padding: 4px 11px;
+  border-radius: 20px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.add-subject-chip:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.add-subject-chip.is-active {
+  background: #1e40af;
+  border-color: #1e40af;
+  color: #ffffff;
+}
+
+.add-subject-cards-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.add-subject-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 14px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 11px;
+  background: #ffffff;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+  text-align: left;
+  width: 100%;
+}
+
+.add-subject-card:hover:not(.is-disabled) {
+  border-color: #93c5fd;
+  background: #f0f7ff;
+}
+
+.add-subject-card.is-selected {
+  border-color: #2563eb;
+  background: #eff6ff;
+  box-shadow: 0 0 0 1px #2563eb;
+}
+
+.add-subject-card.is-disabled {
+  opacity: 0.65;
+  background: #f8fafc;
+  cursor: not-allowed;
+  border-color: #edf2f7;
+}
+
+.add-subject-card-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex: 1;
+}
+
+.add-subject-card-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 11px;
+  padding: 4px 7px;
+  border-radius: 6px;
+  background: #eef2ff;
+  color: #4338ca;
+  min-width: 48px;
+  text-align: center;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.add-subject-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.add-subject-card-title {
+  font-weight: 600;
+  color: #1e293b;
+  font-size: 13.5px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.add-subject-card-program {
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.add-subject-card-desc {
+  font-size: 11.5px;
+  color: #64748b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.add-subject-card-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.add-subject-already-added {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #059669;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  padding: 2px 7px;
+  border-radius: 12px;
+}
+
+.add-subject-checkbox {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: 1.5px solid #cbd5e1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  background: #ffffff;
+  transition: all 0.15s ease;
+  font-size: 11px;
+}
+
+.add-subject-card.is-selected .add-subject-checkbox {
+  background: #2563eb;
+  border-color: #2563eb;
 }
