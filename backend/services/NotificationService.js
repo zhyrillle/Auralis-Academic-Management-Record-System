@@ -121,7 +121,8 @@ async function resolveAdvisersForOffering(subjectOfferingId, connection = db) {
  * @param {number|null} [departmentId]  – limit to one department if provided
  * @returns {Promise<Array<{ user_id: number, department_id: number|null }>>}
  */
-async function resolveDeptHeads(departmentId = null) {
+async function resolveDeptHeads(departmentId = null, connection = null) {
+  const conn = connection || db;
   try {
     let sql = `
       SELECT DISTINCT u.user_id, dh.department_id
@@ -135,11 +136,11 @@ async function resolveDeptHeads(departmentId = null) {
     }
     sql += ' LIMIT 20';
 
-    const [rows] = await db.execute(sql, params);
+    const [rows] = await conn.execute(sql, params);
 
     // If DEPARTMENT_HEAD table is empty, fall back to USER.role
     if (rows.length === 0) {
-      const [fallback] = await db.execute(
+      const [fallback] = await conn.execute(
         `SELECT user_id, NULL AS department_id FROM USER
          WHERE LOWER(TRIM(role)) IN ('department_head', 'dept_head', 'department head')
          LIMIT 20`
@@ -323,10 +324,10 @@ const NotificationService = {
    * @param {string|null} [opts.actionLink]        – e.g. '/at-risk/42'
    * @returns {Promise<number[]>}
    */
-  async notifyAtRisk({ subjectOfferingId, subjectName, sectionName, atRiskCount, departmentId, actionLink }) {
+  async notifyAtRisk({ subjectOfferingId, subjectName, sectionName, atRiskCount, departmentId, actionLink, connection = null }) {
     const recipients = subjectOfferingId
-      ? await resolveDeptHeadsForOffering(subjectOfferingId)
-      : await resolveDeptHeads(departmentId);
+      ? await resolveDeptHeadsForOffering(subjectOfferingId, connection)
+      : await resolveDeptHeads(departmentId, connection);
 
     const ids = [];
     for (const recipient of recipients) {
@@ -337,11 +338,11 @@ const NotificationService = {
         message:             `${atRiskCount} student${atRiskCount !== 1 ? 's' : ''} in ${sectionName} ` +
                              `have been flagged with high risk in ${subjectName} based on recent performance.`,
         type:                NOTIFICATION_TYPES.AT_RISK,
-        related_entity_type: 'AT_RISK_PREDICTION',
-        related_entity_id:   null,
-        action_link:         actionLink || null,
+        related_entity_type: 'SUBJECT_OFFERING',
+        related_entity_id:   subjectOfferingId || null,
+        action_link:         actionLink || '/department-head/dashboard',
         is_read:             false,
-      });
+      }, connection);
       ids.push(id);
     }
     return ids;

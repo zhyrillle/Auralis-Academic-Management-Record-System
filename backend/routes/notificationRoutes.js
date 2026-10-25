@@ -306,7 +306,47 @@ router.get('/department-head', async (req, res) => {
         console.warn('[dept-head] synthesize reopen requests error:', err.message);
       }
 
-      // 2c. Static demo seed tailored to this Department Head's department
+      // 2c. At-risk students in this department based on submitted/recorded grades
+      try {
+        const [atRiskRows] = await db.execute(`
+          SELECT
+            so.subject_offering_id,
+            sub.subject_name,
+            sec.section_name,
+            gl.grade_level_name AS grade_level,
+            COUNT(DISTINCT sg.student_id) AS at_risk_count,
+            MAX(sg.updated_at) AS latest_recorded_at
+          FROM STUDENT_GRADE sg
+          JOIN SUBJECT_OFFERING so ON sg.subject_offering_id = so.subject_offering_id
+          JOIN SUBJECT sub         ON so.subject_id = sub.subject_id
+          JOIN SECTION sec         ON so.section_id = sec.section_id
+          JOIN GRADE_LEVEL gl      ON sec.grade_level_id = gl.grade_level_id
+          WHERE (? IS NULL OR sub.department_id = ?)
+            AND sg.quarterly_grade > 0
+            AND sg.quarterly_grade < 75
+          GROUP BY so.subject_offering_id, sub.subject_name, sec.section_name, gl.grade_level_name
+          ORDER BY latest_recorded_at DESC, at_risk_count DESC
+          LIMIT 3
+        `, [userDeptId, userDeptId]);
+
+        for (const ar of atRiskRows) {
+          synthesized.push({
+            id:          `risk-${ar.subject_offering_id}`,
+            title:       `At-Risk Alert — ${ar.subject_name}`,
+            message:     `${ar.at_risk_count} student${ar.at_risk_count !== 1 ? 's' : ''} in Grade ${ar.grade_level} – ${ar.section_name} ` +
+                         `have been flagged with high risk in ${ar.subject_name} based on quarterly assessments (< 75).`,
+            timestamp:   formatRelativeTime(ar.latest_recorded_at),
+            created_at:  ar.latest_recorded_at || new Date().toISOString(),
+            unread:      true,
+            type:        'AT_RISK',
+            action_link: '/department-head/dashboard',
+          });
+        }
+      } catch (err) {
+        console.warn('[dept-head] synthesize at-risk alerts error:', err.message);
+      }
+
+      // 2d. Static demo seed tailored to this Department Head's department
       if (synthesized.length === 0) {
         const now       = new Date();
         const yesterday = new Date(now);
