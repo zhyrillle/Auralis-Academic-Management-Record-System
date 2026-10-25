@@ -127,8 +127,20 @@ function getDisplayRole(user) {
   return user.role || "";
 }
 
+function formatName(name) {
+  if (!name || typeof name !== "string") return "";
+  return name
+    .toLowerCase()
+    .replace(/(?:^|[\s'-])\S/g, (char) => char.toUpperCase())
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function getUsername(user) {
-  return `${user?.first_name || ""} ${user?.last_name || ""}`.replace(/\s+/g, " ").trim();
+  const firstName = formatName(user?.first_name || "");
+  const lastName = formatName(user?.last_name || "");
+  const fullName = `${firstName} ${lastName}`.replace(/\s+/g, " ").trim();
+  return fullName || formatName(user?.name || user?.username || "") || "";
 }
 
 function resolveProfilePictureUrl(url) {
@@ -540,8 +552,8 @@ export default function UserManagement() {
     const dbRole = DISPLAY_TO_DB_ROLE[formData.role] || formData.role.toLowerCase();
 
     const payload = {
-      first_name: formData.first_name.trim(),
-      last_name: formData.last_name.trim(),
+      first_name: formatName(formData.first_name) || formData.first_name.trim(),
+      last_name: formatName(formData.last_name) || formData.last_name.trim(),
       email: formData.email.trim().toLowerCase(),
       role: dbRole,
       account_status: formData.status,
@@ -687,7 +699,7 @@ export default function UserManagement() {
           </>
         )}
 
-        <OverlayPanel isOpen={profileOpen} onClose={closeProfile} variant="bottom"
+        <OverlayPanel isOpen={profileOpen} onClose={closeProfile} variant="modal"
           className="user-management-overlay user-profile-tray" title="User Profile"
           description="Account details and role assignment"
           footer={<>

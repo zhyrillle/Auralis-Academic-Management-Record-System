@@ -882,7 +882,7 @@ async function findOwnedReopeningSheet(gradeSheetId, userId, connection = db, lo
     INNER JOIN TEACHER_ASSIGNMENT ta
       ON ta.subject_offering_id = gs.subject_offering_id AND ta.user_id = ?
     WHERE gs.grade_sheet_id = ?
-      AND (ta.assigned_until IS NULL OR ta.assigned_until >= UTC_DATE())
+      AND (ta.assigned_until IS NULL OR ta.assigned_until >= UTC_DATE() OR ta.assigned_until < '1901-01-01')
     LIMIT 1${lock ? ' FOR UPDATE' : ''}`,
     [userId, gradeSheetId]
   );
@@ -940,7 +940,7 @@ async function getReopeningOptions(userId) {
     INNER JOIN TEACHER_ASSIGNMENT ta
       ON ta.subject_offering_id = gs.subject_offering_id
       AND ta.user_id = ?
-    WHERE (ta.assigned_until IS NULL OR ta.assigned_until >= UTC_DATE())
+    WHERE (ta.assigned_until IS NULL OR ta.assigned_until >= UTC_DATE() OR ta.assigned_until < '1901-01-01')
     ORDER BY at.grade_submission_deadline_at DESC, s.subject_name, sec.section_name`,
     [userId]
   );

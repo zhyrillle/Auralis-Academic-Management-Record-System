@@ -49,11 +49,12 @@ body:has(.app-overlay[open]) {
 }
 
 .app-overlay--modal .app-overlay__panel {
+  overflow: hidden;
   width: min(510px, 100%);
   height: auto;
   max-height: calc(100dvh - 48px);
   border-radius: 18px;
-  overflow: hidden;
+  box-shadow: 0 16px 60px rgb(17 45 97 / 20%);
   animation-name: overlay-modal-in;
 }
 

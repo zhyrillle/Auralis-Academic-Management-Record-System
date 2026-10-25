@@ -1495,7 +1495,8 @@
 }
 
 .user-profile-tray .app-overlay__panel {
-  max-height: min(620px, calc(100dvh - 40px));
+  width: min(540px, 100%);
+  max-height: min(620px, calc(100dvh - 48px));
 }
 .user-profile-tray .app-overlay__header {
   padding: 16px 20px 12px;
