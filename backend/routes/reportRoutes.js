@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
 const MasterSheetService = require('../services/MasterSheetService');
-const { decryptLrn, hashLrn } = require('../utils/encryption');
+const { decryptLrn, hashLrn, maskLrn } = require('../utils/encryption');
 
 // DepEd Subject Template Definition
 const DEPED_SUBJECT_TEMPLATE = [
@@ -117,9 +117,11 @@ router.get('/sf10/:studentId', async (req, res) => {
       return res.status(404).json({ error: "Student record not found" });
     }
 
-    // Decrypt LRN for official DepEd SF10 report
-    student.LRN = decryptLrn(student.LRN);
-    student.lrn = student.LRN;
+    // Decrypt LRN and mask for official DepEd SF10 on-screen preview (DPA compliance)
+    const plaintextLrn = decryptLrn(student.LRN);
+    const maskedLrnValue = maskLrn(plaintextLrn);
+    student.LRN = maskedLrnValue;
+    student.lrn = maskedLrnValue;
 
     // 2. Fetch School Information
     const [schoolRows] = await db.execute(`SELECT * FROM SCHOOL LIMIT 1`);
@@ -508,6 +510,41 @@ router.get('/sf10/:studentId', async (req, res) => {
   } catch (error) {
     console.error("Error in GET /api/reports/sf10/:studentId:", error);
     return res.status(500).json({ error: "Failed to generate SF10 record", message: error.message });
+  }
+});
+
+// POST /sf10/:identifier/ephemeral-lrn - Ephemeral on-demand fetch of decrypted LRN strictly for document export
+router.post('/sf10/:identifier/ephemeral-lrn', async (req, res) => {
+  try {
+    const { identifier } = req.params;
+    const cleanId = String(identifier).trim();
+    const lrnHash = hashLrn(cleanId);
+    const [stRows] = await db.execute(
+      `SELECT student_id, LRN FROM STUDENT WHERE student_id = ? OR LRN = ? OR lrn_hash = ? LIMIT 1`,
+      [cleanId, cleanId, lrnHash]
+    );
+
+    if (stRows.length > 0) {
+      const decrypted = decryptLrn(stRows[0].LRN);
+      return res.json({ lrn: decrypted });
+    }
+
+    const [ssRows] = await db.execute(
+      `SELECT st.student_id, st.LRN FROM STUDENT_SECTION ss
+       JOIN STUDENT st ON ss.student_id = st.student_id
+       WHERE ss.student_section_id = ? LIMIT 1`,
+      [cleanId]
+    );
+
+    if (ssRows.length > 0) {
+      const decrypted = decryptLrn(ssRows[0].LRN);
+      return res.json({ lrn: decrypted });
+    }
+
+    return res.status(404).json({ error: "Student not found" });
+  } catch (error) {
+    console.error("Error in ephemeral LRN fetch for SF10:", error);
+    return res.status(500).json({ error: "Failed to fetch export credential" });
   }
 });
 

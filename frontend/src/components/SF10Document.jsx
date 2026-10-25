@@ -392,12 +392,15 @@ export default function SF10Document({ student, sf10Data, page1Ref, page2Ref }) 
             <div className="sf10-info-field" style={{ flex: "2" }}>
               <span className="lbl">Learner Reference Number (LRN):</span>
               <span className="underline-val" style={{ fontWeight: "bold" }}>
-                <MaskedLrn
-                  lrn={learner.lrn}
-                  showToggle={true}
-                  allowCopy={true}
-                  badge={false}
-                />
+                <span className="lrn-screen-val">
+                  <MaskedLrn
+                    lrn={learner.lrn}
+                    showToggle={false}
+                    allowCopy={false}
+                    badge={false}
+                  />
+                </span>
+                <span className="lrn-print-val" style={{ display: "none" }}>{learner.lrn}</span>
               </span>
             </div>
             <div className="sf10-info-field" style={{ flex: "2" }}>
