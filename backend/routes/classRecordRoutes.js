@@ -391,8 +391,8 @@ async function submissionContext(input, user, connection) {
       JOIN SECTION sec ON sec.section_id = so.section_id
       JOIN TEACHER_ASSIGNMENT ta ON ta.subject_offering_id = so.subject_offering_id
       WHERE so.subject_offering_id = ? AND so.section_id = ? AND so.school_year_id = ? AND ta.user_id = ?
-        AND (ta.assigned_from IS NULL OR ta.assigned_from <= UTC_DATE())
-        AND (ta.assigned_until IS NULL OR ta.assigned_until >= UTC_DATE())`,
+        AND (ta.assigned_from IS NULL OR ta.assigned_from <= UTC_DATE() OR ta.assigned_from < '1901-01-01')
+        AND (ta.assigned_until IS NULL OR ta.assigned_until >= UTC_DATE() OR ta.assigned_until < '1901-01-01')`,
     [Number(input.subject_offering_id), Number(input.section_id), Number(input.school_year_id), Number(user.user_id)]);
   if (rows.length !== 1) throw httpError(403, 'CLASS_ASSIGNMENT_REQUIRED', 'This subject class is not uniquely assigned to your account.');
   return rows[0];
@@ -413,8 +413,8 @@ async function classRecordReadAccess(input, user, connection, { readOnly = false
       WHERE so.subject_offering_id = ? AND so.section_id = ? AND so.school_year_id = ?
         AND s.department_id = COALESCE(
           (SELECT dh.department_id FROM DEPARTMENT_HEAD dh WHERE dh.user_id = ?
-            AND (dh.appointed_from IS NULL OR dh.appointed_from <= CURDATE())
-            AND (dh.appointed_until IS NULL OR dh.appointed_until >= CURDATE())
+            AND (dh.appointed_from IS NULL OR dh.appointed_from <= CURDATE() OR dh.appointed_from < '1901-01-01')
+            AND (dh.appointed_until IS NULL OR dh.appointed_until >= CURDATE() OR dh.appointed_until < '1901-01-01')
             ORDER BY dh.department_head_id DESC LIMIT 1), ?)`,
     [input.subject_offering_id, input.section_id, input.school_year_id, user.user_id, user.department_id || null]);
   if (rows.length !== 1) throw httpError(403, 'DEPARTMENT_CLASS_ACCESS_REQUIRED',
@@ -644,8 +644,8 @@ router.get('/class-record/:subject_offering_id', resolveCurrentUser, async (req,
          LEFT JOIN TEACHER_ASSIGNMENT ta ON ta.teacher_assignment_id = (
            SELECT MAX(ta2.teacher_assignment_id) FROM TEACHER_ASSIGNMENT ta2
            WHERE ta2.subject_offering_id = so.subject_offering_id
-             AND (ta2.assigned_from IS NULL OR ta2.assigned_from <= UTC_DATE())
-             AND (ta2.assigned_until IS NULL OR ta2.assigned_until >= UTC_DATE()))
+             AND (ta2.assigned_from IS NULL OR ta2.assigned_from <= UTC_DATE() OR ta2.assigned_from < '1901-01-01')
+             AND (ta2.assigned_until IS NULL OR ta2.assigned_until >= UTC_DATE() OR ta2.assigned_until < '1901-01-01'))
          LEFT JOIN USER u ON u.user_id = ta.user_id
          LEFT JOIN SECTION_ADVISER_ASSIGNMENT saa ON saa.adviser_assignment_id = (
            SELECT MAX(saa2.adviser_assignment_id) FROM SECTION_ADVISER_ASSIGNMENT saa2
@@ -1534,7 +1534,7 @@ async function handleBatchScores(req, res) {
 
     const [taRows] = await connection.execute(
       `SELECT teacher_assignment_id FROM TEACHER_ASSIGNMENT WHERE subject_offering_id = ? AND user_id = ?
-        AND (assigned_from IS NULL OR assigned_from <= UTC_DATE()) AND (assigned_until IS NULL OR assigned_until >= UTC_DATE())`,
+        AND (assigned_from IS NULL OR assigned_from <= UTC_DATE() OR assigned_from < '1901-01-01') AND (assigned_until IS NULL OR assigned_until >= UTC_DATE() OR assigned_until < '1901-01-01')`,
       [subject_offering_id, req.currentUser.user_id]);
     if (taRows.length !== 1) return res.status(403).json({ error: 'A unique current teacher assignment is required.' });
     const teacherAssignmentId = taRows[0].teacher_assignment_id;

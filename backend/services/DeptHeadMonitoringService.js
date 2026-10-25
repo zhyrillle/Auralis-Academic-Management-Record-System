@@ -30,8 +30,8 @@ class DeptHeadMonitoringService {
     const [departments] = await db.execute(`SELECT d.department_id, d.department_name, d.department_code
       FROM DEPARTMENT d WHERE d.department_id = COALESCE(
         (SELECT dh.department_id FROM DEPARTMENT_HEAD dh WHERE dh.user_id = ?
-          AND (dh.appointed_from IS NULL OR dh.appointed_from <= CURDATE())
-          AND (dh.appointed_until IS NULL OR dh.appointed_until >= CURDATE())
+          AND (dh.appointed_from IS NULL OR dh.appointed_from <= CURDATE() OR dh.appointed_from < '1901-01-01')
+          AND (dh.appointed_until IS NULL OR dh.appointed_until >= CURDATE() OR dh.appointed_until < '1901-01-01')
           ORDER BY dh.department_head_id DESC LIMIT 1), ?)
       LIMIT 1`, [user.user_id, user.department_id || null]);
     if (!departments.length) throw fail(403, 'Your account has no assigned department.');

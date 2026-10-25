@@ -11,8 +11,8 @@ class GradeSheet {
       FROM GRADE_SHEET gs JOIN SUBJECT_OFFERING so ON so.subject_offering_id = gs.subject_offering_id
       JOIN ACADEMIC_TERM at ON at.term_id = gs.term_id AND at.school_year_id = so.school_year_id
       JOIN TEACHER_ASSIGNMENT ta ON ta.subject_offering_id = so.subject_offering_id AND ta.user_id = ?
-      WHERE gs.grade_sheet_id = ? AND (ta.assigned_from IS NULL OR ta.assigned_from <= UTC_DATE())
-        AND (ta.assigned_until IS NULL OR ta.assigned_until >= UTC_DATE())${lock ? ' FOR UPDATE' : ''}`,
+      WHERE gs.grade_sheet_id = ? AND (ta.assigned_from IS NULL OR ta.assigned_from <= UTC_DATE() OR ta.assigned_from < '1901-01-01')
+        AND (ta.assigned_until IS NULL OR ta.assigned_until >= UTC_DATE() OR ta.assigned_until < '1901-01-01')${lock ? ' FOR UPDATE' : ''}`,
     [Number(user.user_id), sheetId]);
   if (rows.length !== 1 || rows[0].workflow_status !== 'DRAFT') return { editable: false };
   const row = rows[0];

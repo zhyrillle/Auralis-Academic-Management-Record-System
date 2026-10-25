@@ -198,8 +198,8 @@ const NotificationService = {
     const [advisers] = await connection.execute(`SELECT DISTINCT saa.user_id FROM SECTION_ADVISER_ASSIGNMENT saa
         JOIN USER u ON u.user_id = saa.user_id
         WHERE saa.section_id = ? AND saa.school_year_id = ? AND LOWER(u.account_status) = 'active'
-          AND (saa.assigned_from IS NULL OR saa.assigned_from <= UTC_DATE())
-          AND (saa.assigned_until IS NULL OR saa.assigned_until >= UTC_DATE())`, [offering.section_id, offering.school_year_id]);
+          AND (saa.assigned_from IS NULL OR saa.assigned_from <= UTC_DATE() OR saa.assigned_from < '1901-01-01')
+          AND (saa.assigned_until IS NULL OR saa.assigned_until >= UTC_DATE() OR saa.assigned_until < '1901-01-01')`, [offering.section_id, offering.school_year_id]);
     const recipients = [...new Set([...heads, ...advisers].map(row => Number(row.user_id)))];
     const notifications = [];
     for (const userId of recipients) {
