@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const GradeTransmutationConfig = require('../models/GradeTransmutationConfig');
 const AuditEvent = require('../models/AuditEvent');
+const cloudSync = require('../services/cloudSyncService');
 
 const getActorId = (req) => {
   if (req.currentUser?.user_id) return req.currentUser.user_id;
@@ -19,6 +20,7 @@ const getActorId = (req) => {
 // Fetches the active grade transmutation settings (custom or DepEd official default)
 router.get('/', async (req, res) => {
   try {
+    await cloudSync.syncGradeTransmutationFromCloud();
     const config = await GradeTransmutationConfig.getConfig();
     return res.json(config);
   } catch (error) {
@@ -39,6 +41,8 @@ router.put('/', async (req, res) => {
       ranges,
       updated_by: actorId,
     });
+
+    await cloudSync.forwardGradeTransmutationToCloud(saved);
 
     try {
       await AuditEvent.create({

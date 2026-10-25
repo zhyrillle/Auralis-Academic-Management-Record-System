@@ -3,9 +3,11 @@ const router = express.Router();
 const AttendanceSheet = require('../models/AttendanceSheet');
 const AttendanceDayService = require('../services/AttendanceDayService');
 const { resolveCurrentUser } = require('../middleware/resolveCurrentUser');
+const cloudSync = require('../services/cloudSyncService');
 
 router.get('/', async (req, res) => {
   try {
+    await cloudSync.syncAttendanceFromCloud();
     const sheets = await AttendanceSheet.findAll();
     res.json(sheets);
   } catch (err) {
@@ -16,6 +18,7 @@ router.get('/', async (req, res) => {
 // GET all sheets for a specific adviser assignment (for building the date grid)
 router.get('/adviser/:adviserAssignmentId', async (req, res) => {
   try {
+    await cloudSync.syncAttendanceFromCloud();
     const sheets = await AttendanceSheet.findByAdviserAssignmentId(req.params.adviserAssignmentId);
     res.json(sheets);
   } catch (err) {
@@ -26,6 +29,7 @@ router.get('/adviser/:adviserAssignmentId', async (req, res) => {
 // GET all sheets for a specific section
 router.get('/section/:sectionId', async (req, res) => {
   try {
+    await cloudSync.syncAttendanceFromCloud();
     const schoolYearId = req.query.schoolYearId;
     if (schoolYearId !== undefined && !/^[1-9]\d*$/.test(String(schoolYearId))) return res.status(400).json({ error: 'Invalid school year.' });
     const sheets = await AttendanceSheet.findBySectionId(req.params.sectionId, schoolYearId);
@@ -50,6 +54,9 @@ router.post('/find-or-create', async (req, res) => {
       attendance_date,
       user_id,
     });
+    if (result && result.attendance_sheet_id) {
+      cloudSync.forwardAttendanceSheetToCloud(result.attendance_sheet_id, req.body).catch(() => {});
+    }
     res.status(result.created ? 201 : 200).json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -73,6 +80,7 @@ router.patch('/:id/no-classes', resolveCurrentUser, async (req, res) => {
       confirmExistingRecords: req.body.confirmExistingRecords,
       userId: req.currentUser.user_id,
     });
+    cloudSync.forwardAttendanceSheetNoClassesToCloud(req.params.id, req.body.reason).catch(() => {});
     res.json(result);
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: err.message, code: err.code });
@@ -82,6 +90,7 @@ router.patch('/:id/no-classes', resolveCurrentUser, async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const id = await AttendanceSheet.create(req.body);
+    cloudSync.forwardAttendanceSheetToCloud(id, req.body).catch(() => {});
     res.status(201).json({ message: 'Attendance Sheet created successfully', attendance_sheet_id: id });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -91,6 +100,7 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const updated = await AttendanceSheet.update(req.params.id, req.body);
+    cloudSync.forwardAttendanceSheetToCloud(req.params.id, req.body).catch(() => {});
     res.json(updated);
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: err.message });
@@ -101,6 +111,8 @@ router.delete('/:id', async (req, res) => {
   try {
     const success = await AttendanceSheet.delete(req.params.id);
     if (!success) return res.status(404).json({ message: 'Attendance Sheet not found' });
+    const db = require('../config/db');
+    if (db.cloudPool) db.cloudPool.query('DELETE FROM ATTENDANCE_SHEET WHERE attendance_sheet_id = ?', [req.params.id]).catch(() => {});
     res.json({ message: 'Attendance Sheet deleted successfully' });
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: err.message });

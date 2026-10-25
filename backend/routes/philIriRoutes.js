@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const PhilIriAssessment = require('../models/PhilIriAssessment');
+const cloudSync = require('../services/cloudSyncService');
 
 router.use('/screening', require('./philIriScreeningRoutes'));
 
@@ -45,6 +46,7 @@ router.get('/coordinator/english', async (req, res) => {
 // GET /api/phil-iri/:sectionId
 router.get('/:sectionId', async (req, res) => {
   try {
+    await cloudSync.syncPhilIriFromCloud();
     const { sectionId } = req.params;
     const testType = req.query.testType || 'POST_TEST';
     const subjectOfferingId = req.query.subjectOfferingId || null;
@@ -169,6 +171,7 @@ router.post('/batch', async (req, res) => {
     }));
 
     const result = await PhilIriAssessment.upsertBatch(enrichedRecords);
+    cloudSync.forwardPhilIriBatchToCloud(enrichedRecords).catch(() => {});
     return res.json({
       success: true,
       tableReady: true,

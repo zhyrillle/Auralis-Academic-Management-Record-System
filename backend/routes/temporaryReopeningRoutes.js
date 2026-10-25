@@ -1,15 +1,20 @@
 const express = require('express');
 const TemporaryReopening = require('../models/TemporaryReopening');
 const { resolveCurrentUser, requireSystemAdmin } = require('../middleware/resolveCurrentUser');
+const cloudSync = require('../services/cloudSyncService');
 const router = express.Router();
 
 router.use(resolveCurrentUser, requireSystemAdmin);
 router.get('/', async (_req, res) => {
-  try { return res.json(await TemporaryReopening.findAll()); }
+  try {
+    await cloudSync.syncGradeReopenRequestsFromCloud();
+    return res.json(await TemporaryReopening.findAll());
+  }
   catch (_error) { return res.status(500).json({ error: 'Temporary access records could not be loaded.' }); }
 });
 router.get('/:id', async (req, res) => {
   try {
+    await cloudSync.syncGradeReopenRequestsFromCloud();
     const reopening = await TemporaryReopening.findById(req.params.id);
     if (!reopening) return res.status(404).json({ error: 'Temporary access record not found.' });
     return res.json(reopening);
