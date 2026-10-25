@@ -513,6 +513,27 @@ async function submitClassGrades(input, user, database = db) {
       offering, sheetId: sheet.grade_sheet_id, term: input.term, correction: Boolean(sheet.submitted_at),
       teacherName: [user.first_name, user.last_name].filter(Boolean).join(' '),
     }, connection);
+    const atRiskStudentIds = new Set(
+      grades
+        .filter(grade => typeof grade.termGrade === 'number' && grade.termGrade > 0 && grade.termGrade < 75)
+        .map(grade => grade.studentId)
+    );
+    const atRiskCount = atRiskStudentIds.size;
+    if (atRiskCount > 0 && typeof NotificationService.notifyAtRisk === 'function') {
+      try {
+        await NotificationService.notifyAtRisk({
+          subjectOfferingId: offering.subject_offering_id,
+          subjectName: offering.subject_name,
+          sectionName: offering.section_name,
+          atRiskCount,
+          departmentId: offering.department_id,
+          actionLink: '/department-head/dashboard',
+          connection,
+        });
+      } catch (notifErr) {
+        console.warn('At-risk notification delivery failed:', notifErr.message);
+      }
+    }
     await connection.commit();
     try { NotificationService.emitCommittedGradePublications(notifications); }
     catch (error) { console.warn('Submission saved; live notification delivery is unavailable:', error.message); }
