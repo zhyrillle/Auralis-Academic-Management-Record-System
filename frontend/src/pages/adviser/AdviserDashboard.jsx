@@ -20,8 +20,8 @@ import gccnhsLogo from "../../assets/gccnhs_logo.png";
 import Toast from "../../components/common/Toast.jsx";
 
 // Student & Report Services
-import { getStudentSF9Details } from "../../services/studentSf9Service";
-import { getStudentSF10Details } from "../../services/reportService";
+import { getStudentSF9Details, downloadStudentSf9Pdf, fetchEphemeralLrn } from "../../services/studentSf9Service";
+import { getStudentSF10Details, fetchEphemeralSf10Lrn } from "../../services/reportService";
 import { getAdviserSections, getStudentsBySection } from "../../services/sectionService";
 import { getSectionDetails } from "../../services/sectionDetailsService";
 
@@ -456,49 +456,84 @@ export default function AdviserDashboard() {
         // --- Generate SF9 if requested ---
         if (isSF9 || isBulk) {
           try {
-            let sf9Data = null;
-            if (studentIdentifier) {
+            let sf9Blob = null;
+
+            // Attempt 1: Native Vector PDF via Backend (Razor-sharp, 100% crisp vector fonts, zero blur)
+            try {
+              const syId = advClass.schoolYearId || advClass.school_year_id;
+              const backendBlob = await downloadStudentSf9Pdf(studentIdentifier, {
+                schoolYearId: syId,
+                comments: { term1: "", term2: "", term3: "" },
+              });
+              if (backendBlob && backendBlob.size > 1000) {
+                sf9Blob = backendBlob;
+              }
+            } catch (backendErr) {
+              console.warn(`Backend PDF unavailable for student ${studentIdentifier}, using client fallback:`, backendErr);
+            }
+
+            // Attempt 2: Fallback to high-resolution client-side PDF with ephemeral LRN
+            if (!sf9Blob) {
+              let sf9Data = null;
+              if (studentIdentifier) {
+                try {
+                  sf9Data = await getStudentSF9Details(studentIdentifier, {
+                    schoolYearId: advClass.schoolYearId || advClass.school_year_id,
+                  });
+                } catch (sf9FetchErr) {
+                  console.warn(`Could not fetch dynamic SF9 data for student ${studentIdentifier}:`, sf9FetchErr);
+                }
+              }
+
+              let exportLrn = sf9Data?.studentProfile?.lrn || student.lrn;
               try {
-                sf9Data = await getStudentSF9Details(studentIdentifier, {
-                  schoolYearId: advClass.schoolYearId || advClass.school_year_id,
-                });
-              } catch (sf9FetchErr) {
-                console.warn(`Could not fetch dynamic SF9 data for student ${studentIdentifier}:`, sf9FetchErr);
+                const fetchedLrn = await fetchEphemeralLrn(studentIdentifier) || await fetchEphemeralSf10Lrn(studentIdentifier);
+                if (fetchedLrn) exportLrn = fetchedLrn;
+              } catch (lrnErr) {
+                console.warn(`Could not fetch ephemeral LRN for student ${studentIdentifier}:`, lrnErr);
+              }
+
+              const temporaryProfile = {
+                ...(sf9Data?.studentProfile || {}),
+                name: sf9Data?.studentProfile?.name || student.name || `${lastName}, ${firstName}`.trim(),
+                lrn: exportLrn,
+                gradeLevel: sf9Data?.studentProfile?.gradeLevel || advClass.gradeLevel || advClass.grade_level_name || "",
+                grade: sf9Data?.studentProfile?.grade || advClass.gradeLevel || advClass.grade_level_name || "",
+                section: sf9Data?.studentProfile?.section || advClass.sectionName || advClass.section || sectionName,
+                program: sf9Data?.studentProfile?.program || advClass.program_name || advClass.program || "",
+                sex: sf9Data?.studentProfile?.sex || student.sex || "",
+                age: sf9Data?.studentProfile?.age ?? student.age ?? "",
+                schoolYear: sf9Data?.studentProfile?.schoolYear || advClass.schoolYear || advClass.school_year || "",
+              };
+
+              const sf9Result = await exportSf9Pdf({
+                studentProfile: temporaryProfile,
+                grades: sf9Data?.grades || [],
+                performanceDescriptors: sf9Data?.performanceDescriptors || [],
+                attendanceData: sf9Data?.attendanceData || {
+                  months: ["Jun", "Jul", "Aug", "Sept", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr"],
+                  classDays: new Array(11).fill(0),
+                  daysPresent: new Array(11).fill(0),
+                  daysAbsent: new Array(11).fill(0),
+                },
+                comments: { term1: "", term2: "", term3: "" },
+                depedLogo,
+                gccnhsLogo,
+                skipDownload: true,
+              });
+
+              // Clear ephemeral decrypted LRN immediately from function scope
+              temporaryProfile.lrn = null;
+              exportLrn = null;
+
+              if (sf9Result?.blob) {
+                sf9Blob = sf9Result.blob;
               }
             }
 
-            const studentProfile = {
-              ...(sf9Data?.studentProfile || {}),
-              name: sf9Data?.studentProfile?.name || student.name || `${lastName}, ${firstName}`.trim(),
-              lrn: sf9Data?.studentProfile?.lrn || student.lrn || "",
-              gradeLevel: sf9Data?.studentProfile?.gradeLevel || advClass.gradeLevel || advClass.grade_level_name || "",
-              grade: sf9Data?.studentProfile?.grade || advClass.gradeLevel || advClass.grade_level_name || "",
-              section: sf9Data?.studentProfile?.section || advClass.sectionName || advClass.section || sectionName,
-              program: sf9Data?.studentProfile?.program || advClass.program_name || advClass.program || "",
-              sex: sf9Data?.studentProfile?.sex || student.sex || "",
-              age: sf9Data?.studentProfile?.age ?? student.age ?? "",
-              schoolYear: sf9Data?.studentProfile?.schoolYear || advClass.schoolYear || advClass.school_year || "",
-            };
-
-            const sf9Result = await exportSf9Pdf({
-              studentProfile,
-              grades: sf9Data?.grades || [],
-              performanceDescriptors: sf9Data?.performanceDescriptors || [],
-              attendanceData: sf9Data?.attendanceData || {
-                months: ["Jun", "Jul", "Aug", "Sept", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr"],
-                classDays: new Array(11).fill(0),
-                daysPresent: new Array(11).fill(0),
-                daysAbsent: new Array(11).fill(0),
-              },
-              comments: { term1: "", term2: "", term3: "" },
-              depedLogo,
-              gccnhsLogo,
-              skipDownload: true,
-            });
-
-            if (sf9Result?.blob) {
+            if (sf9Blob) {
               const uniqueSf9FileName = makeUniqueName(`${studentBaseName}_SF9`, "pdf", usedSf9Names);
-              sf9Folder.file(uniqueSf9FileName, sf9Result.blob);
+              sf9Folder.file(uniqueSf9FileName, sf9Blob);
               successCount++;
             }
           } catch (sf9Err) {
@@ -518,24 +553,49 @@ export default function AdviserDashboard() {
               }
             }
 
-            const sf10StudentProp = {
+            // Ephemeral on-demand fetch of official 12-digit LRN strictly for document export (DPA compliance)
+            let exportSf10Lrn = student.lrn || sf10Data?.learner?.lrn;
+            try {
+              const fetchedLrn = await fetchEphemeralSf10Lrn(studentIdentifier) || await fetchEphemeralLrn(studentIdentifier);
+              if (fetchedLrn) exportSf10Lrn = fetchedLrn;
+            } catch (lrnErr) {
+              console.warn(`Could not fetch ephemeral LRN for student ${studentIdentifier}:`, lrnErr);
+            }
+
+            const temporarySf10Student = {
               ...student,
               studentId: student.student_id || student.id,
               studentSectionId: student.student_section_id || student.studentSectionId,
-              lrn: student.lrn,
+              lrn: exportSf10Lrn,
               name: student.name || `${lastName}, ${firstName}`.trim(),
               section: advClass.sectionName || advClass.section || sectionName,
               gradeLevel: advClass.gradeLevel || advClass.grade_level_name || "",
             };
 
+            const temporarySf10Data = sf10Data ? {
+              ...sf10Data,
+              learner: {
+                ...(sf10Data.learner || {}),
+                lrn: exportSf10Lrn,
+              },
+              certification: {
+                ...(sf10Data.certification || {}),
+                lrn: exportSf10Lrn,
+              },
+            } : sf10Data;
+
             const uniqueSf10FileName = makeUniqueName(`${studentBaseName}_SF10`, "xlsx", usedSf10Names);
 
             const sf10Result = await exportSf10Excel({
-              student: sf10StudentProp,
-              sf10Data,
+              student: temporarySf10Student,
+              sf10Data: temporarySf10Data,
               fileName: uniqueSf10FileName,
               skipDownload: true,
             });
+
+            // Immediately wipe ephemeral decrypted LRN from function scope
+            temporarySf10Student.lrn = null;
+            exportSf10Lrn = null;
 
             const sf10Blob = sf10Result?.blob || sf10Result?.buffer;
             if (sf10Blob) {

@@ -7,7 +7,7 @@ import gccnhsLogo from "../../assets/gccnhs_logo.png";
 import backIconUrl from "../../assets/backButton.svg";
 import { getStoredUser, normalizeRole } from "../../utils/auth";
 import { getStudentSF9Details, downloadStudentSf9Pdf, fetchEphemeralLrn } from "../../services/studentSf9Service";
-import { getStudentSF10Details } from "../../services/reportService";
+import { getStudentSF10Details, fetchEphemeralSf10Lrn } from "../../services/reportService";
 import Toast from "../../components/common/Toast.jsx";
 import { exportSf9Pdf } from "../../utils/exportSf9Pdf";
 import SF10PreviewModal from "../../components/SF10PreviewModal.jsx";
@@ -245,7 +245,7 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
         });
 
         if (pdfBlob && pdfBlob.size > 1000) {
-          const lastName = getResolvedLastName();
+          const lastName = getStudentLastName();
           const fileName = `${lastName}_SF9.pdf`;
           const blobUrl = window.URL.createObjectURL(pdfBlob);
           const link = document.createElement("a");
@@ -440,14 +440,44 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
       }
       if (userRole === "principal" && !data) throw new Error("Official SF10 records are unavailable.");
 
+      // Ephemeral on-demand fetch of full 12-digit LRN strictly for document export (DPA compliance)
+      let exportLrn = sf10StudentProp.lrn;
+      try {
+        const fetchedLrn = await fetchEphemeralSf10Lrn(identifier) || await fetchEphemeralLrn(identifier);
+        if (fetchedLrn) exportLrn = fetchedLrn;
+      } catch (lrnErr) {
+        console.warn("Could not fetch ephemeral LRN for SF10 export:", lrnErr);
+      }
+
+      const temporaryStudent = {
+        ...sf10StudentProp,
+        lrn: exportLrn,
+      };
+
+      const temporarySf10Data = data ? {
+        ...data,
+        learner: {
+          ...(data.learner || {}),
+          lrn: exportLrn,
+        },
+        certification: {
+          ...(data.certification || {}),
+          lrn: exportLrn,
+        },
+      } : data;
+
       const lastName = getStudentLastName();
       const fileName = `${lastName}_SF10.xlsx`;
 
       await exportSf10Excel({
-        student: sf10StudentProp,
-        sf10Data: data,
+        student: temporaryStudent,
+        sf10Data: temporarySf10Data,
         fileName
       });
+
+      // Clear ephemeral decrypted LRN immediately from function scope
+      temporaryStudent.lrn = null;
+      exportLrn = null;
       showToast(`Successfully downloaded ${fileName}!`, "success");
     } catch (err) {
       console.error("Direct SF10 Excel download error:", err);
@@ -489,42 +519,82 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
       showToast("Generating SF9 Performance Report PDF...", "info");
       let exportLrn = studentProfile.lrn;
       try {
-        const fetchedLrn = await fetchEphemeralLrn(identifier);
+        const fetchedLrn = await fetchEphemeralLrn(identifier) || await fetchEphemeralSf10Lrn(identifier);
         if (fetchedLrn) exportLrn = fetchedLrn;
       } catch (fetchErr) {
         console.warn("Could not fetch ephemeral LRN:", fetchErr);
       }
 
-      const temporaryProfile = {
-        ...studentProfile,
+      let sf9Blob = null;
+      let sf9FileName = `${lastName}_SF9.pdf`;
+
+      // Try backend high-res vector PDF first
+      try {
+        const syId = schoolYearId || studentProfile.schoolYearId || studentProfile.school_year_id;
+        const backendBlob = await downloadStudentSf9Pdf(identifier, {
+          schoolYearId: syId,
+          comments,
+        });
+        if (backendBlob && backendBlob.size > 1000) {
+          sf9Blob = backendBlob;
+        }
+      } catch (backendErr) {
+        console.warn("Backend SF9 PDF unavailable for ZIP, falling back to client PDF:", backendErr);
+      }
+
+      if (!sf9Blob) {
+        const temporaryProfile = {
+          ...studentProfile,
+          lrn: exportLrn,
+        };
+
+        const sf9Result = await exportSf9Pdf({
+          studentProfile: temporaryProfile,
+          grades,
+          performanceDescriptors,
+          attendanceData,
+          comments,
+          depedLogo,
+          gccnhsLogo,
+          skipDownload: true,
+        });
+
+        temporaryProfile.lrn = null;
+        sf9Blob = sf9Result?.blob;
+        if (sf9Result?.fileName) sf9FileName = sf9Result.fileName;
+      }
+
+      const temporarySf10Student = {
+        ...sf10StudentProp,
         lrn: exportLrn,
       };
 
-      const sf9Result = await exportSf9Pdf({
-        studentProfile: temporaryProfile,
-        grades,
-        performanceDescriptors,
-        attendanceData,
-        comments,
-        depedLogo,
-        gccnhsLogo,
-        skipDownload: true,
-      });
+      const temporarySf10Data = data ? {
+        ...data,
+        learner: {
+          ...(data.learner || {}),
+          lrn: exportLrn,
+        },
+        certification: {
+          ...(data.certification || {}),
+          lrn: exportLrn,
+        },
+      } : data;
 
-      temporaryProfile.lrn = null;
-      exportLrn = null;
-
-      const sf9FileName = sf9Result?.fileName || `${lastName}_SF9.pdf`;
-      const sf9Blob = sf9Result?.blob;
+      // sf9FileName and sf9Blob are already set above
 
       showToast("Generating Form 10 Excel (.xlsx)...", "info");
       const sf10FileName = `${lastName}_SF10.xlsx`;
       const sf10Result = await exportSf10Excel({
-        student: sf10StudentProp,
-        sf10Data: data,
+        student: temporarySf10Student,
+        sf10Data: temporarySf10Data,
         fileName: sf10FileName,
         skipDownload: true,
       });
+
+      // Clear ephemeral decrypted LRN immediately from function scope
+      temporarySf10Student.lrn = null;
+      exportLrn = null;
 
       showToast("Bundling documents into ZIP...", "info");
       const zip = new JSZip();
@@ -1067,6 +1137,18 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
                 <div className="profile-field-group">
                   <span className="profile-field-label">Full Name</span>
                   <span className="profile-field-value">{studentProfile.name || "Unavailable"}</span>
+                </div>
+
+                <div className="profile-field-group">
+                  <span className="profile-field-label">Learner Reference Number (LRN)</span>
+                  <span className="profile-field-value">
+                    <MaskedLrn
+                      lrn={studentProfile.lrn}
+                      showToggle={false}
+                      allowCopy={false}
+                      badge={true}
+                    />
+                  </span>
                 </div>
 
                 <div className="profile-field-group">

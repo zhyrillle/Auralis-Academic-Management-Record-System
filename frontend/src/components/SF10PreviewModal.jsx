@@ -3,7 +3,8 @@ import { createPortal } from "react-dom";
 import { X, Printer, FileSpreadsheet, Loader2, AlertCircle, ChevronLeft, ChevronRight } from "lucide-react";
 import SF10Document, { safeStr, parseNameParts } from "./SF10Document";
 import { exportSf10Excel } from "../utils/exportSf10Excel";
-import { getStudentSF10Details } from "../services/reportService";
+import { getStudentSF10Details, fetchEphemeralSf10Lrn } from "../services/reportService";
+import { fetchEphemeralLrn } from "../services/studentSf9Service";
 import "../styles/SF10PreviewModal.css";
 
 /**
@@ -232,7 +233,7 @@ function SF10PreviewModalContent({ isOpen, onClose, student, requireOfficialData
     };
   }, [isOpen, getLastNameForFile]);
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
     if (loading || (requireOfficialData && (error || !sf10Data))) return;
     const docElem = page1Ref.current?.closest(".sf10-document-wrapper");
     const printFileName = `${getLastNameForFile()}_SF10`;
@@ -249,6 +250,23 @@ function SF10PreviewModalContent({ isOpen, onClose, student, requireOfficialData
     if (!docElem) {
       window.print();
       return;
+    }
+
+    // Ephemeral on-demand fetch of official 12-digit LRN strictly for document print (DPA compliance)
+    let printLrn = sf10Data?.learner?.lrn || student?.lrn;
+    try {
+      const fetchedLrn = await fetchEphemeralSf10Lrn(identifier) || await fetchEphemeralLrn(identifier);
+      if (fetchedLrn) printLrn = fetchedLrn;
+    } catch (lrnErr) {
+      console.warn("Could not fetch ephemeral LRN for SF10 print:", lrnErr);
+    }
+
+    // Clone the document wrapper DOM tree to inject the ephemeral decrypted LRN into print spans
+    const clone = docElem.cloneNode(true);
+    if (printLrn) {
+      clone.querySelectorAll(".lrn-print-val").forEach((el) => {
+        el.textContent = printLrn;
+      });
     }
 
     // Collect all stylesheets from head and body
@@ -326,12 +344,15 @@ function SF10PreviewModalContent({ isOpen, onClose, student, requireOfficialData
         </head>
         <body>
           <div class="sf10-document-wrapper">
-            ${docElem.innerHTML}
+            ${clone.innerHTML}
           </div>
         </body>
       </html>
     `);
     doc.close();
+
+    // Clear ephemeral decrypted LRN immediately from function scope
+    printLrn = null;
 
     if (doc) {
       doc.title = printFileName;
@@ -360,11 +381,42 @@ function SF10PreviewModalContent({ isOpen, onClose, student, requireOfficialData
 
     try {
       const fileName = `${getLastNameForFile()}_SF10.xlsx`;
+
+      // Ephemeral on-demand fetch of official 12-digit LRN strictly for document export (DPA compliance)
+      let exportLrn = sf10Data?.learner?.lrn || student?.lrn;
+      try {
+        const fetchedLrn = await fetchEphemeralSf10Lrn(identifier) || await fetchEphemeralLrn(identifier);
+        if (fetchedLrn) exportLrn = fetchedLrn;
+      } catch (lrnErr) {
+        console.warn("Could not fetch ephemeral LRN for SF10 modal export:", lrnErr);
+      }
+
+      const temporaryStudent = {
+        ...student,
+        lrn: exportLrn,
+      };
+
+      const temporarySf10Data = sf10Data ? {
+        ...sf10Data,
+        learner: {
+          ...(sf10Data.learner || {}),
+          lrn: exportLrn,
+        },
+        certification: {
+          ...(sf10Data.certification || {}),
+          lrn: exportLrn,
+        },
+      } : sf10Data;
+
       await exportSf10Excel({
-        student,
-        sf10Data,
+        student: temporaryStudent,
+        sf10Data: temporarySf10Data,
         fileName
       });
+
+      // Clear ephemeral decrypted LRN immediately from function scope
+      temporaryStudent.lrn = null;
+      exportLrn = null;
     } catch (err) {
       console.error("Error generating SF10 Excel:", err);
       alert("Failed to export Excel document. Please try again.");
