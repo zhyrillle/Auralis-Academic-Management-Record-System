@@ -164,3 +164,107 @@
     padding: 24px;
   }
 }
+
+/* Department Head CMSS Grade Distribution Drilldown & Eye Button Styles */
+.dept-eye-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid #d4dfeb;
+  background: #ffffff;
+  color: #17345f;
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.dept-eye-btn:hover:not(:disabled) {
+  background: #edf2fa;
+  border-color: #112d61;
+  color: #112d61;
+  transform: scale(1.05);
+}
+
+.dept-eye-btn:disabled,
+.dept-eye-btn.disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  pointer-events: none;
+  background: #f1f5f9;
+  border-color: #e2e8f0;
+  color: #94a3b8;
+  transform: none;
+}
+
+.dept-name-cell {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dept-drilldown-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--performance-primary);
+  border: 1px solid var(--performance-border);
+  border-radius: 12px;
+  padding: 10px 16px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.dept-breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--performance-heading);
+}
+
+.dept-breadcrumb-crumb {
+  cursor: pointer;
+  color: #1d4ed8;
+  border: none;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.dept-breadcrumb-crumb:hover {
+  color: #112d61;
+}
+
+.dept-breadcrumb-current {
+  color: var(--performance-heading);
+  font-weight: 700;
+}
+
+.dept-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: #ffffff;
+  border: 1px solid #d4dfeb;
+  color: #112d61;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.dept-back-btn:hover {
+  background: #f1f5f9;
+}
