@@ -31,7 +31,12 @@ export async function fetchDeptHeadNotifications(userId = null) {
       ? `${API_BASE_URL}/notifications/department-head?user_id=${encodeURIComponent(resolvedUserId)}`
       : `${API_BASE_URL}/notifications/department-head`;
     const headers = resolvedUserId ? { "x-auralis-user-id": String(resolvedUserId) } : {};
-    const res = await fetch(url, { queueOffline: false, headers });
+    const res = await fetch(url, {
+      queueOffline: false,
+      headers,
+      cacheRead: false,
+      force: true,
+    });
     return await parseResponse(res);
   } catch (error) {
     console.warn("Could not fetch department head notifications:", error);

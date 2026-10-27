@@ -133,8 +133,7 @@ router.get('/', async (req, res) => {
 // GET /api/notifications/department-head
 // Department-Head-specific feed:
 //   • Real DB notifications addressed to this user
-//   • Live fallback aggregations (grade submissions, reopen requests) when DB is empty
-//   • Static demo seed when nothing exists at all (onboarding / testing)
+//   • Live fallback aggregations (grade submissions, reopen requests, at-risk) when DB is empty
 // ─────────────────────────────────────────────────────────────────────────────
 
 router.get('/department-head', async (req, res) => {
@@ -346,55 +345,6 @@ router.get('/department-head', async (req, res) => {
         console.warn('[dept-head] synthesize at-risk alerts error:', err.message);
       }
 
-      // 2d. Static demo seed tailored to this Department Head's department
-      if (synthesized.length === 0) {
-        const now       = new Date();
-        const yesterday = new Date(now);
-        yesterday.setDate(now.getDate() - 1);
-
-        synthesized.push(
-          {
-            id: 'demo-1', type: 'SUBMISSION',
-            title: `Grade Submission Received — ${userDeptName}`,
-            message: `Mr. Juan Dela Cruz submitted Quarter 2 final grades for Grade 9 – Rizal (${userDeptName}).`,
-            timestamp: '5 mins', unread: true,
-            created_at: new Date(now.getTime() - 5 * 60000).toISOString(),
-            action_link: '/department-head/class-records',
-          },
-          {
-            id: 'demo-2', type: 'AT_RISK',
-            title: `At-Risk Alert — ${userDeptName} Department`,
-            message: `4 students in Grade 9 – Einstein have been flagged with high risk in ${userDeptName} based on quarterly assessments.`,
-            timestamp: '30 mins', unread: true,
-            created_at: new Date(now.getTime() - 30 * 60000).toISOString(),
-            action_link: '/department-head/dashboard',
-          },
-          {
-            id: 'demo-3', type: 'DEADLINE',
-            title: 'Grade Submission Deadline Reminder',
-            message: `Quarter 2 grade submission window closes in 3 days. Subject teachers in your department have pending records.`,
-            timestamp: '2 hours', unread: true,
-            created_at: new Date(now.getTime() - 120 * 60000).toISOString(),
-            action_link: '/department-head/class-records',
-          },
-          {
-            id: 'demo-4', type: 'REQUEST',
-            title: 'Grade Reopening Request Endorsed',
-            message: `Grade reopening request for Grade 8 – Mabini (${userDeptName}) has been approved and unlocked for 48 hours.`,
-            timestamp: 'Yesterday', unread: false,
-            created_at: yesterday.toISOString(),
-            action_link: '/department-head/class-records',
-          },
-          {
-            id: 'demo-5', type: 'SUMMARY',
-            title: 'Department Performance Summary Ready',
-            message: `Consolidated pass rates and subject master sheets for ${userDeptName} (Quarter 1) have been finalized and archived.`,
-            timestamp: 'Yesterday', unread: false,
-            created_at: yesterday.toISOString(),
-            action_link: '/department-head/dashboard',
-          }
-        );
-      }
     }
 
     // ── 3. Merge & group ────────────────────────────────────────────────────
