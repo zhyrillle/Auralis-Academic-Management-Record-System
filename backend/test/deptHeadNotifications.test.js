@@ -128,3 +128,49 @@ test('GET /api/notifications/department-head synthesizes at-risk alerts from STU
   assert.equal(atRiskNotif.unread, true);
   assert.equal(atRiskNotif.action_link, '/department-head/dashboard');
 });
+
+test('GET /api/notifications/department-head returns empty notifications without placeholders when DB has no records', async (t) => {
+  const originalLoad = Module._load;
+  const mockDb = {
+    async execute(sql, params) {
+      if (sql.includes('FROM USER u WHERE u.user_id = ?')) {
+        return [[{ user_id: 101, department_id: 5, department_name: 'Science' }]];
+      }
+      return [[]];
+    },
+  };
+
+  let notificationRoutes;
+  try {
+    Module._load = function (request, parent, isMain) {
+      if (request === '../config/db') return mockDb;
+      return originalLoad.call(this, request, parent, isMain);
+    };
+    delete require.cache[require.resolve('../routes/notificationRoutes')];
+    notificationRoutes = require('../routes/notificationRoutes');
+  } finally {
+    Module._load = originalLoad;
+  }
+
+  const app = express();
+  app.use(express.json());
+  app.use('/api/notifications', notificationRoutes);
+
+  const server = app.listen(0);
+  t.after(() => server.close());
+
+  const { port } = server.address();
+  const res = await fetch(`http://127.0.0.1:${port}/api/notifications/department-head`, {
+    headers: { 'x-auralis-user-id': '101' },
+  });
+
+  assert.equal(res.status, 200);
+  const data = await res.json();
+  assert.equal(data.success, true);
+  assert.equal(data.unreadCount, 0);
+  assert.equal(data.totalCount, 0);
+  assert.equal(data.notifications.today.length, 0);
+  assert.equal(data.notifications.yesterday.length, 0);
+  assert.equal(data.all.length, 0);
+});
+

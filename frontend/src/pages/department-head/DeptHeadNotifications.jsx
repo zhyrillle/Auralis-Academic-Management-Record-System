@@ -38,63 +38,6 @@ export function resolveDeptHeadNotificationPath(notification) {
   return "/department-head/dashboard";
 }
 
-const defaultFallbackNotifications = {
-  today: [
-    {
-      id: "dept-1",
-      title: "Grade Submission Received — Mathematics",
-      message:
-        "Mr. Juan Dela Cruz submitted Quarter 2 final grades for Grade 9 – Rizal (Mathematics).",
-      timestamp: "5 mins",
-      unread: true,
-      type: "grade_submission",
-      action_link: "/department-head/class-records",
-    },
-    {
-      id: "dept-2",
-      title: "At-Risk Alert — Science Department",
-      message:
-        "4 students in Grade 9 – Einstein have been flagged with high risk in Science based on quarterly assessments.",
-      timestamp: "30 mins",
-      unread: true,
-      type: "at_risk_alert",
-      action_link: "/department-head/dashboard",
-    },
-    {
-      id: "dept-3",
-      title: "Grade Submission Deadline Reminder",
-      message:
-        "Quarter 2 grade submission window closes in 3 days. 2 subject teachers in your department have pending records.",
-      timestamp: "2 hours",
-      unread: true,
-      type: "deadline_reminder",
-      action_link: "/department-head/class-records",
-    },
-  ],
-  yesterday: [
-    {
-      id: "dept-4",
-      title: "Grade Reopening Request Endorsed",
-      message:
-        "Grade reopening request for Grade 8 – Mabini (English) has been approved and unlocked for 48 hours.",
-      timestamp: "Yesterday",
-      unread: false,
-      type: "reopen_request",
-      action_link: "/department-head/class-records",
-    },
-    {
-      id: "dept-5",
-      title: "Department Performance Summary Ready",
-      message:
-        "Consolidated pass rates and subject master sheets for Quarter 1 have been finalized and archived.",
-      timestamp: "Yesterday",
-      unread: false,
-      type: "summary",
-      action_link: "/department-head/dashboard",
-    },
-  ],
-};
-
 function NotificationCard({ notification, onClick }) {
   return (
     <div
@@ -125,7 +68,7 @@ function NotificationCard({ notification, onClick }) {
 export default function DeptHeadNotifications() {
   const navigate = useNavigate();
   const [activeFilter, setActiveFilter] = useState("all");
-  const [items, setItems] = useState(defaultFallbackNotifications);
+  const [items, setItems] = useState({ today: [], yesterday: [] });
   const [loading, setLoading] = useState(true);
 
   const loadNotifications = useCallback(async () => {
@@ -139,9 +82,12 @@ export default function DeptHeadNotifications() {
           today: res.notifications.today || [],
           yesterday: res.notifications.yesterday || [],
         });
+      } else {
+        setItems({ today: [], yesterday: [] });
       }
     } catch (err) {
       console.warn("Could not fetch department notifications:", err);
+      setItems({ today: [], yesterday: [] });
     } finally {
       setLoading(false);
     }
@@ -290,7 +236,9 @@ export default function DeptHeadNotifications() {
             <p>
               {loading
                 ? "Loading notifications..."
-                : "No unread notifications."}
+                : activeFilter === "unread"
+                ? "No unread notifications."
+                : "No notifications available."}
             </p>
           </div>
         )}
