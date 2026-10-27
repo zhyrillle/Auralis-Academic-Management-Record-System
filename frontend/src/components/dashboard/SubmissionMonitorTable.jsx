@@ -5,14 +5,42 @@ import TablePagination from '../common/TablePagination';
 
 const STATUS_CONFIG = { Pending: 'dept-pill-amber', Submitted: 'dept-pill-green', Overdue: 'dept-pill-red' };
 
-export default function SubmissionMonitorTable({ data, loading }) {
+export default function SubmissionMonitorTable({ data, loading, term, onTermChange }) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(5);
   const safePage = Math.min(page, Math.max(1, Math.ceil(data.length / pageSize)));
+
+  const termOptions = [
+    { value: '1', label: 'Term 1' },
+    { value: '2', label: 'Term 2' },
+    { value: '3', label: 'Term 3' },
+    { value: 'overall', label: 'All Terms' },
+  ];
+
+  const currentTermValue = term === '' ? 'overall' : (term || '1');
+
   return <section className="dept-card dept-submission-monitor">
-    <div className="dept-card-header-row"><h2 className="dept-card-title">Submission Monitor</h2>
-      <DropdownSelect label="Submission rows" value={pageSize} options={[5, 10, 20].map(value => ({ value, label: value + ' rows' }))}
-        onChange={value => { setPageSize(Number(value)); setPage(1); }} />
+    <div className="dept-card-header-row">
+      <h2 className="dept-card-title">Submission Monitor</h2>
+      <div className="dept-card-header-controls" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+        {onTermChange && (
+          <DropdownSelect
+            label="Submission term"
+            value={currentTermValue}
+            options={termOptions}
+            onChange={value => {
+              onTermChange(value === 'overall' ? '' : value);
+              setPage(1);
+            }}
+          />
+        )}
+        <DropdownSelect
+          label="Submission rows"
+          value={pageSize}
+          options={[5, 10, 20].map(value => ({ value, label: value + ' rows' }))}
+          onChange={value => { setPageSize(Number(value)); setPage(1); }}
+        />
+      </div>
     </div>
     {loading ? <div className="dept-skeleton-table" role="status" aria-label="Loading submissions" /> : <>
       <div className="dept-table-wrap"><table className="dept-table">

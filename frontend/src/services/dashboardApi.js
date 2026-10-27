@@ -56,3 +56,8 @@ export async function getPerformanceMatrix({ schoolYear, gradeLevel, quarter }) 
 export async function getGradeDistribution({ schoolYear }) {
   return fetchApi('/department-head/grade-distribution', { schoolYear });
 }
+
+
+export async function getDeptGradeDistributionReport({ schoolYear, term }) {
+  return fetchApi('/department-head/grade-distribution-report', { schoolYear, term });
+}

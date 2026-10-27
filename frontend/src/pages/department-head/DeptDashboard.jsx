@@ -141,7 +141,12 @@ export default function DeptDashboard() {
         </div>
 
         <div className="dept-monitor-details">
-        <SubmissionMonitorTable data={submissions} loading={loading} />
+        <SubmissionMonitorTable
+          data={submissions}
+          loading={loading}
+          term={activeFilters.quarter}
+          onTermChange={value => handleFilterChange('quarter', value)}
+        />
         <PerformanceMatrixTable
           data={matrix}
           loading={loading}

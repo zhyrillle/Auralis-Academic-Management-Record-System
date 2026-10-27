@@ -25,8 +25,14 @@ function buildFilters(queryObj, params, termPrefix = null) {
     params.push(queryObj.gradeLevel);
   }
   if (termPrefix && queryObj.quarter && queryObj.quarter !== 'All') {
-    filterSql += ` AND ${termPrefix}.term = ?`;
-    params.push(`T${queryObj.quarter}`);
+    if (termPrefix === 'at') {
+      const termNameMap = { '1': '1st', '2': '2nd', '3': '3rd' };
+      filterSql += ' AND at.term_name = ?';
+      params.push(termNameMap[queryObj.quarter] || queryObj.quarter);
+    } else {
+      filterSql += ` AND ${termPrefix}.term = ?`;
+      params.push(`T${queryObj.quarter}`);
+    }
   }
   return filterSql;
 }
@@ -124,10 +130,11 @@ router.get('/stats', async (req, res) => {
       JOIN SECTION sec ON so.section_id = sec.section_id
       JOIN GRADE_LEVEL gl ON sec.grade_level_id = gl.grade_level_id
       JOIN SCHOOL_YEAR sy ON so.school_year_id = sy.school_year_id
+      LEFT JOIN ACADEMIC_TERM at ON gs.term_id = at.term_id
       WHERE s.department_id = ? 
     `;
     const subParams = [departmentId];
-    subQuery += buildFilters(req.query, subParams, 'gs');
+    subQuery += buildFilters(req.query, subParams, 'at');
     const [subRows] = await db.query(subQuery, subParams);
 
     let riskQuery = `
@@ -161,31 +168,77 @@ router.get('/stats', async (req, res) => {
 router.get('/submission-monitor', async (req, res) => {
   try {
     const departmentId = await getDepartmentId(req.headers['x-auralis-user-id']);
+    const quarterParam = req.query.quarter;
+    const isOverall = quarterParam === 'all' || quarterParam === 'overall' || quarterParam === 'All';
+    const quarter = (!isOverall && (quarterParam || '1')) || null;
+    const termNameMap = { '1': '1st', '2': '2nd', '3': '3rd' };
+    const termName = quarter ? (termNameMap[quarter] || quarter) : null;
+
     let query = `
       SELECT 
-        u.first_name, u.last_name, gl.grade_level_name, sec.section_name, gs.workflow_status
-      FROM GRADE_SHEET gs
-      JOIN SUBJECT_OFFERING so ON gs.subject_offering_id = so.subject_offering_id
+        so.subject_offering_id,
+        gl.grade_level_name,
+        sec.section_name,
+        GROUP_CONCAT(DISTINCT CONCAT(u.first_name, ' ', u.last_name) SEPARATOR ', ') AS teacher_name,
+        COUNT(gs.grade_sheet_id) AS total_sheets,
+        SUM(CASE WHEN gs.workflow_status = 'SUBMITTED' THEN 1 ELSE 0 END) AS submitted_sheets
+      FROM SUBJECT_OFFERING so
       JOIN SUBJECT s ON so.subject_id = s.subject_id
       JOIN SECTION sec ON so.section_id = sec.section_id
       JOIN GRADE_LEVEL gl ON sec.grade_level_id = gl.grade_level_id
       JOIN SCHOOL_YEAR sy ON so.school_year_id = sy.school_year_id
-      LEFT JOIN TEACHER_ASSIGNMENT ta ON ta.subject_offering_id = so.subject_offering_id
-      LEFT JOIN USER u ON ta.user_id = u.user_id
-      WHERE s.department_id = ?
+      INNER JOIN TEACHER_ASSIGNMENT ta ON ta.subject_offering_id = so.subject_offering_id
+      INNER JOIN USER u ON ta.user_id = u.user_id
+      LEFT JOIN ACADEMIC_TERM at ON at.school_year_id = sy.school_year_id ${termName ? 'AND at.term_name = ? ' : ''}
+      LEFT JOIN GRADE_SHEET gs ON gs.subject_offering_id = so.subject_offering_id AND gs.term_id = at.term_id
+      WHERE s.department_id = ? AND u.user_id IS NOT NULL AND u.first_name IS NOT NULL
     `;
-    const params = [departmentId];
-    query += buildFilters(req.query, params, 'gs');
-    query += ` ORDER BY gl.grade_level_name, sec.section_name`;
+    const params = [];
+    if (termName) params.push(termName);
+    params.push(departmentId);
+
+    if (req.query.schoolYear && req.query.schoolYear !== 'All') {
+      const startsOn = req.query.schoolYear.split('-')[0];
+      query += ' AND sy.starts_on = ?';
+      params.push(startsOn);
+    }
+    if (req.query.gradeLevel && req.query.gradeLevel !== 'All') {
+      query += ' AND gl.grade_level_name = ?';
+      params.push(req.query.gradeLevel);
+    }
+
+    query += `
+      GROUP BY so.subject_offering_id, gl.grade_level_name, sec.section_name
+      ORDER BY gl.grade_level_name, sec.section_name
+    `;
 
     const [rows] = await db.query(query, params);
     const results = rows.map(r => {
-      const isSubmitted = r.workflow_status === 'SUBMITTED';
+      const submitted = Number(r.submitted_sheets) || 0;
+      const total = Number(r.total_sheets) || 0;
+      let isSubmitted = false;
+      let completion = 40;
+
+      if (quarter) {
+        isSubmitted = submitted > 0;
+        completion = isSubmitted ? 100 : 40;
+      } else {
+        const expectedTerms = Math.max(total, 3);
+        isSubmitted = submitted >= expectedTerms && expectedTerms > 0;
+        if (isSubmitted) {
+          completion = 100;
+        } else if (submitted > 0) {
+          completion = Math.round((submitted / expectedTerms) * 100);
+        } else {
+          completion = 40;
+        }
+      }
+
       return {
-        teacher: (r.first_name && r.last_name) ? `${r.first_name} ${r.last_name}` : 'Unassigned',
+        teacher: r.teacher_name,
         gradeSection: `${r.grade_level_name} - ${r.section_name}`,
         status: isSubmitted ? 'Submitted' : 'Pending',
-        completion: isSubmitted ? 100 : 40
+        completion
       };
     });
     res.json(results);
@@ -269,6 +322,350 @@ router.get('/grade-distribution', async (req, res) => {
 // DEPARTMENT HEAD CLASS RECORDS ENDPOINTS
 // ==========================================
 
+router.get('/grade-distribution-report', async (req, res) => {
+  try {
+    const userId = req.headers['x-auralis-user-id'] || req.query.userId || req.query.user_id;
+    const departmentId = await getDepartmentId(userId);
+
+    // Get Department details
+    const [deptRows] = await db.query('SELECT department_name FROM DEPARTMENT WHERE department_id = ?', [departmentId]);
+    const departmentName = deptRows[0]?.department_name || 'Department';
+
+    // Get School Years
+    const [syRows] = await db.query('SELECT school_year_id, starts_on, ends_on, status FROM SCHOOL_YEAR ORDER BY starts_on DESC');
+    const schoolYears = syRows.map(sy => ({
+      id: String(sy.school_year_id),
+      starts_on: sy.starts_on,
+      ends_on: sy.ends_on,
+      label: `S.Y. ${sy.starts_on}-${sy.ends_on}`,
+      is_active: sy.status === 'ongoing' || sy.starts_on === 2026
+    }));
+
+    const activeSy = schoolYears.find(s => s.is_active) || schoolYears[0];
+    const selectedSchoolYear = req.query.schoolYear || (activeSy ? `${activeSy.starts_on}-${activeSy.ends_on}` : '2026-2027');
+    const startsOn = selectedSchoolYear.includes('-') ? selectedSchoolYear.split('-')[0] : selectedSchoolYear;
+
+    const rawTerm = String(req.query.term || '1').trim();
+    let termCodes = [];
+    if (rawTerm === '1' || rawTerm === 'T1' || rawTerm.includes('1')) {
+      termCodes = ['T1', '1', '1st Term', 'Term 1', 'Quarter 1', '1st Quarter', 'Q1'];
+    } else if (rawTerm === '2' || rawTerm === 'T2' || rawTerm.includes('2')) {
+      termCodes = ['T2', '2', '2nd Term', 'Term 2', 'Quarter 2', '2nd Quarter', 'Q2'];
+    } else if (rawTerm === '3' || rawTerm === 'T3' || rawTerm.includes('3')) {
+      termCodes = ['T3', '3', '3rd Term', 'Term 3', 'Quarter 3', '3rd Quarter', 'Q3'];
+    } else {
+      termCodes = [rawTerm];
+    }
+
+    const termIdNum = parseInt(rawTerm.replace(/\D/g, ''), 10) || 1;
+
+    // Query offerings strictly for this department's subjects
+    const [offerings] = await db.query(`
+      SELECT 
+        so.subject_offering_id,
+        so.section_id,
+        sec.section_name,
+        gl.grade_level_id,
+        gl.grade_level_name,
+        ta.user_id,
+        u.first_name,
+        u.last_name
+      FROM SUBJECT_OFFERING so
+      JOIN SUBJECT s ON so.subject_id = s.subject_id
+      JOIN SECTION sec ON so.section_id = sec.section_id
+      JOIN GRADE_LEVEL gl ON sec.grade_level_id = gl.grade_level_id
+      JOIN SCHOOL_YEAR sy ON so.school_year_id = sy.school_year_id
+      LEFT JOIN TEACHER_ASSIGNMENT ta ON ta.subject_offering_id = so.subject_offering_id
+      LEFT JOIN USER u ON ta.user_id = u.user_id
+      WHERE s.department_id = ? AND sy.starts_on = ?
+      ORDER BY gl.grade_level_id, u.last_name, sec.section_name
+    `, [departmentId, startsOn]);
+
+    // Pre-populate G7, G8, G9, G10
+    const gradeLevels = [
+      { id: 'G7', name: 'Grade 7' },
+      { id: 'G8', name: 'Grade 8' },
+      { id: 'G9', name: 'Grade 9' },
+      { id: 'G10', name: 'Grade 10' },
+    ];
+
+    const gradeMap = new Map();
+    gradeLevels.forEach(gl => {
+      gradeMap.set(gl.id, {
+        id: gl.id,
+        name: gl.name,
+        total_score: 0,
+        num_takers: 0,
+        score_mean: 0,
+        mps: 0,
+        no_grade: 0,
+        r60_74: 0,
+        r75_79: 0,
+        r80_84: 0,
+        r85_89: 0,
+        r90_100: 0,
+        teachers: new Map()
+      });
+    });
+
+    for (const row of offerings) {
+      const { section_id, section_name, subject_offering_id, grade_level_name, user_id, first_name, last_name } = row;
+      const glKey = grade_level_name ? (grade_level_name.startsWith('G') ? grade_level_name : `G${grade_level_name}`) : 'G7';
+
+      if (!gradeMap.has(glKey)) {
+        gradeMap.set(glKey, {
+          id: glKey,
+          name: `Grade ${glKey.replace(/\D/g, '')}`,
+          total_score: 0,
+          num_takers: 0,
+          score_mean: 0,
+          mps: 0,
+          no_grade: 0,
+          r60_74: 0,
+          r75_79: 0,
+          r80_84: 0,
+          r85_89: 0,
+          r90_100: 0,
+          teachers: new Map()
+        });
+      }
+      const glObj = gradeMap.get(glKey);
+
+      // Enrolled students
+      const [students] = await db.query(
+        `SELECT DISTINCT ss.student_id FROM STUDENT_SECTION ss WHERE ss.section_id = ?`,
+        [section_id]
+      ).catch(() => [[]]);
+
+      // Quarterly grades
+      const termPlaceholders = termCodes.map(() => 'UPPER(sg.term) = UPPER(?)').join(' OR ');
+      const [grades] = await db.query(
+        `SELECT sg.student_id, sg.quarterly_grade, sg.initial_grade
+         FROM STUDENT_GRADE sg
+         WHERE sg.subject_offering_id = ? AND (${termPlaceholders})`,
+        [subject_offering_id, ...termCodes]
+      ).catch(() => [[]]);
+
+      const stGradeMap = new Map();
+      (grades || []).forEach(g => {
+        const finalGrade = (g.quarterly_grade !== null && g.quarterly_grade !== undefined)
+          ? g.quarterly_grade
+          : g.initial_grade;
+        if (finalGrade !== null && finalGrade !== undefined && !isNaN(Number(finalGrade))) {
+          stGradeMap.set(g.student_id, Number(finalGrade));
+        }
+      });
+
+      let noGrade = 0, r60_74 = 0, r75_79 = 0, r80_84 = 0, r85_89 = 0, r90_100 = 0;
+      (students || []).forEach(st => {
+        if (!stGradeMap.has(st.student_id)) {
+          noGrade++;
+        } else {
+          const g = stGradeMap.get(st.student_id);
+          if (g < 75) r60_74++;
+          else if (g <= 79) r75_79++;
+          else if (g <= 84) r80_84++;
+          else if (g <= 89) r85_89++;
+          else r90_100++;
+        }
+      });
+
+      // Terminal Exam Raw Score
+      let teTotalScore = 0;
+      let teNumTakers = 0;
+      let teScoreMean = 0;
+      let teMps = 0;
+
+      const [sheets] = await db.query(
+        `SELECT grade_sheet_id FROM GRADE_SHEET WHERE subject_offering_id = ? AND (term_id = ? OR term_id = ?) LIMIT 1`,
+        [subject_offering_id, termIdNum, `T${termIdNum}`]
+      ).catch(() => [[]]);
+
+      if (sheets && sheets.length > 0) {
+        const gradeSheetId = sheets[0].grade_sheet_id;
+        const [activities] = await db.query(
+          `SELECT ga.activity_id, ga.activity_name, ct.component_code
+           FROM GRADE_ACTIVITY ga
+           LEFT JOIN SUBJECT_COMPONENT_WEIGHT scw ON scw.subj_comp_weight_id = ga.subj_comp_weight_id
+           LEFT JOIN COMPONENT_TYPE ct ON ct.component_type_id = scw.component_type_id
+           WHERE ga.grade_sheet_id = ? AND (ga.status = 'ACTIVE' OR ga.status IS NULL) AND ga.status != 'ARCHIVED'`,
+          [gradeSheetId]
+        ).catch(() => [[]]);
+
+        let teActId = null;
+        (activities || []).forEach(a => {
+          const aName = String(a.activity_name || '').toUpperCase();
+          const code = String(a.component_code || '').toUpperCase();
+          if (code === 'QA' || code === 'STE' || code === 'EX' || aName.includes('EXAM') || aName.includes('QUARTERLY') || aName.includes('TE')) {
+            if (!/\b(ST1|ST2|SUMMATIVE\s*1|SUMMATIVE\s*2)\b/i.test(aName)) {
+              if (/\b(TE|TERM\s*EXAM|QUARTERLY\s*ASSESSMENT|QUARTERLY)\b/i.test(aName) || !teActId) {
+                teActId = a.activity_id;
+              }
+            }
+          }
+        });
+
+        if (teActId) {
+          const [scoreRows] = await db.query(
+            `SELECT sc.raw_score
+             FROM SCORE sc
+             JOIN STUDENT_SECTION ss ON ss.student_section_id = sc.student_section_id
+             WHERE sc.activity_id = ? AND ss.section_id = ? AND sc.raw_score IS NOT NULL AND sc.raw_score != ''`,
+            [teActId, section_id]
+          ).catch(() => [[]]);
+
+          (scoreRows || []).forEach(sc => {
+            const val = Number(sc.raw_score);
+            if (!isNaN(val)) {
+              teTotalScore += val;
+              teNumTakers += 1;
+            }
+          });
+        }
+      }
+
+      if (teNumTakers === 0 && stGradeMap.size > 0) {
+        for (const val of stGradeMap.values()) {
+          teTotalScore += val;
+          teNumTakers += 1;
+        }
+        teScoreMean = teNumTakers > 0 ? Math.round((teTotalScore / teNumTakers) * 100) / 100 : 0;
+        teMps = teScoreMean;
+      } else if (teNumTakers > 0) {
+        teScoreMean = Math.round((teTotalScore / teNumTakers) * 100) / 100;
+        teMps = Math.round(((teScoreMean / 50) * 100) * 100) / 100;
+      }
+
+      const secObj = {
+        id: section_id,
+        name: section_name,
+        total_score: Math.round(teTotalScore * 100) / 100,
+        num_takers: teNumTakers,
+        score_mean: teScoreMean,
+        mps: teMps,
+        no_grade: noGrade,
+        r60_74,
+        r75_79,
+        r80_84,
+        r85_89,
+        r90_100,
+      };
+
+      // Only add to teacher hierarchy if a teacher is assigned
+      if (user_id && first_name) {
+        const teacherName = `${first_name} ${last_name}`.trim();
+        if (!glObj.teachers.has(user_id)) {
+          glObj.teachers.set(user_id, {
+            id: user_id,
+            name: teacherName,
+            total_score: 0,
+            num_takers: 0,
+            score_mean: 0,
+            mps: 0,
+            no_grade: 0,
+            r60_74: 0,
+            r75_79: 0,
+            r80_84: 0,
+            r85_89: 0,
+            r90_100: 0,
+            sections: []
+          });
+        }
+
+        const tObj = glObj.teachers.get(user_id);
+        tObj.sections.push(secObj);
+        tObj.total_score += secObj.total_score;
+        tObj.num_takers += secObj.num_takers;
+        tObj.no_grade += noGrade;
+        tObj.r60_74 += r60_74;
+        tObj.r75_79 += r75_79;
+        tObj.r80_84 += r80_84;
+        tObj.r85_89 += r85_89;
+        tObj.r90_100 += r90_100;
+      }
+
+      // Aggregate into grade level
+      glObj.total_score += secObj.total_score;
+      glObj.num_takers += secObj.num_takers;
+      glObj.no_grade += noGrade;
+      glObj.r60_74 += r60_74;
+      glObj.r75_79 += r75_79;
+      glObj.r80_84 += r80_84;
+      glObj.r85_89 += r85_89;
+      glObj.r90_100 += r90_100;
+    }
+
+    let grandTotalScore = 0;
+    let grandNumTakers = 0;
+    let grandNoGrade = 0;
+    let grand60_74 = 0;
+    let grand75_79 = 0;
+    let grand80_84 = 0;
+    let grand85_89 = 0;
+    let grand90_100 = 0;
+
+    const resultGrades = Array.from(gradeMap.values()).map(glObj => {
+      glObj.score_mean = glObj.num_takers > 0 ? Math.round((glObj.total_score / glObj.num_takers) * 100) / 100 : 0;
+      glObj.mps = glObj.num_takers > 0 ? Math.round(((glObj.score_mean / 50) * 100) * 100) / 100 : 0;
+      glObj.total_score = Math.round(glObj.total_score * 100) / 100;
+
+      grandTotalScore += glObj.total_score;
+      grandNumTakers += glObj.num_takers;
+      grandNoGrade += glObj.no_grade;
+      grand60_74 += glObj.r60_74;
+      grand75_79 += glObj.r75_79;
+      grand80_84 += glObj.r80_84;
+      grand85_89 += glObj.r85_89;
+      grand90_100 += glObj.r90_100;
+
+      const teacherList = Array.from(glObj.teachers.values()).map(tObj => {
+        tObj.score_mean = tObj.num_takers > 0 ? Math.round((tObj.total_score / tObj.num_takers) * 100) / 100 : 0;
+        tObj.mps = tObj.num_takers > 0 ? Math.round(((tObj.score_mean / 50) * 100) * 100) / 100 : 0;
+        tObj.total_score = Math.round(tObj.total_score * 100) / 100;
+        return tObj;
+      });
+
+      return {
+        ...glObj,
+        teachers: teacherList
+      };
+    });
+
+    const grandMean = grandNumTakers > 0 ? Math.round((grandTotalScore / grandNumTakers) * 100) / 100 : 0;
+    const grandMps = grandNumTakers > 0 ? Math.round(((grandMean / 50) * 100) * 100) / 100 : 0;
+
+    const summary = {
+      name: 'Total',
+      total_score: Math.round(grandTotalScore * 100) / 100,
+      num_takers: grandNumTakers,
+      score_mean: grandMean,
+      mps: grandMps,
+      no_grade: grandNoGrade,
+      r60_74: grand60_74,
+      r75_79: grand75_79,
+      r80_84: grand80_84,
+      r85_89: grand85_89,
+      r90_100: grand90_100
+    };
+
+    res.json({
+      departmentName,
+      schoolYear: selectedSchoolYear,
+      term: rawTerm,
+      schoolYears,
+      terms: [
+        { id: '1', label: 'Term 1' },
+        { id: '2', label: 'Term 2' },
+        { id: '3', label: 'Term 3' },
+      ],
+      grades: resultGrades,
+      summary
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/filter-options', async (req, res) => {
   try {
     const userId = req.headers['x-auralis-user-id'] || req.query.user_id || req.query.userId || req.query.department_id;
@@ -322,7 +719,10 @@ router.get('/missing-grades', async (req, res) => {
   try {
     const userId = req.headers['x-auralis-user-id'] || req.query.user_id || req.query.userId;
     const departmentId = await getDepartmentId(userId);
-    const term = req.query.term || 'T1';
+    const termStr = req.query.term || 'T1';
+    const termNum = termStr.replace(/^T/i, '');
+    const termNameMap = { '1': '1st', '2': '2nd', '3': '3rd' };
+    const termName = termNameMap[termNum] || termStr;
 
     let query = `
       SELECT 
@@ -339,12 +739,13 @@ router.get('/missing-grades', async (req, res) => {
       JOIN SCHOOL_YEAR sy ON so.school_year_id = sy.school_year_id
       LEFT JOIN TEACHER_ASSIGNMENT ta ON ta.subject_offering_id = so.subject_offering_id
       LEFT JOIN USER u ON ta.user_id = u.user_id
-      LEFT JOIN GRADE_SHEET gs ON gs.subject_offering_id = so.subject_offering_id
+      LEFT JOIN ACADEMIC_TERM at ON at.school_year_id = sy.school_year_id AND at.term_name = ?
+      LEFT JOIN GRADE_SHEET gs ON gs.subject_offering_id = so.subject_offering_id AND gs.term_id = at.term_id
       WHERE s.department_id = ?
         AND (gs.workflow_status IS NULL OR gs.workflow_status <> 'SUBMITTED')
       ORDER BY gl.grade_level_name, sec.section_name
     `;
-    const [rows] = await db.query(query, [departmentId]);
+    const [rows] = await db.query(query, [termName, departmentId]);
     const alerts = rows.map((r, idx) => ({
       id: idx + 1,
       teacherId: r.teacherId,
