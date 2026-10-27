@@ -321,10 +321,7 @@ router.delete('/:id', async (req, res) => {
 
     if (db.cloudPool) {
       try {
-        await db.cloudPool.query('DELETE FROM STUDENT_SECTION WHERE section_id = ?', [req.params.id]).catch(() => {});
-        await db.cloudPool.query('DELETE FROM SECTION_ADVISER_ASSIGNMENT WHERE section_id = ?', [req.params.id]).catch(() => {});
-        await db.cloudPool.query('DELETE FROM SUBJECT_OFFERING WHERE section_id = ?', [req.params.id]).catch(() => {});
-        await db.cloudPool.query('DELETE FROM SECTION WHERE section_id = ?', [req.params.id]).catch(() => {});
+        await Section.deleteCascade(db.cloudPool, req.params.id);
       } catch (cloudErr) {
         console.warn('[CloudSection] Delete dual-write failed:', cloudErr.message);
       }

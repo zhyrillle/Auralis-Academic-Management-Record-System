@@ -276,24 +276,153 @@ class Section {
     return this.findById(id);
   }
 
+  static async deleteCascade(target, id) {
+    if (!id || !target) return false;
+    const q = (sql, params) => target.query(sql, params).catch(e => {
+      // Ignore warnings for missing tables/columns in partial environments
+      if (!e.message.includes("doesn't exist")) {
+        console.warn(`[SectionDeleteCascade] ${e.message}`);
+      }
+    });
+
+    // 1. Temporary Reopenings tied to Grade Sheets or Teacher Assignments in this section
+    await q(`
+      DELETE tr FROM TEMPORARY_REOPENING tr
+      JOIN GRADE_REOPEN_REQUEST grr ON grr.request_id = tr.request_id
+      JOIN GRADE_SHEET gs ON gs.grade_sheet_id = grr.grade_sheet_id
+      JOIN SUBJECT_OFFERING so ON so.subject_offering_id = gs.subject_offering_id
+      WHERE so.section_id = ?
+    `, [id]);
+
+    await q(`
+      DELETE tr FROM TEMPORARY_REOPENING tr
+      JOIN GRADE_REOPEN_REQUEST grr ON grr.request_id = tr.request_id
+      JOIN TEACHER_ASSIGNMENT ta ON ta.teacher_assignment_id = grr.teacher_assignment_id
+      JOIN SUBJECT_OFFERING so ON so.subject_offering_id = ta.subject_offering_id
+      WHERE so.section_id = ?
+    `, [id]);
+
+    // 2. Grade Reopen Requests
+    await q(`
+      DELETE grr FROM GRADE_REOPEN_REQUEST grr
+      JOIN GRADE_SHEET gs ON gs.grade_sheet_id = grr.grade_sheet_id
+      JOIN SUBJECT_OFFERING so ON so.subject_offering_id = gs.subject_offering_id
+      WHERE so.section_id = ?
+    `, [id]);
+
+    await q(`
+      DELETE grr FROM GRADE_REOPEN_REQUEST grr
+      JOIN TEACHER_ASSIGNMENT ta ON ta.teacher_assignment_id = grr.teacher_assignment_id
+      JOIN SUBJECT_OFFERING so ON so.subject_offering_id = ta.subject_offering_id
+      WHERE so.section_id = ?
+    `, [id]);
+
+    // 3. Scores
+    await q(`
+      DELETE sc FROM SCORE sc
+      JOIN GRADE_ACTIVITY ga ON ga.activity_id = sc.activity_id
+      JOIN GRADE_SHEET gs ON gs.grade_sheet_id = ga.grade_sheet_id
+      JOIN SUBJECT_OFFERING so ON so.subject_offering_id = gs.subject_offering_id
+      WHERE so.section_id = ?
+    `, [id]);
+
+    await q(`
+      DELETE sc FROM SCORE sc
+      JOIN STUDENT_SECTION ss ON ss.student_section_id = sc.student_section_id
+      WHERE ss.section_id = ?
+    `, [id]);
+
+    // 4. Grade Activities
+    await q(`
+      DELETE ga FROM GRADE_ACTIVITY ga
+      JOIN GRADE_SHEET gs ON gs.grade_sheet_id = ga.grade_sheet_id
+      JOIN SUBJECT_OFFERING so ON so.subject_offering_id = gs.subject_offering_id
+      WHERE so.section_id = ?
+    `, [id]);
+
+    // 5. Grade Sheets
+    await q(`
+      DELETE gs FROM GRADE_SHEET gs
+      JOIN SUBJECT_OFFERING so ON so.subject_offering_id = gs.subject_offering_id
+      WHERE so.section_id = ?
+    `, [id]);
+
+    // 6. Transmuted Student Grades
+    await q(`
+      DELETE sg FROM STUDENT_GRADE sg
+      JOIN SUBJECT_OFFERING so ON so.subject_offering_id = sg.subject_offering_id
+      WHERE so.section_id = ?
+    `, [id]);
+
+    await q(`
+      DELETE sg FROM STUDENT_GRADE sg
+      JOIN STUDENT_SECTION ss ON ss.student_section_id = sg.student_section_id
+      WHERE ss.section_id = ?
+    `, [id]);
+
+    // 7. Attendance
+    await q(`
+      DELETE a FROM ATTENDANCE a
+      JOIN STUDENT_SECTION ss ON ss.student_section_id = a.student_section_id
+      WHERE ss.section_id = ?
+    `, [id]);
+
+    // 8. Attendance Sheets
+    await q(`
+      DELETE ash FROM ATTENDANCE_SHEET ash
+      JOIN TEACHER_ASSIGNMENT ta ON ta.teacher_assignment_id = ash.teacher_assignment_id
+      JOIN SUBJECT_OFFERING so ON so.subject_offering_id = ta.subject_offering_id
+      WHERE so.section_id = ?
+    `, [id]);
+
+    await q(`
+      DELETE ash FROM ATTENDANCE_SHEET ash
+      JOIN SECTION_ADVISER_ASSIGNMENT saa ON saa.adviser_assignment_id = ash.adviser_assignment_id
+      WHERE saa.section_id = ?
+    `, [id]);
+
+    // 9. Phil-IRI Assessments & Screenings
+    await q(`
+      DELETE pia FROM PHIL_IRI_ASSESSMENT pia
+      JOIN STUDENT_SECTION ss ON ss.student_section_id = pia.student_section_id
+      WHERE ss.section_id = ?
+    `, [id]);
+
+    await q(`
+      DELETE pia FROM PHIL_IRI_ASSESSMENT pia
+      JOIN SUBJECT_OFFERING so ON so.subject_offering_id = pia.subject_offering_id
+      WHERE so.section_id = ?
+    `, [id]);
+
+    await q(`
+      DELETE pis FROM PHIL_IRI_SCREENING pis
+      JOIN STUDENT_SECTION ss ON ss.student_section_id = pis.student_section_id
+      WHERE ss.section_id = ?
+    `, [id]);
+
+    // 10. Teacher Assignments
+    await q(`
+      DELETE ta FROM TEACHER_ASSIGNMENT ta
+      JOIN SUBJECT_OFFERING so ON so.subject_offering_id = ta.subject_offering_id
+      WHERE so.section_id = ?
+    `, [id]);
+
+    // 11. Subject Offerings
+    await q('DELETE FROM SUBJECT_OFFERING WHERE section_id = ?', [id]);
+
+    // 12. Section Adviser Assignments
+    await q('DELETE FROM SECTION_ADVISER_ASSIGNMENT WHERE section_id = ?', [id]);
+
+    // 13. Student Sections
+    await q('DELETE FROM STUDENT_SECTION WHERE section_id = ?', [id]);
+
+    // 14. Finally delete the section
+    const [result] = await target.query('DELETE FROM SECTION WHERE section_id = ?', [id]);
+    return result && result.affectedRows > 0;
+  }
+
   static async delete(id) {
-    try {
-      await db.execute('DELETE FROM STUDENT_SECTION WHERE section_id = ?', [id]);
-    } catch (e) {
-      console.warn('Error cleaning STUDENT_SECTION on section delete:', e.message);
-    }
-    try {
-      await db.execute('DELETE FROM SECTION_ADVISER_ASSIGNMENT WHERE section_id = ?', [id]);
-    } catch (e) {
-      console.warn('Error cleaning SECTION_ADVISER_ASSIGNMENT on section delete:', e.message);
-    }
-    try {
-      await db.execute('DELETE FROM SUBJECT_OFFERING WHERE section_id = ?', [id]);
-    } catch (e) {
-      console.warn('Error cleaning SUBJECT_OFFERING on section delete:', e.message);
-    }
-    const [result] = await db.execute('DELETE FROM SECTION WHERE section_id = ?', [id]);
-    return result.affectedRows > 0;
+    return this.deleteCascade(db, id);
   }
 
   static async findAdviserSections(userId) {
