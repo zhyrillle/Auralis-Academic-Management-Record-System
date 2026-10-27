@@ -680,8 +680,8 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
 
   return (
     <div className="attendance-sheet-container">
-      {/* Toast Notifications */}
-      <div style={{ position: "fixed", top: "24px", right: "24px", zIndex: 9999, display: "flex", flexDirection: "column", gap: "10px" }}>
+      {/* Toast Notifications (Bottom-Right Tray matching Class Record & Master Sheet) */}
+      <div style={{ position: "fixed", bottom: "24px", right: "24px", zIndex: 9999, display: "flex", flexDirection: "column-reverse", gap: "10px" }}>
         {toasts.map(t => (
           <Toast key={t.id} message={t.message} variant={t.type} persistent className="att-toast"
             icon={t.type === 'error' ? AlertTriangle : CheckCircle}

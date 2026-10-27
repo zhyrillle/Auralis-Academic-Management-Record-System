@@ -265,13 +265,73 @@ async function forwardRoleAssignmentsToCloud(userId, body, schoolYear) {
   }
 }
 
+async function deleteUserCascade(target, userId) {
+  if (!target || !userId) return false;
+  const q = (sql, params) => target.query(sql, params).catch(e => {
+    console.warn(`[UserDeleteCascade] ${e.message}`);
+  });
+
+  // 1. Audit events: Nullify user_id to satisfy foreign key constraint while preserving audit log history
+  await q(`UPDATE AUDIT_EVENT SET user_id = NULL WHERE user_id = ?`, [userId]);
+
+  // 2. Notifications: Clean up notifications intended for this user
+  await q(`DELETE FROM NOTIFICATION WHERE user_id = ?`, [userId]);
+
+  // 3. Feedback: Remove feedback records where user was evaluator or evaluee
+  await q(`DELETE FROM FEEDBACK WHERE evaluator_id = ? OR evaluee_id = ?`, [userId, userId]);
+
+  // 4. Grade Transmutation Config
+  await q(`UPDATE GRADE_TRANSMUTATION_CONFIG SET updated_by = NULL WHERE updated_by = ?`, [userId]);
+
+  // 5. Phil-IRI Assessments & Screenings
+  await q(`UPDATE PHIL_IRI_ASSESSMENT SET user_id = NULL WHERE user_id = ?`, [userId]);
+  await q(`UPDATE PHIL_IRI_SCREENING SET recorded_by = NULL WHERE recorded_by = ?`, [userId]);
+
+  // 6. Grade Reopen Requests: Unlink reviewed_by and clean requests for this teacher's assignments
+  await q(`UPDATE GRADE_REOPEN_REQUEST SET reviewed_by_user_id = NULL WHERE reviewed_by_user_id = ?`, [userId]);
+  await q(`
+    DELETE tr FROM TEMPORARY_REOPENING tr
+    JOIN GRADE_REOPEN_REQUEST grr ON grr.request_id = tr.request_id
+    JOIN TEACHER_ASSIGNMENT ta ON ta.teacher_assignment_id = grr.teacher_assignment_id
+    WHERE ta.user_id = ?
+  `, [userId]);
+  await q(`
+    DELETE grr FROM GRADE_REOPEN_REQUEST grr
+    JOIN TEACHER_ASSIGNMENT ta ON ta.teacher_assignment_id = grr.teacher_assignment_id
+    WHERE ta.user_id = ?
+  `, [userId]);
+
+  // 7. Attendance Sheets: Nullify assignment references
+  await q(`
+    UPDATE ATTENDANCE_SHEET ash
+    JOIN TEACHER_ASSIGNMENT ta ON ta.teacher_assignment_id = ash.teacher_assignment_id
+    SET ash.teacher_assignment_id = NULL
+    WHERE ta.user_id = ?
+  `, [userId]);
+  await q(`
+    UPDATE ATTENDANCE_SHEET ash
+    JOIN SECTION_ADVISER_ASSIGNMENT saa ON saa.adviser_assignment_id = ash.adviser_assignment_id
+    SET ash.adviser_assignment_id = NULL
+    WHERE saa.user_id = ?
+  `, [userId]);
+
+  // 8. Subject: Legacy user_id assignment
+  await q(`UPDATE SUBJECT SET user_id = NULL WHERE user_id = ?`, [userId]);
+
+  // 9. Role Assignments
+  await q(`DELETE FROM SECTION_ADVISER_ASSIGNMENT WHERE user_id = ?`, [userId]);
+  await q(`DELETE FROM TEACHER_ASSIGNMENT WHERE user_id = ?`, [userId]);
+  await q(`DELETE FROM DEPARTMENT_HEAD WHERE user_id = ?`, [userId]);
+
+  // 10. Delete the user
+  const [result] = await target.query(`DELETE FROM USER WHERE user_id = ?`, [userId]);
+  return result && result.affectedRows > 0;
+}
+
 async function deleteUserOnCloud(userId) {
   if (!db.cloudPool) return;
   try {
-    await db.cloudPool.query(`DELETE FROM SECTION_ADVISER_ASSIGNMENT WHERE user_id = ?`, [userId]);
-    await db.cloudPool.query(`DELETE FROM TEACHER_ASSIGNMENT WHERE user_id = ?`, [userId]);
-    await db.cloudPool.query(`DELETE FROM DEPARTMENT_HEAD WHERE user_id = ?`, [userId]);
-    await db.cloudPool.query(`DELETE FROM USER WHERE user_id = ?`, [userId]);
+    await deleteUserCascade(db.cloudPool, userId);
   } catch (err) {
     console.warn("[CloudUser] Failed to delete user from cloud:", err.message);
   }
@@ -1307,8 +1367,12 @@ router.delete("/:id", async (req, res) => {
     connection = await db.getConnection();
     await connection.beginTransaction();
 
-    await deleteRoleAssignments(connection, userId);
-    await connection.execute(`DELETE FROM USER WHERE user_id = ?`, [userId]);
+    const deleted = await deleteUserCascade(connection, userId);
+    if (!deleted) {
+      await connection.rollback();
+      return res.status(404).json({ error: "User not found." });
+    }
+
     await connection.commit();
 
     if (db.cloudPool) {
