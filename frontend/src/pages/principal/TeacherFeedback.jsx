@@ -49,7 +49,7 @@ export default function TeacherFeedback() {
   const rated = summary.totalResponses > 0 && Number(summary.overallRating) > 0;
   const cards = [
     { label: "Total Responses", value: summary.totalResponses, description: `SY ${schoolYear}`, icon: Users, tone: "navy" },
-    { label: "Overall Rating", value: rated ? summary.overallRating : "Not rated", description: rated ? `Out of 5.0${summary.ratingDiff != null ? ` · ${summary.ratingDiff} vs reference` : ""}` : "No recorded ratings", icon: LayoutGrid, tone: "gold" },
+    { label: "Overall Rating", value: rated ? Math.round(Number(summary.overallRating)) : "Not rated", description: rated ? `Out of 5${summary.ratingDiff != null ? ` · ${summary.ratingDiff} vs reference` : ""}` : "No recorded ratings", icon: LayoutGrid, tone: "gold" },
     { label: "Comments Received", value: summary.totalComments, description: "Anonymous teacher comments", icon: CheckCircle2, tone: "green" },
     { label: "Below Target", value: summary.belowTargetCount, description: "Rated questions under 3.0", icon: Target, tone: "red" },
   ];

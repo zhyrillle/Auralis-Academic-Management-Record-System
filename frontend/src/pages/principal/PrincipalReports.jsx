@@ -126,7 +126,7 @@ export default function PrincipalReports() {
     return learners.filter((learner) => {
       if (learner.sectionId !== secId) return false;
       if (!query) return true;
-      return learner.name.toLowerCase().includes(query) || learner.lrn.includes(query);
+      return learner.name.toLowerCase().includes(query);
     });
   }, [selectedSection, learners, sectionSearch]);
 
@@ -217,10 +217,8 @@ export default function PrincipalReports() {
               <thead>
                 <tr>
                   <th scope="col">STUDENT</th>
-                  <th scope="col">LRN</th>
                   <th scope="col">GRADE / SECTION</th>
                   <th scope="col">FORMS</th>
-                  <th scope="col">STATUS</th>
                   <th scope="col" className="pr-th-actions">ACTIONS</th>
                 </tr>
               </thead>
@@ -228,14 +226,14 @@ export default function PrincipalReports() {
                 {loading ? (
                   Array.from({ length: 6 }, (_, row) => (
                     <tr key={row} aria-hidden="true">
-                      {Array.from({ length: 6 }, (_, col) => (
+                      {Array.from({ length: 4 }, (_, col) => (
                         <td key={col}><span className="pr-skeleton" /></td>
                       ))}
                     </tr>
                   ))
                 ) : error ? (
                   <tr>
-                    <td colSpan={6}>
+                    <td colSpan={4}>
                       <div className="pr-empty" role="alert">
                         <EmptyState title="Student records could not be loaded" description={error} />
                         <button type="button" className="pr-action-view-btn" onClick={refresh}>
@@ -256,9 +254,6 @@ export default function PrincipalReports() {
                           <Badge className="pr-form-badge pr-form-badge--sf10">SF10</Badge>
                         </span>
                       </td>
-                      <td title="Report issuance status is not tracked. Use View to preview or download school forms.">
-                        <Badge className="pr-status-pill pr-status-pill--unavailable">Not tracked</Badge>
-                      </td>
                       <td className="pr-th-actions">
                         <button
                           type="button"
@@ -274,12 +269,12 @@ export default function PrincipalReports() {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={6}>
+                    <td colSpan={4}>
                       <EmptyState
                         className="pr-empty"
                         icon={Users}
                         title="No learners found"
-                        description={sectionSearch.trim() ? "Try a different student name or LRN." : "No enrolled learners in this section for the active school year."}
+                        description={sectionSearch.trim() ? "Try a different student name." : "No enrolled learners in this section for the active school year."}
                       />
                     </td>
                   </tr>
@@ -378,11 +373,6 @@ export default function PrincipalReports() {
                       <div className="pr-class-students">
                         <Users size={16} className="pr-class-icon" />
                         <span>{sec.studentCount} student{sec.studentCount === 1 ? "" : "s"}</span>
-                      </div>
-
-                      <div className="pr-class-report-status" title="Adviser report submission is not tracked.">
-                        <span>Report submission</span>
-                        <Badge className="pr-status-pill pr-status-pill--unavailable">Not tracked</Badge>
                       </div>
 
                       <button
