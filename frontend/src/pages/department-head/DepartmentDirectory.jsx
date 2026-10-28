@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   Users,
@@ -19,6 +19,7 @@ import {
   getDepartmentSections,
   getDepartmentPhilIri,
   useDepartmentContext,
+  PHIL_IRI_REPORT_VERSION,
 } from "../../services/deptHeadMonitoringApi";
 import DeptClassRecord from "./DeptClassRecord";
 import PhilIriOverview from "./PhilIriOverview";
@@ -71,6 +72,7 @@ export function MonitoringState({
 
 export default function DepartmentDirectory({ mode = "records" }) {
   const philIri = mode === "phil-iri";
+  const [testPhase, setTestPhase] = useState("pre");
   const context = useDepartmentContext();
   const [params, setParams] = useSearchParams();
   const scroll = useRef(0);
@@ -90,11 +92,21 @@ export default function DepartmentDirectory({ mode = "records" }) {
     context.data && (!philIri || context.data.canViewPhilIri),
   );
   const directory = useCachedQuery(
-    cacheKey("department-directory", { mode, yearId }),
+    cacheKey("department-directory", { mode, yearId, version: philIri ? PHIL_IRI_REPORT_VERSION : 1 }),
     () =>
       philIri ? getDepartmentPhilIri(yearId) : getDepartmentSections(yearId),
     { enabled: Boolean(yearId && allowed) },
   );
+  const refreshDirectory = useRef(directory.refresh);
+  refreshDirectory.current = directory.refresh;
+  useEffect(() => {
+    if (!philIri || !yearId || !allowed || sectionId) return;
+    const refresh = () => { if (document.visibilityState === "visible") refreshDirectory.current(); };
+    refresh();
+    const timer = window.setInterval(refresh, 15000);
+    window.addEventListener("focus", refresh);
+    return () => { window.clearInterval(timer); window.removeEventListener("focus", refresh); };
+  }, [philIri, yearId, allowed, sectionId]);
   const update = (changes) =>
     setParams(
       (previous) => {
@@ -223,6 +235,9 @@ export default function DepartmentDirectory({ mode = "records" }) {
         </span>
       </header>
       <FilterToolbar label="Section navigation" className="dept-monitor-navigation" end={<>
+        {philIri && <DropdownSelect label="Test phase" value={testPhase}
+          options={[{ value: 'pre', label: 'Pre-test (Screening)' }, { value: 'post', label: 'Post-test' }]}
+          onChange={setTestPhase} />}
         <DropdownSelect label="School year" value={yearId}
           options={context.data.schoolYears.map(year => ({ value: String(year.id), label: 'SY ' + year.label }))}
           onChange={value => update({ year: value })} />
@@ -249,7 +264,7 @@ export default function DepartmentDirectory({ mode = "records" }) {
       ) : (
         <>
 
-          {philIri && <PhilIriOverview sections={filtered} available={directory.data?.availability?.screening} />}
+          {philIri && <PhilIriOverview sections={filtered} testPhase={testPhase} available={directory.data?.availability?.[testPhase === "pre" ? "screening" : "postTest"]} />}
           <div className="section-card-grid dept-monitor-grid">
             {filtered.map((section) => (
               <ClassCard key={section.sectionId} className="section-card dept-adviser-card"

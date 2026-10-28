@@ -157,6 +157,12 @@ class DeptHeadMonitoringService {
       return { ...section, learnerCount: members.length,
         screeningPassed: screening.available ? results.passed : null,
         screeningFailed: screening.available ? results.failed : null,
+        postTestIndependent: postTest.available ? members.filter(learner => learner.postTestStatus === 'Complete'
+          && String(learner.postTest.overall_reading_level).toUpperCase() === 'INDEPENDENT').length : null,
+        postTestInstructional: postTest.available ? members.filter(learner => learner.postTestStatus === 'Complete'
+          && String(learner.postTest.overall_reading_level).toUpperCase() === 'INSTRUCTIONAL').length : null,
+        postTestFrustration: postTest.available ? members.filter(learner => learner.postTestStatus === 'Complete'
+          && String(learner.postTest.overall_reading_level).toUpperCase() === 'FRUSTRATION').length : null,
         screeningComplete: screening.available ? members.filter(learner => learner.screeningStatus === 'Complete').length : null,
         screeningIncomplete: screening.available ? members.filter(learner => learner.screeningStatus === 'Incomplete').length : null,
         postTestComplete: postTest.available ? members.filter(learner => learner.postTestStatus === 'Complete').length : null,
