@@ -86,4 +86,8 @@ test('management options preserve sections with no assigned adviser', async () =
   assert.equal(response.statusCode, 200);
   assert.deepEqual(response.body.sections, sections);
   assert.equal(response.body.sections[0].adviser_user_id, null);
+  const subjectSql = harness.calls.find(query => query.includes('FROM SUBJECT_OFFERING so'));
+  assert.match(subjectSql, /FROM TEACHER_ASSIGNMENT ta/);
+  assert.match(subjectSql, /WHERE ta\.subject_offering_id = so\.subject_offering_id/);
+  assert.match(subjectSql, /\) AS teacher_user_id/);
 });

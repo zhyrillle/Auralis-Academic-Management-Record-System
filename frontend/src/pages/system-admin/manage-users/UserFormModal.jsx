@@ -181,21 +181,76 @@ export default function UserFormModal({
                           <Plus size={16} aria-hidden="true" /> Add Subject Class
                         </button>
                       </div>
-                      {data.teaching_assignments.length === 0 ? <p className="user-form-empty">No subject classes assigned. Use Add Subject Class to create an assignment.</p> : data.teaching_assignments.map((assignment, index) => <div className="user-form-assignment" key={index}>
-                          <div className="user-form-assignment-label">
-                            <button type="button" className="user-form-remove" disabled={saving} aria-label={`Remove class assignment ${index + 1}`} onClick={() => onRemoveAssignment(index)}>
-                              <Trash2 size={15} aria-hidden="true" /> Remove
-                            </button>
-                          </div>
-                          <div className="user-form-assignment-grid">
-                            <FormSelect label="Grade Level" value={assignment.grade_level_id} options={gradeOptions} placeholder="Select grade" disabled={saving || !gradeOptions.length} onChange={value => onAssignmentChange(index, "grade_level_id", value)} />
-                            <FormSelect label="Section" value={assignment.section_id} options={optionsFor(sections.filter(section => String(section.grade_level_id) === String(assignment.grade_level_id)), "section_id", "section_name")} placeholder="Select section" disabled={saving || !assignment.grade_level_id} onChange={value => onAssignmentChange(index, "section_id", value)} />
-                            <FormSelect label="Subject" value={assignment.subject_offering_id} options={subjectOfferings.filter(offering => String(offering.section_id) === String(assignment.section_id)).map(offering => ({
-                    value: String(offering.subject_offering_id),
-                    label: offering.subject_name + (offering.subject_code ? ` (${offering.subject_code})` : "")
-                  }))} placeholder="Select subject" disabled={saving || !assignment.section_id} onChange={value => onAssignmentChange(index, "subject_offering_id", value)} />
-                          </div>
-                        </div>)}
+                      {data.teaching_assignments.length === 0 ? <p className="user-form-empty">No subject classes assigned. Use Add Subject Class to create an assignment.</p> : data.teaching_assignments.map((assignment, index) => {
+                          const availableOfferings = subjectOfferings.filter(offering => {
+                            // Must belong to the chosen section
+                            if (String(offering.section_id) !== String(assignment.section_id)) return false;
+
+                            // If this offering is already the selected value for THIS row, keep it so it displays
+                            if (assignment.subject_offering_id && String(offering.subject_offering_id) === String(assignment.subject_offering_id)) {
+                              return true;
+                            }
+
+                            // Filter out if assigned to another user via metadata
+                            if (offering.teacher_user_id && String(offering.teacher_user_id) !== String(data.user_id || "")) {
+                              return false;
+                            }
+
+                            // Filter out if assigned to another active user in the users array
+                            if (Array.isArray(users)) {
+                              const isHandledByOtherUser = users.some(u => {
+                                if (String(u.user_id) === String(data.user_id || "")) return false;
+                                const status = String(u.account_status || "active").toLowerCase();
+                                if (status === "inactive" || status === "archived") return false;
+                                return Array.isArray(u.teaching_assignments) && u.teaching_assignments.some(
+                                  ta => String(ta.subject_offering_id) === String(offering.subject_offering_id)
+                                );
+                              });
+                              if (isHandledByOtherUser) return false;
+                            }
+
+                            // Filter out if selected in another row within this form
+                            const isSelectedInOtherRow = data.teaching_assignments.some((otherAssign, otherIndex) => {
+                              if (otherIndex === index) return false;
+                              return String(otherAssign.subject_offering_id) === String(offering.subject_offering_id);
+                            });
+                            if (isSelectedInOtherRow) return false;
+
+                            return true;
+                          });
+
+                          const noSubjectsAvailable = Boolean(assignment.section_id) && availableOfferings.length === 0 && !assignment.subject_offering_id;
+
+                          return (
+                            <div className="user-form-assignment" key={index}>
+                              <div className="user-form-assignment-label">
+                                <button type="button" className="user-form-remove" disabled={saving} aria-label={`Remove class assignment ${index + 1}`} onClick={() => onRemoveAssignment(index)}>
+                                  <Trash2 size={15} aria-hidden="true" /> Remove
+                                </button>
+                              </div>
+                              <div className="user-form-assignment-grid">
+                                <FormSelect label="Grade Level" value={assignment.grade_level_id} options={gradeOptions} placeholder="Select grade" disabled={saving || !gradeOptions.length} onChange={value => onAssignmentChange(index, "grade_level_id", value)} />
+                                <FormSelect label="Section" value={assignment.section_id} options={optionsFor(sections.filter(section => String(section.grade_level_id) === String(assignment.grade_level_id)), "section_id", "section_name")} placeholder="Select section" disabled={saving || !assignment.grade_level_id} onChange={value => onAssignmentChange(index, "section_id", value)} />
+                                <FormSelect
+                                  label="Subject"
+                                  value={assignment.subject_offering_id}
+                                  options={availableOfferings.map(offering => ({
+                                    value: String(offering.subject_offering_id),
+                                    label: offering.subject_name + (offering.subject_code ? ` (${offering.subject_code})` : "")
+                                  }))}
+                                  placeholder={noSubjectsAvailable ? "No available subjects" : "Select subject"}
+                                  disabled={saving || !assignment.section_id || noSubjectsAvailable}
+                                  onChange={value => onAssignmentChange(index, "subject_offering_id", value)}
+                                />
+                              </div>
+                              {noSubjectsAvailable && (
+                                <p className="user-form-help" style={{ marginTop: "6px" }}>
+                                  All subjects for this section are already handled by other teachers.
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })}
                     </>}
                   </section>}
               </fieldset>}
