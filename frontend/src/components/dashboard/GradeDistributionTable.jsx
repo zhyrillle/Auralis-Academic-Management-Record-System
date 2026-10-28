@@ -3,6 +3,8 @@ import { Eye, ArrowLeft } from 'lucide-react';
 import { getDeptGradeDistributionReport } from '../../services/dashboardApi';
 import '../../styles/performanceReport.css';
 
+const hasReportData = row => Number(row.num_takers) > 0 || ['r60_74', 'r75_79', 'r80_84', 'r85_89', 'r90_100'].some(key => Number(row[key]) > 0);
+
 export default function GradeDistributionTable({ schoolYear }) {
   const [selectedSchoolYear, setSelectedSchoolYear] = useState(schoolYear || '2026-2027');
   const [selectedTerm, setSelectedTerm] = useState('1');
@@ -86,7 +88,7 @@ export default function GradeDistributionTable({ schoolYear }) {
         currentRows: reportData.grades.map(g => ({
           id: g.id,
           name: g.name,
-          canDrillDown: g.teachers && g.teachers.length > 0,
+          canDrillDown: g.teachers?.some(hasReportData),
           total_score: g.total_score,
           num_takers: g.num_takers,
           score_mean: g.score_mean,
@@ -128,7 +130,7 @@ export default function GradeDistributionTable({ schoolYear }) {
         currentRows: teachers.map(t => ({
           id: t.id,
           name: t.name,
-          canDrillDown: t.sections && t.sections.length > 0,
+          canDrillDown: t.sections?.some(hasReportData),
           total_score: t.total_score,
           num_takers: t.num_takers,
           score_mean: t.score_mean,
