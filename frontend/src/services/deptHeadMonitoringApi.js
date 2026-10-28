@@ -18,8 +18,14 @@ async function read(path, params = {}) {
 }
 export const getMonitoringContext = () => read('context', { viewVersion: PHIL_IRI_REPORT_VERSION });
 export const getDepartmentSections = schoolYearId => read('sections', { schoolYearId });
-export const getDepartmentPhilIri = (schoolYearId, sectionId) => read(`phil-iri${sectionId ? `/${sectionId}` : ''}`,
-  { schoolYearId, viewVersion: PHIL_IRI_REPORT_VERSION });
+export const getDepartmentPhilIri = async (schoolYearId, sectionId) => {
+  const data = await read(`phil-iri${sectionId ? `/${sectionId}` : ''}`, { schoolYearId, viewVersion: PHIL_IRI_REPORT_VERSION });
+  if (!sectionId && data.availability?.screening && data.sections?.some(section =>
+    !Array.isArray(section.screeningThresholds) || !section.screeningThresholdCounts)) {
+    throw new Error('The backend is missing the screening score_threshold summary update. Pull the latest rr branch and restart the backend.');
+  }
+  return data;
+};
 export function useDepartmentContext() {
   const user = getStoredUser();
   return useCachedQuery(cacheKey('department-monitoring-context', { userId: user?.user_id || user?.id, version: PHIL_IRI_REPORT_VERSION }), getMonitoringContext,

@@ -17,7 +17,7 @@ export default function PhilIriOverview({ sections, available, testPhase }) {
   const categories = pre ? thresholds.flatMap(threshold => PRE_CATEGORIES.map(category => ({
     ...category, key: `${threshold}-${category.key}`, threshold,
     band: category.key === "screeningPassed" ? "passed" : "failed",
-    label: `${category.key === "screeningPassed" ? ">=" : "<"} ${threshold}`,
+    label: `${category.key === "screeningPassed" ? "Above" : "Below"} ${threshold}`,
   }))) : POST_CATEGORIES;
   const groups = sections.map(section => ({
     id: section.sectionId, label: section.sectionName,
@@ -33,7 +33,7 @@ export default function PhilIriOverview({ sections, available, testPhase }) {
   const excluded = Math.max(0, sections.reduce((sum, section) => sum + Number(section.learnerCount || 0), 0) - classified);
   return <section className="dept-phil-overview" aria-label={`PHIL-IRI ${label} overview`}>
     <header><div><h2>{label} Results by Section</h2><p>{pre
-      ? "Scores are grouped by the database-assigned score boundaries shown below."
+      ? "Scores equal to or above the displayed threshold are green; scores below it are red."
       : "Reading levels use each learner's saved overall post-test classification."} Results follow the school year, grade level, and section search above.</p></div></header>
     {available === false ? <EmptyState className="dept-monitor-state" title={`${label} results unavailable`} description="Records are not available for this school year." /> : <>
       <div className="dept-phil-overview__totals" aria-label={`${label} totals`}>

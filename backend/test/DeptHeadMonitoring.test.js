@@ -148,3 +148,13 @@ test('screening pass counts use each saved threshold rather than a fixed cutoff'
   assert.equal(result.sections[0].screeningPassed, 2);
   assert.equal(result.sections[0].screeningFailed, 1);
 });
+
+test('pre-test summary reads numeric-string score_threshold database values', async () => {
+  const screenings = [27, 28, 29].map((total, index) => ({ ...screening,
+    student_section_id: 101 + index, test_taken: '1', literal_max: '14', inferential_max: '12', critical_max: '14',
+    literal_score: '10', inferential_score: '10', critical_score: String(total - 20), score_threshold: '28' }));
+  const data = await harness({ screenings }).DeptHeadMonitoringService.philIri(user, 12);
+  assert.deepEqual(Array.from(data.sections[0].screeningThresholds), [28]);
+  assert.equal(data.sections[0].screeningThresholdCounts['28'].passed, 2);
+  assert.equal(data.sections[0].screeningThresholdCounts['28'].failed, 1);
+});
