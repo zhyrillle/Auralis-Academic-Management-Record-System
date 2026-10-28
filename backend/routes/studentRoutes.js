@@ -240,8 +240,15 @@ router.delete('/:id', async (req, res) => {
 
     if (db.cloudPool) {
       try {
-        await db.cloudPool.query('DELETE FROM STUDENT_SECTION WHERE student_id = ?', [req.params.id]).catch(() => {});
+        const [cloudSsRows] = await db.cloudPool.query('SELECT student_section_id FROM STUDENT_SECTION WHERE student_id = ?', [req.params.id]).catch(() => [[]]);
+        for (const ss of cloudSsRows) {
+          await db.cloudPool.query('DELETE FROM ATTENDANCE WHERE student_section_id = ?', [ss.student_section_id]).catch(() => {});
+          await db.cloudPool.query('DELETE FROM PHIL_IRI_ASSESSMENT WHERE student_section_id = ?', [ss.student_section_id]).catch(() => {});
+          await db.cloudPool.query('DELETE FROM PHIL_IRI_SCREENING WHERE student_section_id = ?', [ss.student_section_id]).catch(() => {});
+          await db.cloudPool.query('DELETE FROM SCORE WHERE student_section_id = ?', [ss.student_section_id]).catch(() => {});
+        }
         await db.cloudPool.query('DELETE FROM STUDENT_GRADE WHERE student_id = ?', [req.params.id]).catch(() => {});
+        await db.cloudPool.query('DELETE FROM STUDENT_SECTION WHERE student_id = ?', [req.params.id]).catch(() => {});
         await db.cloudPool.query('DELETE FROM STUDENT WHERE student_id = ?', [req.params.id]).catch(() => {});
       } catch (cloudErr) {
         console.warn('[CloudStudent] Delete dual-write failed:', cloudErr.message);

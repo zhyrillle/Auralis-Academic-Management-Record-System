@@ -121,10 +121,9 @@ export default function SF10Document({ student, sf10Data, page1Ref, page2Ref }) 
       isSubSubject: Boolean(g.isSubSubject)
     }));
     const mainSubjs = targetRec.grades.filter(g => !g.isSubSubject);
-    const allT1 = mainSubjs.length > 0 && mainSubjs.every(g => typeof g.t1 === 'number');
     const allFinal = mainSubjs.length > 0 && mainSubjs.every(g => typeof g.final === 'number');
     targetRec.general_average = {
-      t1: allT1 ? Math.round(mainSubjs.reduce((s, g) => s + g.t1, 0) / mainSubjs.length) : "",
+      t1: "",
       t2: "",
       t3: "",
       final: allFinal ? safeDisplay(student?.termGrade) : "",
@@ -291,12 +290,10 @@ export default function SF10Document({ student, sf10Data, page1Ref, page2Ref }) 
             {renderScholasticRows(record)}
             {/* General Average Row */}
             <tr className="sf10-gen-avg-row">
-              <td className="sf10-gen-avg-lbl">General Average</td>
-              <td className="sf10-td-center">{safeDisplay(genAvg.t1)}</td>
-              <td className="sf10-td-center">{safeDisplay(genAvg.t2)}</td>
-              <td className="sf10-td-center">{safeDisplay(genAvg.t3)}</td>
+              <td>&nbsp;</td>
+              <td colSpan="3" className="sf10-td-center font-bold">General Average</td>
               <td className="sf10-td-center font-bold">{safeDisplay(genAvg.final)}</td>
-              <td className="sf10-td-center">{safeStr(genAvg.remarks)}</td>
+              <td className="sf10-td-center font-bold">{safeStr(genAvg.remarks)}</td>
             </tr>
           </tbody>
         </table>

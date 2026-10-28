@@ -551,24 +551,20 @@ function renderScholasticBlockExcel(worksheet, record, defaultGradeNum, startRow
 
   // 6. General Average Row
   worksheet.mergeCells(curr, 2, curr, 7);
-  const genAvgLabel = worksheet.getCell(curr, 2);
-  genAvgLabel.value = "General Average";
-  genAvgLabel.font = { name: "Arial", size: 8.5, bold: true };
-  genAvgLabel.alignment = { horizontal: "right", vertical: "middle", indent: 1 };
+  const genAvgBlank = worksheet.getCell(curr, 2);
+  genAvgBlank.value = "";
 
-  const cGaT1 = worksheet.getCell(curr, 8);
-  const cGaT2 = worksheet.getCell(curr, 9);
-  const cGaT3 = worksheet.getCell(curr, 10);
+  worksheet.mergeCells(curr, 8, curr, 10);
+  const cGaLabel = worksheet.getCell(curr, 8);
+  cGaLabel.value = "General Average";
+
   const cGaFin = worksheet.getCell(curr, 11);
   const cGaRem = worksheet.getCell(curr, 12);
 
-  cGaT1.value = safeDisplay(genAvg.t1);
-  cGaT2.value = safeDisplay(genAvg.t2);
-  cGaT3.value = safeDisplay(genAvg.t3);
   cGaFin.value = safeDisplay(genAvg.final);
   cGaRem.value = safeStr(genAvg.remarks);
 
-  [cGaT1, cGaT2, cGaT3, cGaFin, cGaRem].forEach((cell) => {
+  [cGaLabel, cGaFin, cGaRem].forEach((cell) => {
     cell.alignment = { horizontal: "center", vertical: "middle" };
     cell.font = { name: "Arial", size: 8.5, bold: true };
   });
@@ -957,10 +953,9 @@ export async function exportSf10Excel({ student = {}, sf10Data = null, fileName 
     }));
 
     const mainSubjs = targetRec.grades.filter(g => !g.isSubSubject);
-    const allT1 = mainSubjs.length > 0 && mainSubjs.every(g => typeof g.t1 === "number");
     const allFinal = mainSubjs.length > 0 && mainSubjs.every(g => typeof g.final === "number");
     targetRec.general_average = {
-      t1: allT1 ? Math.round(mainSubjs.reduce((s, g) => s + g.t1, 0) / mainSubjs.length) : "",
+      t1: "",
       t2: "",
       t3: "",
       final: allFinal ? safeDisplay(student?.termGrade) : "",
