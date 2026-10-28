@@ -69,7 +69,7 @@ export default function TeacherFeedback() {
     <div className={`pa-content${refreshing ? " is-busy" : ""}`} aria-busy={refreshing}>
       {refreshing && <div className="pa-busy-overlay" role="status" aria-label="Updating feedback"><span className="pa-spinner pa-spinner--large" /></div>}
       <section className="pa-stat-grid" aria-label="Feedback overview">{cards.map(card => <AnalyticsStatCard key={card.label} {...card} />)}</section>
-      {Number(summary.totalResponses) === 0 && <section className="pa-panel tf-empty"><EmptyState icon={MessageSquareOff} title="No feedback yet" description="No saved teacher submissions for this school year." /></section>}
+      {Number(summary.totalResponses) === 0 ? <section className="pa-panel tf-empty" aria-label="No feedback"><EmptyState className="tf-empty-state" icon={MessageSquareOff} title="No teacher feedback for this school year" description="Ratings and comments will appear here once teachers submit their evaluations. You can select another school year to view earlier feedback." /></section> : <>
       <PerformanceProgressTable title="Likert Scale Result - Leadership Evaluation" subtitle="Recorded question ratings on a five-point scale." columns={columns} data={likertResults} emptyMessage="No survey questions are configured." />
       <section className="pa-panel">
         <div className="pa-panel__header"><div><h2>Comment Explorer</h2><p>Anonymous open-ended responses from teachers</p></div>
@@ -83,9 +83,10 @@ export default function TeacherFeedback() {
             <header><span className={`tf-tag tf-tag--${categoryKind(comment.category)}`}>{comment.category || "Comment"}</span>
               {comment.created_at && <time dateTime={comment.created_at}>{new Date(comment.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</time>}
             </header><p>{comment.text}</p>
-          </article>) : <EmptyState icon={MessageSquareOff} title="No matching comments" description="No saved comments match the selected filters." />}
+          </article>) : <EmptyState className="tf-empty-state" icon={MessageSquareOff} title={data.comments.length ? "No matching comments" : "No comments submitted"} description={data.comments.length ? "No saved comments match the selected filters." : "Teacher evaluations for this school year do not include any comments."} />}
         </div>
       </section>
+      </>}
     </div>
   </main>;
 }
