@@ -273,12 +273,18 @@
   font-size: 12px;
 }
 
+.pr-class-card-actions {
+  margin-top: auto;
+  padding-top: 14px;
+  width: 100%;
+}
+
 .pr-class-cta-btn {
   display: inline-flex;
   justify-content: center;
   align-items: center;
   gap: 6px;
-  margin-top: 4px;
+  margin: 0;
   width: 100%;
   min-height: 38px;
   padding: 9px 16px;
