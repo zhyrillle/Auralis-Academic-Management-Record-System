@@ -10,6 +10,8 @@ import {
   Search,
   Pencil,
   X,
+  AlertTriangle,
+  Lock,
 } from "lucide-react";
 import "../../styles/adviserFeedback.css";
 import TeacherEvalList from "./TeacherEvalList";
@@ -209,6 +211,7 @@ export default function AdviserFeedback() {
   const [selectedTeacher, setSelectedTeacher] = useState(null);
   const [selectedPerson, setSelectedPerson] = useState(null);
   const [roleFormType, setRoleFormType] = useState(null);
+  const [windowStatus, setWindowStatus] = useState(null);
 
   // Dynamic Backend Data State
   const [userStats, setUserStats] = useState({
@@ -252,8 +255,18 @@ export default function AdviserFeedback() {
       .then((res) => (res.ok ? res.json() : []))
       .catch(() => []);
 
-    Promise.all([statsPromise, usersPromise, evalFeedbacksPromise]).then(
-      ([statsData, usersData, evalFeedbacksData]) => {
+    const windowPromise = fetch("http://localhost:5000/api/feedback/window-status")
+      .then((res) => (res.ok ? res.json() : null))
+      .catch(() => null);
+
+    Promise.all([statsPromise, usersPromise, evalFeedbacksPromise, windowPromise]).then(
+      ([statsData, usersData, evalFeedbacksData, windowData]) => {
+        if (windowData) {
+          setWindowStatus(windowData);
+        } else if (statsData?.window_status) {
+          setWindowStatus(statsData.window_status);
+        }
+
         const evaluatedSet = new Set(
           Array.isArray(evalFeedbacksData) ? evalFeedbacksData.map((f) => Number(f.evaluee_id)) : []
         );
@@ -375,6 +388,14 @@ export default function AdviserFeedback() {
   }, [currentUser?.user_id, currentView]);
 
   const handleEvaluatePeer = (person) => {
+    if (!windowStatus?.can_submit) {
+      alert(
+        windowStatus?.status === "UPCOMING"
+          ? `Peer feedback is currently closed. It opens once per school year from ${windowStatus.formatted_window_open} until ${windowStatus.formatted_deadline}.`
+          : `The peer feedback deadline for S.Y. ${windowStatus?.school_year || ""} has passed.`
+      );
+      return;
+    }
     setShowPendingModal(false);
     const r = (person.role || person.displayRole || "").toLowerCase();
     if (r.includes("principal")) {
@@ -469,7 +490,9 @@ export default function AdviserFeedback() {
     return (
       <TeacherEvalList
         onBack={() => setCurrentView("dashboard")}
+        windowStatus={windowStatus}
         onCreateFeedback={(teacher) => {
+          if (!windowStatus?.can_submit) return;
           setSelectedTeacher(teacher);
           setCurrentView("eval-form");
         }}
@@ -480,6 +503,7 @@ export default function AdviserFeedback() {
     return (
       <TeacherEvalForm
         teacher={selectedTeacher}
+        windowStatus={windowStatus}
         onBack={() => setCurrentView("teacher-list")}
         onCancel={() => setCurrentView("teacher-list")}
       />
@@ -491,7 +515,9 @@ export default function AdviserFeedback() {
     return (
       <DeptHeadEvalList
         onBack={() => setCurrentView("dashboard")}
+        windowStatus={windowStatus}
         onCreateFeedback={(person) => {
+          if (!windowStatus?.can_submit) return;
           setSelectedPerson(person);
           setRoleFormType("dept-head");
           setCurrentView("dept-head-form");
@@ -504,6 +530,7 @@ export default function AdviserFeedback() {
       <RoleEvalForm
         formType="dept-head"
         person={selectedPerson}
+        windowStatus={windowStatus}
         onBack={() => setCurrentView("dept-head-list")}
         onCancel={() => setCurrentView("dept-head-list")}
       />
@@ -515,7 +542,9 @@ export default function AdviserFeedback() {
     return (
       <PrincipalEvalList
         onBack={() => setCurrentView("dashboard")}
+        windowStatus={windowStatus}
         onCreateFeedback={(person) => {
+          if (!windowStatus?.can_submit) return;
           setSelectedPerson(person);
           setRoleFormType("principal");
           setCurrentView("principal-form");
@@ -528,6 +557,7 @@ export default function AdviserFeedback() {
       <RoleEvalForm
         formType="principal"
         person={selectedPerson}
+        windowStatus={windowStatus}
         onBack={() => setCurrentView("principal-list")}
         onCancel={() => setCurrentView("principal-list")}
       />
@@ -539,8 +569,73 @@ export default function AdviserFeedback() {
   return (
     <div className="fb-container">
 
-      {/* ── Page Title ── */}
-      <h1 className="fb-page-title">Peer Feedback</h1>
+      {/* ── Page Title & Deadline Status ── */}
+      <div className="fb-header-wrap">
+        <div>
+          <h1 className="fb-page-title">Peer Feedback</h1>
+          <p className="fb-page-subtitle">Annual peer evaluation &amp; professional development feedback</p>
+        </div>
+        {windowStatus && (
+          <div className={`fb-status-pill fb-status-pill--${windowStatus.status.toLowerCase()}`}>
+            <span className="fb-status-dot" />
+            <span>
+              {windowStatus.status === "OPEN"
+                ? `Window Active · Deadline: ${windowStatus.formatted_deadline}`
+                : windowStatus.status === "UPCOMING"
+                ? `Opens: ${windowStatus.formatted_window_open}`
+                : `Closed · Deadline Was ${windowStatus.formatted_deadline}`}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* ── Window Alert Banner ── */}
+      {windowStatus && (
+        <div className={`fb-window-banner fb-window-banner--${windowStatus.status.toLowerCase()}`}>
+          <div className="fb-window-banner-icon">
+            {windowStatus.status === "OPEN" ? (
+              <Clock size={20} />
+            ) : windowStatus.status === "UPCOMING" ? (
+              <Lock size={20} />
+            ) : (
+              <AlertTriangle size={20} />
+            )}
+          </div>
+          <div className="fb-window-banner-content">
+            <h4>
+              {windowStatus.status === "OPEN"
+                ? "Annual Peer Feedback Window is Open"
+                : windowStatus.status === "UPCOMING"
+                ? "Peer Feedback is Currently Closed (Read-Only Mode)"
+                : "Peer Feedback Window Has Closed (Read-Only Mode)"}
+            </h4>
+            <p>
+              {windowStatus.status === "OPEN" ? (
+                <>
+                  Feedback takes place <strong>once per school year</strong>. Please submit all peer evaluations before the deadline on <strong>{windowStatus.formatted_deadline}</strong> (2 weeks before S.Y. {windowStatus.school_year} ends).
+                </>
+              ) : windowStatus.status === "UPCOMING" ? (
+                <>
+                  Feedback only happens <strong>once per school year</strong>. The 2-week feedback window will be accessible from <strong>{windowStatus.formatted_window_open}</strong> until the deadline on <strong>{windowStatus.formatted_deadline}</strong> (2 weeks before S.Y. {windowStatus.school_year} ends).
+                </>
+              ) : (
+                <>
+                  The annual feedback deadline for S.Y. {windowStatus.school_year} was on <strong>{windowStatus.formatted_deadline}</strong> (2 weeks before the school year ended). You may review your received ratings and comments below.
+                </>
+              )}
+            </p>
+          </div>
+          <div className="fb-window-banner-badge">
+            {windowStatus.status === "OPEN" ? (
+              <span>{windowStatus.days_remaining} {windowStatus.days_remaining === 1 ? "day" : "days"} left</span>
+            ) : windowStatus.status === "UPCOMING" ? (
+              <span>Opens in {windowStatus.days_until_open} {windowStatus.days_until_open === 1 ? "day" : "days"}</span>
+            ) : (
+              <span>Deadline Passed</span>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── Stat Cards ── */}
       <div className="fb-stats-grid">
@@ -605,14 +700,30 @@ export default function AdviserFeedback() {
                   <p className="fb-give-card-title">{card.title}</p>
                   <p className="fb-give-card-desc">{pendingDesc}</p>
                   <button
-                    className="fb-give-btn"
+                    className={`fb-give-btn ${!windowStatus?.can_submit ? "fb-give-btn--locked" : ""}`}
+                    disabled={!windowStatus?.can_submit}
+                    title={
+                      !windowStatus?.can_submit
+                        ? windowStatus?.status === "UPCOMING"
+                          ? `Feedback opens on ${windowStatus?.formatted_window_open}`
+                          : `Feedback closed on ${windowStatus?.formatted_deadline}`
+                        : "Give feedback"
+                    }
                     onClick={() => {
+                      if (!windowStatus?.can_submit) return;
                       if (card.id === "teacher") setCurrentView("teacher-list");
                       if (card.id === "dept-head") setCurrentView("dept-head-list");
                       if (card.id === "principal") setCurrentView("principal-list");
                     }}
                   >
-                    Give Feedback
+                    {!windowStatus?.can_submit ? (
+                      <>
+                        <Lock size={13} />
+                        <span>{windowStatus?.status === "UPCOMING" ? "Window Closed" : "Deadline Passed"}</span>
+                      </>
+                    ) : (
+                      "Give Feedback"
+                    )}
                   </button>
                 </div>
               );

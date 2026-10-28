@@ -48,7 +48,7 @@ const ROLE_CONFIG = {
 
 // Component 
 
-export default function RoleEvalForm({ formType, person, onBack, onCancel }) {
+export default function RoleEvalForm({ formType, person, onBack, onCancel, windowStatus }) {
   const config = ROLE_CONFIG[formType] || ROLE_CONFIG["dept-head"];
   const { pageTitle, badgeRole, likertQuestions, openEnded } = config;
 
@@ -99,6 +99,11 @@ export default function RoleEvalForm({ formType, person, onBack, onCancel }) {
   };
 
   const handleSubmit = async () => {
+    if (windowStatus && !windowStatus.can_submit) {
+      alert(windowStatus.message || "Feedback submissions are currently closed.");
+      return;
+    }
+
     const errs = validate();
     if (Object.keys(errs).length > 0) {
       setErrors(errs);
@@ -111,6 +116,7 @@ export default function RoleEvalForm({ formType, person, onBack, onCancel }) {
     const payload = {
       evaluator_id: currentUser.user_id,
       evaluee_id: person?.id || person?.user_id,
+      school_year_id: windowStatus?.school_year_id || null,
       q1_rate: ratings[0],
       q2_rate: ratings[1],
       q3_rate: ratings[2],
@@ -275,9 +281,14 @@ export default function RoleEvalForm({ formType, person, onBack, onCancel }) {
 
         {/* Footer */}
         <div className="tef-form-footer">
-          <button className="tef-submit-btn" onClick={handleSubmit}>
+          <button
+            className="tef-submit-btn"
+            disabled={windowStatus && !windowStatus.can_submit}
+            style={windowStatus && !windowStatus.can_submit ? { opacity: 0.6, cursor: "not-allowed" } : {}}
+            onClick={handleSubmit}
+          >
             <Pencil size={15} />
-            Submit Feedback
+            {windowStatus && !windowStatus.can_submit ? "Feedback Closed" : "Submit Feedback"}
           </button>
           <button className="tef-cancel-btn" onClick={onCancel}>
             Cancel
