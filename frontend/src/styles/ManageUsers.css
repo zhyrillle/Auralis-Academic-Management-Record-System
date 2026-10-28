@@ -81,6 +81,13 @@
   line-height: 1.5;
 }
 
+.user-management-page .page-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
 .user-management-page .add-user-btn {
   flex: 0 0 auto;
   border: 1px solid var(--mu-navy);

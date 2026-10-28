@@ -12,12 +12,20 @@ export default function useCachedQuery(key, loader, { enabled = true, keepPrevio
   const data = entry?.data ?? previous?.data;
   const attemptedKey = useRef(null);
   useEffect(() => {
-    if (!enabled) { attemptedKey.current = null; return; }
-    if (attemptedKey.current !== key || !entry) {
-      attemptedKey.current = key;
-      loadCached(key, loader).catch(() => {});
-    }
-  }, [key, loader, enabled, entry]);
+    if (!enabled) return;
+    loadCached(key, loader).catch(() => {});
+  }, [key, loader, enabled]);
+
+  // Periodic automatic sync: revalidate in background every 20s while tab is visible
+  useEffect(() => {
+    if (!enabled) return;
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        loadCached(key, loader).catch(() => {});
+      }
+    }, 20_000);
+    return () => clearInterval(interval);
+  }, [key, loader, enabled]);
   const refresh = useCallback(() => loadCached(key, loader, { force: true }).catch(() => {}), [key, loader]);
   return {
     data: enabled ? data : undefined,

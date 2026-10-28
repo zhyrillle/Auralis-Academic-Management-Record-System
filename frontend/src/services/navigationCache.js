@@ -77,13 +77,25 @@ export function clearNavigationCache({ persistent = true } = {}) {
   if (persistent) return invalidatePersistentCache();
 }
 
+const SWR_THROTTLE_MS = 2_000;
+
 export function loadCached(key, loader, { force = false } = {}) {
   checkIdentity();
   const previous = entries.get(key);
-  if (!force && previous?.pending) return previous.pending;
-  if (!force && previous?.data !== undefined && Date.now() - previous.updatedAt < FRESH_FOR_MS) {
+
+  // 1. If fresh within throttle window and not forced, return cached data immediately
+  if (!force && previous?.data !== undefined && Date.now() - previous.updatedAt < SWR_THROTTLE_MS) {
     return Promise.resolve(previous.data);
   }
+
+  // 2. If already pending revalidation and not forced:
+  if (!force && previous?.pending) {
+    if (previous?.data !== undefined) {
+      return Promise.resolve(previous.data);
+    }
+    return previous.pending;
+  }
+
   const scope = getSessionScope();
   const startedGeneration = generation;
   const startedIdentity = identity;
@@ -105,9 +117,9 @@ export function loadCached(key, loader, { force = false } = {}) {
     }
     let data;
     try {
-      if (force) refreshingReads += 1;
+      refreshingReads += 1;
       try { data = await loader(); }
-      finally { if (force) refreshingReads -= 1; }
+      finally { refreshingReads -= 1; }
     }
     catch (error) {
       verify();
@@ -115,18 +127,21 @@ export function loadCached(key, loader, { force = false } = {}) {
       // Server rejections and session changes must not be disguised as offline success.
       const persisted = isNetworkError(error) ? await getPersistentCacheEntry(key, scope) : undefined;
       verify();
-      if (!persisted) throw error;
+      if (!persisted && previous?.data === undefined) throw error;
       if (entries.get(key) === entry) {
-        entries.set(key, { data: persisted.data, updatedAt: persisted.updatedAt, error: '', pending: null, offline: true });
+        entries.set(key, { data: persisted?.data ?? previous?.data, updatedAt: Date.now(), error: '', pending: null, offline: true });
         notify();
       }
-      return persisted.data;
+      return persisted?.data ?? previous?.data;
     }
     verify();
     if (startedGeneration !== generation) return loadCached(key, loader);
     if (entries.get(key) === entry) {
+      const hasChanged = previous?.data === undefined || JSON.stringify(previous.data) !== JSON.stringify(data);
       entries.set(key, { data, updatedAt: Date.now(), error: '', pending: null });
-      notify();
+      if (hasChanged) {
+        notify();
+      }
       await setPersistentCache(key, data, undefined, scope);
     }
     verify();
@@ -152,6 +167,13 @@ export function loadCached(key, loader, { force = false } = {}) {
     const oldest = [...entries].find(([candidate, value]) => candidate !== key && !value.pending);
     if (oldest) entries.delete(oldest[0]);
   }
+
+  // If cached data was already available and not forced, return cached data immediately (0ms)
+  // while background revalidation executes seamlessly
+  if (!force && previous?.data !== undefined) {
+    return Promise.resolve(previous.data);
+  }
+
   notify();
   return pending;
 }
@@ -258,5 +280,21 @@ if (typeof window !== 'undefined') {
       requestSessionId = null;
     }
     if (userIdentity() !== identity) { checkIdentity(); notify(); }
+  });
+
+  const revalidateOnFocus = () => {
+    const now = Date.now();
+    for (const [, v] of entries.entries()) {
+      if (v && !v.pending && now - v.updatedAt > 30_000) {
+        v.updatedAt = 0; // Age out stale entries so next read revalidates in background
+      }
+    }
+  };
+
+  window.addEventListener('focus', revalidateOnFocus);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      revalidateOnFocus();
+    }
   });
 }

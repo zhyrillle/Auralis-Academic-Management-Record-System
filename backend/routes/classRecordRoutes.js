@@ -8,6 +8,7 @@ const NotificationService = require('../services/NotificationService');
 const GradeComputationService = require('../services/GradeComputationService');
 const { termCode, problem } = GradeComputationService;
 const GradeTransmutationConfig = require('../models/GradeTransmutationConfig');
+const cloudSync = require('../services/cloudSyncService');
 const { resolveCurrentUser } = require('../middleware/resolveCurrentUser');
 const { decryptLrn } = require('../utils/encryption');
 const {
@@ -232,6 +233,14 @@ async function ensureGradeSheet(subjectOfferingId, schoolYearId, termName, conne
       'INSERT INTO GRADE_SHEET (subject_offering_id, term_id, lock_status, workflow_status) VALUES (?, ?, ?, ?)',
       [subjectOfferingId, selected.term_id, 'EDITABLE', 'DRAFT']);
     sheet = { grade_sheet_id: result.insertId, term_id: selected.term_id, lock_status: 'EDITABLE', workflow_status: 'DRAFT' };
+    if (db.cloudPool) {
+      db.cloudPool.execute(
+        `INSERT INTO GRADE_SHEET (grade_sheet_id, subject_offering_id, term_id, lock_status, workflow_status)
+         VALUES (?, ?, ?, 'EDITABLE', 'DRAFT')
+         ON DUPLICATE KEY UPDATE lock_status = VALUES(lock_status), workflow_status = VALUES(workflow_status)`,
+        [sheet.grade_sheet_id, subjectOfferingId, selected.term_id]
+      ).catch((err) => console.warn('[CloudDualWrite] Failed to dual-write grade sheet to Aiven:', err.message));
+    }
   }
   return { gradeSheetId: sheet.grade_sheet_id, termId: sheet.term_id, termName: selected.term_name,
     lockStatus: sheet.lock_status, workflowStatus: sheet.workflow_status };
@@ -241,6 +250,27 @@ async function ensureGradeSheet(subjectOfferingId, schoolYearId, termName, conne
  * Ensures default assessment columns exist for a grade sheet so every column
  * (Written Work, Performance Task, and Quarterly Assessment) always has a valid assessment_id in DB.
  */
+async function insertDefaultActivity(connection, gradeSheetId, subjCompWeightId, mapehComponent, name, maxScore, date) {
+  const [result] = await connection.execute(
+    `INSERT INTO GRADE_ACTIVITY (grade_sheet_id, subj_comp_weight_id, mapeh_component, activity_name, highest_possible_score, activity_date, status)
+     VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE')`,
+    [gradeSheetId, subjCompWeightId, mapehComponent || null, name, maxScore, date]
+  );
+  if (db.cloudPool && result?.insertId) {
+    db.cloudPool.execute(
+      `INSERT INTO GRADE_ACTIVITY (activity_id, grade_sheet_id, subj_comp_weight_id, mapeh_component, activity_name, highest_possible_score, activity_date, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE')
+       ON DUPLICATE KEY UPDATE
+         activity_name = VALUES(activity_name),
+         highest_possible_score = VALUES(highest_possible_score),
+         activity_date = VALUES(activity_date),
+         status = VALUES(status)`,
+      [result.insertId, gradeSheetId, subjCompWeightId, mapehComponent || null, name, maxScore, date]
+    ).catch((err) => console.warn('[CloudDualWrite] Failed to dual-write default activity to Aiven:', err.message));
+  }
+  return result;
+}
+
 async function ensureDefaultActivitiesForSheet(gradeSheetId, subjectId, schoolYearId, mapehComponent = null, connection = db) {
   if (mapehComponent) {
     // Safeguard: backfill any legacy unassigned activities for this grade sheet to 'MA'
@@ -314,11 +344,7 @@ async function ensureDefaultActivitiesForSheet(gradeSheetId, subjectId, schoolYe
       { name: 'Written Work 1', max: 20 },
     ];
     for (const ww of defaultWW) {
-      await connection.execute(
-        `INSERT INTO GRADE_ACTIVITY (grade_sheet_id, subj_comp_weight_id, mapeh_component, activity_name, highest_possible_score, activity_date, status)
-         VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE')`,
-        [gradeSheetId, wwWeightId, mapehComponent || null, ww.name, ww.max, today]
-      );
+      await insertDefaultActivity(connection, gradeSheetId, wwWeightId, mapehComponent, ww.name, ww.max, today);
     }
   }
 
@@ -328,11 +354,7 @@ async function ensureDefaultActivitiesForSheet(gradeSheetId, subjectId, schoolYe
       { name: 'Performance Task 1', max: 50 },
     ];
     for (const pt of defaultPT) {
-      await connection.execute(
-        `INSERT INTO GRADE_ACTIVITY (grade_sheet_id, subj_comp_weight_id, mapeh_component, activity_name, highest_possible_score, activity_date, status)
-         VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE')`,
-        [gradeSheetId, ptWeightId, mapehComponent || null, pt.name, pt.max, today]
-      );
+      await insertDefaultActivity(connection, gradeSheetId, ptWeightId, mapehComponent, pt.name, pt.max, today);
     }
   }
 
@@ -351,27 +373,15 @@ async function ensureDefaultActivitiesForSheet(gradeSheetId, subjectId, schoolYe
 
   // Ensure ST1, ST2, and TE all exist individually
   if (!hasST1) {
-    await connection.execute(
-      `INSERT INTO GRADE_ACTIVITY (grade_sheet_id, subj_comp_weight_id, mapeh_component, activity_name, highest_possible_score, activity_date, status)
-       VALUES (?, ?, ?, 'Summative Test 1', ?, ?, 'ACTIVE')`,
-      [gradeSheetId, qaWeightId, mapehComponent || null, defaultSt1Hps, today]
-    );
+    await insertDefaultActivity(connection, gradeSheetId, qaWeightId, mapehComponent, 'Summative Test 1', defaultSt1Hps, today);
   }
 
   if (!hasST2) {
-    await connection.execute(
-      `INSERT INTO GRADE_ACTIVITY (grade_sheet_id, subj_comp_weight_id, mapeh_component, activity_name, highest_possible_score, activity_date, status)
-       VALUES (?, ?, ?, 'Summative Test 2', ?, ?, 'ACTIVE')`,
-      [gradeSheetId, qaWeightId, mapehComponent || null, defaultSt2Hps, today]
-    );
+    await insertDefaultActivity(connection, gradeSheetId, qaWeightId, mapehComponent, 'Summative Test 2', defaultSt2Hps, today);
   }
 
   if (!hasTE) {
-    await connection.execute(
-      `INSERT INTO GRADE_ACTIVITY (grade_sheet_id, subj_comp_weight_id, mapeh_component, activity_name, highest_possible_score, activity_date, status)
-       VALUES (?, ?, ?, 'Term Exam', ?, ?, 'ACTIVE')`,
-      [gradeSheetId, qaWeightId, mapehComponent || null, defaultTeHps, today]
-    );
+    await insertDefaultActivity(connection, gradeSheetId, qaWeightId, mapehComponent, 'Term Exam', defaultTeHps, today);
   }
 }
 
@@ -603,8 +613,8 @@ async function gradingSummary(input, user, database = db) {
 
 router.get('/class-record/:subject_offering_id', resolveCurrentUser, async (req, res) => {
   try {
-    await GradeTransmutationConfig.getActiveTiers();
     const subjectOfferingId = Number(req.params.subject_offering_id);
+    await GradeTransmutationConfig.getActiveTiers();
     const requestedSectionId = req.query.section_id ? Number(req.query.section_id) : null;
     const requestedSubjectId = req.query.subject_id ? Number(req.query.subject_id) : null;
 
