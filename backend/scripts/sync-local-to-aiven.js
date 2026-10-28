@@ -568,16 +568,16 @@ async function pushLocalToAiven() {
     }
     console.log('✅ Grade activities verified and synced to Aiven.');
 
-    // 0t. Sync local student grades to Aiven Cloud (omit surrogate student_grade_id to avoid unique key collision)
+    // 0t. Sync local student grades to Aiven Cloud (omit surrogate student_grade_id and generated column mapeh_key)
     const [localStudentGrades] = await localConn.query(
-      'SELECT subject_offering_id, student_id, student_section_id, term, mapeh_component, mapeh_key, initial_grade, quarterly_grade, remarks FROM STUDENT_GRADE;'
+      'SELECT subject_offering_id, student_id, student_section_id, term, mapeh_component, initial_grade, quarterly_grade, remarks FROM STUDENT_GRADE;'
     );
     console.log(`🎓 Checking ${localStudentGrades.length} local student quarterly grades...`);
     if (localStudentGrades.length > 0) {
       const CHUNK_SIZE = 100;
       for (let i = 0; i < localStudentGrades.length; i += CHUNK_SIZE) {
         const chunk = localStudentGrades.slice(i, i + CHUNK_SIZE);
-        const placeholders = chunk.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
+        const placeholders = chunk.map(() => '(?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
         const flat = [];
         for (const sg of chunk) {
           flat.push(
@@ -586,14 +586,13 @@ async function pushLocalToAiven() {
             sg.student_section_id || null,
             sg.term,
             sg.mapeh_component || null,
-            sg.mapeh_key || null,
             sg.initial_grade,
             sg.quarterly_grade,
             sg.remarks || null
           );
         }
         await aivenConn.query(
-          `INSERT INTO STUDENT_GRADE (subject_offering_id, student_id, student_section_id, term, mapeh_component, mapeh_key, initial_grade, quarterly_grade, remarks)
+          `INSERT INTO STUDENT_GRADE (subject_offering_id, student_id, student_section_id, term, mapeh_component, initial_grade, quarterly_grade, remarks)
            VALUES ${placeholders}
            ON DUPLICATE KEY UPDATE
              student_section_id = VALUES(student_section_id),

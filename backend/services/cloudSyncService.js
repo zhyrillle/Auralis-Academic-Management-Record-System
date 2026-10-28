@@ -1752,22 +1752,21 @@ async function syncClassRecordFromCloud(subjectOfferingId, timeoutMs = 4500) {
 
     // 4. Sync STUDENT_GRADE for this subject offering
     const [cloudSG] = await db.cloudPool.query(
-      `SELECT student_grade_id, subject_offering_id, student_id, student_section_id, term, mapeh_component, mapeh_key, initial_grade, quarterly_grade, remarks
+      `SELECT student_grade_id, subject_offering_id, student_id, student_section_id, term, mapeh_component, initial_grade, quarterly_grade, remarks
        FROM STUDENT_GRADE WHERE subject_offering_id = ?`,
       [offId]
     );
     if (cloudSG) {
       for (const g of cloudSG) {
         await db.execute(
-          `INSERT INTO STUDENT_GRADE (student_grade_id, subject_offering_id, student_id, student_section_id, term, mapeh_component, mapeh_key, initial_grade, quarterly_grade, remarks)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `INSERT INTO STUDENT_GRADE (student_grade_id, subject_offering_id, student_id, student_section_id, term, mapeh_component, initial_grade, quarterly_grade, remarks)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON DUPLICATE KEY UPDATE
              subject_offering_id = VALUES(subject_offering_id),
              student_id = VALUES(student_id),
              student_section_id = VALUES(student_section_id),
              term = VALUES(term),
              mapeh_component = VALUES(mapeh_component),
-             mapeh_key = VALUES(mapeh_key),
              initial_grade = VALUES(initial_grade),
              quarterly_grade = VALUES(quarterly_grade),
              remarks = VALUES(remarks)`,
@@ -1778,7 +1777,6 @@ async function syncClassRecordFromCloud(subjectOfferingId, timeoutMs = 4500) {
             g.student_section_id || null,
             g.term,
             g.mapeh_component || null,
-            g.mapeh_key || null,
             g.initial_grade !== undefined ? g.initial_grade : null,
             g.quarterly_grade !== undefined ? g.quarterly_grade : null,
             g.remarks || null,
