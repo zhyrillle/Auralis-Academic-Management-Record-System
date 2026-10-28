@@ -736,6 +736,66 @@ class Section {
     const result = [];
     const addedSectionAssignments = new Set();
 
+    // Fetch active academic terms and deadlines for relevant school years
+    const schoolYearIds = [...new Set([
+      ...advisoryRows.map(r => r.school_year_id),
+      ...teacherRows.map(r => r.school_year_id),
+    ].filter(Boolean))];
+
+    const yearTermInfo = {};
+    if (schoolYearIds.length > 0) {
+      try {
+        const placeholders = schoolYearIds.map(() => '?').join(', ');
+        const [termRows] = await db.execute(
+          `SELECT term_id, school_year_id, term_name, starts_at, ends_at, grade_submission_deadline_at, status
+           FROM ACADEMIC_TERM
+           WHERE school_year_id IN (${placeholders})
+           ORDER BY starts_at ASC, term_id ASC`,
+          schoolYearIds
+        );
+
+        const now = Date.now();
+        const normalizeTermCode = (name) => {
+          const val = String(name || '').toUpperCase();
+          if (val.includes('1') || val.includes('FIRST')) return 'T1';
+          if (val.includes('2') || val.includes('SECOND')) return 'T2';
+          if (val.includes('3') || val.includes('THIRD')) return 'T3';
+          return null;
+        };
+
+        for (const syId of schoolYearIds) {
+          const terms = termRows.filter(t => Number(t.school_year_id) === Number(syId));
+          if (!terms.length) continue;
+
+          let active = terms.find(t => t.starts_at && t.ends_at && new Date(t.starts_at).getTime() <= now && new Date(t.ends_at).getTime() > now);
+          if (!active) {
+            active = terms.find(t => ['ongoing', 'open'].includes(String(t.status || '').toLowerCase()));
+          }
+          if (!active) {
+            active = terms.find(t => t.starts_at && new Date(t.starts_at).getTime() > now) || terms[0];
+          }
+
+          const termDeadlines = {};
+          terms.forEach(t => {
+            const code = normalizeTermCode(t.term_name);
+            if (code && t.grade_submission_deadline_at) {
+              const dt = new Date(t.grade_submission_deadline_at);
+              termDeadlines[code] = Number.isFinite(dt.getTime()) ? dt.toISOString() : String(t.grade_submission_deadline_at);
+            }
+          });
+
+          const activeDeadline = active?.grade_submission_deadline_at ? new Date(active.grade_submission_deadline_at) : null;
+          yearTermInfo[syId] = {
+            activeTermCode: active ? normalizeTermCode(active.term_name) : 'T1',
+            deadline: activeDeadline && Number.isFinite(activeDeadline.getTime()) ? activeDeadline.toISOString() : null,
+            termDeadlines,
+          };
+        }
+      } catch (err) {
+        console.warn('Academic terms query error in findAdviserSections:', err.message);
+      }
+    }
+
     // 1. Process Advisory Classes first (one single card per advisory section)
     for (const row of advisoryRows) {
       const sectionAssignmentKey = `${row.section_id}:${row.school_year_id}`;
@@ -755,6 +815,11 @@ class Section {
         const displayClassType = isSpecialized && progCode
           ? `Advisory Class - ${progCode}`
           : "Advisory Class";
+
+        const termInfo = yearTermInfo[row.school_year_id];
+        const activeDeadline = termInfo?.deadline || (row.school_year_end ? `${row.school_year_end}-07-31` : "2026-07-31");
+        const activeTerm = termInfo?.activeTermCode || "T1";
+        const termDeadlines = termInfo?.termDeadlines || {};
 
         result.push({
           id: `advisory-${row.adviser_assignment_id}`,
@@ -776,7 +841,9 @@ class Section {
           classType: displayClassType,
           is_specialized: isSpecialized ? 1 : 0,
           isAdviser: true,
-          deadline: row.school_year_end ? String(row.school_year_end).slice(0, 10) : "2026-07-31",
+          active_term: activeTerm,
+          deadline: activeDeadline,
+          termDeadlines: termDeadlines,
           submitted: false,
         });
       }
@@ -805,6 +872,11 @@ class Section {
           ? "Special Program"
           : "Regular Class";
 
+        const termInfo = yearTermInfo[row.school_year_id];
+        const activeDeadline = termInfo?.deadline || (row.school_year_end ? `${row.school_year_end}-08-15` : "2026-08-15");
+        const activeTerm = termInfo?.activeTermCode || "T1";
+        const termDeadlines = termInfo?.termDeadlines || {};
+
         result.push({
           id: `teaching-${row.teacher_assignment_id}`,
           assignmentType: "teaching",
@@ -825,7 +897,9 @@ class Section {
           classType: displayClassType,
           is_specialized: isSpecialized ? 1 : 0,
           isAdviser: false,
-          deadline: row.school_year_end ? String(row.school_year_end).slice(0, 10) : "2026-08-15",
+          active_term: activeTerm,
+          deadline: activeDeadline,
+          termDeadlines: termDeadlines,
           submitted: false,
         });
       }

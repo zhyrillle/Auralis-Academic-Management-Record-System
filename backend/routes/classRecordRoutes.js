@@ -569,6 +569,14 @@ async function gradingSummary(input, user, database = db) {
       lrn: decryptLrn(s.lrn), term1: '', term2: '', term3: '', term1_ma: '', term2_ma: '', term3_ma: '', term1_peh: '', term2_peh: '', term3_peh: '' }));
     const warnings = [];
     const submissionTerms = [];
+    const termDeadlines = {};
+    for (const p of periods) {
+      const code = termCode(p.term_name);
+      if (code && p.grade_submission_deadline_at) {
+        const dt = new Date(p.grade_submission_deadline_at);
+        termDeadlines[code] = Number.isFinite(dt.getTime()) ? dt.toISOString() : p.grade_submission_deadline_at;
+      }
+    }
     for (const position of [1, 2, 3]) {
       const code = `T${position}`, matchingTerms = periods.filter(t => termCode(t.term_name) === code);
       if (matchingTerms.length !== 1) { warnings.push(`${code}: term configuration needs review.`); continue; }
@@ -578,6 +586,7 @@ async function gradingSummary(input, user, database = db) {
       const sheet = matchingSheets[0];
       const window = await GradeSheet.editingWindow(sheet, user, database);
       if (window.editable) submissionTerms.push({ term: code, deadline: window.deadline, correction: window.correction });
+      if (window.correction && window.deadline) termDeadlines[code] = window.deadline;
       let grades;
       if (sheet.workflow_status === 'SUBMITTED') {
         grades = saved.filter(g => termCode(g.term) === code).map(g => ({ studentId: Number(g.student_id),
@@ -607,8 +616,12 @@ async function gradingSummary(input, user, database = db) {
     }
     const now = Date.now();
     const current = periods.filter(p => new Date(p.starts_at).getTime() <= now && new Date(p.ends_at).getTime() > now);
-    return { summaryVersion: 2, context: { ...submissionPublicContext(offering), activeTerm: current.length === 1 ? termCode(current[0].term_name) : null,
-      isMapeh: GradeComputationService.isMapehSubject(offering), submissionTerms }, students: result, warnings };
+    const ongoing = current.length === 1 ? current[0]
+      : periods.find(p => ['ongoing', 'open'].includes(String(p.status || '').toLowerCase())) || periods[0];
+    const activeTermCode = ongoing ? termCode(ongoing.term_name) : (current.length === 1 ? termCode(current[0].term_name) : null);
+    return { summaryVersion: 2, context: { ...submissionPublicContext(offering), activeTerm: activeTermCode,
+      isMapeh: GradeComputationService.isMapehSubject(offering), submissionTerms, termDeadlines,
+      deadline: (activeTermCode && termDeadlines[activeTermCode]) || null }, students: result, warnings };
   }
 
 router.get('/class-record/:subject_offering_id', resolveCurrentUser, async (req, res) => {
@@ -2635,5 +2648,86 @@ router.post('/class-record/export-grading-sheet', async (req, res) => {
   }
 });
 
+/**
+ * POST /api/class-record/export-grading-sheet-pdf
+ * Generates official high-definition vector DepEd PDF using Chrome headless (matches native browser print 100%)
+ */
+let depedLogoBase64 = null;
+let depedGifLogoBase64 = null;
+
+function getGradingSheetLogos() {
+  const fs = require('fs');
+  const path = require('path');
+  if (!depedLogoBase64) {
+    const p = path.join(__dirname, '../assets/deped_logo.png');
+    if (fs.existsSync(p)) {
+      depedLogoBase64 = `data:image/png;base64,${fs.readFileSync(p).toString('base64')}`;
+    }
+  }
+  if (!depedGifLogoBase64) {
+    const p = path.join(__dirname, '../assets/deped-logo.gif');
+    if (fs.existsSync(p)) {
+      depedGifLogoBase64 = `data:image/gif;base64,${fs.readFileSync(p).toString('base64')}`;
+    }
+  }
+  return { depedLogoBase64, depedGifLogoBase64 };
+}
+
+router.post('/class-record/export-grading-sheet-pdf', async (req, res) => {
+  try {
+    const { html, fileName = 'Grading_Sheet.pdf' } = req.body;
+    if (!html) {
+      return res.status(400).json({ error: 'HTML content is required' });
+    }
+
+    const { depedLogoBase64, depedGifLogoBase64 } = getGradingSheetLogos();
+    let finalHtml = html;
+    if (depedLogoBase64) {
+      finalHtml = finalHtml.replace(/src="[^"]*deped_logo[^"]*"/gi, `src="${depedLogoBase64}"`);
+    }
+    if (depedGifLogoBase64) {
+      finalHtml = finalHtml.replace(/src="[^"]*deped-logo\.gif[^"]*"/gi, `src="${depedGifLogoBase64}"`);
+    }
+
+    const puppeteer = require('puppeteer-core');
+    const { resolveBrowserExecutable } = require('../services/Sf9PdfService');
+    const executablePath = resolveBrowserExecutable();
+
+    const browser = await puppeteer.launch({
+      executablePath,
+      headless: true,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--font-render-hinting=none',
+      ],
+    });
+
+    try {
+      const page = await browser.newPage();
+      await page.setViewport({ width: 1122, height: 793, deviceScaleFactor: 2 });
+      await page.setContent(finalHtml, { waitUntil: 'load' });
+      const pdfBuffer = await page.pdf({
+        format: 'A4',
+        landscape: true,
+        printBackground: true,
+        preferCSSPageSize: true,
+      });
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+      res.send(pdfBuffer);
+    } finally {
+      await browser.close();
+    }
+  } catch (err) {
+    console.error('Error generating grading sheet vector PDF:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.__test = { submitClassGrades, gradingSummary, handleBatchScores };
 module.exports = router;
+

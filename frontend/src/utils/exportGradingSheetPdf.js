@@ -1,5 +1,3 @@
-import { jsPDF } from "jspdf";
-import html2canvas from "html2canvas";
 import depedLogoUrl from "../assets/deped_logo.png";
 import depedGifLogoUrl from "../assets/deped-logo.gif";
 
@@ -136,72 +134,72 @@ export async function exportGradingSheetPdf({
   const isCombinedMapeh = isMapeh && activeMapehTab === "COMBINED";
   const isCombinedSingleTerm = isCombinedMapeh && combinedTermFilter !== "All";
 
-  // Total Columns count: 14 for MAPEH Combined All Terms summary view; 8 for all single term/standard views
-  const totalCols = isCombinedMapeh && combinedTermFilter === "All" ? 14 : 8;
+  // Total Columns count: 15 for MAPEH Combined All Terms summary view; 9 for all single term/standard views
+  const totalCols = isCombinedMapeh && combinedTermFilter === "All" ? 15 : 9;
 
   // Metadata Grid HTML (Row 2 to Row 6) depending on totalCols count
   let metaRowsHtml = "";
-  if (totalCols === 14) {
+  if (totalCols === 15) {
     metaRowsHtml = `
       <tr>
-        <td colspan="2" class="meta-lbl-right">REGION</td>
+        <td colspan="2" class="meta-lbl-left-noborder">REGION</td>
         <td colspan="4" class="meta-val-box">${region}</td>
-        <td colspan="2" class="meta-lbl-right">DIVISION</td>
-        <td colspan="2" class="meta-val-box">${division}</td>
-        <td colspan="2" class="meta-lbl-right">SCHOOL ID</td>
+        <td colspan="2" class="meta-lbl-noborder">DIVISION</td>
+        <td colspan="3" class="meta-val-box">${division}</td>
+        <td colspan="2" class="meta-lbl-noborder">SCHOOL ID</td>
         <td colspan="2" class="meta-val-box">${schoolId}</td>
       </tr>
       <tr>
-        <td colspan="2" class="meta-lbl-right">SCHOOL NAME</td>
-        <td colspan="8" class="meta-val-box">${schoolName}</td>
-        <td colspan="2" class="meta-lbl-right">SCHOOL YEAR</td>
+        <td colspan="2" class="meta-lbl-left-noborder">SCHOOL NAME</td>
+        <td colspan="9" class="meta-val-box">${schoolName}</td>
+        <td colspan="2" class="meta-lbl-noborder">SCHOOL YEAR</td>
         <td colspan="2" class="meta-val-box">${schoolYear}</td>
       </tr>
       <tr class="navy-divider-row">
         <td colspan="${totalCols}"></td>
       </tr>
       <tr>
-        <td colspan="2" class="meta-lbl-left">GRADE LEVEL</td>
-        <td colspan="4" class="meta-val-box">${gradeLevel}</td>
-        <td colspan="2" class="meta-lbl-center">SUBJECT</td>
-        <td colspan="6" class="meta-val-box">${displaySubjectName}</td>
+        <td colspan="2" class="meta-lbl-left meta-lbl-bold">GRADE LEVEL</td>
+        <td colspan="7" class="meta-val-box">${gradeLevel}</td>
+        <td colspan="2" class="meta-val-box meta-lbl-bold">SUBJECT</td>
+        <td colspan="4" class="meta-val-box">${displaySubjectName}</td>
       </tr>
       <tr>
-        <td colspan="2" class="meta-lbl-left">SECTION</td>
-        <td colspan="4" class="meta-val-box">${sectionName}</td>
-        <td colspan="2" class="meta-lbl-center">TEACHER</td>
-        <td colspan="6" class="meta-val-box">${teacherName}</td>
+        <td colspan="2" class="meta-lbl-left meta-lbl-bold">SECTION</td>
+        <td colspan="7" class="meta-val-box">${sectionName}</td>
+        <td colspan="2" class="meta-val-box meta-lbl-bold">TEACHER</td>
+        <td colspan="4" class="meta-val-box">${teacherName}</td>
       </tr>
     `;
   } else {
     metaRowsHtml = `
       <tr>
-        <td colspan="2" class="meta-lbl-right">REGION</td>
-        <td colspan="2" class="meta-val-box">${region}</td>
-        <td class="meta-lbl-right">DIVISION</td>
-        <td class="meta-val-box">${division}</td>
-        <td class="meta-lbl-right">SCHOOL ID</td>
-        <td class="meta-val-box">${schoolId}</td>
+        <td colspan="2" class="meta-lbl-left-noborder">REGION</td>
+        <td class="meta-val-box">${region}</td>
+        <td class="meta-lbl-noborder">DIVISION</td>
+        <td colspan="2" class="meta-val-box">${division}</td>
+        <td class="meta-lbl-noborder">SCHOOL ID</td>
+        <td colspan="2" class="meta-val-box">${schoolId}</td>
       </tr>
       <tr>
-        <td colspan="2" class="meta-lbl-right">SCHOOL NAME</td>
+        <td colspan="2" class="meta-lbl-left-noborder">SCHOOL NAME</td>
         <td colspan="4" class="meta-val-box">${schoolName}</td>
-        <td class="meta-lbl-right">SCHOOL YEAR</td>
-        <td class="meta-val-box">${schoolYear}</td>
+        <td class="meta-lbl-noborder">SCHOOL YEAR</td>
+        <td colspan="2" class="meta-val-box">${schoolYear}</td>
       </tr>
       <tr class="navy-divider-row">
         <td colspan="${totalCols}"></td>
       </tr>
       <tr>
-        <td colspan="2" class="meta-lbl-left">GRADE LEVEL</td>
-        <td colspan="2" class="meta-val-box">${gradeLevel}</td>
-        <td class="meta-lbl-center">SUBJECT</td>
+        <td colspan="2" class="meta-lbl-left meta-lbl-bold">GRADE LEVEL</td>
+        <td colspan="3" class="meta-val-box">${gradeLevel}</td>
+        <td class="meta-val-box meta-lbl-bold">SUBJECT</td>
         <td colspan="3" class="meta-val-box">${displaySubjectName}</td>
       </tr>
       <tr>
-        <td colspan="2" class="meta-lbl-left">SECTION</td>
-        <td colspan="2" class="meta-val-box">${sectionName}</td>
-        <td class="meta-lbl-center">TEACHER</td>
+        <td colspan="2" class="meta-lbl-left meta-lbl-bold">SECTION</td>
+        <td colspan="3" class="meta-val-box">${sectionName}</td>
+        <td class="meta-val-box meta-lbl-bold">TEACHER</td>
         <td colspan="3" class="meta-val-box">${teacherName}</td>
       </tr>
     `;
@@ -213,8 +211,7 @@ export async function exportGradingSheetPdf({
     const termLabel = combinedTermFilter === "T1" ? "TERM 1" : combinedTermFilter === "T2" ? "TERM 2" : "TERM 3";
     tableHeaderHtml = `
       <tr>
-        <th rowspan="2" class="th-empty"></th>
-        <th rowspan="2" class="th-centered">LEARNERS' NAMES</th>
+        <th rowspan="2" colspan="3" class="th-centered">LEARNERS' NAMES</th>
         <th colspan="3" class="th-centered">TERM GRADES (${termLabel})</th>
         <th rowspan="2" class="th-centered">FINAL GRADE</th>
         <th rowspan="2" class="th-centered">DESCRIPTOR</th>
@@ -229,8 +226,7 @@ export async function exportGradingSheetPdf({
   } else if (isCombinedMapeh && combinedTermFilter === "All") {
     tableHeaderHtml = `
       <tr>
-        <th rowspan="2" class="th-empty"></th>
-        <th rowspan="2" class="th-centered">LEARNERS' NAMES</th>
+        <th rowspan="2" colspan="3" class="th-centered">LEARNERS' NAMES</th>
         <th colspan="3" class="th-centered">TERM 1</th>
         <th colspan="3" class="th-centered">TERM 2</th>
         <th colspan="3" class="th-centered">TERM 3</th>
@@ -255,8 +251,7 @@ export async function exportGradingSheetPdf({
   } else {
     tableHeaderHtml = `
       <tr>
-        <th rowspan="2" class="th-empty"></th>
-        <th rowspan="2" class="th-centered">LEARNERS' NAMES</th>
+        <th rowspan="2" colspan="3" class="th-centered">LEARNERS' NAMES</th>
         <th colspan="3" class="th-centered">TERM GRADES</th>
         <th rowspan="2" class="th-centered">FINAL GRADE</th>
         <th rowspan="2" class="th-centered">DESCRIPTOR</th>
@@ -297,7 +292,7 @@ export async function exportGradingSheetPdf({
         return `
           <tr>
             <td class="col-learner-num">${indexNum}</td>
-            <td class="col-learner-name">${fullName}</td>
+            <td colspan="2" class="col-learner-name">${fullName}</td>
             <td class="col-val-centered">${maVal !== undefined && maVal !== null ? maVal : ""}</td>
             <td class="col-val-centered">${pehVal !== undefined && pehVal !== null ? pehVal : ""}</td>
             <td class="col-val-centered highlight-val">${combinedVal !== undefined && combinedVal !== null ? combinedVal : ""}</td>
@@ -312,7 +307,7 @@ export async function exportGradingSheetPdf({
         return `
           <tr>
             <td class="col-learner-num">${indexNum}</td>
-            <td class="col-learner-name">${fullName}</td>
+            <td colspan="2" class="col-learner-name">${fullName}</td>
             <td class="col-val-centered">${grades.t1_ma !== undefined && grades.t1_ma !== null ? grades.t1_ma : ""}</td>
             <td class="col-val-centered">${grades.t1_peh !== undefined && grades.t1_peh !== null ? grades.t1_peh : ""}</td>
             <td class="col-val-centered highlight-val">${grades.t1_combined !== undefined && grades.t1_combined !== null ? grades.t1_combined : ""}</td>
@@ -335,7 +330,7 @@ export async function exportGradingSheetPdf({
       return `
         <tr>
           <td class="col-learner-num">${indexNum}</td>
-          <td class="col-learner-name">${fullName}</td>
+          <td colspan="2" class="col-learner-name">${fullName}</td>
           <td class="col-val-centered">${grades.t1 !== undefined && grades.t1 !== null ? grades.t1 : ""}</td>
           <td class="col-val-centered">${grades.t2 !== undefined && grades.t2 !== null ? grades.t2 : ""}</td>
           <td class="col-val-centered">${grades.t3 !== undefined && grades.t3 !== null ? grades.t3 : ""}</td>
@@ -422,6 +417,9 @@ export async function exportGradingSheetPdf({
       vertical-align: middle;
       color: #000000;
     }
+    table.grading-grid tr {
+      page-break-inside: avoid;
+    }
 
     /* Metadata Row Styling */
     .meta-lbl-right {
@@ -429,6 +427,7 @@ export async function exportGradingSheetPdf({
       text-align: right;
       border: none !important;
       background-color: #ffffff;
+      padding-right: 8px;
     }
     .meta-val-box {
       text-align: center;
@@ -441,12 +440,29 @@ export async function exportGradingSheetPdf({
       text-align: left;
       border: 1px solid #000000 !important;
       background-color: #ffffff;
+      padding-left: 8px;
+    }
+    .meta-lbl-left-noborder {
+      font-weight: bold !important;
+      text-align: left;
+      border: none !important;
+      background-color: #ffffff;
+      padding-left: 8px;
+    }
+    .meta-lbl-noborder {
+      font-weight: bold !important;
+      text-align: center;
+      border: none !important;
+      background-color: #ffffff;
     }
     .meta-lbl-center {
       font-weight: bold;
       text-align: center;
       border: 1px solid #000000 !important;
       background-color: #ffffff;
+    }
+    .meta-lbl-bold {
+      font-weight: bold !important;
     }
 
     /* Navy Divider Bar (#002060, height 8-10pt) */
@@ -458,14 +474,10 @@ export async function exportGradingSheetPdf({
     }
 
     /* Multi-level Headers (Rows 7-8) */
-    .th-empty {
-      width: 38px;
-      background-color: #ffffff;
-      border: 1px solid #000000 !important;
-    }
     .th-centered {
       font-weight: bold;
       text-align: center;
+      vertical-align: middle;
       font-size: 10.5pt;
       background-color: #ffffff;
       border: 1px solid #000000 !important;
@@ -505,6 +517,7 @@ export async function exportGradingSheetPdf({
       text-align: left;
       padding-left: 8px;
       font-weight: normal;
+      font-size: 9.5pt;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -522,12 +535,12 @@ export async function exportGradingSheetPdf({
     .col-final-grade {
       text-align: center;
       font-weight: bold;
-      font-style: italic;
       border: 1px solid #000000 !important;
     }
     .col-descriptor {
       text-align: center;
       font-style: italic;
+      font-weight: bold;
       border: 1px solid #000000 !important;
     }
     .col-remark {
@@ -553,10 +566,11 @@ export async function exportGradingSheetPdf({
     </div>
 
     <table class="grading-grid">
-      ${totalCols === 14 ? `
+      ${totalCols === 15 ? `
         <colgroup>
           <col style="width: 35px;" />
-          <col style="width: 210px;" />
+          <col style="width: 85px;" />
+          <col style="width: 125px;" />
           <col style="width: 50px;" />
           <col style="width: 50px;" />
           <col style="width: 55px;" />
@@ -573,7 +587,8 @@ export async function exportGradingSheetPdf({
       ` : `
         <colgroup>
           <col style="width: 38px;" />
-          <col style="width: 260px;" />
+          <col style="width: 82px;" />
+          <col style="width: 178px;" />
           <col style="width: 75px;" />
           <col style="width: 75px;" />
           <col style="width: 75px;" />
@@ -606,10 +621,9 @@ export async function exportGradingSheetPdf({
 </html>
   `;
 
-  if (isPrintMode) {
-    // PRINT BUTTON: Open browser print preview window
+  const openNativePrint = (html, title) => {
     const originalTitle = document.title;
-    document.title = fileName;
+    document.title = title.replace(/\.pdf$/i, "");
 
     const iframe = document.createElement("iframe");
     iframe.style.position = "fixed";
@@ -622,7 +636,7 @@ export async function exportGradingSheetPdf({
 
     const doc = iframe.contentWindow.document;
     doc.open();
-    doc.write(htmlContent);
+    doc.write(html);
     doc.close();
 
     iframe.contentWindow.focus();
@@ -635,48 +649,36 @@ export async function exportGradingSheetPdf({
         }
       }, 3000);
     }, 300);
+  };
+
+  if (isPrintMode) {
+    // PRINT BUTTON: Open browser native print dialog (vector output)
+    openNativePrint(htmlContent, fileName);
   } else {
-    // DOWNLOAD PDF BUTTON: Render exact layout and save via jsPDF + html2canvas
-    const container = document.createElement("div");
-    container.style.position = "fixed";
-    container.style.left = "-9999px";
-    container.style.top = "-9999px";
-    container.style.width = "1020px";
-    container.innerHTML = htmlContent;
-    document.body.appendChild(container);
-
+    // DOWNLOAD PDF BUTTON: Generate authentic vector PDF using Chrome headless (matches native print 100%)
     try {
-      const element = container.querySelector("#excel-pdf-export-root") || container;
-
-      const canvas = await html2canvas(element, {
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        backgroundColor: "#ffffff",
+      const response = await fetch("http://localhost:5000/api/class-record/export-grading-sheet-pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ html: htmlContent, fileName }),
       });
 
-      const imgData = canvas.toDataURL("image/png");
-      const pdf = new jsPDF({
-        orientation: "landscape",
-        unit: "pt",
-        format: "a4",
-      });
-
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
-      const margin = 36; // 0.5 in margins = 36 pt
-
-      const imgWidth = pdfWidth - margin * 2;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-      pdf.addImage(imgData, "PNG", margin, margin, imgWidth, Math.min(imgHeight, pdfHeight - margin * 2));
-      pdf.save(fileName);
-    } catch (err) {
-      console.error("Error exporting PDF:", err);
-    } finally {
-      if (document.body.contains(container)) {
-        document.body.removeChild(container);
+      if (!response.ok) {
+        throw new Error(`Server PDF export returned status ${response.status}`);
       }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.warn("Backend vector PDF generation unavailable, opening native print dialog:", err.message);
+      openNativePrint(htmlContent, fileName);
     }
   }
 }

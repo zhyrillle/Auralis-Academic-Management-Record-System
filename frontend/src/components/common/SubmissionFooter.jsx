@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Calendar, Check, Send, Loader2 } from "lucide-react";
 
 export default function SubmissionFooter({
@@ -103,6 +103,17 @@ export default function SubmissionFooter({
         }
     };
 
+    const formattedDeadline = useMemo(() => {
+        if (!deadline) return "N/A";
+        const d = new Date(deadline);
+        if (isNaN(d.getTime())) return "N/A";
+        return d.toLocaleDateString("en-US", {
+            month: "long",
+            day: "numeric",
+            year: "numeric",
+        });
+    }, [deadline]);
+
     return (
         <>
             <div
@@ -141,13 +152,7 @@ export default function SubmissionFooter({
                             fontWeight: 600,
                         }}
                     >
-                        {deadline
-                            ? new Date(deadline).toLocaleDateString("en-US", {
-                                month: "long",
-                                day: "numeric",
-                                year: "numeric",
-                            })
-                            : "N/A"}
+                        {formattedDeadline}
                     </span>
                 </div>
 
