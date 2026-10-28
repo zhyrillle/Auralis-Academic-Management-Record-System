@@ -267,37 +267,42 @@ async function forwardRoleAssignmentsToCloud(userId, body, schoolYear) {
   const { assignedFrom, assignedUntil } = getAssignmentDates(body, schoolYear);
   const role = normalizeRole(body.role);
 
-  // Clean up existing on cloud
-  await db.cloudPool.query(`UPDATE ATTENDANCE_SHEET SET adviser_assignment_id = NULL WHERE adviser_assignment_id IN (SELECT adviser_assignment_id FROM SECTION_ADVISER_ASSIGNMENT WHERE user_id = ?)`).catch(() => {});
-  await db.cloudPool.query(`UPDATE ATTENDANCE_SHEET SET teacher_assignment_id = NULL WHERE teacher_assignment_id IN (SELECT teacher_assignment_id FROM TEACHER_ASSIGNMENT WHERE user_id = ?)`).catch(() => {});
-  await db.cloudPool.query(`UPDATE SCORE SET teacher_assignment_id = NULL WHERE teacher_assignment_id IN (SELECT teacher_assignment_id FROM TEACHER_ASSIGNMENT WHERE user_id = ?)`).catch(() => {});
-  await db.cloudPool.query(`DELETE FROM SECTION_ADVISER_ASSIGNMENT WHERE user_id = ?`, [userId]).catch(() => {});
-  await db.cloudPool.query(`DELETE FROM TEACHER_ASSIGNMENT WHERE user_id = ?`, [userId]).catch(() => {});
-  await db.cloudPool.query(`DELETE FROM DEPARTMENT_HEAD WHERE user_id = ?`, [userId]).catch(() => {});
+  await db.cloudPool.query('SET FOREIGN_KEY_CHECKS = 0;').catch(() => {});
+  try {
+    // Clean up existing on cloud
+    await db.cloudPool.query(`UPDATE ATTENDANCE_SHEET SET adviser_assignment_id = NULL WHERE adviser_assignment_id IN (SELECT adviser_assignment_id FROM SECTION_ADVISER_ASSIGNMENT WHERE user_id = ?)`, [userId]).catch(() => {});
+    await db.cloudPool.query(`UPDATE ATTENDANCE_SHEET SET teacher_assignment_id = NULL WHERE teacher_assignment_id IN (SELECT teacher_assignment_id FROM TEACHER_ASSIGNMENT WHERE user_id = ?)`, [userId]).catch(() => {});
+    await db.cloudPool.query(`UPDATE SCORE SET teacher_assignment_id = NULL WHERE teacher_assignment_id IN (SELECT teacher_assignment_id FROM TEACHER_ASSIGNMENT WHERE user_id = ?)`, [userId]).catch(() => {});
+    await db.cloudPool.query(`DELETE FROM SECTION_ADVISER_ASSIGNMENT WHERE user_id = ?`, [userId]).catch(() => {});
+    await db.cloudPool.query(`DELETE FROM TEACHER_ASSIGNMENT WHERE user_id = ?`, [userId]).catch(() => {});
+    await db.cloudPool.query(`DELETE FROM DEPARTMENT_HEAD WHERE user_id = ?`, [userId]).catch(() => {});
 
-  if (role === "department head" && body.department_id) {
-    await db.cloudPool.query(
-      `INSERT INTO DEPARTMENT_HEAD (department_id, user_id, school_year_id, appointed_from, appointed_until) VALUES (?, ?, ?, ?, ?)`,
-      [body.department_id, userId, schoolYear.school_year_id, assignedFrom, assignedUntil]
-    ).catch((e) => console.warn('[CloudUser] DH assign cloud error:', e.message));
-  }
+    if (role === "department head" && body.department_id) {
+      await db.cloudPool.query(
+        `INSERT INTO DEPARTMENT_HEAD (department_id, user_id, school_year_id, appointed_from, appointed_until) VALUES (?, ?, ?, ?, ?)`,
+        [body.department_id, userId, schoolYear.school_year_id, assignedFrom, assignedUntil]
+      ).catch((e) => console.warn('[CloudUser] DH assign cloud error:', e.message));
+    }
 
-  if ((role === "subject teacher" || body.is_adviser) && body.adviser_section_id) {
-    await db.cloudPool.query(
-      `INSERT INTO SECTION_ADVISER_ASSIGNMENT (section_id, school_year_id, user_id, assigned_from, assigned_until) VALUES (?, ?, ?, ?, ?)`,
-      [body.adviser_section_id, schoolYear.school_year_id, userId, assignedFrom, assignedUntil]
-    ).catch((e) => console.warn('[CloudUser] SAA assign cloud error:', e.message));
-  }
+    if ((role === "subject teacher" || body.is_adviser) && body.adviser_section_id) {
+      await db.cloudPool.query(
+        `INSERT INTO SECTION_ADVISER_ASSIGNMENT (section_id, school_year_id, user_id, assigned_from, assigned_until) VALUES (?, ?, ?, ?, ?)`,
+        [body.adviser_section_id, schoolYear.school_year_id, userId, assignedFrom, assignedUntil]
+      ).catch((e) => console.warn('[CloudUser] SAA assign cloud error:', e.message));
+    }
 
-  if (Array.isArray(body.teaching_assignments)) {
-    for (const assign of body.teaching_assignments) {
-      if (assign.subject_offering_id) {
-        await db.cloudPool.query(
-          `INSERT INTO TEACHER_ASSIGNMENT (user_id, subject_offering_id, assigned_from, assigned_until) VALUES (?, ?, ?, ?)`,
-          [userId, assign.subject_offering_id, assignedFrom, assignedUntil]
-        ).catch((e) => console.warn('[CloudUser] TA assign cloud error:', e.message));
+    if (Array.isArray(body.teaching_assignments)) {
+      for (const assign of body.teaching_assignments) {
+        if (assign.subject_offering_id) {
+          await db.cloudPool.query(
+            `INSERT INTO TEACHER_ASSIGNMENT (user_id, subject_offering_id, assigned_from, assigned_until) VALUES (?, ?, ?, ?)`,
+            [userId, assign.subject_offering_id, assignedFrom, assignedUntil]
+          ).catch((e) => console.warn('[CloudUser] TA assign cloud error:', e.message));
+        }
       }
     }
+  } finally {
+    await db.cloudPool.query('SET FOREIGN_KEY_CHECKS = 1;').catch(() => {});
   }
 }
 
@@ -1103,22 +1108,8 @@ router.get("/:id", async (req, res) => {
     return res.status(400).json({ error: "Invalid user ID." });
   }
   try {
+    await syncUsersFromCloud();
     const userId = Number(req.params.id);
-    if (db.cloudPool) {
-      try {
-        const [cloudRows] = await db.cloudPool.query(
-          `SELECT user_id, role, department_id, first_name, middle_name, last_name, extension_name, email, password, account_status, pfp_url, last_login_at FROM USER WHERE user_id = ?`,
-          [userId]
-        );
-        if (cloudRows && cloudRows.length > 0) {
-          const u = cloudRows[0];
-          await db.execute(
-            `UPDATE USER SET role = ?, department_id = ?, first_name = ?, middle_name = ?, last_name = ?, extension_name = ?, email = ?, password = ?, account_status = ?, pfp_url = ?, last_login_at = ? WHERE user_id = ?`,
-            [u.role, u.department_id, u.first_name, u.middle_name, u.last_name, u.extension_name, u.email, u.password, u.account_status, u.pfp_url, u.last_login_at, userId]
-          );
-        }
-      } catch (_) {}
-    }
     const users = await getManagementUsers();
     const user = users.find((item) => Number(item.user_id) === userId);
     if (!user) {
@@ -1220,6 +1211,9 @@ const saveRoleAssignments = async (connection, userId, body, schoolYear) => {
 };
 
 const deleteRoleAssignments = async (connection, userId) => {
+  await connection.execute(`UPDATE ATTENDANCE_SHEET SET adviser_assignment_id = NULL WHERE adviser_assignment_id IN (SELECT adviser_assignment_id FROM SECTION_ADVISER_ASSIGNMENT WHERE user_id = ?)`, [userId]).catch(() => {});
+  await connection.execute(`UPDATE ATTENDANCE_SHEET SET teacher_assignment_id = NULL WHERE teacher_assignment_id IN (SELECT teacher_assignment_id FROM TEACHER_ASSIGNMENT WHERE user_id = ?)`, [userId]).catch(() => {});
+  await connection.execute(`UPDATE SCORE SET teacher_assignment_id = NULL WHERE teacher_assignment_id IN (SELECT teacher_assignment_id FROM TEACHER_ASSIGNMENT WHERE user_id = ?)`, [userId]).catch(() => {});
   await connection.execute(`DELETE FROM SECTION_ADVISER_ASSIGNMENT WHERE user_id = ?`, [userId]);
   await connection.execute(`DELETE FROM TEACHER_ASSIGNMENT WHERE user_id = ?`, [userId]);
   await connection.execute(`DELETE FROM DEPARTMENT_HEAD WHERE user_id = ?`, [userId]);

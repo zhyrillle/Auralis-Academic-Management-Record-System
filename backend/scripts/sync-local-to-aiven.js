@@ -53,6 +53,28 @@ async function pushLocalToAiven() {
     }
     console.log('✅ Users verified and synced to Aiven.');
 
+    // Prune users from Aiven Cloud that were deleted locally (protect root admin user_id = 1)
+    const localUserIdSet = new Set(localUsers.map((u) => Number(u.user_id)));
+    const [cloudAllUsers] = await aivenConn.query("SELECT user_id, email FROM USER WHERE user_id != 1 AND email != 'admin@gmail.com'");
+    for (const cu of cloudAllUsers) {
+      if (!localUserIdSet.has(Number(cu.user_id))) {
+        console.log(`🗑️ Pruning deleted user ${cu.email} (ID: ${cu.user_id}) from Aiven Cloud...`);
+        await aivenConn.query('SET FOREIGN_KEY_CHECKS = 0;').catch(() => {});
+        try {
+          await aivenConn.query('UPDATE AUDIT_EVENT SET user_id = NULL WHERE user_id = ?', [cu.user_id]).catch(() => {});
+          await aivenConn.query('UPDATE AUDIT_LOG SET user_id = NULL WHERE user_id = ?', [cu.user_id]).catch(() => {});
+          await aivenConn.query('DELETE FROM NOTIFICATION WHERE user_id = ?', [cu.user_id]).catch(() => {});
+          await aivenConn.query('DELETE FROM FEEDBACK WHERE evaluator_id = ? OR evaluee_id = ?', [cu.user_id, cu.user_id]).catch(() => {});
+          await aivenConn.query('DELETE FROM SECTION_ADVISER_ASSIGNMENT WHERE user_id = ?', [cu.user_id]).catch(() => {});
+          await aivenConn.query('DELETE FROM TEACHER_ASSIGNMENT WHERE user_id = ?', [cu.user_id]).catch(() => {});
+          await aivenConn.query('DELETE FROM DEPARTMENT_HEAD WHERE user_id = ?', [cu.user_id]).catch(() => {});
+          await aivenConn.query('DELETE FROM USER WHERE user_id = ?', [cu.user_id]).catch(() => {});
+        } finally {
+          await aivenConn.query('SET FOREIGN_KEY_CHECKS = 1;').catch(() => {});
+        }
+      }
+    }
+
     // 0b. Sync local sections to Aiven Cloud
     const [localSections] = await localConn.query('SELECT section_id, section_name, grade_level_id, program_id, is_specialized FROM SECTION;');
     console.log(`🏫 Checking ${localSections.length} local sections...`);
