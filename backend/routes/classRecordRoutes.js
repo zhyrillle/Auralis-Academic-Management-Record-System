@@ -8,6 +8,7 @@ const NotificationService = require('../services/NotificationService');
 const GradeComputationService = require('../services/GradeComputationService');
 const { termCode, problem } = GradeComputationService;
 const GradeTransmutationConfig = require('../models/GradeTransmutationConfig');
+const cloudSync = require('../services/cloudSyncService');
 const { resolveCurrentUser } = require('../middleware/resolveCurrentUser');
 const { decryptLrn } = require('../utils/encryption');
 const {
@@ -219,19 +220,74 @@ async function resolveActiveAcademicTerm(schoolYearId) {
 async function ensureGradeSheet(subjectOfferingId, schoolYearId, termName, connection = db, { create = true } = {}) {
   const selected = selectSubmissionTerm(await loadClassTerms({ school_year_id: schoolYearId }, connection), termCode(termName));
   const [sheets] = await connection.execute(
-    'SELECT * FROM GRADE_SHEET WHERE subject_offering_id = ? AND term_id = ?',
+    'SELECT * FROM GRADE_SHEET WHERE subject_offering_id = ? AND term_id = ? ORDER BY grade_sheet_id ASC',
     [subjectOfferingId, selected.term_id]);
-  if (sheets.length > 1) throw problem('DUPLICATE_GRADE_SHEET', 'This class and term have duplicate grade sheets. Please request a configuration review.');
-  let sheet = sheets[0];
+
+  let sheet;
+  if (sheets.length > 1) {
+    console.warn(`[ensureGradeSheet] Detected ${sheets.length} duplicate sheets for offering ${subjectOfferingId}, term ${selected.term_id}. Self-healing...`);
+    // Rank sheets: 1. SUBMITTED, 2. lowest ID
+    sheets.sort((a, b) => {
+      const aSub = (a.workflow_status === 'SUBMITTED' || a.submitted_at) ? 1 : 0;
+      const bSub = (b.workflow_status === 'SUBMITTED' || b.submitted_at) ? 1 : 0;
+      if (bSub !== aSub) return bSub - aSub;
+      return a.grade_sheet_id - b.grade_sheet_id;
+    });
+    sheet = sheets[0];
+
+    // Re-link and delete redundant duplicates in background
+    for (let i = 1; i < sheets.length; i++) {
+      const redundantId = sheets[i].grade_sheet_id;
+      connection.execute(`UPDATE GRADE_REOPEN_REQUEST SET grade_sheet_id = ? WHERE grade_sheet_id = ?`, [sheet.grade_sheet_id, redundantId]).catch(() => {});
+      connection.execute(`UPDATE GRADE_ACTIVITY SET grade_sheet_id = ? WHERE grade_sheet_id = ?`, [sheet.grade_sheet_id, redundantId]).catch(() => {});
+      connection.execute(`DELETE FROM GRADE_SHEET WHERE grade_sheet_id = ?`, [redundantId]).catch(() => {});
+      if (db.cloudPool) {
+        db.cloudPool.query(`DELETE FROM GRADE_SHEET WHERE grade_sheet_id = ?`, [redundantId]).catch(() => {});
+      }
+    }
+  } else {
+    sheet = sheets[0];
+  }
+
   if (!sheet && !create) {
     return { gradeSheetId: null, termId: selected.term_id, termName: selected.term_name,
       lockStatus: 'NOT_CREATED', workflowStatus: 'DRAFT' };
   }
   if (!sheet) {
-    const [result] = await connection.execute(
-      'INSERT INTO GRADE_SHEET (subject_offering_id, term_id, lock_status, workflow_status) VALUES (?, ?, ?, ?)',
-      [subjectOfferingId, selected.term_id, 'EDITABLE', 'DRAFT']);
-    sheet = { grade_sheet_id: result.insertId, term_id: selected.term_id, lock_status: 'EDITABLE', workflow_status: 'DRAFT' };
+    try {
+      const [result] = await connection.execute(
+        `INSERT INTO GRADE_SHEET (subject_offering_id, term_id, lock_status, workflow_status)
+         VALUES (?, ?, 'EDITABLE', 'DRAFT')
+         ON DUPLICATE KEY UPDATE lock_status = lock_status`,
+        [subjectOfferingId, selected.term_id]);
+      const sheetId = result.insertId;
+      if (sheetId) {
+        sheet = { grade_sheet_id: sheetId, term_id: selected.term_id, lock_status: 'EDITABLE', workflow_status: 'DRAFT' };
+      } else {
+        const [existing] = await connection.execute(
+          'SELECT * FROM GRADE_SHEET WHERE subject_offering_id = ? AND term_id = ? LIMIT 1',
+          [subjectOfferingId, selected.term_id]);
+        sheet = existing[0];
+      }
+    } catch (insertErr) {
+      if (insertErr.code === 'ER_DUP_ENTRY') {
+        const [existing] = await connection.execute(
+          'SELECT * FROM GRADE_SHEET WHERE subject_offering_id = ? AND term_id = ? LIMIT 1',
+          [subjectOfferingId, selected.term_id]);
+        sheet = existing[0];
+      } else {
+        throw insertErr;
+      }
+    }
+
+    if (sheet && db.cloudPool) {
+      db.cloudPool.execute(
+        `INSERT INTO GRADE_SHEET (grade_sheet_id, subject_offering_id, term_id, lock_status, workflow_status)
+         VALUES (?, ?, ?, 'EDITABLE', 'DRAFT')
+         ON DUPLICATE KEY UPDATE lock_status = VALUES(lock_status), workflow_status = VALUES(workflow_status)`,
+        [sheet.grade_sheet_id, subjectOfferingId, selected.term_id]
+      ).catch((err) => console.warn('[CloudDualWrite] Failed to dual-write grade sheet to Aiven:', err.message));
+    }
   }
   return { gradeSheetId: sheet.grade_sheet_id, termId: sheet.term_id, termName: selected.term_name,
     lockStatus: sheet.lock_status, workflowStatus: sheet.workflow_status };
@@ -241,6 +297,27 @@ async function ensureGradeSheet(subjectOfferingId, schoolYearId, termName, conne
  * Ensures default assessment columns exist for a grade sheet so every column
  * (Written Work, Performance Task, and Quarterly Assessment) always has a valid assessment_id in DB.
  */
+async function insertDefaultActivity(connection, gradeSheetId, subjCompWeightId, mapehComponent, name, maxScore, date) {
+  const [result] = await connection.execute(
+    `INSERT INTO GRADE_ACTIVITY (grade_sheet_id, subj_comp_weight_id, mapeh_component, activity_name, highest_possible_score, activity_date, status)
+     VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE')`,
+    [gradeSheetId, subjCompWeightId, mapehComponent || null, name, maxScore, date]
+  );
+  if (db.cloudPool && result?.insertId) {
+    db.cloudPool.execute(
+      `INSERT INTO GRADE_ACTIVITY (activity_id, grade_sheet_id, subj_comp_weight_id, mapeh_component, activity_name, highest_possible_score, activity_date, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE')
+       ON DUPLICATE KEY UPDATE
+         activity_name = VALUES(activity_name),
+         highest_possible_score = VALUES(highest_possible_score),
+         activity_date = VALUES(activity_date),
+         status = VALUES(status)`,
+      [result.insertId, gradeSheetId, subjCompWeightId, mapehComponent || null, name, maxScore, date]
+    ).catch((err) => console.warn('[CloudDualWrite] Failed to dual-write default activity to Aiven:', err.message));
+  }
+  return result;
+}
+
 async function ensureDefaultActivitiesForSheet(gradeSheetId, subjectId, schoolYearId, mapehComponent = null, connection = db) {
   if (mapehComponent) {
     // Safeguard: backfill any legacy unassigned activities for this grade sheet to 'MA'
@@ -314,11 +391,7 @@ async function ensureDefaultActivitiesForSheet(gradeSheetId, subjectId, schoolYe
       { name: 'Written Work 1', max: 20 },
     ];
     for (const ww of defaultWW) {
-      await connection.execute(
-        `INSERT INTO GRADE_ACTIVITY (grade_sheet_id, subj_comp_weight_id, mapeh_component, activity_name, highest_possible_score, activity_date, status)
-         VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE')`,
-        [gradeSheetId, wwWeightId, mapehComponent || null, ww.name, ww.max, today]
-      );
+      await insertDefaultActivity(connection, gradeSheetId, wwWeightId, mapehComponent, ww.name, ww.max, today);
     }
   }
 
@@ -328,11 +401,7 @@ async function ensureDefaultActivitiesForSheet(gradeSheetId, subjectId, schoolYe
       { name: 'Performance Task 1', max: 50 },
     ];
     for (const pt of defaultPT) {
-      await connection.execute(
-        `INSERT INTO GRADE_ACTIVITY (grade_sheet_id, subj_comp_weight_id, mapeh_component, activity_name, highest_possible_score, activity_date, status)
-         VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE')`,
-        [gradeSheetId, ptWeightId, mapehComponent || null, pt.name, pt.max, today]
-      );
+      await insertDefaultActivity(connection, gradeSheetId, ptWeightId, mapehComponent, pt.name, pt.max, today);
     }
   }
 
@@ -351,27 +420,15 @@ async function ensureDefaultActivitiesForSheet(gradeSheetId, subjectId, schoolYe
 
   // Ensure ST1, ST2, and TE all exist individually
   if (!hasST1) {
-    await connection.execute(
-      `INSERT INTO GRADE_ACTIVITY (grade_sheet_id, subj_comp_weight_id, mapeh_component, activity_name, highest_possible_score, activity_date, status)
-       VALUES (?, ?, ?, 'Summative Test 1', ?, ?, 'ACTIVE')`,
-      [gradeSheetId, qaWeightId, mapehComponent || null, defaultSt1Hps, today]
-    );
+    await insertDefaultActivity(connection, gradeSheetId, qaWeightId, mapehComponent, 'Summative Test 1', defaultSt1Hps, today);
   }
 
   if (!hasST2) {
-    await connection.execute(
-      `INSERT INTO GRADE_ACTIVITY (grade_sheet_id, subj_comp_weight_id, mapeh_component, activity_name, highest_possible_score, activity_date, status)
-       VALUES (?, ?, ?, 'Summative Test 2', ?, ?, 'ACTIVE')`,
-      [gradeSheetId, qaWeightId, mapehComponent || null, defaultSt2Hps, today]
-    );
+    await insertDefaultActivity(connection, gradeSheetId, qaWeightId, mapehComponent, 'Summative Test 2', defaultSt2Hps, today);
   }
 
   if (!hasTE) {
-    await connection.execute(
-      `INSERT INTO GRADE_ACTIVITY (grade_sheet_id, subj_comp_weight_id, mapeh_component, activity_name, highest_possible_score, activity_date, status)
-       VALUES (?, ?, ?, 'Term Exam', ?, ?, 'ACTIVE')`,
-      [gradeSheetId, qaWeightId, mapehComponent || null, defaultTeHps, today]
-    );
+    await insertDefaultActivity(connection, gradeSheetId, qaWeightId, mapehComponent, 'Term Exam', defaultTeHps, today);
   }
 }
 
@@ -559,6 +616,14 @@ async function gradingSummary(input, user, database = db) {
       lrn: decryptLrn(s.lrn), term1: '', term2: '', term3: '', term1_ma: '', term2_ma: '', term3_ma: '', term1_peh: '', term2_peh: '', term3_peh: '' }));
     const warnings = [];
     const submissionTerms = [];
+    const termDeadlines = {};
+    for (const p of periods) {
+      const code = termCode(p.term_name);
+      if (code && p.grade_submission_deadline_at) {
+        const dt = new Date(p.grade_submission_deadline_at);
+        termDeadlines[code] = Number.isFinite(dt.getTime()) ? dt.toISOString() : p.grade_submission_deadline_at;
+      }
+    }
     for (const position of [1, 2, 3]) {
       const code = `T${position}`, matchingTerms = periods.filter(t => termCode(t.term_name) === code);
       if (matchingTerms.length !== 1) { warnings.push(`${code}: term configuration needs review.`); continue; }
@@ -568,6 +633,7 @@ async function gradingSummary(input, user, database = db) {
       const sheet = matchingSheets[0];
       const window = await GradeSheet.editingWindow(sheet, user, database);
       if (window.editable) submissionTerms.push({ term: code, deadline: window.deadline, correction: window.correction });
+      if (window.correction && window.deadline) termDeadlines[code] = window.deadline;
       let grades;
       if (sheet.workflow_status === 'SUBMITTED') {
         grades = saved.filter(g => termCode(g.term) === code).map(g => ({ studentId: Number(g.student_id),
@@ -597,14 +663,20 @@ async function gradingSummary(input, user, database = db) {
     }
     const now = Date.now();
     const current = periods.filter(p => new Date(p.starts_at).getTime() <= now && new Date(p.ends_at).getTime() > now);
-    return { summaryVersion: 2, context: { ...submissionPublicContext(offering), activeTerm: current.length === 1 ? termCode(current[0].term_name) : null,
-      isMapeh: GradeComputationService.isMapehSubject(offering), submissionTerms }, students: result, warnings };
+    const ongoing = current.length === 1 ? current[0]
+      : periods.find(p => ['ongoing', 'open'].includes(String(p.status || '').toLowerCase())) || periods[0];
+    const activeTermCode = ongoing ? termCode(ongoing.term_name) : (current.length === 1 ? termCode(current[0].term_name) : null);
+    return { summaryVersion: 2, context: { ...submissionPublicContext(offering), activeTerm: activeTermCode,
+      isMapeh: GradeComputationService.isMapehSubject(offering), submissionTerms, termDeadlines,
+      deadline: (activeTermCode && termDeadlines[activeTermCode]) || null }, students: result, warnings };
   }
 
 router.get('/class-record/:subject_offering_id', resolveCurrentUser, async (req, res) => {
   try {
-    await GradeTransmutationConfig.getActiveTiers();
     const subjectOfferingId = Number(req.params.subject_offering_id);
+    await cloudSync.syncClassRecordFromCloud(subjectOfferingId).catch(() => {});
+    await GradeTransmutationConfig.getActiveTiers();
+    res.set('Cache-Control', 'no-store');
     const requestedSectionId = req.query.section_id ? Number(req.query.section_id) : null;
     const requestedSubjectId = req.query.subject_id ? Number(req.query.subject_id) : null;
 
@@ -2577,6 +2649,7 @@ router.post('/class-record/submit', resolveCurrentUser, async (req, res) => {
 
 router.get('/class-record/grading-summary/:subjectOfferingId', resolveCurrentUser, async (req, res) => {
   try {
+    await cloudSync.syncClassRecordFromCloud(req.params.subjectOfferingId).catch(() => {});
     const result = await gradingSummary({
       subject_offering_id: req.params.subjectOfferingId, section_id: req.query.section_id, school_year_id: req.query.school_year_id,
     }, req.currentUser);
@@ -2622,5 +2695,86 @@ router.post('/class-record/export-grading-sheet', async (req, res) => {
   }
 });
 
+/**
+ * POST /api/class-record/export-grading-sheet-pdf
+ * Generates official high-definition vector DepEd PDF using Chrome headless (matches native browser print 100%)
+ */
+let depedLogoBase64 = null;
+let depedGifLogoBase64 = null;
+
+function getGradingSheetLogos() {
+  const fs = require('fs');
+  const path = require('path');
+  if (!depedLogoBase64) {
+    const p = path.join(__dirname, '../assets/deped_logo.png');
+    if (fs.existsSync(p)) {
+      depedLogoBase64 = `data:image/png;base64,${fs.readFileSync(p).toString('base64')}`;
+    }
+  }
+  if (!depedGifLogoBase64) {
+    const p = path.join(__dirname, '../assets/deped-logo.gif');
+    if (fs.existsSync(p)) {
+      depedGifLogoBase64 = `data:image/gif;base64,${fs.readFileSync(p).toString('base64')}`;
+    }
+  }
+  return { depedLogoBase64, depedGifLogoBase64 };
+}
+
+router.post('/class-record/export-grading-sheet-pdf', async (req, res) => {
+  try {
+    const { html, fileName = 'Grading_Sheet.pdf' } = req.body;
+    if (!html) {
+      return res.status(400).json({ error: 'HTML content is required' });
+    }
+
+    const { depedLogoBase64, depedGifLogoBase64 } = getGradingSheetLogos();
+    let finalHtml = html;
+    if (depedLogoBase64) {
+      finalHtml = finalHtml.replace(/src="[^"]*deped_logo[^"]*"/gi, `src="${depedLogoBase64}"`);
+    }
+    if (depedGifLogoBase64) {
+      finalHtml = finalHtml.replace(/src="[^"]*deped-logo\.gif[^"]*"/gi, `src="${depedGifLogoBase64}"`);
+    }
+
+    const puppeteer = require('puppeteer-core');
+    const { resolveBrowserExecutable } = require('../services/Sf9PdfService');
+    const executablePath = resolveBrowserExecutable();
+
+    const browser = await puppeteer.launch({
+      executablePath,
+      headless: true,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--font-render-hinting=none',
+      ],
+    });
+
+    try {
+      const page = await browser.newPage();
+      await page.setViewport({ width: 1122, height: 793, deviceScaleFactor: 2 });
+      await page.setContent(finalHtml, { waitUntil: 'load' });
+      const pdfBuffer = await page.pdf({
+        format: 'A4',
+        landscape: true,
+        printBackground: true,
+        preferCSSPageSize: true,
+      });
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+      res.send(pdfBuffer);
+    } finally {
+      await browser.close();
+    }
+  } catch (err) {
+    console.error('Error generating grading sheet vector PDF:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.__test = { submitClassGrades, gradingSummary, handleBatchScores };
 module.exports = router;
+

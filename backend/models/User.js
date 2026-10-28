@@ -185,7 +185,17 @@ class User {
         u.email,
         u.pfp_url,
         u.account_status,
-        u.last_login_at
+        u.last_login_at,
+        CASE
+          WHEN u.role IN ('subject_teacher', 'subject teacher') AND EXISTS (
+            SELECT 1
+            FROM SECTION_ADVISER_ASSIGNMENT saa
+            LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = saa.school_year_id
+            WHERE saa.user_id = u.user_id
+              AND (sy.status IS NULL OR LOWER(sy.status) IN ('active', 'ongoing'))
+          ) THEN 'adviser'
+          ELSE u.role
+        END AS display_role
       FROM \`USER\` u
       WHERE u.user_id = ?
       `,
@@ -356,6 +366,13 @@ class User {
       ]
     );
 
+    if (db.cloudPool) {
+      db.cloudPool.query(
+        `UPDATE USER SET first_name = ?, middle_name = ?, last_name = ?, extension_name = ?, email = ? WHERE user_id = ?`,
+        [first_name, middle_name || null, last_name, extension_name || null, email, id]
+      ).catch((err) => console.warn('[CloudUser] Failed to dual-write profile update to cloud:', err.message));
+    }
+
     return this.findById(id);
   }
 
@@ -368,6 +385,13 @@ class User {
       `,
       [profilePictureUrl, id]
     );
+
+    if (db.cloudPool) {
+      db.cloudPool.query(
+        `UPDATE USER SET pfp_url = ? WHERE user_id = ?`,
+        [profilePictureUrl, id]
+      ).catch((err) => console.warn('[CloudUser] Failed to dual-write profile picture to cloud:', err.message));
+    }
 
     return this.findById(id);
   }

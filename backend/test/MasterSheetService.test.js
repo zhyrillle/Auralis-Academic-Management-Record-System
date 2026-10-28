@@ -30,15 +30,15 @@ const gradeRow = (term, sheetId = term) => ({ grade_sheet_id: sheetId, subject_o
   workflow_status: 'SUBMITTED', lock_status: 'TERM_LOCKED', submitted_at: '2026-10-04T12:00:00Z' });
 const saved = (term, value) => ({ subject_offering_id: 130, student_id: 41, student_section_id: 501,
   term: `T${term}`, initial_grade: value, quarterly_grade: value, mapeh_component: null });
-test("one configured subject produces ten setup notices, not ten data warnings", () => {
+test("a regular class keeps core subject setup notices without unrelated specializations", () => {
   const result = build(input());
   assert.deepEqual(result.warnings, []);
   assert.equal(result.subjectSetup.configuredSubjectCount, 1);
-  assert.equal(result.subjectSetup.templateSubjectCount, 11);
-  assert.equal(result.subjectSetup.notOfferedSubjects.length, 10);
+  assert.equal(result.subjectSetup.templateSubjectCount, 8);
+  assert.equal(result.subjectSetup.notOfferedSubjects.length, 7);
   assert.ok(!result.subjectSetup.notOfferedSubjects.includes("English"));
-  assert.equal(result.subjects.length, 11, "Keep the existing report template");
-  assert.equal(result.completeness.expectedTermGrades, 33, "Keep existing completeness semantics");
+  assert.equal(result.subjects.length, 8);
+  assert.equal(result.completeness.expectedTermGrades, 24);
   assert.deepEqual(result.students[0].grades.filipino, { terms: [null, null, null], finalGrade: null });
   assert.equal(result.students[0].generalAverage, null);
 });
@@ -84,10 +84,66 @@ test("empty subject setup stays explicit without fabricating grades or warnings"
   data.offeringRows = [];
   const result = build(data);
   assert.equal(result.subjectSetup.configuredSubjectCount, 0);
-  assert.equal(result.subjectSetup.notOfferedSubjects.length, 11);
+  assert.equal(result.subjectSetup.notOfferedSubjects.length, 8);
   assert.equal(result.completeness.completedTermGrades, 0);
   assert.deepEqual(result.warnings, []);
 });
+
+for (const [program, specialization] of [['STE', 'research'], ['SPJ', 'journalism'], ['SPA', 'spa_spec']]) {
+  test(`${program} includes only its own specialized subject even when other offerings exist`, () => {
+    const data = input();
+    data.assignment.program_code = program;
+    data.offeringRows = MasterSheetService.SUBJECT_DEFINITIONS.map((subject, index) => ({
+      subject_offering_id: 130 + index, subject_id: index + 1,
+      subject_code: subject.code, subject_name: subject.label,
+    }));
+    const result = build(data);
+    const specializedKeys = ['research', 'journalism', 'spa_spec'];
+    assert.deepEqual(result.subjects.filter(subject => specializedKeys.includes(subject.key)).map(subject => subject.key), [specialization]);
+    assert.equal(result.subjects.length, 9);
+    assert.equal(result.subjectSetup.configuredSubjectCount, 9);
+    assert.deepEqual(result.subjectSetup.notOfferedSubjects, []);
+    assert.equal(result.completeness.expectedTermGrades, 27);
+    assert.equal(result.completeness.expectedSubjectFinals, 9);
+    assert.deepEqual(Object.keys(result.students[0].grades), result.subjects.map(subject => subject.key));
+  });
+
+  test(`${program} keeps a missing required specialization visible as a setup notice`, () => {
+    const data = input();
+    data.assignment.program_code = program;
+    const result = build(data);
+    const subject = result.subjects.find(subject => subject.key === specialization);
+    assert.equal(subject.available, false);
+    assert(result.subjectSetup.notOfferedSubjects.includes(subject.label));
+    assert.equal(result.subjectSetup.notOfferedSubjects.length, 8);
+  });
+}
+
+for (const [program, specialization] of [['EBEC', null], ['STE', 'research'], ['SPJ', 'journalism'], ['SPA', 'spa_spec']]) {
+  test(`${program} averages and completeness use only the class's required subjects`, () => {
+    const data = input();
+    data.assignment.program_code = program;
+    const specializedKeys = ['research', 'journalism', 'spa_spec'];
+    data.offeringRows = MasterSheetService.SUBJECT_DEFINITIONS.map((subject, index) => ({
+      subject_offering_id: 130 + index, subject_code: subject.code, subject_name: subject.label,
+    }));
+    data.gradeSheetRows = data.offeringRows.flatMap(offering => [1, 2, 3].map(term => ({
+      ...gradeRow(term), grade_sheet_id: offering.subject_offering_id * 10 + term,
+      subject_offering_id: offering.subject_offering_id,
+    })));
+    data.savedGradeRows = data.offeringRows.flatMap((offering, index) => [1, 2, 3].map(term => ({
+      ...saved(term, 80), subject_offering_id: offering.subject_offering_id,
+      quarterly_grade: specializedKeys.includes(MasterSheetService.SUBJECT_DEFINITIONS[index].key)
+        ? MasterSheetService.SUBJECT_DEFINITIONS[index].key === specialization ? 98 : null : 80,
+    })));
+    const result = build(data);
+    const count = specialization ? 9 : 8;
+    assert.equal(result.students[0].generalAverage, specialization ? 82 : 80);
+    assert.equal(result.completeness.completedTermGrades, count * 3);
+    assert.equal(result.completeness.completedSubjectFinals, count);
+    assert.equal(result.completeness.completedGeneralAverages, 1);
+  });
+}
 
 test('a term-locked draft is not published', () => {
   const data = input();

@@ -67,7 +67,16 @@ async function syncAivenToLocal() {
       const [rows] = await aivenConn.query(`SELECT * FROM \`${table}\``);
 
       if (rows.length > 0) {
-        const columns = Object.keys(rows[0]);
+        // Exclude generated columns (e.g. mapeh_key) from the insert
+        const [colsInfo] = await localConn.query(
+          `SELECT COLUMN_NAME, EXTRA FROM information_schema.COLUMNS 
+           WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?`,
+          [table]
+        );
+        const generatedCols = new Set(
+          colsInfo.filter(c => c.EXTRA && c.EXTRA.toUpperCase().includes('GENERATED')).map(c => c.COLUMN_NAME)
+        );
+        const columns = Object.keys(rows[0]).filter(col => !generatedCols.has(col));
         const values = rows.map((row) =>
           columns.map((col) => {
             const val = row[col];

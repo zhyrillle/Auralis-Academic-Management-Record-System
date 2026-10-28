@@ -13,7 +13,7 @@
 .grade-submission-open:focus-visible, .grade-submission-retry:focus-visible, .grade-submission-table-wrap:focus-visible { outline: 2px solid #123062; outline-offset: 3px; }
 .grade-submission-panel .app-overlay__panel { width: min(1000px, 100%); }
 .grade-submission-panel.is-open .app-overlay__panel {
-  transform-origin: 50% 100%;
+  transform-origin: center;
   animation: grade-submission-pop-up .36s ease-out both;
 }
 @keyframes grade-submission-pop-up {

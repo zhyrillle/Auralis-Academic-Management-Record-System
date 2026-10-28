@@ -200,6 +200,226 @@ class Section {
     return { schoolYearId, count: created.length, created };
   }
 
+  static async findAllGradeLevelSubjects(targetSchoolYearId = null) {
+    const schoolYearId = targetSchoolYearId || await this.getActiveSchoolYearId();
+    const [rows] = await db.execute(`
+      SELECT 
+        sec.grade_level_id,
+        COALESCE(gl.grade_level_name, CONCAT('G', sec.grade_level_id + 6)) AS grade_level_name,
+        s.subject_id,
+        s.subject_code,
+        s.subject_name,
+        s.description,
+        s.program_id,
+        COALESCE(p.program_code, 'EBEC') AS program_code,
+        COALESCE(p.is_specialized, 0) AS is_specialized,
+        COUNT(DISTINCT so.section_id) AS offering_count,
+        GROUP_CONCAT(DISTINCT sec.section_id ORDER BY sec.section_id SEPARATOR ',') AS section_ids,
+        GROUP_CONCAT(DISTINCT sec.section_name ORDER BY sec.section_name SEPARATOR ', ') AS section_names
+      FROM SUBJECT_OFFERING so
+      INNER JOIN SECTION sec ON sec.section_id = so.section_id
+      INNER JOIN SUBJECT s ON s.subject_id = so.subject_id
+      LEFT JOIN PROGRAM p ON p.program_id = s.program_id
+      LEFT JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
+      WHERE so.school_year_id = ?
+      GROUP BY sec.grade_level_id, gl.grade_level_name, s.subject_id, s.subject_code, s.subject_name, s.description, s.program_id, p.program_code, p.is_specialized
+      ORDER BY sec.grade_level_id ASC, s.subject_name ASC
+    `, [schoolYearId]);
+    return rows;
+  }
+
+  static async findSubjectsByGradeLevel(gradeLevelId, targetSchoolYearId = null) {
+    const schoolYearId = targetSchoolYearId || await this.getActiveSchoolYearId();
+    const [rows] = await db.execute(`
+      SELECT 
+        s.subject_id,
+        s.subject_code,
+        s.subject_name,
+        s.description,
+        s.program_id,
+        COALESCE(p.program_code, 'EBEC') AS program_code,
+        COALESCE(p.is_specialized, 0) AS is_specialized,
+        COUNT(DISTINCT so.section_id) AS offering_count,
+        GROUP_CONCAT(DISTINCT sec.section_id ORDER BY sec.section_id SEPARATOR ',') AS section_ids,
+        GROUP_CONCAT(DISTINCT sec.section_name ORDER BY sec.section_name SEPARATOR ', ') AS section_names
+      FROM SUBJECT_OFFERING so
+      INNER JOIN SECTION sec ON sec.section_id = so.section_id
+      INNER JOIN SUBJECT s ON s.subject_id = so.subject_id
+      LEFT JOIN PROGRAM p ON p.program_id = s.program_id
+      WHERE sec.grade_level_id = ? AND so.school_year_id = ?
+      GROUP BY s.subject_id, s.subject_code, s.subject_name, s.description, s.program_id, p.program_code, p.is_specialized
+      ORDER BY s.subject_name ASC
+    `, [gradeLevelId, schoolYearId]);
+    return rows;
+  }
+
+  static async addSubjectsToGradeLevel(gradeLevelId, { subject_ids, section_id = null, section_type = 'all', school_year_id = null }) {
+    const schoolYearId = school_year_id || await this.getActiveSchoolYearId();
+    const targetIds = Array.isArray(subject_ids) ? subject_ids.map(Number) : [];
+    if (!targetIds.length) return { count: 0, sections_affected: 0 };
+
+    let secQuery = `SELECT section_id, section_name, program_id, is_specialized FROM SECTION WHERE grade_level_id = ?`;
+    const secParams = [gradeLevelId];
+    if (section_id && section_id !== 'all') {
+      secQuery += ` AND section_id = ?`;
+      secParams.push(section_id);
+    } else if (section_type === 'regular') {
+      secQuery += ` AND (is_specialized = 0 OR is_specialized IS NULL)`;
+    } else if (section_type === 'specialized') {
+      secQuery += ` AND is_specialized = 1`;
+    }
+    const [sections] = await db.execute(secQuery, secParams);
+    if (!sections.length) return { count: 0, sections_affected: 0 };
+
+    const placeholders = targetIds.map(() => '?').join(',');
+    const [subjects] = await db.execute(`
+      SELECT s.subject_id, s.program_id, COALESCE(p.is_specialized, 0) AS is_specialized
+      FROM SUBJECT s
+      LEFT JOIN PROGRAM p ON p.program_id = s.program_id
+      WHERE s.subject_id IN (${placeholders})
+    `, targetIds);
+    const subjectMap = new Map(subjects.map(s => [s.subject_id, s]));
+
+    let totalCreated = 0;
+    const affectedSections = new Set();
+
+    for (const sec of sections) {
+      const isSecSpec = Number(sec.is_specialized) === 1;
+      const secProgId = Number(sec.program_id);
+
+      for (const subId of targetIds) {
+        const sub = subjectMap.get(subId);
+        if (!sub) continue;
+
+        // Rule: if section is not specialized, specialized subjects should not be added; if specialized, regular subjects should not be added
+        if (!isSecSpec && (sub.is_specialized || (sub.program_id && sub.program_id !== 4))) {
+          continue;
+        }
+        if (isSecSpec && (!sub.is_specialized && (!sub.program_id || sub.program_id === 4))) {
+          continue;
+        }
+        if (isSecSpec && sub.program_id && sub.program_id !== 4 && Number(sub.program_id) !== secProgId) {
+          continue;
+        }
+
+        const [existing] = await db.execute(
+          `SELECT subject_offering_id FROM SUBJECT_OFFERING WHERE section_id = ? AND subject_id = ? AND school_year_id = ? LIMIT 1`,
+          [sec.section_id, subId, schoolYearId]
+        );
+        if (existing.length > 0) continue;
+
+        let cloudSoId = null;
+        if (db.cloudPool) {
+          try {
+            const [cloudRes] = await db.cloudPool.query(
+              `INSERT INTO SUBJECT_OFFERING (subject_id, section_id, school_year_id) VALUES (?, ?, ?)`,
+              [subId, sec.section_id, schoolYearId]
+            );
+            cloudSoId = cloudRes.insertId;
+          } catch (cErr) {
+            console.warn('[CloudSection] Grade-level add subject offering cloud insert failed:', cErr.message);
+          }
+        }
+
+        if (cloudSoId) {
+          await db.execute(
+            `INSERT INTO SUBJECT_OFFERING (subject_offering_id, subject_id, section_id, school_year_id)
+             VALUES (?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE
+               subject_id = VALUES(subject_id),
+               section_id = VALUES(section_id),
+               school_year_id = VALUES(school_year_id)`,
+            [cloudSoId, subId, sec.section_id, schoolYearId]
+          );
+        } else {
+          await db.execute(
+            `INSERT INTO SUBJECT_OFFERING (subject_id, section_id, school_year_id) VALUES (?, ?, ?)`,
+            [subId, sec.section_id, schoolYearId]
+          );
+        }
+
+        totalCreated++;
+        affectedSections.add(sec.section_id);
+      }
+    }
+
+    return {
+      count: totalCreated,
+      sections_affected: affectedSections.size,
+    };
+  }
+
+  static async dropSubjectFromGradeLevel(gradeLevelId, subjectId, { section_id = null, section_type = 'all', school_year_id = null }) {
+    const schoolYearId = school_year_id || await this.getActiveSchoolYearId();
+
+    let secQuery = `SELECT section_id FROM SECTION WHERE grade_level_id = ?`;
+    const secParams = [gradeLevelId];
+    if (section_id && section_id !== 'all') {
+      secQuery += ` AND section_id = ?`;
+      secParams.push(section_id);
+    } else if (section_type === 'regular') {
+      secQuery += ` AND (is_specialized = 0 OR is_specialized IS NULL)`;
+    } else if (section_type === 'specialized') {
+      secQuery += ` AND is_specialized = 1`;
+    }
+    const [sections] = await db.execute(secQuery, secParams);
+    if (!sections.length) return { dropped_count: 0, blocked_count: 0, blocked_sections: [] };
+
+    const sectionIds = sections.map(s => s.section_id);
+    const placeholders = sectionIds.map(() => '?').join(',');
+
+    const [offerings] = await db.execute(
+      `SELECT so.subject_offering_id, so.section_id, sec.section_name
+       FROM SUBJECT_OFFERING so
+       INNER JOIN SECTION sec ON sec.section_id = so.section_id
+       WHERE so.subject_id = ? AND so.school_year_id = ? AND so.section_id IN (${placeholders})`,
+      [subjectId, schoolYearId, ...sectionIds]
+    );
+
+    if (!offerings.length) return { dropped_count: 0, blocked_count: 0, blocked_sections: [] };
+
+    let droppedCount = 0;
+    const blockedSections = [];
+
+    for (const off of offerings) {
+      const [scoreCheck] = await db.execute(
+        `SELECT score_id FROM SCORE s
+         INNER JOIN TEACHER_ASSIGNMENT ta ON ta.teacher_assignment_id = s.teacher_assignment_id
+         WHERE ta.subject_offering_id = ? LIMIT 1`,
+        [off.subject_offering_id]
+      ).catch(() => [[]]);
+
+      const [gradeCheck] = await db.execute(
+        `SELECT student_grade_id FROM STUDENT_GRADE WHERE subject_offering_id = ? LIMIT 1`,
+        [off.subject_offering_id]
+      ).catch(() => [[]]);
+
+      if (scoreCheck.length > 0 || gradeCheck.length > 0) {
+        blockedSections.push(off.section_name);
+        continue;
+      }
+
+      if (db.cloudPool) {
+        try {
+          await db.cloudPool.query(`DELETE FROM TEACHER_ASSIGNMENT WHERE subject_offering_id = ?`, [off.subject_offering_id]).catch(() => {});
+          await db.cloudPool.query(`DELETE FROM SUBJECT_OFFERING WHERE subject_offering_id = ?`, [off.subject_offering_id]).catch(() => {});
+        } catch (cErr) {
+          console.warn('[CloudSection] Drop subject cloud failed:', cErr.message);
+        }
+      }
+
+      await db.execute(`DELETE FROM TEACHER_ASSIGNMENT WHERE subject_offering_id = ?`, [off.subject_offering_id]).catch(() => {});
+      await db.execute(`DELETE FROM SUBJECT_OFFERING WHERE subject_offering_id = ?`, [off.subject_offering_id]).catch(() => {});
+      droppedCount++;
+    }
+
+    return {
+      dropped_count: droppedCount,
+      blocked_count: blockedSections.length,
+      blocked_sections: blockedSections,
+    };
+  }
+
   static async create(data) {
     let { section_name, name, grade_level_id, level, program_id, is_specialized, subject_ids, school_year_id } = data;
     const finalName = (section_name || name || '').trim();
@@ -516,14 +736,78 @@ class Section {
     const result = [];
     const addedSectionAssignments = new Set();
 
+    // Fetch active academic terms and deadlines for relevant school years
+    const schoolYearIds = [...new Set([
+      ...advisoryRows.map(r => r.school_year_id),
+      ...teacherRows.map(r => r.school_year_id),
+    ].filter(Boolean))];
+
+    const yearTermInfo = {};
+    if (schoolYearIds.length > 0) {
+      try {
+        const placeholders = schoolYearIds.map(() => '?').join(', ');
+        const [termRows] = await db.execute(
+          `SELECT term_id, school_year_id, term_name, starts_at, ends_at, grade_submission_deadline_at, status
+           FROM ACADEMIC_TERM
+           WHERE school_year_id IN (${placeholders})
+           ORDER BY starts_at ASC, term_id ASC`,
+          schoolYearIds
+        );
+
+        const now = Date.now();
+        const normalizeTermCode = (name) => {
+          const val = String(name || '').toUpperCase();
+          if (val.includes('1') || val.includes('FIRST')) return 'T1';
+          if (val.includes('2') || val.includes('SECOND')) return 'T2';
+          if (val.includes('3') || val.includes('THIRD')) return 'T3';
+          return null;
+        };
+
+        for (const syId of schoolYearIds) {
+          const terms = termRows.filter(t => Number(t.school_year_id) === Number(syId));
+          if (!terms.length) continue;
+
+          let active = terms.find(t => t.starts_at && t.ends_at && new Date(t.starts_at).getTime() <= now && new Date(t.ends_at).getTime() > now);
+          if (!active) {
+            active = terms.find(t => ['ongoing', 'open'].includes(String(t.status || '').toLowerCase()));
+          }
+          if (!active) {
+            active = terms.find(t => t.starts_at && new Date(t.starts_at).getTime() > now) || terms[0];
+          }
+
+          const termDeadlines = {};
+          terms.forEach(t => {
+            const code = normalizeTermCode(t.term_name);
+            if (code && t.grade_submission_deadline_at) {
+              const dt = new Date(t.grade_submission_deadline_at);
+              termDeadlines[code] = Number.isFinite(dt.getTime()) ? dt.toISOString() : String(t.grade_submission_deadline_at);
+            }
+          });
+
+          const activeDeadline = active?.grade_submission_deadline_at ? new Date(active.grade_submission_deadline_at) : null;
+          yearTermInfo[syId] = {
+            activeTermCode: active ? normalizeTermCode(active.term_name) : 'T1',
+            deadline: activeDeadline && Number.isFinite(activeDeadline.getTime()) ? activeDeadline.toISOString() : null,
+            termDeadlines,
+          };
+        }
+      } catch (err) {
+        console.warn('Academic terms query error in findAdviserSections:', err.message);
+      }
+    }
+
     // 1. Process Advisory Classes first (one single card per advisory section)
     for (const row of advisoryRows) {
       const sectionAssignmentKey = `${row.section_id}:${row.school_year_id}`;
       if (!addedSectionAssignments.has(sectionAssignmentKey)) {
         addedSectionAssignments.add(sectionAssignmentKey);
         const gradeNum = parseInt(String(row.grade_level_name).replace(/\D/g, "")) || "";
-        const teacherMatch = sectionTeacherMap[sectionAssignmentKey];
-        const subjectName = teacherMatch?.subject_name || sectionSubjectMap[sectionAssignmentKey] || "All subjects";
+        const teacherMatch = sectionTeacherMap[sectionAssignmentKey]
+          || Object.values(sectionTeacherMap).find(t => t.section_id === row.section_id);
+        const subjectName = teacherMatch?.subject_name 
+          || sectionSubjectMap[sectionAssignmentKey] 
+          || Object.entries(sectionSubjectMap).find(([k]) => k.startsWith(`${row.section_id}:`))?.[1]
+          || "All subjects";
         const subjectOfferingId = teacherMatch?.subject_offering_id || null;
         const subjectId = teacherMatch?.subject_id || null;
         const isSpecialized = checkIsSpecialized(row.is_specialized);
@@ -531,6 +815,11 @@ class Section {
         const displayClassType = isSpecialized && progCode
           ? `Advisory Class - ${progCode}`
           : "Advisory Class";
+
+        const termInfo = yearTermInfo[row.school_year_id];
+        const activeDeadline = termInfo?.deadline || (row.school_year_end ? `${row.school_year_end}-07-31` : "2026-07-31");
+        const activeTerm = termInfo?.activeTermCode || "T1";
+        const termDeadlines = termInfo?.termDeadlines || {};
 
         result.push({
           id: `advisory-${row.adviser_assignment_id}`,
@@ -552,7 +841,9 @@ class Section {
           classType: displayClassType,
           is_specialized: isSpecialized ? 1 : 0,
           isAdviser: true,
-          deadline: row.school_year_end ? String(row.school_year_end).slice(0, 10) : "2026-07-31",
+          active_term: activeTerm,
+          deadline: activeDeadline,
+          termDeadlines: termDeadlines,
           submitted: false,
         });
       }
@@ -561,9 +852,14 @@ class Section {
     // 2. Process Regular Teaching Classes for other section/year assignments.
     for (const row of teacherRows) {
       const teacherKey = `${row.section_id}:${row.school_year_id}:${row.subject_offering_id}`;
-      const teacherMatch = sectionTeacherMap[`${row.section_id}:${row.school_year_id}`];
-      const isRepresentedInAdvisory = advisoryRows.some(a => a.section_id === row.section_id && a.school_year_id === row.school_year_id)
-        && teacherMatch?.subject_offering_id === row.subject_offering_id;
+      const teacherMatch = sectionTeacherMap[`${row.section_id}:${row.school_year_id}`]
+        || Object.values(sectionTeacherMap).find(t => t.section_id === row.section_id);
+      const isRepresentedInAdvisory = advisoryRows.some(a => 
+        a.section_id === row.section_id && (
+          (a.school_year_id === row.school_year_id && teacherMatch?.subject_offering_id === row.subject_offering_id)
+          || (teacherMatch?.subject_offering_id === row.subject_offering_id)
+        )
+      );
 
       if (!isRepresentedInAdvisory && !addedSectionAssignments.has(teacherKey)) {
         addedSectionAssignments.add(teacherKey);
@@ -575,6 +871,11 @@ class Section {
           : isSpecialized
           ? "Special Program"
           : "Regular Class";
+
+        const termInfo = yearTermInfo[row.school_year_id];
+        const activeDeadline = termInfo?.deadline || (row.school_year_end ? `${row.school_year_end}-08-15` : "2026-08-15");
+        const activeTerm = termInfo?.activeTermCode || "T1";
+        const termDeadlines = termInfo?.termDeadlines || {};
 
         result.push({
           id: `teaching-${row.teacher_assignment_id}`,
@@ -596,7 +897,9 @@ class Section {
           classType: displayClassType,
           is_specialized: isSpecialized ? 1 : 0,
           isAdviser: false,
-          deadline: row.school_year_end ? String(row.school_year_end).slice(0, 10) : "2026-08-15",
+          active_term: activeTerm,
+          deadline: activeDeadline,
+          termDeadlines: termDeadlines,
           submitted: false,
         });
       }

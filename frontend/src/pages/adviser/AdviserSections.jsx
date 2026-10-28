@@ -88,9 +88,16 @@ export default function AdviserSections({ userRole: propUserRole }) {
         }, { force: recordReadVersion > 0 }) : null;
         const studentList = summary ? summary.students : await getStudentsBySection(sectionId, offeringId, subjectId, subjectName);
         if (cancelled) return;
-        if (summary) setactiveSelectedClass(prev => prev && prev.id === classKey && (prev.active_term !== summary.context.activeTerm
-          || JSON.stringify(prev.submissionTerms) !== JSON.stringify(summary.context.submissionTerms))
-          ? { ...prev, active_term: summary.context.activeTerm, submissionTerms: summary.context.submissionTerms } : prev);
+        if (summary) setactiveSelectedClass(prev => prev && prev.id === classKey
+          ? {
+              ...prev,
+              active_term: summary.context.activeTerm || prev.active_term,
+              submissionTerms: summary.context.submissionTerms,
+              termDeadlines: summary.context.termDeadlines || prev.termDeadlines,
+              deadline: (summary.context.termDeadlines && summary.context.activeTerm && summary.context.termDeadlines[summary.context.activeTerm])
+                || summary.context.deadline
+                || prev.deadline,
+            } : prev);
         if (Array.isArray(studentList)) {
           setStudentsBySection((prev) => ({
             ...prev,
@@ -248,14 +255,21 @@ export default function AdviserSections({ userRole: propUserRole }) {
     try {
       const summary = await getTeacherGradingSummary(context, { force: true });
       setStudentsBySection(prev => ({ ...prev, [classId]: summary.students }));
-      setactiveSelectedClass(prev => prev?.id === classId ? { ...prev, submissionTerms: summary.context.submissionTerms } : prev);
+      setactiveSelectedClass(prev => prev?.id === classId ? {
+        ...prev,
+        submissionTerms: summary.context.submissionTerms,
+        termDeadlines: summary.context.termDeadlines || prev?.termDeadlines,
+        deadline: (summary.context.termDeadlines && summary.context.activeTerm && summary.context.termDeadlines[summary.context.activeTerm])
+          || summary.context.deadline
+          || prev?.deadline,
+      } : prev);
     } catch {
       triggerToast('Submission confirmed. Reload the grading sheet to retrieve its latest grades.', 'warning');
     }
     return result;
   };
 
-  const activeactiveSelectedClass = useMemo(() => {
+  const activeSelectedClassData = useMemo(() => {
     if (!activeSelectedClass) return null;
 
     return (
@@ -425,7 +439,7 @@ export default function AdviserSections({ userRole: propUserRole }) {
       ) : (
         activeSelectedClass && (
           <GradingSheet
-            activeSelectedClass={activeactiveSelectedClass || activeSelectedClass}
+            activeSelectedClass={activeSelectedClassData || activeSelectedClass}
             students={studentsBySection[activeSelectedClass.id] || []}
             onBack={() => setCurrentView("dashboard")}
             triggerToast={triggerToast}

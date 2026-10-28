@@ -1,4 +1,4 @@
-import { cachedApiFetch as fetch } from "../../services/navigationCache";
+import { cachedApiFetch as fetch, clearNavigationCache } from "../../services/navigationCache";
 import useCachedQuery from "../../services/useCachedQuery";
 import { cacheKey } from "../../services/navigationCache";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -59,6 +59,15 @@ function Icon({ type, size = 22 }) {
       return (
         <svg {...common}>
           <path d="M12 5v14M5 12h14" />
+        </svg>
+      );
+    case "refresh":
+      return (
+        <svg {...common}>
+          <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+          <path d="M21 3v5h-5" />
+          <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+          <path d="M3 21v-5h5" />
         </svg>
       );
     default:
@@ -165,14 +174,14 @@ function StatusBadge({ status }) {
 }
 
 async function loadUsers() {
-  const response = await fetch(`${API_URL}/users`);
+  const response = await fetch(`${API_URL}/users`, { cache: 'no-store' });
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || "Failed to load users.");
   return Array.isArray(data) ? data : [];
 }
 
 async function loadManagementOptions() {
-  const response = await fetch(`${API_URL}/users/management-options`);
+  const response = await fetch(`${API_URL}/users/management-options`, { cache: 'no-store' });
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || "Failed to load form options.");
   return data;
@@ -232,6 +241,38 @@ export default function UserManagement() {
   const fetchFormOptions = optionsQuery.refresh;
 
   useEffect(() => () => { formRequestId.current += 1; profileRequestId.current += 1; }, []);
+
+  // Background auto-revalidation (every 4 seconds + window focus / visibility change)
+  useEffect(() => {
+    let isFetching = false;
+    const revalidate = async () => {
+      if (isFetching || formMode || savingUser || deletingUser) return;
+      isFetching = true;
+      try {
+        await userQuery.refresh();
+      } catch (_) {
+      } finally {
+        isFetching = false;
+      }
+    };
+
+    const interval = setInterval(revalidate, 4000);
+
+    const handleFocusOrVisible = () => {
+      if (document.visibilityState === "visible") {
+        revalidate();
+      }
+    };
+
+    window.addEventListener("focus", handleFocusOrVisible);
+    document.addEventListener("visibilitychange", handleFocusOrVisible);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", handleFocusOrVisible);
+      document.removeEventListener("visibilitychange", handleFocusOrVisible);
+    };
+  }, [formMode, savingUser, deletingUser, userQuery]);
 
   const getUserDepartment = (user) => {
     if (!user) return "-";
@@ -315,7 +356,7 @@ export default function UserManagement() {
       closeProfile();
 
       // Fetch user details from API
-      const response = await fetch(`${API_URL}/users/${user.user_id}`);
+      const response = await fetch(`${API_URL}/users/${user.user_id}`, { cache: 'no-store' });
       if (!response.ok) throw new Error("User information could not be loaded.");
       const fullUser = await response.json();
       if (requestId !== formRequestId.current) return;
@@ -548,6 +589,32 @@ export default function UserManagement() {
       return;
     }
 
+    const subjectIds = nonRowEmptyAssignments.map((a) => String(a.subject_offering_id));
+    if (new Set(subjectIds).size !== subjectIds.length) {
+      setFormError("Duplicate subject assignments detected. Please select distinct subjects.");
+      return;
+    }
+
+    const hasAlreadyAssignedSubject = nonRowEmptyAssignments.some((assign) => {
+      const offering = subjectOfferings.find((so) => String(so.subject_offering_id) === String(assign.subject_offering_id));
+      if (offering?.teacher_user_id && String(offering.teacher_user_id) !== String(formData.user_id || "")) {
+        return true;
+      }
+      return users.some((u) => {
+        if (String(u.user_id) === String(formData.user_id || "")) return false;
+        const status = String(u.account_status || "active").toLowerCase();
+        if (status === "inactive" || status === "archived") return false;
+        return Array.isArray(u.teaching_assignments) && u.teaching_assignments.some(
+          (ta) => String(ta.subject_offering_id) === String(assign.subject_offering_id)
+        );
+      });
+    });
+
+    if (hasAlreadyAssignedSubject) {
+      setFormError("One or more selected subjects are already assigned to another teacher.");
+      return;
+    }
+
     const targetUserId = formData.user_id;
     const dbRole = DISPLAY_TO_DB_ROLE[formData.role] || formData.role.toLowerCase();
 
@@ -599,9 +666,11 @@ export default function UserManagement() {
             <h1>User Management</h1>
             <p>Manage accounts, roles, departments, and teaching assignments.</p>
           </div>
-          <button type="button" className="add-user-btn" onClick={handleAddUser}>
-            <Icon type="plusPerson" size={20} /> Add User
-          </button>
+          <div className="page-header-actions">
+            <button type="button" className="add-user-btn" onClick={handleAddUser}>
+              <Icon type="plusPerson" size={20} /> Add User
+            </button>
+          </div>
         </div>
 
         {userError && <div className="users-state-message users-state-message--error" role="alert">{userError}</div>}

@@ -84,6 +84,8 @@ router.post('/reset', async (req, res) => {
     const actorId = getActorId(req);
     const resetConfig = await GradeTransmutationConfig.resetToDefault({ updated_by: actorId });
 
+    await cloudSync.forwardGradeTransmutationToCloud(resetConfig);
+
     try {
       await AuditEvent.create({
         user_id: actorId,

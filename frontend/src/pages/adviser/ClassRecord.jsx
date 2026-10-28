@@ -746,12 +746,14 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
   // LOAD DATA FROM BACKEND
   // ============================================================
   const loadClassRecord = useCallback(
-    async (termToLoad, targetComp = null, force = false) => {
+    async (termToLoad, targetComp = null, force = false, silent = false) => {
       const activeComp = targetComp || (isMapehRef.current ? mapehComponentRef.current : "MA");
       const requestId = ++recordRequestRef.current;
       const selectionKey = `${subjectOfferingId}:${sectionId}:${effectiveSubjectId}:${termToLoad}:${activeComp}`;
-      setRecordLoad({ key: selectionKey, status: "loading", error: "" });
-      setModalState(previous => ({ ...previous, isOpen: false }));
+      if (!silent) {
+        setRecordLoad({ key: selectionKey, status: "loading", error: "" });
+        setModalState(previous => ({ ...previous, isOpen: false }));
+      }
 
       try {
         if (!subjectOfferingId) {
@@ -857,9 +859,42 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
             console.warn("Failed to merge offline scores:", offlineErr);
           }
 
-          setStudents(parsed.students);
-          setGrades(parsed.grades);
-          gradesRef.current = parsed.grades;
+          if (!silent) {
+            setStudents(parsed.students);
+            setGrades(parsed.grades);
+            gradesRef.current = parsed.grades;
+          } else {
+            setStudents(parsed.students);
+            setGrades((prev) => {
+              const merged = { ...parsed.grades };
+              if (pendingQueueRef.current.size > 0) {
+                pendingQueueRef.current.forEach((item) => {
+                  const sId = String(item.student_id);
+                  if (!merged[sId]) return;
+                  if (item.exam_key === "st1") {
+                    merged[sId] = { ...merged[sId], examinations: { ...(merged[sId].examinations || {}), st1: item.raw_score } };
+                  } else if (item.exam_key === "st2") {
+                    merged[sId] = { ...merged[sId], examinations: { ...(merged[sId].examinations || {}), st2: item.raw_score } };
+                  } else if (item.exam_key === "te") {
+                    merged[sId] = { ...merged[sId], examinations: { ...(merged[sId].examinations || {}), te: item.raw_score }, quarterlyAssessment: item.raw_score };
+                  } else {
+                    parsed.writtenWorkColumns.forEach((c) => {
+                      if (c.assessment_id === item.assessment_id || c.id === item.assessment_id) {
+                        merged[sId] = { ...merged[sId], writtenWorks: { ...(merged[sId].writtenWorks || {}), [c.id]: item.raw_score } };
+                      }
+                    });
+                    parsed.performanceTaskColumns.forEach((c) => {
+                      if (c.assessment_id === item.assessment_id || c.id === item.assessment_id) {
+                        merged[sId] = { ...merged[sId], performanceTasks: { ...(merged[sId].performanceTasks || {}), [c.id]: item.raw_score } };
+                      }
+                    });
+                  }
+                });
+              }
+              gradesRef.current = merged;
+              return merged;
+            });
+          }
 
           // If this subject is MAPEH, store into cache ref and prefetch the alternate component
           if (isCurrentMapeh) {
@@ -904,12 +939,16 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
 
           const hasOfflinePending = (await getPendingOfflineScores(subjectOfferingId, termToLoad).catch(() => []))?.length > 0;
           setSyncStatus(parsed.isLocked ? "locked" : (!navigator.onLine || hasOfflinePending ? "offline" : "saved"));
-          setRecordLoad({ key: selectionKey, status: "ready", error: "" });
+          if (!silent) {
+            setRecordLoad({ key: selectionKey, status: "ready", error: "" });
+          }
         }
       } catch (err) {
         if (requestId !== recordRequestRef.current || isSessionCancellation(err)) return;
         console.warn("Error loading class record:", err.message);
-        setRecordLoad({ key: selectionKey, status: "error", error: err.message || "Unable to load this term's class record." });
+        if (!silent) {
+          setRecordLoad({ key: selectionKey, status: "error", error: err.message || "Unable to load this term's class record." });
+        }
       }
     },
     [subjectOfferingId, sectionId, effectiveSubjectId, parseRecordPayload, isMapeh]
@@ -917,6 +956,42 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
 
   const loadClassRecordRef = useRef(loadClassRecord);
   loadClassRecordRef.current = loadClassRecord;
+
+  // Real-time auto-sync from cloud (every 4 seconds + tab focus / visibility)
+  useEffect(() => {
+    if (!subjectOfferingId || isLocked || !isRecordReady) return;
+
+    let isPolling = false;
+    const pollSync = async () => {
+      if (isPolling) return;
+      if (!navigator.onLine) return;
+      if (pendingQueueRef.current.size > 0 || isFlushingRef.current) return;
+      isPolling = true;
+      try {
+        await loadClassRecordRef.current(activeTerm, mapehComponentRef.current, true, true);
+      } catch (_) {
+      } finally {
+        isPolling = false;
+      }
+    };
+
+    const interval = setInterval(pollSync, 4000);
+
+    const handleFocusOrVisible = () => {
+      if (document.visibilityState === "visible") {
+        pollSync();
+      }
+    };
+
+    window.addEventListener("focus", handleFocusOrVisible);
+    document.addEventListener("visibilitychange", handleFocusOrVisible);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", handleFocusOrVisible);
+      document.removeEventListener("visibilitychange", handleFocusOrVisible);
+    };
+  }, [subjectOfferingId, isLocked, isRecordReady, activeTerm]);
 
   // Sync MAPEH detection when switching subject offering
   useEffect(() => {

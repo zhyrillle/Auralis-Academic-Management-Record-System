@@ -110,9 +110,10 @@ try {
   holdStatus = false; releaseStatus(); await page.emulateMedia({ reducedMotion: 'reduce' });
   await panel.getByText('Submitted by: Actual Submitter', { exact: true }).waitFor();
   assert.equal(await panel.locator('.grade-submission-spinner').count(), 0, 'spinner disappears when status finishes loading');
-  assert(await panel.evaluate(node => node.classList.contains('app-overlay--bottom')), 'status uses the shared bottom-floating presentation');
+  assert(await panel.evaluate(node => node.classList.contains('app-overlay--modal')), 'status uses the shared centered modal presentation');
   const laptopPanel = await panel.locator('.app-overlay__panel').boundingBox();
-  assert(Math.abs(768 - laptopPanel.y - laptopPanel.height - 20) < 2, 'status floats above the bottom edge, not centered');
+  assert(Math.abs(laptopPanel.y + laptopPanel.height / 2 - 768 / 2) < 2, 'status is vertically centered on a laptop');
+  assert(Math.abs(laptopPanel.x + laptopPanel.width / 2 - 1366 / 2) < 2, 'status is horizontally centered on a laptop');
   assert.equal(await panel.getByText('Not submitted', { exact: true }).count(), 2);
   assert(reads.some(r => r.owner === '28' && r.query.adviserAssignmentId === '1'));
   await page.screenshot({ path: join(artifacts, 'master-status-laptop.png'), fullPage: true });
@@ -133,8 +134,8 @@ try {
     await page.setViewportSize(viewport); await go('adviser'); await open(); await panel.getByRole('rowheader').filter({ hasText: 'English' }).waitFor();
     assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 2), 'status panel stays inside viewport');
     const bounds = await panel.locator('.app-overlay__panel').boundingBox(); assert(bounds.x >= 0 && bounds.x + bounds.width <= viewport.width + 1);
-    const bottomGap = viewport.height - bounds.y - bounds.height;
-    assert(bottomGap >= 8 && bottomGap <= 24, 'bottom-floating status keeps a small viewport inset');
+    assert(Math.abs(bounds.y + bounds.height / 2 - viewport.height / 2) < 2, 'status is vertically centered at each viewport size');
+    assert(Math.abs(bounds.x + bounds.width / 2 - viewport.width / 2) < 2, 'status is horizontally centered at each viewport size');
     await page.screenshot({ path: join(artifacts, `master-status-${viewport.width}.png`), fullPage: true });
   }
   await go('teacher'); await page.getByText('Term 2 · Not submitted', { exact: true }).waitFor();

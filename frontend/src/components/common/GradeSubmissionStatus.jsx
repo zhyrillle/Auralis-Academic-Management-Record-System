@@ -50,7 +50,7 @@ export default function GradeSubmissionStatusPanel({ adviserAssignmentId, disabl
     <button type="button" className="grade-submission-open" onClick={() => setOpen(true)} disabled={disabled} aria-haspopup="dialog">
       <ClipboardCheck size={17} aria-hidden="true" />Submission status
     </button>
-    <OverlayPanel isOpen={open} onClose={() => setOpen(false)} title="Submission status" variant="bottom" className="grade-submission-panel"
+    <OverlayPanel isOpen={open} onClose={() => setOpen(false)} title="Submission status" variant="modal" className="grade-submission-panel"
       description="Subject teacher submissions for this section and school year. Times are shown in Philippine time.">
       {open && <SubmissionRows key={adviserAssignmentId} assignmentId={adviserAssignmentId} refreshKey={refreshKey} />}
     </OverlayPanel>

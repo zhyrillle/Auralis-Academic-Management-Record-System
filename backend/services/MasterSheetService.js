@@ -15,6 +15,8 @@ const SUBJECT_DEFINITIONS = [
   { key: "spa_spec", code: "SPA", label: "SPA Specialization", aliases: ["SPA", "SPASPECIALIZATION", "ARTS", "SPARTS"] },
 ];
 
+const SPECIALIZATION_SUBJECTS = { STE: "research", SPJ: "journalism", SPA: "spa_spec" };
+
 const serviceError = (statusCode, code, message) => {
   const error = new Error(message);
   error.statusCode = statusCode;
@@ -142,6 +144,7 @@ class MasterSheetService {
          sy.starts_on,
          sy.ends_on,
          sy.curriculum,
+         CASE WHEN sec.is_specialized = 1 THEN p.program_code ELSE NULL END AS program_code,
          sy.status AS school_year_status,
          sch.school_name,
          sch.school_code,
@@ -153,6 +156,7 @@ class MasterSheetService {
          u.extension_name
        FROM SECTION_ADVISER_ASSIGNMENT saa
        INNER JOIN SECTION sec ON sec.section_id = saa.section_id
+       LEFT JOIN PROGRAM p ON p.program_id = sec.program_id
        INNER JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
        INNER JOIN SCHOOL_YEAR sy ON sy.school_year_id = saa.school_year_id
        INNER JOIN SCHOOL sch ON sch.school_id = sy.school_id
@@ -237,6 +241,10 @@ class MasterSheetService {
 
   static buildResponse({ assignment, termRows, offeringRows, studentRows, gradeSheetRows = [], savedGradeRows = [] }) {
     const warnings = new Set();
+    const specializationKey = SPECIALIZATION_SUBJECTS[cleanToken(assignment.program_code)];
+    const subjectDefinitions = SUBJECT_DEFINITIONS.filter((subject) =>
+      !Object.values(SPECIALIZATION_SUBJECTS).includes(subject.key) || subject.key === specializationKey,
+    );
     const terms = [1, 2, 3].map((position) => {
       const matches = termRows.filter((term) => getTermPosition(term.term_name) === position);
       if (matches.length > 1) warnings.add(`Term ${position} has duplicate academic-period records.`);
@@ -252,10 +260,12 @@ class MasterSheetService {
       };
     });
 
-    const offeringsBySubjectKey = new Map(SUBJECT_DEFINITIONS.map((subject) => [subject.key, []]));
+    const offeringsBySubjectKey = new Map(subjectDefinitions.map((subject) => [subject.key, []]));
     for (const offering of offeringRows) {
       const definition = resolveSubjectDefinition(offering);
-      if (definition) offeringsBySubjectKey.get(definition.key).push(offering);
+      if (definition && offeringsBySubjectKey.has(definition.key)) {
+        offeringsBySubjectKey.get(definition.key).push(offering);
+      }
     }
 
     const sheetsByOfferingAndTerm = new Map();
@@ -266,7 +276,7 @@ class MasterSheetService {
     }
 
     const notOfferedSubjects = [];
-    const subjects = SUBJECT_DEFINITIONS.map((definition) => {
+    const subjects = subjectDefinitions.map((definition) => {
       const offerings = offeringsBySubjectKey.get(definition.key) || [];
       // A missing offering is a section-setup notice, not a learner-grade error.
       if (offerings.length === 0) notOfferedSubjects.push(definition.label);
@@ -284,7 +294,7 @@ class MasterSheetService {
     let completedSubjectFinals = 0;
     const students = studentRows.map((student) => {
       const subjectGrades = {};
-      for (const definition of SUBJECT_DEFINITIONS) {
+      for (const definition of subjectDefinitions) {
         const offerings = offeringsBySubjectKey.get(definition.key) || [];
         const offering = offerings.length === 1 ? offerings[0] : null;
         const termGrades = terms.map((term) => {
@@ -319,11 +329,11 @@ class MasterSheetService {
         subjectGrades[definition.key] = { terms: termGrades, finalGrade };
       }
 
-      const finalGrades = SUBJECT_DEFINITIONS.map(
+      const finalGrades = subjectDefinitions.map(
         (definition) => subjectGrades[definition.key].finalGrade,
       );
       const generalAverage = finalGrades.every((grade) => Number.isFinite(grade))
-        ? Math.round(finalGrades.reduce((sum, grade) => sum + grade, 0) / SUBJECT_DEFINITIONS.length)
+        ? Math.round(finalGrades.reduce((sum, grade) => sum + grade, 0) / subjectDefinitions.length)
         : null;
 
       return {
@@ -385,9 +395,9 @@ class MasterSheetService {
       completeness: {
         studentCount: students.length,
         completedTermGrades,
-        expectedTermGrades: students.length * SUBJECT_DEFINITIONS.length * 3,
+        expectedTermGrades: students.length * subjectDefinitions.length * 3,
         completedSubjectFinals,
-        expectedSubjectFinals: students.length * SUBJECT_DEFINITIONS.length,
+        expectedSubjectFinals: students.length * subjectDefinitions.length,
         completedGeneralAverages: students.filter((student) => student.generalAverage !== null).length,
       },
       warnings: [...warnings],

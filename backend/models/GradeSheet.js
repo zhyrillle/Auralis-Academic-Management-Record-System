@@ -14,8 +14,11 @@ class GradeSheet {
       WHERE gs.grade_sheet_id = ? AND (ta.assigned_from IS NULL OR ta.assigned_from <= UTC_DATE() OR ta.assigned_from < '1901-01-01')
         AND (ta.assigned_until IS NULL OR ta.assigned_until >= UTC_DATE() OR ta.assigned_until < '1901-01-01')${lock ? ' FOR UPDATE' : ''}`,
     [Number(user.user_id), sheetId]);
-  if (rows.length !== 1 || rows[0].workflow_status !== 'DRAFT') return { editable: false };
+  if (rows.length !== 1) return { editable: false };
   const row = rows[0];
+  if (row.workflow_status !== 'DRAFT') {
+    return { editable: false, deadline: row.submission_deadline, correction: false };
+  }
   if (row.lock_status !== 'TEMPORARILY_REOPENED') {
     return { editable: ['EDITABLE', 'OPEN'].includes(row.lock_status) && Number(row.within_submission_window) === 1,
       deadline: row.submission_deadline, correction: false };
@@ -25,7 +28,7 @@ class GradeSheet {
       WHERE grr.grade_sheet_id = ? AND grr.teacher_assignment_id = ? AND grr.status = 'APPROVED'
         AND tr.status = 'ACTIVE' AND tr.starts_at <= UTC_TIMESTAMP(6) AND tr.expires_at > UTC_TIMESTAMP(6)${lock ? ' FOR UPDATE' : ''}`,
     [sheetId, row.teacher_assignment_id]);
-  return { editable: access.length === 1, deadline: access[0]?.expires_at, correction: true };
+  return { editable: access.length === 1, deadline: access[0]?.expires_at || row.submission_deadline, correction: true };
 }
 
   static async canEdit(...args) { return (await this.editingWindow(...args)).editable; }
@@ -47,6 +50,21 @@ class GradeSheet {
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [subject_offering_id, term_id, workflow_status || 'DRAFT', lock_status || 'EDITABLE', submitted_at, approved_at, locked_at]
     );
+    if (db.cloudPool && result.insertId) {
+      db.cloudPool.execute(
+        `INSERT INTO GRADE_SHEET (grade_sheet_id, subject_offering_id, term_id, workflow_status, lock_status, submitted_at, approved_at, locked_at) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE
+           subject_offering_id = VALUES(subject_offering_id),
+           term_id = VALUES(term_id),
+           workflow_status = VALUES(workflow_status),
+           lock_status = VALUES(lock_status),
+           submitted_at = VALUES(submitted_at),
+           approved_at = VALUES(approved_at),
+           locked_at = VALUES(locked_at)`,
+        [result.insertId, subject_offering_id, term_id, workflow_status || 'DRAFT', lock_status || 'EDITABLE', submitted_at, approved_at, locked_at]
+      ).catch((err) => console.warn('[CloudDualWrite] Failed to create GRADE_SHEET on Aiven:', err.message));
+    }
     return result.insertId;
   }
 
@@ -60,6 +78,12 @@ class GradeSheet {
     const values = entries.map(([, value]) => value);
     const setClause = keys.map(key => `${key} = ?`).join(', ');
     await connection.execute(`UPDATE GRADE_SHEET SET ${setClause}, updated_at = UTC_TIMESTAMP(6) WHERE grade_sheet_id = ?`, [...values, id]);
+    if (db.cloudPool) {
+      db.cloudPool.execute(
+        `UPDATE GRADE_SHEET SET ${setClause}, updated_at = UTC_TIMESTAMP(6) WHERE grade_sheet_id = ?`,
+        [...values, id]
+      ).catch((err) => console.warn('[CloudDualWrite] Failed to update GRADE_SHEET on Aiven:', err.message));
+    }
     return this.findById(id, connection);
   }
 

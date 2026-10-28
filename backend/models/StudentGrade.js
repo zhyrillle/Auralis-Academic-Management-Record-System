@@ -70,6 +70,36 @@ class StudentGrade {
         remarks || (quarterly_grade >= 75 ? 'Passed' : (quarterly_grade !== null ? 'Failed' : null)),
       ]
     );
+    if (db.cloudPool) {
+      db.cloudPool.execute(
+        `INSERT INTO STUDENT_GRADE (
+          subject_offering_id,
+          student_id,
+          student_section_id,
+          term,
+          mapeh_component,
+          initial_grade,
+          quarterly_grade,
+          remarks
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+          student_section_id = VALUES(student_section_id),
+          initial_grade = VALUES(initial_grade),
+          quarterly_grade = VALUES(quarterly_grade),
+          remarks = VALUES(remarks),
+          updated_at = NOW(6)`,
+        [
+          subject_offering_id,
+          student_id,
+          student_section_id || null,
+          String(term),
+          finalComp,
+          initial_grade !== undefined && initial_grade !== null ? initial_grade : null,
+          quarterly_grade !== undefined && quarterly_grade !== null ? quarterly_grade : null,
+          remarks || (quarterly_grade >= 75 ? 'Passed' : (quarterly_grade !== null ? 'Failed' : null)),
+        ]
+      ).catch((err) => console.warn('[CloudDualWrite] Failed to dual-write student grade to Aiven:', err.message));
+    }
     return result;
   }
 

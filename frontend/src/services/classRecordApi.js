@@ -56,7 +56,7 @@ export const getClassRecord = async (
   const cacheKey = `classRecord_v2_${subjectOfferingId}_${term}_${sectionId || ""}_${mapehComponent || ""}_${subjectId || ""}${readOnly ? '_readOnly' : ''}`;
 
   try {
-    const res = await fetch(url, { force, throwOnAuthError: false });
+    const res = await fetch(url, { force: true, cache: 'no-store', throwOnAuthError: false });
     const data = await parseResponse(res);
     assertCurrentSession(scope);
     return data;

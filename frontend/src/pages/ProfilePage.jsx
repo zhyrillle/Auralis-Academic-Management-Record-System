@@ -23,7 +23,6 @@ import {
 import "../styles/profile.css";
 
 const acceptedImageTypes = ["image/jpeg", "image/png", "image/webp"];
-const maxAvatarSize = 5 * 1024 * 1024;
 const avatarOutputSize = 512;
 
 const roleLabels = {
@@ -76,7 +75,7 @@ const mapApiUserToProfile = (user, fallback = emptyProfile) => ({
   lastName: user.last_name ?? fallback.lastName,
   extensionName: user.extension_name ?? fallback.extensionName,
   email: user.email ?? fallback.email,
-  role: getRoleLabel(user.role ?? fallback.role),
+  role: getRoleLabel(user.display_role ?? user.role ?? fallback.role),
   accountStatus: user.account_status ?? fallback.accountStatus ?? "active",
   lastLoginAt: user.last_login_at ?? fallback.lastLoginAt,
   avatar:
@@ -309,10 +308,6 @@ export default function ProfilePage({ user, onUserUpdated }) {
       setAvatarError("Choose a JPG, PNG, or WebP image.");
       return;
     }
-    if (file.size > maxAvatarSize) {
-      setAvatarError("The image must be 5 MB or smaller.");
-      return;
-    }
     if (pendingAvatarUrlRef.current) {
       URL.revokeObjectURL(pendingAvatarUrlRef.current);
     }
@@ -397,7 +392,6 @@ export default function ProfilePage({ user, onUserUpdated }) {
     if (!image?.naturalWidth || !image?.naturalHeight || !cropSize) {
       throw new Error("The selected image is not ready yet.");
     }
-
     const scale = Math.max(
       cropSize / image.naturalWidth,
       cropSize / image.naturalHeight,
