@@ -11,8 +11,8 @@ export default function PerformanceReport() {
   const effectiveUserId = user?.user_id || user?.id || user?.user?.user_id || user?.user?.id || 3;
 
   const [selectedSchoolYear, setSelectedSchoolYear] = useState("");
-  const [selectedTerm, setSelectedTerm] = useState("1");
-  const [selectedSubject, setSelectedSubject] = useState("");
+  const [selectedTerm, setSelectedTerm] = useState("");
+  const [selectedSubject, setSelectedSubject] = useState("all");
 
   const [schoolYearOptions, setSchoolYearOptions] = useState([]);
   const [termOptions, setTermOptions] = useState([
@@ -29,8 +29,11 @@ export default function PerformanceReport() {
   useEffect(() => {
     async function loadFilters() {
       try {
-        const query = effectiveUserId ? `?userId=${effectiveUserId}` : "";
-        const res = await fetch(`${API_BASE_URL}/adviser/dashboard/performance-filters${query}`);
+        const queryParams = new URLSearchParams();
+        if (effectiveUserId) queryParams.set("userId", String(effectiveUserId));
+        if (selectedSchoolYear) queryParams.set("schoolYearId", String(selectedSchoolYear));
+
+        const res = await fetch(`${API_BASE_URL}/adviser/dashboard/performance-filters?${queryParams.toString()}`);
         if (res.ok) {
           const data = await res.json();
           if (data.schoolYears && data.schoolYears.length > 0) {
@@ -43,17 +46,28 @@ export default function PerformanceReport() {
             setSelectedSchoolYear((prev) => {
               if (prev && mappedSY.some((sy) => sy.id === prev)) return prev;
               const active = mappedSY.find((sy) => sy.is_active);
-              return active ? active.id : mappedSY[0].id;
+              const defaultSy = data.currentSchoolYearId ? String(data.currentSchoolYearId) : (active ? active.id : mappedSY[0].id);
+              return defaultSy;
             });
           }
           if (data.terms && data.terms.length > 0) {
             const formattedTerms = data.terms.map((t) => {
               if (typeof t === "object") {
-                return { id: String(t.value || t.id), label: t.label || `Term ${t.value || t.id}` };
+                return {
+                  id: String(t.value || t.id),
+                  label: t.label || `Term ${t.value || t.id}`,
+                  is_active: Boolean(t.is_active || t.is_current),
+                };
               }
-              return { id: String(t), label: `Term ${t}` };
+              return { id: String(t), label: `Term ${t}`, is_active: false };
             });
             setTermOptions(formattedTerms);
+            const activeTermObj = formattedTerms.find((t) => t.is_active);
+            const targetDefaultTerm = data.currentTerm ? String(data.currentTerm) : (activeTermObj ? activeTermObj.id : formattedTerms[0].id);
+            setSelectedTerm((prev) => {
+              if (prev && formattedTerms.some((t) => t.id === prev)) return prev;
+              return targetDefaultTerm;
+            });
           }
           if (data.subjects && data.subjects.length > 0) {
             const mappedSubjects = data.subjects.map((s) => ({
@@ -62,9 +76,12 @@ export default function PerformanceReport() {
             }));
             setSubjectOptions(mappedSubjects);
             setSelectedSubject((prev) => {
-              if (prev && mappedSubjects.some((sub) => sub.id === prev)) return prev;
-              return mappedSubjects[0].id;
+              if (prev && (prev === "all" || mappedSubjects.some((sub) => sub.id === prev))) return prev;
+              return "all";
             });
+          } else {
+            setSubjectOptions([]);
+            setSelectedSubject("all");
           }
         }
       } catch (err) {
@@ -72,17 +89,16 @@ export default function PerformanceReport() {
       }
     }
     loadFilters();
-  }, [effectiveUserId]);
+  }, [effectiveUserId, selectedSchoolYear]);
 
   // Fetch dynamic Performance report data from database based on quarterly_grade
   useEffect(() => {
     async function fetchGradeRangeData() {
-      if (!selectedSubject) return;
       setLoading(true);
       try {
         const params = new URLSearchParams({
-          term: selectedTerm,
-          subjectId: selectedSubject,
+          term: selectedTerm || "1",
+          subjectId: selectedSubject || "all",
         });
 
         if (selectedSchoolYear) {
@@ -93,7 +109,7 @@ export default function PerformanceReport() {
           params.append("userId", String(effectiveUserId));
         }
 
-        const res = await fetch(`${API_BASE_URL}/adviser/dashboard/grade-range-report?${params.toString()}`);
+        const res = await fetch(`${API_BASE_URL}/adviser/dashboard/grade-range-report?${params.toString()}`, { force: true });
         if (res.ok) {
           const data = await res.json();
           setSectionsData(data.sections || []);
@@ -111,35 +127,44 @@ export default function PerformanceReport() {
     fetchGradeRangeData();
   }, [selectedSchoolYear, selectedTerm, selectedSubject, effectiveUserId]);
 
-  // Calculate averages per column across all handled sections dynamically
-  // Calculate totals across all handled sections dynamically
+  // Calculate totals and averages across all handled sections dynamically
   const summaryRow = useMemo(() => {
     if (!sectionsData || sectionsData.length === 0) return null;
 
-    const sumNoGrade = sectionsData.reduce((acc, r) => acc + (Number(r.no_grade) || 0), 0);
-    const sum60_74 = sectionsData.reduce((acc, r) => acc + (Number(r.r60_74) || 0), 0);
-    const sum75_79 = sectionsData.reduce((acc, r) => acc + (Number(r.r75_79) || 0), 0);
-    const sum80_84 = sectionsData.reduce((acc, r) => acc + (Number(r.r80_84) || 0), 0);
-    const sum85_89 = sectionsData.reduce((acc, r) => acc + (Number(r.r85_89) || 0), 0);
-    const sum90_100 = sectionsData.reduce((acc, r) => acc + (Number(r.r90_100) || 0), 0);
+    const submittedSections = sectionsData.filter((r) => r.is_submitted);
+    const hasSubmitted = submittedSections.length > 0;
 
-    const sumTotalScore = sectionsData.reduce((acc, r) => acc + (Number(r.total_score) || 0), 0);
-    const sumNumTakers = sectionsData.reduce((acc, r) => acc + (Number(r.num_takers) || 0), 0);
-    const overallMean = sumNumTakers > 0 ? Math.round((sumTotalScore / sumNumTakers) * 100) / 100 : 0;
-    const overallMps = sumNumTakers > 0 ? Math.round(((overallMean / 50) * 100) * 100) / 100 : 0;
+    const sumNoGrade = submittedSections.reduce((acc, r) => acc + (Number(r.no_grade) || 0), 0);
+    const sum60_74 = submittedSections.reduce((acc, r) => acc + (Number(r.r60_74) || 0), 0);
+    const sum75_79 = submittedSections.reduce((acc, r) => acc + (Number(r.r75_79) || 0), 0);
+    const sum80_84 = submittedSections.reduce((acc, r) => acc + (Number(r.r80_84) || 0), 0);
+    const sum85_89 = submittedSections.reduce((acc, r) => acc + (Number(r.r85_89) || 0), 0);
+    const sum90_100 = submittedSections.reduce((acc, r) => acc + (Number(r.r90_100) || 0), 0);
+
+    // Calculate Average of Score Mean and MPS
+    // Prioritize sections with test takers / valid scores, or fall back to all sections
+    const sectionsWithScores = sectionsData.filter((r) => (Number(r.num_takers) || 0) > 0 || (Number(r.score_mean) || 0) > 0);
+    const meanTargetList = sectionsWithScores.length > 0 ? sectionsWithScores : sectionsData;
+    const avgScoreMean = meanTargetList.length > 0
+      ? Math.round((meanTargetList.reduce((acc, r) => acc + (Number(r.score_mean) || 0), 0) / meanTargetList.length) * 100) / 100
+      : 0;
+    const avgMps = meanTargetList.length > 0
+      ? Math.round((meanTargetList.reduce((acc, r) => acc + (Number(r.mps) || 0), 0) / meanTargetList.length) * 100) / 100
+      : 0;
 
     return {
-      section_name: "Total",
+      section_name: submittedSections.length === sectionsData.length ? "Total" : "Total (Submitted)",
+      has_submitted_data: hasSubmitted,
+      submitted_count: submittedSections.length,
+      total_count: sectionsData.length,
       no_grade: sumNoGrade,
       r60_74: sum60_74,
       r75_79: sum75_79,
       r80_84: sum80_84,
       r85_89: sum85_89,
       r90_100: sum90_100,
-      total_score: sumTotalScore,
-      num_takers: sumNumTakers,
-      score_mean: overallMean,
-      mps: overallMps,
+      avg_score_mean: avgScoreMean,
+      avg_mps: avgMps,
     };
   }, [sectionsData]);
 
@@ -188,10 +213,11 @@ export default function PerformanceReport() {
 
               <label className="filter-control">
                 <select
-                  value={selectedSubject}
+                  value={selectedSubject || "all"}
                   onChange={(e) => setSelectedSubject(e.target.value)}
                   aria-label="Subject"
                 >
+                  <option value="all">All Subjects</option>
                   {subjectOptions.map((subj) => (
                     <option key={subj.id} value={subj.id}>
                       {subj.label}
@@ -244,20 +270,14 @@ export default function PerformanceReport() {
 
                     {summaryRow && (
                       <tr className="average-row">
-                        <td>
-                          <strong>{summaryRow.section_name}</strong>
+                        <td colSpan={3} className="average-label-cell">
+                          <strong>Average</strong>
                         </td>
                         <td>
-                          <strong>{summaryRow.total_score}</strong>
+                          <strong>{Number(summaryRow.avg_score_mean || 0).toFixed(2)}</strong>
                         </td>
                         <td>
-                          <strong>{summaryRow.num_takers}</strong>
-                        </td>
-                        <td>
-                          <strong>{Number(summaryRow.score_mean || 0).toFixed(2)}</strong>
-                        </td>
-                        <td>
-                          <strong>{Number(summaryRow.mps || 0).toFixed(2)}%</strong>
+                          <strong>{Number(summaryRow.avg_mps || 0).toFixed(2)}%</strong>
                         </td>
                       </tr>
                     )}
@@ -270,7 +290,12 @@ export default function PerformanceReport() {
 
         {/* 2. Grade Range Table */}
         <div className="report-card">
-          <h2>Grade Range</h2>
+          <div className="report-card-header">
+            <h2>Grade Range</h2>
+            <span className="report-card-hint">
+              Distribution data is displayed only for sections with officially submitted grades.
+            </span>
+          </div>
           <div className="table-wrap">
             <table className="performance-table grade-table">
               <thead>
@@ -300,18 +325,44 @@ export default function PerformanceReport() {
                 ) : (
                   <>
                     {sectionsData.map((row, idx) => (
-                      <tr key={row.section_id || idx}>
-                        <td>{row.section_name}</td>
-                        <td>{row.no_grade ?? 0}</td>
-                        <td>{row.r60_74 ?? 0}</td>
-                        <td>{row.r75_79 ?? 0}</td>
-                        <td>{row.r80_84 ?? 0}</td>
-                        <td>{row.r85_89 ?? 0}</td>
-                        <td>{row.r90_100 ?? 0}</td>
+                      <tr key={row.section_id || idx} className={row.is_submitted ? "row-submitted" : "row-unsubmitted"}>
+                        <td className="section-name-td">
+                          <div className="section-cell-inner">
+                            <span className="section-name-text">{row.section_name}</span>
+                            {row.is_submitted ? (
+                              <span className="status-pill status-pill-submitted" title="Grades officially submitted">
+                                Submitted
+                              </span>
+                            ) : (
+                              <span className="status-pill status-pill-pending" title="Grades pending submission">
+                                Pending
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        {row.is_submitted ? (
+                          <>
+                            <td>{row.no_grade ?? 0}</td>
+                            <td>{row.r60_74 ?? 0}</td>
+                            <td>{row.r75_79 ?? 0}</td>
+                            <td>{row.r80_84 ?? 0}</td>
+                            <td>{row.r85_89 ?? 0}</td>
+                            <td>{row.r90_100 ?? 0}</td>
+                          </>
+                        ) : (
+                          <td colSpan={6} className="unsubmitted-notice-cell">
+                            <div className="unsubmitted-notice-box">
+                              <span className="unsubmitted-notice-icon" aria-hidden="true">⚠️</span>
+                              <span className="unsubmitted-notice-text">
+                                Grades not yet submitted for this section. Distribution will display once submitted.
+                              </span>
+                            </div>
+                          </td>
+                        )}
                       </tr>
                     ))}
 
-                    {summaryRow && (
+                    {summaryRow && summaryRow.has_submitted_data && (
                       <tr className="average-row">
                         <td>
                           <strong>{summaryRow.section_name}</strong>
@@ -333,6 +384,17 @@ export default function PerformanceReport() {
                         </td>
                         <td>
                           <strong>{summaryRow.r90_100}</strong>
+                        </td>
+                      </tr>
+                    )}
+
+                    {summaryRow && !summaryRow.has_submitted_data && (
+                      <tr className="average-row">
+                        <td>
+                          <strong>Total</strong>
+                        </td>
+                        <td colSpan={6} className="no-submitted-summary-cell">
+                          No submitted section grades for this term yet.
                         </td>
                       </tr>
                     )}

@@ -40,6 +40,73 @@ router.get('/:id/students', async (req, res) => {
   }
 });
 
+// GET /api/sections/grade-level/subjects - Get all subjects offered across all grade levels
+router.get('/grade-level/subjects', async (req, res) => {
+  try {
+    await cloudSync.syncAcademicAssignmentsFromCloud().catch(() => {});
+    const subjects = await Section.findAllGradeLevelSubjects();
+    res.json(subjects);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/sections/grade-level/:gradeLevelId/subjects - Get subjects offered in this grade level
+router.get('/grade-level/:gradeLevelId/subjects', async (req, res) => {
+  try {
+    await cloudSync.syncAcademicAssignmentsFromCloud().catch(() => {});
+    const subjects = await Section.findSubjectsByGradeLevel(req.params.gradeLevelId);
+    res.json(subjects);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/sections/grade-level/:gradeLevelId/subjects - Add subject(s) across sections of this grade level
+router.post('/grade-level/:gradeLevelId/subjects', async (req, res) => {
+  try {
+    const { subject_ids, section_id, section_type, school_year_id } = req.body;
+    const result = await Section.addSubjectsToGradeLevel(req.params.gradeLevelId, {
+      subject_ids,
+      section_id: section_id || null,
+      section_type: section_type || 'all',
+      school_year_id,
+    });
+    res.status(201).json({
+      message: `Added subject(s) across ${result.sections_affected} section(s).`,
+      ...result,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/sections/grade-level/:gradeLevelId/subjects/:subjectId - Drop a subject across sections of this grade level
+router.delete('/grade-level/:gradeLevelId/subjects/:subjectId', async (req, res) => {
+  try {
+    const section_type = req.body?.section_type || req.query.section_type || 'all';
+    const section_id = req.body?.section_id || req.query.section_id || null;
+    const school_year_id = req.body?.school_year_id || null;
+    const result = await Section.dropSubjectFromGradeLevel(req.params.gradeLevelId, req.params.subjectId, {
+      section_id,
+      section_type,
+      school_year_id,
+    });
+    if (result.blocked_count > 0 && result.dropped_count === 0) {
+      return res.status(400).json({
+        error: `Cannot drop this subject because grades or scores are already recorded in section(s): ${result.blocked_sections.join(', ')}.`,
+      });
+    }
+    res.json({
+      message: `Dropped subject from ${result.dropped_count} section(s).` +
+        (result.blocked_count > 0 ? ` (${result.blocked_count} section(s) skipped due to existing recorded grades).` : ''),
+      ...result,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/:id', async (req, res) => {
   try {
     await cloudSync.syncSectionsFromCloud();

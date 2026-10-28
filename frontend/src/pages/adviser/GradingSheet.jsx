@@ -62,6 +62,15 @@ export default function GradingSheet({
         : submissionTerms.some(t => t.term === activeTermCode) ? activeTermCode : submissionTerms[0]?.term || activeTermCode;
     const submissionWindow = submissionTerms.find(t => t.term === currentTermCode);
 
+    const resolvedDeadline = useMemo(() => {
+        if (submissionWindow?.deadline) return submissionWindow.deadline;
+        const targetTerm = currentTermCode || activeTermCode;
+        if (targetTerm && activeSelectedClass?.termDeadlines?.[targetTerm]) {
+            return activeSelectedClass.termDeadlines[targetTerm];
+        }
+        return activeSelectedClass?.deadline || null;
+    }, [submissionWindow?.deadline, currentTermCode, activeTermCode, activeSelectedClass]);
+
     const currentTermLabel = useMemo(() => {
         if (currentTermCode === "T2") return "Term 2";
         if (currentTermCode === "T3") return "Term 3";
@@ -496,7 +505,7 @@ export default function GradingSheet({
                     <SearchBar
                         query={searchStudentQuery}
                         setQuery={setSearchStudentQuery}
-                        placeholder="Search student names or LRN..."
+                        placeholder="Search student names..."
                     />
                 </div>
 
@@ -630,7 +639,6 @@ export default function GradingSheet({
                                                     <span className="student-full-name">
                                                         {stud.lastName}, {stud.firstName} {stud.middleName ? `${stud.middleName.charAt(0)}.` : ""}
                                                     </span>
-                                                    <span className="student-lrn">LRN: {stud.lrn}</span>
                                                 </td>
                                                 <td className="grade-value-cell">{maVal}</td>
                                                 <td className="grade-value-cell">{pehVal}</td>
@@ -652,7 +660,6 @@ export default function GradingSheet({
                                                 <span className="student-full-name">
                                                     {stud.lastName}, {stud.firstName} {stud.middleName ? `${stud.middleName.charAt(0)}.` : ""}
                                                 </span>
-                                                <span className="student-lrn">LRN: {stud.lrn}</span>
                                             </td>
 
                                             {/* Term 1 */}
@@ -689,7 +696,6 @@ export default function GradingSheet({
                                             <span className="student-full-name">
                                                 {stud.lastName}, {stud.firstName} {stud.middleName ? `${stud.middleName.charAt(0)}.` : ""}
                                             </span>
-                                            <span className="student-lrn">LRN: {stud.lrn}</span>
                                         </td>
                                         <td className="grade-value-cell">{grades.t1}</td>
                                         <td className="grade-value-cell">{grades.t2}</td>
@@ -738,7 +744,6 @@ export default function GradingSheet({
                                                     <span className="student-full-name">
                                                         {stud.lastName}, {stud.firstName} {stud.middleName ? `${stud.middleName.charAt(0)}.` : ""}
                                                     </span>
-                                                    <span className="student-lrn">LRN: {stud.lrn}</span>
                                                 </td>
                                                 <td className="grade-value-cell">{maVal}</td>
                                                 <td className="grade-value-cell">{pehVal}</td>
@@ -760,7 +765,6 @@ export default function GradingSheet({
                                                 <span className="student-full-name">
                                                     {stud.lastName}, {stud.firstName} {stud.middleName ? `${stud.middleName.charAt(0)}.` : ""}
                                                 </span>
-                                                <span className="student-lrn">LRN: {stud.lrn}</span>
                                             </td>
 
                                             {/* Term 1 */}
@@ -797,7 +801,6 @@ export default function GradingSheet({
                                             <span className="student-full-name">
                                                 {stud.lastName}, {stud.firstName} {stud.middleName ? `${stud.middleName.charAt(0)}.` : ""}
                                             </span>
-                                            <span className="student-lrn">LRN: {stud.lrn}</span>
                                         </td>
                                         <td className="grade-value-cell">{grades.t1}</td>
                                         <td className="grade-value-cell">{grades.t2}</td>
@@ -819,7 +822,7 @@ export default function GradingSheet({
 
             {/* Sticky Bottom Submission Action Bar */}
             <SubmissionFooter
-                deadline={submissionWindow?.deadline || activeSelectedClass.deadline}
+                deadline={resolvedDeadline}
                 isSubmitted={currentSubmission?.state === "SUBMITTED"}
                 onSubmit={handleFooterSubmitTrigger}
                 userRole={userRole}

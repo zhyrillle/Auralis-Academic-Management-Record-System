@@ -638,3 +638,255 @@
   background: #2563eb;
   border-color: #2563eb;
 }
+
+/* ── Centralized Grade-Level Subject Management & Group Headers ── */
+.section-grade-group {
+  margin-bottom: 30px;
+}
+
+.section-grade-group:last-child {
+  margin-bottom: 0;
+}
+
+/* Manage Subjects Card and Modal Styling */
+.subject-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.subject-card-code-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  color: #4338ca;
+  background: #eef2ff;
+  padding: 2px 7px;
+  border-radius: 5px;
+  letter-spacing: 0.5px;
+  margin-top: 5px;
+}
+
+.subject-card-offering {
+  margin: 12px 0 16px;
+  padding: 10px 13px;
+  background: #f8fafc;
+  border: 1px solid #eef2f6;
+  border-radius: 10px;
+  flex: 1;
+}
+
+.subject-card-offering-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #475569;
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.subject-card-offering-header strong {
+  color: #1e293b;
+}
+
+.subject-card-sections-list {
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  color: #64748b;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.add-subject-modal .app-overlay__panel {
+  width: min(580px, 100%);
+}
+
+.add-subject-modal-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.add-subject-modal .dropdown-select__trigger,
+.add-subject-modal-content .dropdown-select__trigger {
+  height: 42px;
+  min-height: 42px;
+  padding: 0 42px 0 14px;
+  font-size: 13px;
+  color: #334155;
+  background: #ffffff;
+  border: 1px solid #dbe3ee;
+  border-radius: 9px;
+  box-sizing: border-box;
+}
+
+.add-subject-modal .dropdown-select__trigger:hover:not(:disabled),
+.add-subject-modal-content .dropdown-select__trigger:hover:not(:disabled) {
+  border-color: #b9c9df;
+}
+
+.add-subject-modal .dropdown-select__trigger:focus-visible,
+.add-subject-modal-content .dropdown-select__trigger:focus-visible {
+  outline: 2px solid #c9a227;
+  outline-offset: -2px;
+  border-color: #c9a227;
+  box-shadow: none;
+}
+
+.add-subject-modal .dropdown-select__menu button,
+.add-subject-modal-content .dropdown-select__menu button {
+  height: 38px;
+  font-size: 13px;
+}
+
+.add-subject-modal-content .search-input {
+  height: 42px;
+  font-size: 13px;
+  box-sizing: border-box;
+}
+
+.catalog-subject-picker-list {
+  max-height: 280px;
+  overflow-y: auto;
+  padding-right: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.catalog-subject-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 14px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
+  background: #ffffff;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.catalog-subject-item:hover:not(.is-disabled) {
+  border-color: #3b82f6;
+  background: #f8faff;
+}
+
+.catalog-subject-item.is-selected {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.catalog-subject-item.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+
+.catalog-subject-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex: 1;
+}
+
+.subject-code-tag {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 7px;
+  border-radius: 5px;
+  background: #eef2ff;
+  color: #4338ca;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+
+.catalog-subject-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.catalog-subject-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.catalog-subject-name {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #1e293b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.catalog-subject-program-badge {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
+}
+
+.catalog-subject-program-badge.is-core {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.catalog-subject-program-badge.is-spec {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.catalog-subject-desc {
+  font-size: 11.5px;
+  color: #64748b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.catalog-subject-right {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.catalog-subject-badge-added {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #059669;
+  background: #ecfdf5;
+  padding: 3px 8px;
+  border-radius: 12px;
+  border: 1px solid #a7f3d0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.catalog-subject-checkbox {
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  border: 1.5px solid #cbd5e1;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  transition: all 0.15s ease;
+}
+
+.catalog-subject-checkbox.is-checked {
+  background: #2563eb;
+  border-color: #2563eb;
+}
