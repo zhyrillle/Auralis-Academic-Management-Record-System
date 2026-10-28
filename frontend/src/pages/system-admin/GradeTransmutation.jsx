@@ -170,8 +170,8 @@ export default function GradeTransmutation() {
   const [previewGrade, setPreviewGrade] = useState("");
   const [toast, setToast] = useState("");
   const [pendingAction, setPendingAction] = useState(null);
-  // Independent table lock: lets admins lock the table while custom is still ON.
-  const [isTableLocked, setIsTableLocked] = useState(false);
+  // Independent table lock: locked by default to prevent accidental edits
+  const [isTableLocked, setIsTableLocked] = useState(true);
   // Drag-to-reorder: id of the row being dragged and the id being hovered over.
   const dragIdRef = useRef(null);
   const [dragOverId, setDragOverId] = useState(null);
@@ -373,6 +373,7 @@ export default function GradeTransmutation() {
         });
       }
 
+      setIsTableLocked(true);
       showToast(res.message || "Transmutation table saved successfully.");
     } catch (err) {
       showToast(err.message || "Failed to save transmutation table.");

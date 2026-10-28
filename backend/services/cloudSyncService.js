@@ -530,22 +530,42 @@ async function syncGradeTransmutationFromCloud(timeoutMs = 2500) {
     );
     if (cloudRows && cloudRows.length > 0) {
       const row = cloudRows[0];
-      await db.execute(
-        `INSERT INTO GRADE_TRANSMUTATION_CONFIG (config_id, is_custom_enabled, ranges_json, updated_by, updated_at)
-         VALUES (?, ?, ?, ?, ?)
-         ON DUPLICATE KEY UPDATE
-           is_custom_enabled = VALUES(is_custom_enabled),
-           ranges_json = VALUES(ranges_json),
-           updated_by = VALUES(updated_by),
-           updated_at = VALUES(updated_at)`,
-        [
-          row.config_id,
-          row.is_custom_enabled,
-          typeof row.ranges_json === 'object' ? JSON.stringify(row.ranges_json) : row.ranges_json,
-          row.updated_by,
-          row.updated_at,
-        ]
-      ).catch(() => {});
+      const rangesVal = typeof row.ranges_json === 'object' ? JSON.stringify(row.ranges_json) : row.ranges_json;
+      try {
+        await db.execute(
+          `INSERT INTO GRADE_TRANSMUTATION_CONFIG (config_id, is_custom_enabled, ranges_json, updated_by, updated_at)
+           VALUES (?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE
+             is_custom_enabled = VALUES(is_custom_enabled),
+             ranges_json = VALUES(ranges_json),
+             updated_by = VALUES(updated_by),
+             updated_at = VALUES(updated_at)`,
+          [
+            row.config_id,
+            row.is_custom_enabled,
+            rangesVal,
+            row.updated_by,
+            row.updated_at,
+          ]
+        );
+      } catch (err) {
+        // Fallback with updated_by = NULL if local foreign key check fails
+        await db.execute(
+          `INSERT INTO GRADE_TRANSMUTATION_CONFIG (config_id, is_custom_enabled, ranges_json, updated_by, updated_at)
+           VALUES (?, ?, ?, NULL, ?)
+           ON DUPLICATE KEY UPDATE
+             is_custom_enabled = VALUES(is_custom_enabled),
+             ranges_json = VALUES(ranges_json),
+             updated_by = NULL,
+             updated_at = VALUES(updated_at)`,
+          [
+            row.config_id,
+            row.is_custom_enabled,
+            rangesVal,
+            row.updated_at,
+          ]
+        ).catch(() => {});
+      }
     }
   })();
 
@@ -593,17 +613,45 @@ async function forwardGradeTransmutationToCloud(config) {
 
   try {
     const isCustom = config.is_custom_enabled ? 1 : 0;
-    const jsonStr = typeof config.ranges === 'object' ? JSON.stringify(config.ranges) : config.ranges_json;
-    await db.cloudPool.query(
-      `INSERT INTO GRADE_TRANSMUTATION_CONFIG (config_id, is_custom_enabled, ranges_json, updated_by, updated_at)
-       VALUES (1, ?, ?, ?, NOW())
-       ON DUPLICATE KEY UPDATE
-         is_custom_enabled = VALUES(is_custom_enabled),
-         ranges_json = VALUES(ranges_json),
-         updated_by = VALUES(updated_by),
-         updated_at = NOW()`,
-      [isCustom, jsonStr, config.updated_by || null]
-    );
+    const jsonStr = typeof config.ranges === 'object' ? JSON.stringify(config.ranges) : (config.ranges_json || null);
+
+    let updatedBy = null;
+    if (config.updated_by) {
+      if (typeof config.updated_by === 'object' && config.updated_by !== null) {
+        updatedBy = config.updated_by.user_id || config.updated_by.id || null;
+      } else if (!isNaN(Number(config.updated_by))) {
+        updatedBy = Number(config.updated_by);
+      }
+    }
+
+    try {
+      await db.cloudPool.query(
+        `INSERT INTO GRADE_TRANSMUTATION_CONFIG (config_id, is_custom_enabled, ranges_json, updated_by, updated_at)
+         VALUES (1, ?, ?, ?, NOW())
+         ON DUPLICATE KEY UPDATE
+           is_custom_enabled = VALUES(is_custom_enabled),
+           ranges_json = VALUES(ranges_json),
+           updated_by = VALUES(updated_by),
+           updated_at = NOW()`,
+        [isCustom, jsonStr, updatedBy]
+      );
+    } catch (dbErr) {
+      // If foreign key constraint failed due to updated_by not existing in cloud USER table, retry with null
+      if (dbErr.code === 'ER_NO_REFERENCED_ROW_2' || dbErr.errno === 1452) {
+        await db.cloudPool.query(
+          `INSERT INTO GRADE_TRANSMUTATION_CONFIG (config_id, is_custom_enabled, ranges_json, updated_by, updated_at)
+           VALUES (1, ?, ?, NULL, NOW())
+           ON DUPLICATE KEY UPDATE
+             is_custom_enabled = VALUES(is_custom_enabled),
+             ranges_json = VALUES(ranges_json),
+             updated_by = NULL,
+             updated_at = NOW()`,
+          [isCustom, jsonStr]
+        );
+      } else {
+        throw dbErr;
+      }
+    }
   } catch (err) {
     console.warn('[CloudTransmutation] Failed to dual-write transmutation to Aiven Cloud:', err.message);
   }
