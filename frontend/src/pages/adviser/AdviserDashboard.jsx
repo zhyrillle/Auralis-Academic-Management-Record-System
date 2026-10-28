@@ -80,7 +80,7 @@ export default function AdviserDashboard() {
   // Data States (Defaults to 0 / empty)
   const [summary, setSummary] = useState({
     sectionAverage: "0%",
-    sectionAverageDiff: "0% from Q1",
+    sectionAverageDiff: "0% from T1",
     lowestPerformingSection: "—",
     lowestPerformingSectionNote: "No data",
     atRiskStudentsCount: 0,
@@ -132,10 +132,15 @@ export default function AdviserDashboard() {
       const userId = currentUser?.user_id || currentUser?.id;
 
       try {
-        // Parallel fetch for dashboard metrics and role status
+        const [roleRes, sumRes] = await Promise.all([
+          checkAdviserRole(userId),
+          getAdviserSummary(userId),
+        ]);
+
+        const resolvedActiveTerm = sumRes?.activeTerm || "T1";
+
+        // Parallel fetch remaining dashboard metrics using the active term
         const [
-          roleRes,
-          sumRes,
           classesRes,
           attendRes,
           subjPerfRes,
@@ -144,15 +149,13 @@ export default function AdviserDashboard() {
           subjAreaRes,
           coreRes,
         ] = await Promise.all([
-          checkAdviserRole(userId),
-          getAdviserSummary(userId),
           getAssignedClasses(userId),
           getAttendanceTrend(userId),
-          getSubjectPerformance(subjectTerm, userId),
-          getGradeRangeDistribution(radarSection, radarTerm, userId),
-          getTestExamAnalysis(testTerm, testSection, userId),
-          getSubjectAreaPerformance(subjectAreaTerm, userId),
-          getCoreValuesComparison(coreValuesTerm, userId),
+          getSubjectPerformance(resolvedActiveTerm, userId),
+          getGradeRangeDistribution(radarSection, resolvedActiveTerm, userId),
+          getTestExamAnalysis(resolvedActiveTerm, testSection, userId),
+          getSubjectAreaPerformance(resolvedActiveTerm, userId),
+          getCoreValuesComparison(resolvedActiveTerm, userId),
         ]);
 
         if (isMounted) {
@@ -166,6 +169,13 @@ export default function AdviserDashboard() {
 
           setIsAdviser(resolvedIsAdviser);
           setSummary(sumRes || {});
+          if (resolvedActiveTerm) {
+            setSubjectTerm(resolvedActiveTerm);
+            setRadarTerm(resolvedActiveTerm);
+            setTestTerm(resolvedActiveTerm);
+            setSubjectAreaTerm(resolvedActiveTerm);
+            setCoreValuesTerm(resolvedActiveTerm);
+          }
           setAssignedClasses(classesRes || []);
           setAttendanceTrend(attendRes || []);
           setSubjectPerformance(subjPerfRes || []);
@@ -764,7 +774,7 @@ export default function AdviserDashboard() {
             <AdviserStatCard
               title="Section Average"
               value={summary?.sectionAverage ?? "0%"}
-              subtitle={summary?.sectionAverageDiff ?? "0% from Q1"}
+              subtitle={summary?.sectionAverageDiff ?? `0% from ${summary?.activeTerm || "T1"}`}
               subtitleType="positive"
               loading={loading}
             />

@@ -5,7 +5,7 @@
 
 export const placeholderAdviserSummary = {
   sectionAverage: "0%",
-  sectionAverageDiff: "0% from Q1",
+  sectionAverageDiff: "0% from T1",
   lowestPerformingSection: "—",
   lowestPerformingSectionNote: "No data",
   atRiskStudentsCount: 0,

@@ -220,20 +220,67 @@ async function resolveActiveAcademicTerm(schoolYearId) {
 async function ensureGradeSheet(subjectOfferingId, schoolYearId, termName, connection = db, { create = true } = {}) {
   const selected = selectSubmissionTerm(await loadClassTerms({ school_year_id: schoolYearId }, connection), termCode(termName));
   const [sheets] = await connection.execute(
-    'SELECT * FROM GRADE_SHEET WHERE subject_offering_id = ? AND term_id = ?',
+    'SELECT * FROM GRADE_SHEET WHERE subject_offering_id = ? AND term_id = ? ORDER BY grade_sheet_id ASC',
     [subjectOfferingId, selected.term_id]);
-  if (sheets.length > 1) throw problem('DUPLICATE_GRADE_SHEET', 'This class and term have duplicate grade sheets. Please request a configuration review.');
-  let sheet = sheets[0];
+
+  let sheet;
+  if (sheets.length > 1) {
+    console.warn(`[ensureGradeSheet] Detected ${sheets.length} duplicate sheets for offering ${subjectOfferingId}, term ${selected.term_id}. Self-healing...`);
+    // Rank sheets: 1. SUBMITTED, 2. lowest ID
+    sheets.sort((a, b) => {
+      const aSub = (a.workflow_status === 'SUBMITTED' || a.submitted_at) ? 1 : 0;
+      const bSub = (b.workflow_status === 'SUBMITTED' || b.submitted_at) ? 1 : 0;
+      if (bSub !== aSub) return bSub - aSub;
+      return a.grade_sheet_id - b.grade_sheet_id;
+    });
+    sheet = sheets[0];
+
+    // Re-link and delete redundant duplicates in background
+    for (let i = 1; i < sheets.length; i++) {
+      const redundantId = sheets[i].grade_sheet_id;
+      connection.execute(`UPDATE GRADE_REOPEN_REQUEST SET grade_sheet_id = ? WHERE grade_sheet_id = ?`, [sheet.grade_sheet_id, redundantId]).catch(() => {});
+      connection.execute(`UPDATE GRADE_ACTIVITY SET grade_sheet_id = ? WHERE grade_sheet_id = ?`, [sheet.grade_sheet_id, redundantId]).catch(() => {});
+      connection.execute(`DELETE FROM GRADE_SHEET WHERE grade_sheet_id = ?`, [redundantId]).catch(() => {});
+      if (db.cloudPool) {
+        db.cloudPool.query(`DELETE FROM GRADE_SHEET WHERE grade_sheet_id = ?`, [redundantId]).catch(() => {});
+      }
+    }
+  } else {
+    sheet = sheets[0];
+  }
+
   if (!sheet && !create) {
     return { gradeSheetId: null, termId: selected.term_id, termName: selected.term_name,
       lockStatus: 'NOT_CREATED', workflowStatus: 'DRAFT' };
   }
   if (!sheet) {
-    const [result] = await connection.execute(
-      'INSERT INTO GRADE_SHEET (subject_offering_id, term_id, lock_status, workflow_status) VALUES (?, ?, ?, ?)',
-      [subjectOfferingId, selected.term_id, 'EDITABLE', 'DRAFT']);
-    sheet = { grade_sheet_id: result.insertId, term_id: selected.term_id, lock_status: 'EDITABLE', workflow_status: 'DRAFT' };
-    if (db.cloudPool) {
+    try {
+      const [result] = await connection.execute(
+        `INSERT INTO GRADE_SHEET (subject_offering_id, term_id, lock_status, workflow_status)
+         VALUES (?, ?, 'EDITABLE', 'DRAFT')
+         ON DUPLICATE KEY UPDATE lock_status = lock_status`,
+        [subjectOfferingId, selected.term_id]);
+      const sheetId = result.insertId;
+      if (sheetId) {
+        sheet = { grade_sheet_id: sheetId, term_id: selected.term_id, lock_status: 'EDITABLE', workflow_status: 'DRAFT' };
+      } else {
+        const [existing] = await connection.execute(
+          'SELECT * FROM GRADE_SHEET WHERE subject_offering_id = ? AND term_id = ? LIMIT 1',
+          [subjectOfferingId, selected.term_id]);
+        sheet = existing[0];
+      }
+    } catch (insertErr) {
+      if (insertErr.code === 'ER_DUP_ENTRY') {
+        const [existing] = await connection.execute(
+          'SELECT * FROM GRADE_SHEET WHERE subject_offering_id = ? AND term_id = ? LIMIT 1',
+          [subjectOfferingId, selected.term_id]);
+        sheet = existing[0];
+      } else {
+        throw insertErr;
+      }
+    }
+
+    if (sheet && db.cloudPool) {
       db.cloudPool.execute(
         `INSERT INTO GRADE_SHEET (grade_sheet_id, subject_offering_id, term_id, lock_status, workflow_status)
          VALUES (?, ?, ?, 'EDITABLE', 'DRAFT')
