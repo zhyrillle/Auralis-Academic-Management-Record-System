@@ -246,7 +246,6 @@ export default function PrincipalReports() {
                   sectionLearners.map((learner) => (
                     <tr key={learner.id} className="pr-tr">
                       <td className="pr-td-student">{learner.name}</td>
-                      <td className="pr-td-lrn">{learner.lrn || "—"}</td>
                       <td>{learner.gradeSection}</td>
                       <td>
                         <span className="pr-forms">
