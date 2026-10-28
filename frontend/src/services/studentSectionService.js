@@ -295,3 +295,46 @@ export const fetchSubjectCatalog = async () => {
   return Array.isArray(data) ? data : [];
 };
 
+/**
+ * Fetch subjects offered across all grade levels
+ */
+export const fetchAllGradeLevelSubjects = async () => {
+  const response = await fetch(`${API_BASE_URL}/sections/grade-level/subjects`);
+  const data = await parseResponse(response);
+  return Array.isArray(data) ? data : [];
+};
+
+/**
+ * Fetch subjects offered in a grade level
+ */
+export const fetchGradeLevelSubjects = async (gradeLevelId) => {
+  const response = await fetch(`${API_BASE_URL}/sections/grade-level/${gradeLevelId}/subjects`);
+  const data = await parseResponse(response);
+  return Array.isArray(data) ? data : [];
+};
+
+/**
+ * Add subject(s) to sections in a grade level
+ */
+export const addGradeLevelSubjects = async (gradeLevelId, { subject_ids, section_id = null, section_type = "all" }) => {
+  const response = await fetch(`${API_BASE_URL}/sections/grade-level/${gradeLevelId}/subjects`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ subject_ids, section_id, section_type }),
+  });
+  return parseResponse(response);
+};
+
+/**
+ * Drop a subject from sections in a grade level
+ */
+export const dropGradeLevelSubject = async (gradeLevelId, subjectId, { section_id = null, section_type = "all" } = {}) => {
+  const response = await fetch(`${API_BASE_URL}/sections/grade-level/${gradeLevelId}/subjects/${subjectId}`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ section_id, section_type }),
+  });
+  return parseResponse(response);
+};
+
+

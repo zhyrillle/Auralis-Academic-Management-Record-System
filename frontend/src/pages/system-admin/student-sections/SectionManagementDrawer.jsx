@@ -184,11 +184,19 @@ export default function SectionManagementDrawer({
     }
   };
 
+  const isSecSpec = Number(section?.is_specialized) === 1;
+
   const filteredCatalogSubjects = subjectCatalog.filter(sub => {
+    const isSubSpec = Boolean(sub.is_specialized || (sub.program_id && sub.program_id !== 4));
+    // Requirement 1: if section is not specialized, specialized subjects should not appear and vice versa
+    if (!isSecSpec && isSubSpec) return false;
+    if (isSecSpec && !isSubSpec) return false;
+    if (isSecSpec && sub.program_id && sub.program_id !== 4 && Number(sub.program_id) !== Number(section?.program_id)) return false;
+
     const alreadyIn = isSubjectAlreadyInSection(sub.subject_id);
     if (pickerFilter === "available" && alreadyIn) return false;
-    if (pickerFilter === "core" && (sub.is_specialized || (sub.program_id && sub.program_id !== 4))) return false;
-    if (pickerFilter === "specialized" && !sub.is_specialized && (!sub.program_id || sub.program_id === 4)) return false;
+    if (pickerFilter === "core" && isSubSpec) return false;
+    if (pickerFilter === "specialized" && !isSubSpec) return false;
 
     if (!pickerSearch.trim()) return true;
     const q = pickerSearch.toLowerCase().trim();
@@ -272,22 +280,9 @@ export default function SectionManagementDrawer({
           </>
         ) : view === "subjects" ? (
           <>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 16 }}>
-              <div>
-                <h3 className="student-admin-subheading">Curriculum subjects ({sectionSubjects.length})</h3>
-                <p className="student-admin-hint">Subjects offered for this section in the active school year.</p>
-              </div>
-              {sectionSubjects.length > 0 && (
-                <button
-                  type="button"
-                  className="student-admin-button student-admin-button--primary"
-                  onClick={openAddSubjectModal}
-                  disabled={busy || subjectActionBusy}
-                  style={{ whiteSpace: "nowrap", flexShrink: 0 }}
-                >
-                  <Plus size={15} /> Add Subject
-                </button>
-              )}
+            <div style={{ marginBottom: 16 }}>
+              <h3 className="student-admin-subheading">Curriculum subjects ({sectionSubjects.length})</h3>
+              <p className="student-admin-hint">Subjects offered for this section in the active school year.</p>
             </div>
 
             {sectionSubjects.length > 0 && (
@@ -311,7 +306,7 @@ export default function SectionManagementDrawer({
                   className="student-admin-empty"
                   icon={BookOpen}
                   title="No subjects offered yet"
-                  description="This section does not have subjects attached for the active school year. You can auto-assign the standard curriculum or add individual subjects."
+                  description="This section does not have subjects attached for the active school year. You can auto-assign the standard curriculum or manage subjects from the Manage Subjects tab."
                 />
                 <div className="section-subject-empty-actions">
                   <button
@@ -322,14 +317,6 @@ export default function SectionManagementDrawer({
                   >
                     {subjectActionBusy ? <Loader2 size={15} className="student-admin-spinner" /> : <Sparkles size={15} />}
                     Auto-Assign Curriculum Subjects
-                  </button>
-                  <button
-                    type="button"
-                    className="student-admin-button"
-                    onClick={openAddSubjectModal}
-                    disabled={busy || subjectActionBusy}
-                  >
-                    <Plus size={15} /> Add Custom Subject
                   </button>
                 </div>
               </>
@@ -446,131 +433,6 @@ export default function SectionManagementDrawer({
         <p className="student-admin-form-note"><strong>{pendingRemoval?.name}</strong> will be unassigned from {section?.name}.</p>
       </OverlayPanel>
 
-      {/* Add Subject Modal */}
-      <OverlayPanel
-        isOpen={addingSubjectModalOpen}
-        onClose={() => setAddingSubjectModalOpen(false)}
-        variant="modal"
-        title="Add Subjects to Section"
-        eyebrow="Curriculum catalog"
-        className="add-subject-modal"
-        busy={subjectActionBusy}
-        error={subjectError}
-        description={`Choose subjects from the catalog to offer in ${section?.name || "this section"}.`}
-        footer={<>
-          <button
-            type="button"
-            className="student-admin-button"
-            disabled={subjectActionBusy}
-            onClick={() => setAddingSubjectModalOpen(false)}
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            className="student-admin-button student-admin-button--primary"
-            disabled={subjectActionBusy || selectedSubjectIds.size === 0}
-            onClick={handleAddSubjectSubmit}
-          >
-            {subjectActionBusy ? (
-              <>
-                <Loader2 size={15} className="student-admin-spinner" />
-                Adding…
-              </>
-            ) : (
-              <>
-                <Plus size={15} />
-                {selectedSubjectIds.size === 0
-                  ? "Select subject(s)"
-                  : selectedSubjectIds.size === 1
-                  ? "Add 1 Subject"
-                  : `Add ${selectedSubjectIds.size} Subjects`}
-              </>
-            )}
-          </button>
-        </>}
-      >
-        <div className="add-subject-picker">
-          <div className="add-subject-toolbar">
-            <SearchBar
-              id="picker-subject-search"
-              query={pickerSearch}
-              setQuery={setPickerSearch}
-              placeholder="Search by code, subject name, or program…"
-            />
-            <div className="add-subject-filter-chips">
-              {[
-                { id: "available", label: `Available (${subjectCatalog.filter(s => !isSubjectAlreadyInSection(s.subject_id)).length})` },
-                { id: "all", label: `All catalog (${subjectCatalog.length})` },
-                { id: "core", label: "Core (EBEC)" },
-                { id: "specialized", label: "Specialized" },
-              ].map(chip => (
-                <button
-                  key={chip.id}
-                  type="button"
-                  className={`add-subject-chip ${pickerFilter === chip.id ? "is-active" : ""}`}
-                  onClick={() => setPickerFilter(chip.id)}
-                >
-                  {chip.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="add-subject-cards-list">
-            {filteredCatalogSubjects.length === 0 ? (
-              <EmptyState
-                className="student-admin-empty"
-                icon={BookOpen}
-                title="No subjects match your filter"
-                description={pickerSearch ? "Try a different search term or filter chip." : "All matching subjects are already in this section."}
-              />
-            ) : (
-              filteredCatalogSubjects.map(sub => {
-                const alreadyIn = isSubjectAlreadyInSection(sub.subject_id);
-                const isSelected = selectedSubjectIds.has(sub.subject_id);
-                return (
-                  <div
-                    key={sub.subject_id}
-                    className={`add-subject-card ${alreadyIn ? "is-disabled" : ""} ${isSelected ? "is-selected" : ""}`}
-                    onClick={() => toggleSubjectSelection(sub.subject_id)}
-                    role="checkbox"
-                    aria-checked={isSelected}
-                    aria-disabled={alreadyIn}
-                  >
-                    <div className="add-subject-card-left">
-                      <span className="add-subject-card-badge">{sub.subject_code}</span>
-                      <div className="add-subject-card-body">
-                        <div className="add-subject-card-title">
-                          <span>{sub.subject_name}</span>
-                          {sub.program_code && (
-                            <span className="add-subject-card-program">{sub.program_code}</span>
-                          )}
-                        </div>
-                        {sub.description && (
-                          <span className="add-subject-card-desc">{sub.description}</span>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="add-subject-card-status">
-                      {alreadyIn ? (
-                        <span className="add-subject-already-added">
-                          <CheckCircle2 size={12} /> In Section
-                        </span>
-                      ) : (
-                        <span className="add-subject-checkbox">
-                          {isSelected && <Check size={12} strokeWidth={3} />}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
-      </OverlayPanel>
 
       {/* Remove Subject Modal */}
       <OverlayPanel
