@@ -3,7 +3,8 @@ import { Eye, ArrowLeft } from 'lucide-react';
 import { getDeptGradeDistributionReport } from '../../services/dashboardApi';
 import '../../styles/performanceReport.css';
 
-const hasReportData = row => Number(row.num_takers) > 0 || ['r60_74', 'r75_79', 'r80_84', 'r85_89', 'r90_100'].some(key => Number(row[key]) > 0);
+const hasReportData = row => ['num_takers', 'total_score', 'score_mean', 'mps', 'no_grade', 'r60_74', 'r75_79', 'r80_84', 'r85_89', 'r90_100'].some(key => Number(row[key]) > 0);
+const hasTeacherData = teacher => hasReportData(teacher) || teacher.sections?.some(hasReportData);
 
 export default function GradeDistributionTable({ schoolYear }) {
   const [selectedSchoolYear, setSelectedSchoolYear] = useState(schoolYear || '2026-2027');
@@ -88,7 +89,7 @@ export default function GradeDistributionTable({ schoolYear }) {
         currentRows: reportData.grades.map(g => ({
           id: g.id,
           name: g.name,
-          canDrillDown: g.teachers?.some(hasReportData),
+          canDrillDown: g.teachers?.some(hasTeacherData),
           total_score: g.total_score,
           num_takers: g.num_takers,
           score_mean: g.score_mean,
@@ -130,7 +131,7 @@ export default function GradeDistributionTable({ schoolYear }) {
         currentRows: teachers.map(t => ({
           id: t.id,
           name: t.name,
-          canDrillDown: t.sections?.some(hasReportData),
+          canDrillDown: Boolean(t.sections?.length && hasTeacherData(t)),
           total_score: t.total_score,
           num_takers: t.num_takers,
           score_mean: t.score_mean,
