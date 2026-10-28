@@ -1,0 +1,13 @@
+node_modules
+**/node_modules
+backend/.venv-model
+backend/.model-tools
+backend/.env
+backend/.env.*
+!.env.production.example
+frontend/.env
+frontend/.env.*
+frontend/dist
+.git
+.gitignore
+*.log

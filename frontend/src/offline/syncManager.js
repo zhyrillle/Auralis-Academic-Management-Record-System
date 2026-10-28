@@ -1,4 +1,5 @@
 import db from './db.js';
+import { API_BASE_URL } from '../services/apiConfig.js';
 
 const listeners = new Set();
 const logoutDraftSavers = new Set();
@@ -128,7 +129,8 @@ export async function getSyncSnapshot() {
       .filter(item => item.ownerIdentity === scope.identity).toArray();
     const meta = await db.syncMeta.get('lastSyncedAt:' + scope.identity);
     const recoveryNeeded = await db.outbox.where('status').equals('requires-review').count() > 0 ||
-      await db.offlineScores.filter(item => !item.ownerId).count() > 0;
+      await db.offlineScores.filter(item => !item.ownerId).count() > 0 ||
+      await db.offlineAttendance.filter(item => !item.ownerId).count() > 0;
     if (!isCurrentSession(scope)) return empty;
     return { ...empty, recoveryNeeded, isSyncing: syncTask?.scope.sessionId === scope.sessionId,
       pendingCount: rows.filter(item => item.status === 'pending').length,
@@ -211,8 +213,9 @@ export async function processOutbox() {
         // Older queued score drafts predate the assignment checks. Replay only as
         // their matching current owner; never migrate or adopt another user's drafts.
         const scoreBatch = /\/(?:class-record\/)?scores\/batch(?:\?|$)/.test(item.url);
-        const replayHeaders = scoreBatch ? new Headers(item.headers) : item.headers;
-        if (scoreBatch) replayHeaders.set('X-Auralis-User-Id', scope.ownerId);
+        const attendanceBatch = /\/attendance\/bulk-save(?:\?|$)/.test(item.url);
+        const replayHeaders = (scoreBatch || attendanceBatch) ? new Headers(item.headers) : item.headers;
+        if (scoreBatch || attendanceBatch) replayHeaders.set('X-Auralis-User-Id', scope.ownerId);
         const response = await fetch(item.url, { method: item.method, headers: replayHeaders,
           body: item.body, credentials: item.credentials, signal: task.controller.signal });
         if (!isCurrentSession(scope)) break;
@@ -222,11 +225,12 @@ export async function processOutbox() {
             error, retryCount: item.retryCount + 1 });
           break;
         }
-        await db.transaction('rw', db.outbox, db.offlineScores, async () => {
+        await db.transaction('rw', db.outbox, db.offlineScores, db.offlineAttendance, async () => {
           assertCurrentSession(scope);
           await db.outbox.delete(item.id);
           // A newer edit to the same cell has a different mutationId and must survive.
           await clearOfflineScores(null, null, { scope, mutationId: item.id });
+          await clearOfflineAttendance(null, null, { scope, mutationId: item.id });
         });
         await db.syncMeta.put({ key: 'lastSyncedAt:' + scope.identity, value: Date.now() });
         if (isCurrentSession(scope)) await invalidatePersistentCache();
@@ -284,6 +288,82 @@ export async function clearOfflineScores(subject_offering_id, term, { scope = ge
     (term == null || record.term === term)).delete();
 }
 
+export async function saveOfflineAttendance({ section_id, attendance_date, attendance_sheet_id = null, adviser_assignment_id = null, records = [], apiUrl = null }, scope = getSessionScope()) {
+  assertCurrentSession(scope);
+  const secId = Number(section_id);
+  const cleanDate = String(attendance_date).split('T')[0];
+  await db.transaction('rw', db.offlineAttendance, db.outbox, async () => {
+    assertCurrentSession(scope);
+    const targetUrl = apiUrl || `${API_BASE_URL}/attendance/bulk-save`;
+    const mutationId = await db.outbox.add(mutationRecord({
+      url: targetUrl,
+      headers: { 'X-Auralis-User-Id': scope.ownerId },
+      body: {
+        section_id: secId,
+        attendance_date: cleanDate,
+        adviser_assignment_id: adviser_assignment_id ? Number(adviser_assignment_id) : undefined,
+        records,
+      },
+      label: `Batch Attendance (Section ${secId}, ${cleanDate}, ${records.length} records)`,
+    }, scope));
+
+    for (const rec of records) {
+      const studentSecId = rec.student_section_id || rec.student_id;
+      const existing = await db.offlineAttendance.where('[section_id+attendance_date]').equals([secId, cleanDate])
+        .filter(item => item.ownerId === scope.ownerId && item.ownerIdentity === scope.identity &&
+          String(item.student_section_id) === String(studentSecId)).first();
+
+      const record = {
+        section_id: secId,
+        attendance_date: cleanDate,
+        attendance_sheet_id: rec.attendance_sheet_id || attendance_sheet_id || null,
+        student_section_id: studentSecId,
+        student_id: rec.student_id || null,
+        status: rec.status || 'BLANK',
+        remarks: rec.remarks !== undefined ? rec.remarks : null,
+        ownerId: scope.ownerId,
+        ownerIdentity: scope.identity,
+        mutationId,
+        timestamp: Date.now(),
+      };
+
+      if (existing) await db.offlineAttendance.update(existing.id, record);
+      else await db.offlineAttendance.add(record);
+    }
+  });
+  notify();
+  return true;
+}
+
+export async function getPendingOfflineAttendance(section_id, attendance_date = null, scope = getSessionScope(), { strict = false } = {}) {
+  if (!isCurrentSession(scope)) return [];
+  try {
+    const secId = Number(section_id);
+    let collection;
+    if (attendance_date) {
+      const cleanDate = String(attendance_date).split('T')[0];
+      collection = db.offlineAttendance.where('[section_id+attendance_date]').equals([secId, cleanDate]);
+    } else {
+      collection = db.offlineAttendance.where('section_id').equals(secId);
+    }
+    const records = await collection
+      .filter(record => record.ownerId === scope.ownerId && record.ownerIdentity === scope.identity)
+      .toArray();
+    return isCurrentSession(scope) ? records : [];
+  } catch (error) {
+    if (strict) throw error;
+    return [];
+  }
+}
+
+export async function clearOfflineAttendance(section_id, attendance_date, { scope = getSessionScope(), mutationId } = {}) {
+  if (!scope || mutationId == null) return;
+  await db.offlineAttendance.where('mutationId').equals(mutationId).filter(record =>
+    record.ownerId === scope.ownerId && record.ownerIdentity === scope.identity &&
+    (section_id == null || record.section_id === Number(section_id)) &&
+    (attendance_date == null || record.attendance_date === attendance_date)).delete();
+}
+
 if (typeof window !== 'undefined') {
   window.addEventListener('online', () => { notify(); processOutbox(); });
   window.addEventListener('offline', notify);
@@ -298,4 +378,6 @@ if (typeof window !== 'undefined') {
 }
 
 export default { subscribeSyncStatus, getSyncSnapshot, setPersistentCache, getPersistentCache,
-  enqueueMutation, processOutbox, saveOfflineScores, getPendingOfflineScores, clearOfflineScores };
+  enqueueMutation, processOutbox, saveOfflineScores, getPendingOfflineScores, clearOfflineScores,
+  saveOfflineAttendance, getPendingOfflineAttendance, clearOfflineAttendance };
+

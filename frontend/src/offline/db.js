@@ -40,4 +40,14 @@ db.version(3).stores({
   });
 });
 
+db.version(4).stores({
+  cache: 'key, sessionId, updatedAt, expiresAt',
+  outbox: '++id, ownerId, [ownerId+status], endpoint, method, timestamp, status',
+  syncMeta: 'key',
+  offlineScores: '++id, ownerId, mutationId, [subject_offering_id+term], student_id, assessment_id, timestamp, status',
+  offlineAttendance: '++id, ownerId, mutationId, section_id, [section_id+attendance_date], student_section_id, timestamp, status',
+});
+
+
 export default db;
+

@@ -1,4 +1,5 @@
 import { cachedApiFetch as fetch } from "../../services/navigationCache.js";
+import { API_BASE_URL } from "../../services/apiConfig.js";
 import React, { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -240,22 +241,22 @@ export default function AdviserFeedback() {
     if (!currentUser?.user_id) return;
 
     // 1. Fetch backend stats, active users list, and evaluator feedback in parallel
-    const statsPromise = fetch(`http://localhost:5000/api/feedback/stats/${currentUser.user_id}`)
+    const statsPromise = fetch(`${API_BASE_URL}/feedback/stats/${currentUser.user_id}`)
       .then((res) => (res.ok ? res.json() : null))
       .catch((err) => {
         console.error("Error fetching feedback stats:", err);
         return null;
       });
 
-    const usersPromise = fetch("http://localhost:5000/api/users")
+    const usersPromise = fetch(`${API_BASE_URL}/users`)
       .then((res) => (res.ok ? res.json() : []))
       .catch(() => []);
 
-    const evalFeedbacksPromise = fetch(`http://localhost:5000/api/feedback/evaluator/${currentUser.user_id}`)
+    const evalFeedbacksPromise = fetch(`${API_BASE_URL}/feedback/evaluator/${currentUser.user_id}`)
       .then((res) => (res.ok ? res.json() : []))
       .catch(() => []);
 
-    const windowPromise = fetch("http://localhost:5000/api/feedback/window-status")
+    const windowPromise = fetch(`${API_BASE_URL}/feedback/window-status`)
       .then((res) => (res.ok ? res.json() : null))
       .catch(() => null);
 
@@ -340,7 +341,7 @@ export default function AdviserFeedback() {
     );
 
     // 2. Fetch recent peer comments where currentUser is evaluee
-    fetch(`http://localhost:5000/api/feedback/evaluee/${currentUser.user_id}`)
+    fetch(`${API_BASE_URL}/feedback/evaluee/${currentUser.user_id}`)
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (Array.isArray(data)) {

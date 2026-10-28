@@ -5,7 +5,7 @@ const path = require('path');
 
 const app = express();
 
-app.use(cors());
+app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '7mb' }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
@@ -98,6 +98,26 @@ app.use('/api/grade-transmutation', gradeTransmutationRoutes);
 
 app.get('/', (req, res) => {
   res.json({ status: 'Backend API is running' });
+});
+
+app.get('/api/health', async (req, res) => {
+  try {
+    const pool = require('./config/db');
+    await pool.query('SELECT 1');
+    res.json({
+      status: 'healthy',
+      database: 'connected',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+    });
+  } catch (error) {
+    res.status(503).json({
+      status: 'unhealthy',
+      database: 'disconnected',
+      error: error.message,
+      timestamp: new Date().toISOString(),
+    });
+  }
 });
 
 const PORT = process.env.PORT || 5000;

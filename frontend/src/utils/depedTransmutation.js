@@ -1,6 +1,7 @@
 /**
  * DepEd MATATAG (SY 2026-2027) Transmutation Table & Grade Calculation Helpers (Frontend)
  */
+import { API_BASE_URL } from "../services/apiConfig";
 
 export const TRANSMUTATION_TABLE = [
   { min: 99.50, max: 100.00, grade: 100, transmuted: 100 },
@@ -83,7 +84,7 @@ export function getActiveTransmutationConfig() {
   return activeTransmutationConfig;
 }
 
-export async function initTransmutationConfig(baseUrl = "http://localhost:5000/api") {
+export async function initTransmutationConfig(baseUrl = API_BASE_URL) {
   try {
     const res = await fetch(`${baseUrl}/grade-transmutation`);
     if (res.ok) {

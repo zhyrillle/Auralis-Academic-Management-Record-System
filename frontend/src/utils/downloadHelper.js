@@ -2,6 +2,7 @@ import ExcelJS from "exceljs/dist/exceljs.min.js";
 import schoolLogoUrl from "../assets/gccnhs_logo.png";
 import depedLogoUrl from "../assets/deped_logo.png";
 import { getTransmutedGrade, getGradeDescriptor } from "./depedTransmutation";
+import { API_BASE_URL } from "../services/apiConfig";
 
 /**
  * Helper to fetch image asset as base64 ArrayBuffer for ExcelJS image attachment
@@ -54,7 +55,7 @@ export async function downloadGradingSheetCSV(
       students: students,
     };
 
-    const response = await fetch("http://localhost:5000/api/class-record/export-grading-sheet", {
+    const response = await fetch(`${API_BASE_URL}/class-record/export-grading-sheet`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),

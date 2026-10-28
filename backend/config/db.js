@@ -5,9 +5,10 @@ const mysql = require("mysql2/promise");
 let connectionUri = process.env.DATABASE_URL;
 const isLocal = connectionUri && (connectionUri.includes("localhost") || connectionUri.includes("127.0.0.1"));
 const requiresSsl = process.env.DB_SSL === "true" || (!isLocal && connectionUri && connectionUri.includes("aivencloud.com"));
+const cleanUri = connectionUri ? connectionUri.replace(/[?&]ssl-mode=[^&]+/i, "") : connectionUri;
 
 let pool = mysql.createPool({
-  uri: connectionUri,
+  uri: cleanUri,
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
@@ -21,8 +22,9 @@ console.log(`MySQL Connection Pool Initialized [Target: ${isLocal ? 'LOCAL (127.
 let cloudPool = null;
 if (process.env.AIVEN_DATABASE_URL && isLocal) {
   try {
+    const cleanCloudUri = process.env.AIVEN_DATABASE_URL.replace(/[?&]ssl-mode=[^&]+/i, "");
     cloudPool = mysql.createPool({
-      uri: process.env.AIVEN_DATABASE_URL,
+      uri: cleanCloudUri,
       waitForConnections: true,
       connectionLimit: 5,
       queueLimit: 0,

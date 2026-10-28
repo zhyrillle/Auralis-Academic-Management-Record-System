@@ -8,8 +8,7 @@ import ManageUsersSkeleton from "./manage-users/ManageUsersSkeleton";
 import UserFormModal from "./manage-users/UserFormModal";
 import "../../styles/ManageUsers.css";
 import { isSessionCancellation } from "../../offline/syncManager.js";
-
-const API_URL = "http://localhost:5000/api";
+import { API_BASE_URL as API_URL } from "../../services/apiConfig";
 
 function Icon({ type, size = 22 }) {
   const common = {

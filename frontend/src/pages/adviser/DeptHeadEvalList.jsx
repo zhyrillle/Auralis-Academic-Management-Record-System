@@ -1,4 +1,5 @@
 import { cachedApiFetch as fetch } from "../../services/navigationCache.js";
+import { API_BASE_URL } from "../../services/apiConfig.js";
 import React, { useState, useEffect } from "react";
 import { Search, Pencil, X, Check, Lock } from "lucide-react";
 import backIconUrl from "../../assets/backButton.svg";
@@ -15,7 +16,7 @@ export default function DeptHeadEvalList({ onBack, onCreateFeedback, windowStatu
 
   useEffect(() => {
     // 1. Fetch users from backend
-    fetch("http://localhost:5000/api/users")
+    fetch(`${API_BASE_URL}/users`)
       .then((res) => res.json())
       .then((data) => {
         if (Array.isArray(data)) {
@@ -45,7 +46,7 @@ export default function DeptHeadEvalList({ onBack, onCreateFeedback, windowStatu
 
     // 2. Fetch feedback given by current logged-in user
     if (currentUser?.user_id) {
-      fetch(`http://localhost:5000/api/feedback/evaluator/${currentUser.user_id}`)
+      fetch(`${API_BASE_URL}/feedback/evaluator/${currentUser.user_id}`)
         .then((res) => res.json())
         .then((data) => {
           if (Array.isArray(data)) {

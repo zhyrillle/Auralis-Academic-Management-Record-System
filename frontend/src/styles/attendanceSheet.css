@@ -937,3 +937,52 @@
   color: #94a3b8 !important;
   cursor: default;
 }
+
+/* Google Docs Style Auto-Save / Offline Indicator for Attendance */
+.gdocs-sync-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 10px;
+}
+
+.gdocs-status-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.gdocs-status-item.saved {
+  color: #059669;
+  background: #f0fdf4;
+}
+
+.gdocs-status-item.saving {
+  color: #2563eb;
+  background: #eff6ff;
+}
+
+.gdocs-status-item.offline {
+  color: #b45309;
+  background: #fffbeb;
+  border: 1px solid #fef3c7;
+}
+
+.spin-icon {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+

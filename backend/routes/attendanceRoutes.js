@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
 const Attendance = require('../models/Attendance');
+const AttendanceSheet = require('../models/AttendanceSheet');
 const AuditEvent = require('../models/AuditEvent');
 const cloudSync = require('../services/cloudSyncService');
 
@@ -58,16 +59,37 @@ router.post('/save-remarks', async (req, res) => {
 // POST bulk-save multiple attendance records at once
 router.post('/bulk-save', async (req, res) => {
   try {
-    const { records } = req.body;
+    const { records, section_id, adviser_assignment_id, attendance_date } = req.body;
     if (!Array.isArray(records) || records.length === 0) {
       return res.status(400).json({ error: 'records array is required' });
     }
+
+    // Auto-resolve attendance_sheet_id if records were saved offline before sheet creation
+    let targetSheetId = records[0]?.attendance_sheet_id;
+    if ((!targetSheetId || isNaN(Number(targetSheetId))) && (section_id || adviser_assignment_id) && attendance_date) {
+      const sheetRes = await AttendanceSheet.findOrCreate({
+        section_id: section_id ? Number(section_id) : undefined,
+        adviser_assignment_id: adviser_assignment_id ? Number(adviser_assignment_id) : undefined,
+        attendance_date,
+        user_id: req.headers['x-auralis-user-id'] || null,
+      });
+      targetSheetId = sheetRes?.attendance_sheet_id;
+    }
+
+    if (targetSheetId) {
+      records.forEach(r => {
+        if (!r.attendance_sheet_id || isNaN(Number(r.attendance_sheet_id))) {
+          r.attendance_sheet_id = targetSheetId;
+        }
+      });
+    }
+
     const ids = await Attendance.bulkUpsert(records);
     cloudSync.forwardAttendanceBulkSaveToCloud(records).catch(() => {});
 
     // Audit log attendance record
     try {
-      const sheetId = records[0]?.attendance_sheet_id;
+      const sheetId = records[0]?.attendance_sheet_id || targetSheetId;
       if (sheetId) {
         const [sheetRows] = await db.execute(
           `SELECT ash.attendance_date, sec.section_name, saa.user_id, sy.starts_on, sy.ends_on

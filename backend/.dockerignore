@@ -1,0 +1,11 @@
+node_modules
+.venv-model
+.model-tools
+.env
+.env.*
+!.env.production.example
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.git
+.gitignore

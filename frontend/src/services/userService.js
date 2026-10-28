@@ -1,5 +1,5 @@
 import { cachedApiFetch as fetch } from "./navigationCache";
-const API_BASE_URL = "http://localhost:5000/api";
+import { API_BASE_URL, BACKEND_URL } from "./apiConfig";
 
 const parseResponse = async (response) => {
   const data = await response.json().catch(() => ({}));
@@ -48,7 +48,7 @@ export const resolveProfilePictureUrl = (profilePictureUrl) => {
   if (!profilePictureUrl) return null;
   if (/^(https?:|data:)/.test(profilePictureUrl)) return profilePictureUrl;
 
-  return `http://localhost:5000${profilePictureUrl.startsWith("/") ? "" : "/"}${profilePictureUrl}`;
+  return `${BACKEND_URL}${profilePictureUrl.startsWith("/") ? "" : "/"}${profilePictureUrl}`;
 };
 
 export const forgotPassword = async (email) => {

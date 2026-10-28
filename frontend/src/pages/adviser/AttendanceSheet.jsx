@@ -1,6 +1,6 @@
 import { cachedApiFetch as fetch } from "../../services/navigationCache.js";
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { Calendar, CalendarOff, CheckCircle, AlertTriangle, Info, Save, ChevronLeft, ChevronRight } from "lucide-react";
+import { Calendar, CalendarOff, CheckCircle, AlertTriangle, Info, Save, ChevronLeft, ChevronRight, Cloud, CloudOff, RefreshCw } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import "../../styles/attendanceSheet.css";
 import backIconUrl from "../../assets/backButton.svg";
@@ -10,8 +10,15 @@ import Toast from "../../components/common/Toast.jsx";
 import EmptyState from "../../components/common/EmptyState.jsx";
 import AttendanceDayControl from "../../components/adviser/AttendanceDayControl.jsx";
 import { NO_CLASS_LABELS, noClassDaysFromSheets, classDaysForMonth } from "../../utils/attendanceDays.js";
-
-const BASE_URL = "http://localhost:5000/api";
+import {
+  saveOfflineAttendance,
+  getPendingOfflineAttendance,
+  subscribeSyncStatus,
+  getSyncSnapshot,
+  processOutbox,
+  isNetworkError,
+} from "../../offline/syncManager.js";
+import { API_BASE_URL as BASE_URL } from "../../services/apiConfig";
 
 const DAY_LABELS = ["SU", "M", "T", "W", "Th", "F", "SA"];
 const WEEK_HEADER_COLORS = [
@@ -110,6 +117,53 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
   const [loadError, setLoadError] = useState('');
   const [saving, setSaving] = useState(false);
   const [toasts, setToasts] = useState([]);
+  const [syncStatus, setSyncStatus] = useState(
+    typeof navigator !== "undefined" && !navigator.onLine ? "offline" : "saved"
+  );
+
+  useEffect(() => {
+    const updateSyncState = async () => {
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        setSyncStatus("offline");
+        return;
+      }
+      try {
+        const snapshot = await getSyncSnapshot();
+        const pending = targetSectionId ? await getPendingOfflineAttendance(targetSectionId).catch(() => []) : [];
+        if (pending.length > 0) {
+          setSyncStatus("offline");
+        } else if (snapshot.isSyncing) {
+          setSyncStatus("saving");
+        } else {
+          setSyncStatus("saved");
+        }
+      } catch {
+        setSyncStatus(typeof navigator !== "undefined" && navigator.onLine ? "saved" : "offline");
+      }
+    };
+
+    updateSyncState();
+    const unsubscribe = subscribeSyncStatus(() => {
+      updateSyncState();
+    });
+
+    const handleOnline = () => {
+      setSyncStatus("saving");
+      processOutbox().finally(() => updateSyncState());
+    };
+    const handleOffline = () => {
+      setSyncStatus("offline");
+    };
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    return () => {
+      unsubscribe();
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, [targetSectionId]);
 
   const triggerToast = useCallback((message, type = "error") => {
     const id = Date.now();
@@ -127,6 +181,7 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
     setAdviserAssignment(null);
     loadAll();
   }, [targetSectionId, currentUser?.user_id, currentUser?.id]);
+
 
   const loadAll = async (force = false) => {
     setLoading(true);
@@ -224,35 +279,74 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
 
       // 3. Load all sheets for this section
       const yearQuery = assignment?.school_year_id ? `?schoolYearId=${assignment.school_year_id}` : '';
-      const sheetsRes = await fetch(`${BASE_URL}/attendance-sheets/section/${sectionId}${yearQuery}`, { force: Boolean(force) });
-      if (!sheetsRes.ok) throw new Error('Attendance day markers could not be loaded.');
-      const sheets = await sheetsRes.json();
+      let sheets = [];
+      try {
+        const sheetsRes = await fetch(`${BASE_URL}/attendance-sheets/section/${sectionId}${yearQuery}`, { force: Boolean(force) });
+        if (sheetsRes.ok) sheets = await sheetsRes.json();
+      } catch (sheetsErr) {
+        console.warn("[AttendanceSheet] Could not load sheets from network:", sheetsErr);
+      }
       const byDate = {};
-      sheets.forEach(sh => {
-        const d = sh.attendance_date?.split("T")[0] || sh.attendance_date;
-        byDate[d] = sh.attendance_sheet_id;
-      });
+      if (Array.isArray(sheets)) {
+        sheets.forEach(sh => {
+          const d = sh.attendance_date?.split("T")[0] || sh.attendance_date;
+          byDate[d] = sh.attendance_sheet_id;
+        });
+        setNoClassDays(noClassDaysFromSheets(sheets));
+      }
       setSheetsByDate(byDate);
-      setNoClassDays(noClassDaysFromSheets(sheets));
 
       // 4. Load attendance records for this section
-      const attRes = await fetch(`${BASE_URL}/attendance/section/${sectionId}${yearQuery}`, { force: Boolean(force) });
-      if (!attRes.ok) throw new Error('Attendance records could not be loaded.');
-      const attRows = await attRes.json();
+      let attRows = [];
+      try {
+        const attRes = await fetch(`${BASE_URL}/attendance/section/${sectionId}${yearQuery}`, { force: Boolean(force) });
+        if (attRes.ok) attRows = await attRes.json();
+      } catch (attErr) {
+        console.warn("[AttendanceSheet] Could not load attendance records from network:", attErr);
+      }
       const attMap = {};
       const remMap = {};
-      attRows.forEach(row => {
-        const d = row.attendance_date?.split("T")[0] || row.attendance_date;
-        const key = `${row.student_section_id}-${d}`;
-        attMap[key] = row.status;
-        if (row.student_id) {
-          attMap[`${row.student_id}-${d}`] = row.status;
+      if (Array.isArray(attRows)) {
+        attRows.forEach(row => {
+          const d = row.attendance_date?.split("T")[0] || row.attendance_date;
+          const key = `${row.student_section_id}-${d}`;
+          attMap[key] = row.status;
+          if (row.student_id) {
+            attMap[`${row.student_id}-${d}`] = row.status;
+          }
+          if (row.remarks) {
+            remMap[row.student_section_id] = row.remarks;
+            if (row.student_id) remMap[row.student_id] = row.remarks;
+          }
+        });
+      }
+
+      // 5. Merge any pending offline attendance records
+      try {
+        const pendingOffline = await getPendingOfflineAttendance(sectionId);
+        if (Array.isArray(pendingOffline) && pendingOffline.length > 0) {
+          console.log(`[AttendanceSheet] Restoring ${pendingOffline.length} pending offline attendance records`);
+          pendingOffline.forEach(p => {
+            const d = p.attendance_date;
+            const sSecId = p.student_section_id;
+            if (p.status && p.status !== 'BLANK') {
+              attMap[`${sSecId}-${d}`] = p.status;
+              if (p.student_id) attMap[`${p.student_id}-${d}`] = p.status;
+            } else {
+              delete attMap[`${sSecId}-${d}`];
+              if (p.student_id) delete attMap[`${p.student_id}-${d}`];
+            }
+            if (p.remarks !== undefined && p.remarks !== null) {
+              remMap[sSecId] = p.remarks;
+              if (p.student_id) remMap[p.student_id] = p.remarks;
+            }
+          });
+          setSyncStatus("offline");
         }
-        if (row.remarks) {
-          remMap[row.student_section_id] = row.remarks;
-          if (row.student_id) remMap[row.student_id] = row.remarks;
-        }
-      });
+      } catch (offErr) {
+        console.warn("Failed to merge offline attendance records:", offErr);
+      }
+
       setAttendanceMap(attMap);
       setRemarksMap(remMap);
 
@@ -317,25 +411,37 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
   // ── Helper to find or create attendance sheet for a date ──
   const ensureSheetForDate = async (dateStr) => {
     if (sheetsByDate[dateStr]) return sheetsByDate[dateStr];
-    const sheetRes = await apiFetch(`${BASE_URL}/attendance-sheets/find-or-create`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        section_id: targetSectionId,
-        adviser_assignment_id: adviserAssignment?.adviser_assignment_id || undefined,
-        user_id: currentUser?.user_id || currentUser?.id,
-        attendance_scope: "SECTION",
-        attendance_date: dateStr,
-      }),
-    });
-    if (!sheetRes.ok) {
-      const errData = await sheetRes.json().catch(() => ({}));
-      throw new Error(errData.error || "Failed to create attendance sheet");
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      return null;
     }
-    const sheetData = await sheetRes.json();
-    const sheetId = sheetData.attendance_sheet_id;
-    setSheetsByDate(prev => ({ ...prev, [dateStr]: sheetId }));
-    return sheetId;
+    try {
+      const sheetRes = await apiFetch(`${BASE_URL}/attendance-sheets/find-or-create`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          section_id: targetSectionId,
+          adviser_assignment_id: adviserAssignment?.adviser_assignment_id || undefined,
+          user_id: currentUser?.user_id || currentUser?.id,
+          attendance_scope: "SECTION",
+          attendance_date: dateStr,
+        }),
+      });
+      if (!sheetRes.ok) {
+        const errData = await sheetRes.json().catch(() => ({}));
+        throw new Error(errData.error || "Failed to create attendance sheet");
+      }
+      const sheetData = await sheetRes.json();
+      const sheetId = sheetData.attendance_sheet_id;
+      if (sheetId) {
+        setSheetsByDate(prev => ({ ...prev, [dateStr]: sheetId }));
+      }
+      return sheetId;
+    } catch (err) {
+      if (isNetworkError(err) || (typeof navigator !== "undefined" && !navigator.onLine)) {
+        return null;
+      }
+      throw err;
+    }
   };
 
   // ── Handle cell click: toggle Blank → P → L → A → Blank ──
@@ -377,22 +483,40 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
       return next;
     });
 
+    const recordPayload = {
+      attendance_sheet_id: sheetsByDate[dateStr] || null,
+      student_section_id: studentSectionId,
+      student_id: studentId,
+      status: newStatus || "BLANK",
+      remarks: remarksMap[studentSectionId] || (studentId ? remarksMap[studentId] : null) || null,
+    };
+
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      await saveOfflineAttendance({
+        section_id: targetSectionId,
+        attendance_date: dateStr,
+        attendance_sheet_id: sheetsByDate[dateStr] || null,
+        adviser_assignment_id: adviserAssignment?.adviser_assignment_id || null,
+        records: [recordPayload],
+      });
+      setSyncStatus("offline");
+      return;
+    }
+
     // Save to backend
     try {
       setSaving(true);
       const sheetId = await ensureSheetForDate(dateStr);
+      if (sheetId) recordPayload.attendance_sheet_id = sheetId;
 
       const saveRes = await apiFetch(`${BASE_URL}/attendance/bulk-save`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          records: [{
-            attendance_sheet_id: sheetId,
-            student_section_id: studentSectionId,
-            student_id: studentId,
-            status: newStatus || "BLANK",
-            remarks: remarksMap[studentSectionId] || (studentId ? remarksMap[studentId] : null) || null,
-          }],
+          section_id: targetSectionId,
+          attendance_date: dateStr,
+          adviser_assignment_id: adviserAssignment?.adviser_assignment_id || null,
+          records: [recordPayload],
         }),
       });
 
@@ -400,7 +524,20 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
         const errData = await saveRes.json().catch(() => ({}));
         throw new Error(errData.error || "Failed to save attendance");
       }
+      setSyncStatus("saved");
     } catch (err) {
+      if (isNetworkError(err) || (typeof navigator !== "undefined" && !navigator.onLine)) {
+        console.warn("[AttendanceSheet] Network error while saving, stored offline:", err.message);
+        await saveOfflineAttendance({
+          section_id: targetSectionId,
+          attendance_date: dateStr,
+          attendance_sheet_id: sheetsByDate[dateStr] || null,
+          adviser_assignment_id: adviserAssignment?.adviser_assignment_id || null,
+          records: [recordPayload],
+        });
+        setSyncStatus("offline");
+        return;
+      }
       console.error("Error saving attendance:", err);
       triggerToast(`Failed to save attendance: ${err.message}`, "error");
       // Rollback
@@ -425,7 +562,10 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
     if (!isEditableDate || saving || selectedNoClassReason || !targetSectionId || students.length === 0) return;
     try {
       setSaving(true);
-      const sheetId = await ensureSheetForDate(TODAY);
+      let sheetId = sheetsByDate[TODAY] || null;
+      if (typeof navigator === "undefined" || navigator.onLine) {
+        try { sheetId = await ensureSheetForDate(TODAY); } catch (e) { console.warn("Could not ensure sheet online:", e); }
+      }
 
       const newMapUpdates = {};
       const records = students.map(stu => {
@@ -445,10 +585,28 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
 
       setAttendanceMap(prev => ({ ...prev, ...newMapUpdates }));
 
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        await saveOfflineAttendance({
+          section_id: targetSectionId,
+          attendance_date: TODAY,
+          attendance_sheet_id: sheetId,
+          adviser_assignment_id: adviserAssignment?.adviser_assignment_id || null,
+          records,
+        });
+        setSyncStatus("offline");
+        triggerToast("Saved offline. Will sync automatically when back online.", "info");
+        return;
+      }
+
       const saveRes = await apiFetch(`${BASE_URL}/attendance/bulk-save`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ records }),
+        body: JSON.stringify({
+          section_id: targetSectionId,
+          attendance_date: TODAY,
+          adviser_assignment_id: adviserAssignment?.adviser_assignment_id || null,
+          records,
+        }),
       });
 
       if (!saveRes.ok) {
@@ -456,8 +614,30 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
         throw new Error(errData.error || "Failed to save attendance");
       }
 
+      setSyncStatus("saved");
       triggerToast("Marked all learners as Present for today!", "success");
     } catch (err) {
+      if (isNetworkError(err) || (typeof navigator !== "undefined" && !navigator.onLine)) {
+        await saveOfflineAttendance({
+          section_id: targetSectionId,
+          attendance_date: TODAY,
+          attendance_sheet_id: sheetsByDate[TODAY] || null,
+          adviser_assignment_id: adviserAssignment?.adviser_assignment_id || null,
+          records: students.map(stu => {
+            const sSecId = stu.student_section_id || stu.student_id || stu.id;
+            return {
+              attendance_sheet_id: sheetsByDate[TODAY] || null,
+              student_section_id: sSecId,
+              student_id: stu.student_id || stu.id,
+              status: "P",
+              remarks: remarksMap[sSecId] || null,
+            };
+          }),
+        });
+        setSyncStatus("offline");
+        triggerToast("Saved offline. Will sync automatically when back online.", "info");
+        return;
+      }
       console.error("Error marking all present:", err);
       triggerToast(`Failed: ${err.message}`, "error");
     } finally {
@@ -470,7 +650,10 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
     if (!isEditableDate || saving || selectedNoClassReason || !targetSectionId) return;
     try {
       setSaving(true);
-      const sheetId = await ensureSheetForDate(TODAY);
+      let sheetId = sheetsByDate[TODAY] || null;
+      if (typeof navigator === "undefined" || navigator.onLine) {
+        try { sheetId = await ensureSheetForDate(TODAY); } catch (e) { console.warn("Could not ensure sheet online:", e); }
+      }
 
       const records = students.map(stu => {
         const sSecId = stu.student_section_id || stu.student_id || stu.id;
@@ -485,10 +668,28 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
         };
       });
 
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        await saveOfflineAttendance({
+          section_id: targetSectionId,
+          attendance_date: TODAY,
+          attendance_sheet_id: sheetId,
+          adviser_assignment_id: adviserAssignment?.adviser_assignment_id || null,
+          records,
+        });
+        setSyncStatus("offline");
+        triggerToast("Saved offline. Will sync automatically when back online.", "info");
+        return;
+      }
+
       const saveRes = await apiFetch(`${BASE_URL}/attendance/bulk-save`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ records }),
+        body: JSON.stringify({
+          section_id: targetSectionId,
+          attendance_date: TODAY,
+          adviser_assignment_id: adviserAssignment?.adviser_assignment_id || null,
+          records,
+        }),
       });
 
       if (!saveRes.ok) {
@@ -496,8 +697,31 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
         throw new Error(errData.error || "Failed to save attendance");
       }
 
+      setSyncStatus("saved");
       triggerToast("Attendance saved successfully!", "success");
     } catch (err) {
+      if (isNetworkError(err) || (typeof navigator !== "undefined" && !navigator.onLine)) {
+        await saveOfflineAttendance({
+          section_id: targetSectionId,
+          attendance_date: TODAY,
+          attendance_sheet_id: sheetsByDate[TODAY] || null,
+          adviser_assignment_id: adviserAssignment?.adviser_assignment_id || null,
+          records: students.map(stu => {
+            const sSecId = stu.student_section_id || stu.student_id || stu.id;
+            const currentStatus = attendanceMap[`${sSecId}-${TODAY}`] || attendanceMap[`${stu.student_section_id}-${TODAY}`] || attendanceMap[`${stu.student_id}-${TODAY}`] || null;
+            return {
+              attendance_sheet_id: sheetsByDate[TODAY] || null,
+              student_section_id: sSecId,
+              student_id: stu.student_id || stu.id,
+              status: currentStatus || "BLANK",
+              remarks: remarksMap[sSecId] || null,
+            };
+          }),
+        });
+        setSyncStatus("offline");
+        triggerToast("Saved offline. Will sync automatically when back online.", "info");
+        return;
+      }
       console.error("Error saving all attendance:", err);
       triggerToast(`Failed to save attendance: ${err.message}`, "error");
     } finally {
@@ -517,24 +741,44 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
   // ── Save remarks on blur or Enter ──
   const handleRemarksBlur = async (studentSectionId, val, studentId = null) => {
     if (!targetSectionId || noClassDays[selectedDate]) return;
+    const targetDate = selectedDate || TODAY;
+    const cleanVal = val !== undefined && val !== null ? String(val).trim() : null;
+    const currentStatus = attendanceMap[`${studentSectionId}-${targetDate}`] ||
+      (studentId ? attendanceMap[`${studentId}-${targetDate}`] : null) ||
+      null;
+
+    const recordPayload = {
+      attendance_sheet_id: sheetsByDate[targetDate] || null,
+      student_section_id: studentSectionId,
+      student_id: studentId,
+      status: currentStatus || "P",
+      remarks: cleanVal,
+    };
+
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      await saveOfflineAttendance({
+        section_id: targetSectionId,
+        attendance_date: targetDate,
+        attendance_sheet_id: sheetsByDate[targetDate] || null,
+        adviser_assignment_id: adviserAssignment?.adviser_assignment_id || null,
+        records: [recordPayload],
+      });
+      setSyncStatus("offline");
+      return;
+    }
+
     try {
-      const targetDate = selectedDate || TODAY;
       const sheetId = await ensureSheetForDate(targetDate);
-      const currentStatus = attendanceMap[`${studentSectionId}-${targetDate}`] ||
-        (studentId ? attendanceMap[`${studentId}-${targetDate}`] : null) ||
-        null;
+      if (sheetId) recordPayload.attendance_sheet_id = sheetId;
 
       const saveRes = await apiFetch(`${BASE_URL}/attendance/bulk-save`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          records: [{
-            attendance_sheet_id: sheetId,
-            student_section_id: studentSectionId,
-            student_id: studentId,
-            status: currentStatus || "P",
-            remarks: val !== undefined && val !== null ? String(val).trim() : null,
-          }],
+          section_id: targetSectionId,
+          attendance_date: targetDate,
+          adviser_assignment_id: adviserAssignment?.adviser_assignment_id || null,
+          records: [recordPayload],
         }),
       });
 
@@ -542,7 +786,19 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
         const errData = await saveRes.json().catch(() => ({}));
         throw new Error(errData.error || `Failed with status ${saveRes.status}`);
       }
+      setSyncStatus("saved");
     } catch (err) {
+      if (isNetworkError(err) || (typeof navigator !== "undefined" && !navigator.onLine)) {
+        await saveOfflineAttendance({
+          section_id: targetSectionId,
+          attendance_date: targetDate,
+          attendance_sheet_id: sheetsByDate[targetDate] || null,
+          adviser_assignment_id: adviserAssignment?.adviser_assignment_id || null,
+          records: [recordPayload],
+        });
+        setSyncStatus("offline");
+        return;
+      }
       console.error("Error saving remarks:", err);
       triggerToast(`Failed to save remark: ${err.message}`, "error");
     }
@@ -696,7 +952,61 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
             <img src={backIconUrl} alt="Back" width={17} height={17} />
           </button>
           <div>
-            <h1 className="att-title">Learner Attendance Conversion Tool</h1>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+              <h1 className="att-title" style={{ margin: 0 }}>Learner Attendance Conversion Tool</h1>
+              {/* GOOGLE DOCS STYLE AUTO-SAVE / OFFLINE INDICATOR */}
+              <div
+                className="gdocs-sync-status"
+                title={
+                  syncStatus === "offline"
+                    ? (typeof navigator !== "undefined" && navigator.onLine
+                        ? "Pending sync. Click to sync now."
+                        : "Working offline - changes will sync when online")
+                    : syncStatus === "saving"
+                    ? "Saving changes to cloud..."
+                    : "All changes automatically saved to cloud"
+                }
+              >
+                {syncStatus === "saving" && (
+                  <span className="gdocs-status-item saving">
+                    <RefreshCw size={14} className="spin-icon" />
+                    <span>Saving...</span>
+                  </span>
+                )}
+                {syncStatus === "saved" && (
+                  <span className="gdocs-status-item saved">
+                    <Cloud size={15} />
+                    <span>All changes saved to cloud</span>
+                  </span>
+                )}
+                {syncStatus === "offline" && (
+                  <span
+                    className="gdocs-status-item offline"
+                    style={{ cursor: typeof navigator !== "undefined" && navigator.onLine ? "pointer" : "default" }}
+                    onClick={() => {
+                      if (typeof navigator !== "undefined" && navigator.onLine) {
+                        setSyncStatus("saving");
+                        processOutbox()
+                          .then(() => setSyncStatus("saved"))
+                          .catch(() => setSyncStatus("saved"));
+                      }
+                    }}
+                    title={
+                      typeof navigator !== "undefined" && navigator.onLine
+                        ? "Click to sync your offline changes now"
+                        : "Attendance saved safely to device. Will automatically sync when online."
+                    }
+                  >
+                    <CloudOff size={15} />
+                    <span>
+                      {typeof navigator !== "undefined" && navigator.onLine
+                        ? "Pending Sync (Click to sync)"
+                        : "Saved offline (Device)"}
+                    </span>
+                  </span>
+                )}
+              </div>
+            </div>
             <span className="att-subtitle">School Form 2 (SF2) Daily Attendance & Monthly Record</span>
           </div>
         </div>

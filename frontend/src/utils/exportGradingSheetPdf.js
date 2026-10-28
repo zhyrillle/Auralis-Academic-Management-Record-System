@@ -1,5 +1,6 @@
 import depedLogoUrl from "../assets/deped_logo.png";
 import depedGifLogoUrl from "../assets/deped-logo.gif";
+import { API_BASE_URL } from "../services/apiConfig";
 
 /**
  * Helper to format student name as: First Name Middle Initial Last Name
@@ -657,7 +658,7 @@ export async function exportGradingSheetPdf({
   } else {
     // DOWNLOAD PDF BUTTON: Generate authentic vector PDF using Chrome headless (matches native print 100%)
     try {
-      const response = await fetch("http://localhost:5000/api/class-record/export-grading-sheet-pdf", {
+      const response = await fetch(`${API_BASE_URL}/class-record/export-grading-sheet-pdf`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ html: htmlContent, fileName }),
