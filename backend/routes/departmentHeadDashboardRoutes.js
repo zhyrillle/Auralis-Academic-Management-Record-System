@@ -364,6 +364,7 @@ router.get('/grade-distribution-report', async (req, res) => {
       SELECT 
         so.subject_offering_id,
         so.section_id,
+        so.school_year_id,
         sec.section_name,
         gl.grade_level_id,
         gl.grade_level_name,
@@ -408,7 +409,11 @@ router.get('/grade-distribution-report', async (req, res) => {
       });
     });
 
+    const gradeSections = new Map();
+    const seenOfferings = new Set();
     for (const row of offerings) {
+      if (seenOfferings.has(row.subject_offering_id)) continue;
+      seenOfferings.add(row.subject_offering_id);
       const { section_id, section_name, subject_offering_id, grade_level_name, user_id, first_name, last_name } = row;
       const glKey = grade_level_name ? (grade_level_name.startsWith('G') ? grade_level_name : `G${grade_level_name}`) : 'G7';
 
@@ -433,8 +438,8 @@ router.get('/grade-distribution-report', async (req, res) => {
 
       // Enrolled students
       const [students] = await db.query(
-        `SELECT DISTINCT ss.student_id FROM STUDENT_SECTION ss WHERE ss.section_id = ?`,
-        [section_id]
+        `SELECT DISTINCT ss.student_id FROM STUDENT_SECTION ss WHERE ss.section_id = ? AND ss.school_year_id = ?`,
+        [section_id, row.school_year_id]
       ).catch(() => [[]]);
 
       // Quarterly grades
@@ -456,35 +461,44 @@ router.get('/grade-distribution-report', async (req, res) => {
         }
       });
 
-      let noGrade = 0, r60_74 = 0, r75_79 = 0, r80_84 = 0, r85_89 = 0, r90_100 = 0;
-      (students || []).forEach(st => {
-        if (!stGradeMap.has(st.student_id)) {
-          noGrade++;
-        } else {
-          const g = stGradeMap.get(st.student_id);
-          if (g < 75) r60_74++;
-          else if (g <= 79) r75_79++;
-          else if (g <= 84) r80_84++;
-          else if (g <= 89) r85_89++;
-          else r90_100++;
-        }
-      });
-
-      // Terminal Exam Raw Score
+      const targetTermName = ['1st', '2nd', '3rd'][termIdNum - 1];
+      const [termRows] = await db.query(`SELECT at.term_id FROM ACADEMIC_TERM at
+        WHERE at.school_year_id = ? AND (UPPER(at.term_name) = UPPER(?) OR at.term_name LIKE ?) LIMIT 1`,
+        [row.school_year_id, targetTermName, `%${termIdNum}%`]);
+      const targetTermId = termRows[0]?.term_id || null;
+      // 3. Calculate Mean and MPS for this section using Terminal Examination (TE) raw scores
       let teTotalScore = 0;
       let teNumTakers = 0;
       let teScoreMean = 0;
       let teMps = 0;
+      let teMaxScore = 50;
 
       const [sheets] = await db.query(
-        `SELECT grade_sheet_id FROM GRADE_SHEET WHERE subject_offering_id = ? AND (term_id = ? OR term_id = ?) LIMIT 1`,
-        [subject_offering_id, termIdNum, `T${termIdNum}`]
+        `SELECT gs.grade_sheet_id, gs.term_id, gs.workflow_status, gs.submitted_at
+         FROM GRADE_SHEET gs
+         LEFT JOIN ACADEMIC_TERM at ON at.term_id = gs.term_id
+         WHERE gs.subject_offering_id = ?
+           AND (
+             gs.term_id = ?
+             OR gs.term_id = ?
+             OR at.term_name LIKE ?
+             OR UPPER(at.term_name) = UPPER(?)
+           )
+         LIMIT 1`,
+        [
+          subject_offering_id,
+          targetTermId || termIdNum,
+          termIdNum,
+          `%${termIdNum}%`,
+          targetTermName || (rawTerm === '1' ? '1st' : rawTerm === '2' ? '2nd' : '3rd'),
+        ]
       ).catch(() => [[]]);
 
       if (sheets && sheets.length > 0) {
         const gradeSheetId = sheets[0].grade_sheet_id;
+
         const [activities] = await db.query(
-          `SELECT ga.activity_id, ga.activity_name, ct.component_code
+          `SELECT ga.activity_id, ga.activity_name, ga.highest_possible_score, ct.component_code
            FROM GRADE_ACTIVITY ga
            LEFT JOIN SUBJECT_COMPONENT_WEIGHT scw ON scw.subj_comp_weight_id = ga.subj_comp_weight_id
            LEFT JOIN COMPONENT_TYPE ct ON ct.component_type_id = scw.component_type_id
@@ -492,49 +506,76 @@ router.get('/grade-distribution-report', async (req, res) => {
           [gradeSheetId]
         ).catch(() => [[]]);
 
-        let teActId = null;
-        (activities || []).forEach(a => {
+        // Prioritize Terminal Exam / Quarterly Exam over regular daily works
+        let teAct = (activities || []).find((a) => {
           const aName = String(a.activity_name || '').toUpperCase();
           const code = String(a.component_code || '').toUpperCase();
-          if (code === 'QA' || code === 'STE' || code === 'EX' || aName.includes('EXAM') || aName.includes('QUARTERLY') || aName.includes('TE')) {
-            if (!/\b(ST1|ST2|SUMMATIVE\s*1|SUMMATIVE\s*2)\b/i.test(aName)) {
-              if (/\b(TE|TERM\s*EXAM|QUARTERLY\s*ASSESSMENT|QUARTERLY)\b/i.test(aName) || !teActId) {
-                teActId = a.activity_id;
-              }
-            }
-          }
+          return (code === 'QA' || code === 'EX' || /\b(TERM\s*EXAM|QUARTERLY\s*ASSESSMENT|QUARTERLY\s*EXAM|PERIODICAL\s*EXAM)\b/i.test(aName)) &&
+                 !/\b(WRITTEN|WORK|PERFORMANCE|TASK|ST1|ST2|SUMMATIVE)\b/i.test(aName);
         });
 
-        if (teActId) {
+        if (!teAct) {
+          teAct = (activities || []).find((a) => {
+            const aName = String(a.activity_name || '').toUpperCase();
+            const code = String(a.component_code || '').toUpperCase();
+            return (code === 'QA' || code === 'STE' || code === 'EX' || /\b(EXAM|QUARTERLY|TE)\b/i.test(aName)) &&
+                   !/\b(WRITTEN|WORK|PERFORMANCE|TASK)\b/i.test(aName);
+          });
+        }
+
+        if (!teAct && activities.length > 0) {
+          teAct = activities[activities.length - 1];
+        }
+
+        if (teAct) {
+          teMaxScore = Number(teAct.highest_possible_score) || 50;
           const [scoreRows] = await db.query(
             `SELECT sc.raw_score
              FROM SCORE sc
              JOIN STUDENT_SECTION ss ON ss.student_section_id = sc.student_section_id
              WHERE sc.activity_id = ? AND ss.section_id = ? AND sc.raw_score IS NOT NULL AND sc.raw_score != ''`,
-            [teActId, section_id]
+            [teAct.activity_id, section_id]
           ).catch(() => [[]]);
 
-          (scoreRows || []).forEach(sc => {
+          (scoreRows || []).forEach((sc) => {
             const val = Number(sc.raw_score);
             if (!isNaN(val)) {
               teTotalScore += val;
               teNumTakers += 1;
             }
           });
+
+          if (teNumTakers > 0) {
+            teScoreMean = Math.round((teTotalScore / teNumTakers) * 100) / 100;
+            teMps = Math.round(((teScoreMean / teMaxScore) * 100) * 100) / 100;
+          }
         }
       }
 
-      if (teNumTakers === 0 && stGradeMap.size > 0) {
-        for (const val of stGradeMap.values()) {
-          teTotalScore += val;
-          teNumTakers += 1;
-        }
-        teScoreMean = teNumTakers > 0 ? Math.round((teTotalScore / teNumTakers) * 100) / 100 : 0;
-        teMps = teScoreMean;
-      } else if (teNumTakers > 0) {
-        teScoreMean = Math.round((teTotalScore / teNumTakers) * 100) / 100;
-        teMps = Math.round(((teScoreMean / 50) * 100) * 100) / 100;
+      // Fallback: If no activity score rows, but valid quarterly grades exist in STUDENT_GRADE
+      if (teNumTakers === 0 && Array.from(stGradeMap.values()).length > 0) {
+        const sumGrades = Array.from(stGradeMap.values()).reduce((acc, g) => acc + g, 0);
+        teTotalScore = Math.round(sumGrades * 100) / 100;
+        teNumTakers = Array.from(stGradeMap.values()).length;
+        teScoreMean = Math.round((sumGrades / teNumTakers) * 100) / 100;
+        teMps = teScoreMean; // Quarterly grade is already on a 0-100 percentage scale
       }
+
+      let noGrade = 0, r60_74 = 0, r75_79 = 0, r80_84 = 0, r85_89 = 0, r90_100 = 0;
+      const submitted = sheets[0] ? (sheets[0].workflow_status === "SUBMITTED" || sheets[0].submitted_at != null) : stGradeMap.size > 0;
+      (submitted ? students || [] : []).forEach(st => {
+        if (!stGradeMap.has(st.student_id)) {
+          noGrade++;
+        } else {
+          const g = stGradeMap.get(st.student_id);
+          if (g < 75) r60_74++;
+          else if (g >= 75 && g <= 79) r75_79++;
+          else if (g >= 80 && g <= 84) r80_84++;
+          else if (g >= 85 && g <= 89) r85_89++;
+          else if (g >= 90 && g <= 100) r90_100++;
+          else r60_74++;
+        }
+      });
 
       const secObj = {
         id: section_id,
@@ -551,12 +592,16 @@ router.get('/grade-distribution-report', async (req, res) => {
         r90_100,
       };
 
-      // Only add to teacher hierarchy if a teacher is assigned
-      if (user_id && first_name) {
-        const teacherName = `${first_name} ${last_name}`.trim();
-        if (!glObj.teachers.has(user_id)) {
-          glObj.teachers.set(user_id, {
-            id: user_id,
+      if (!gradeSections.has(glKey)) gradeSections.set(glKey, []);
+      gradeSections.get(glKey).push(secObj);
+
+      // Retain sections with results even when a teacher assignment is missing.
+      {
+        const teacherKey = user_id || "unassigned";
+        const teacherName = [first_name, last_name].filter(Boolean).join(" ").trim() || (user_id ? "Assigned teacher" : "Unassigned teacher");
+        if (!glObj.teachers.has(teacherKey)) {
+          glObj.teachers.set(teacherKey, {
+            id: teacherKey,
             name: teacherName,
             total_score: 0,
             num_takers: 0,
@@ -572,7 +617,7 @@ router.get('/grade-distribution-report', async (req, res) => {
           });
         }
 
-        const tObj = glObj.teachers.get(user_id);
+        const tObj = glObj.teachers.get(teacherKey);
         tObj.sections.push(secObj);
         tObj.total_score += secObj.total_score;
         tObj.num_takers += secObj.num_takers;
@@ -604,9 +649,13 @@ router.get('/grade-distribution-report', async (req, res) => {
     let grand85_89 = 0;
     let grand90_100 = 0;
 
+    const weightedMps = rows => {
+      const takers = rows.reduce((sum, row) => sum + row.num_takers, 0);
+      return takers ? Math.round(rows.reduce((sum, row) => sum + row.mps * row.num_takers, 0) / takers * 100) / 100 : 0;
+    };
     const resultGrades = Array.from(gradeMap.values()).map(glObj => {
       glObj.score_mean = glObj.num_takers > 0 ? Math.round((glObj.total_score / glObj.num_takers) * 100) / 100 : 0;
-      glObj.mps = glObj.num_takers > 0 ? Math.round(((glObj.score_mean / 50) * 100) * 100) / 100 : 0;
+      glObj.mps = weightedMps(gradeSections.get(glObj.id) || []);
       glObj.total_score = Math.round(glObj.total_score * 100) / 100;
 
       grandTotalScore += glObj.total_score;
@@ -620,7 +669,7 @@ router.get('/grade-distribution-report', async (req, res) => {
 
       const teacherList = Array.from(glObj.teachers.values()).map(tObj => {
         tObj.score_mean = tObj.num_takers > 0 ? Math.round((tObj.total_score / tObj.num_takers) * 100) / 100 : 0;
-        tObj.mps = tObj.num_takers > 0 ? Math.round(((tObj.score_mean / 50) * 100) * 100) / 100 : 0;
+        tObj.mps = weightedMps(tObj.sections);
         tObj.total_score = Math.round(tObj.total_score * 100) / 100;
         return tObj;
       });
@@ -632,7 +681,7 @@ router.get('/grade-distribution-report', async (req, res) => {
     });
 
     const grandMean = grandNumTakers > 0 ? Math.round((grandTotalScore / grandNumTakers) * 100) / 100 : 0;
-    const grandMps = grandNumTakers > 0 ? Math.round(((grandMean / 50) * 100) * 100) / 100 : 0;
+    const grandMps = weightedMps(resultGrades);
 
     const summary = {
       name: 'Total',

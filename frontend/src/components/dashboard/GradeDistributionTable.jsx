@@ -3,6 +3,9 @@ import { Eye, ArrowLeft } from 'lucide-react';
 import { getDeptGradeDistributionReport } from '../../services/dashboardApi';
 import '../../styles/performanceReport.css';
 
+const hasReportData = row => ['num_takers', 'total_score', 'score_mean', 'mps', 'no_grade', 'r60_74', 'r75_79', 'r80_84', 'r85_89', 'r90_100'].some(key => Number(row[key]) > 0);
+const hasTeacherData = teacher => hasReportData(teacher) || teacher.sections?.some(hasReportData);
+
 export default function GradeDistributionTable({ schoolYear }) {
   const [selectedSchoolYear, setSelectedSchoolYear] = useState(schoolYear || '2026-2027');
   const [selectedTerm, setSelectedTerm] = useState('1');
@@ -86,7 +89,7 @@ export default function GradeDistributionTable({ schoolYear }) {
         currentRows: reportData.grades.map(g => ({
           id: g.id,
           name: g.name,
-          canDrillDown: g.teachers && g.teachers.length > 0,
+          canDrillDown: hasReportData(g) || Boolean(g.teachers?.some(hasTeacherData)),
           total_score: g.total_score,
           num_takers: g.num_takers,
           score_mean: g.score_mean,
@@ -107,7 +110,7 @@ export default function GradeDistributionTable({ schoolYear }) {
 
     if (drillDown.level === 'teacher') {
       const selectedGrade = reportData.grades.find(g => g.id === drillDown.gradeId);
-      const teachers = selectedGrade?.teachers || [];
+      const teachers = (selectedGrade?.teachers || []).filter(teacher => teacher.id !== "unassigned");
 
       // Summary row for this grade level
       const gradeSummary = selectedGrade ? {
@@ -128,7 +131,7 @@ export default function GradeDistributionTable({ schoolYear }) {
         currentRows: teachers.map(t => ({
           id: t.id,
           name: t.name,
-          canDrillDown: t.sections && t.sections.length > 0,
+          canDrillDown: Boolean(t.sections?.length && hasTeacherData(t)),
           total_score: t.total_score,
           num_takers: t.num_takers,
           score_mean: t.score_mean,
@@ -357,7 +360,7 @@ export default function GradeDistributionTable({ schoolYear }) {
                       <td>
                         <div className="dept-name-cell">
                           <span>{row.name}</span>
-                          {row.canDrillDown ? (
+                          {drillDown.level !== 'section' && (row.canDrillDown ? (
                             <button
                               type="button"
                               className="dept-eye-btn"
@@ -372,13 +375,13 @@ export default function GradeDistributionTable({ schoolYear }) {
                               type="button"
                               className="dept-eye-btn disabled"
                               disabled
-                              title={drillDown.level === 'section' ? 'End of breakdown' : 'No data available'}
+                              title="No data available"
                               aria-label="No data available"
                               tabIndex={-1}
                             >
                               <Eye size={16} />
                             </button>
-                          )}
+                          ))}
                         </div>
                       </td>
                       <td>{row.total_score !== undefined ? Number(row.total_score).toFixed(2) : '0.00'}</td>
@@ -452,7 +455,7 @@ export default function GradeDistributionTable({ schoolYear }) {
                       <td style={{ textAlign: 'left' }}>
                         <div className="dept-name-cell">
                           <span>{row.name}</span>
-                          {row.canDrillDown ? (
+                          {drillDown.level !== 'section' && (row.canDrillDown ? (
                             <button
                               type="button"
                               className="dept-eye-btn"
@@ -467,13 +470,13 @@ export default function GradeDistributionTable({ schoolYear }) {
                               type="button"
                               className="dept-eye-btn disabled"
                               disabled
-                              title={drillDown.level === 'section' ? 'End of breakdown' : 'No data available'}
+                              title="No data available"
                               aria-label="No data available"
                               tabIndex={-1}
                             >
                               <Eye size={16} />
                             </button>
-                          )}
+                          ))}
                         </div>
                       </td>
                       <td>{row.no_grade ?? 0}</td>
