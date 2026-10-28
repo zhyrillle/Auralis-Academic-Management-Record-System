@@ -242,6 +242,38 @@ export default function UserManagement() {
 
   useEffect(() => () => { formRequestId.current += 1; profileRequestId.current += 1; }, []);
 
+  // Background auto-revalidation (every 4 seconds + window focus / visibility change)
+  useEffect(() => {
+    let isFetching = false;
+    const revalidate = async () => {
+      if (isFetching || formMode || savingUser || deletingUser) return;
+      isFetching = true;
+      try {
+        await userQuery.refresh();
+      } catch (_) {
+      } finally {
+        isFetching = false;
+      }
+    };
+
+    const interval = setInterval(revalidate, 4000);
+
+    const handleFocusOrVisible = () => {
+      if (document.visibilityState === "visible") {
+        revalidate();
+      }
+    };
+
+    window.addEventListener("focus", handleFocusOrVisible);
+    document.addEventListener("visibilitychange", handleFocusOrVisible);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", handleFocusOrVisible);
+      document.removeEventListener("visibilitychange", handleFocusOrVisible);
+    };
+  }, [formMode, savingUser, deletingUser, userQuery]);
+
   const getUserDepartment = (user) => {
     if (!user) return "-";
     const role = getDisplayRole(user);
