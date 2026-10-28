@@ -145,7 +145,18 @@ class DeptHeadMonitoringService {
     });
     const sections = directory.sections.filter(section => selectedId === null || section.sectionId === selectedId).map(section => {
       const members = learners.filter(learner => learner.sectionId === section.sectionId);
+      const results = { passed: 0, failed: 0 };
+      for (const learner of members) {
+        if (learner.screeningStatus !== 'Complete') continue;
+        const row = learner.screening;
+        const threshold = Number(row.score_threshold);
+        if (!Number.isInteger(threshold) || threshold <= 0) continue;
+        const total = ['literal', 'inferential', 'critical'].reduce((sum, part) => sum + Number(row[part + '_score']), 0);
+        results[total >= threshold ? 'passed' : 'failed']++;
+      }
       return { ...section, learnerCount: members.length,
+        screeningPassed: screening.available ? results.passed : null,
+        screeningFailed: screening.available ? results.failed : null,
         screeningComplete: screening.available ? members.filter(learner => learner.screeningStatus === 'Complete').length : null,
         screeningIncomplete: screening.available ? members.filter(learner => learner.screeningStatus === 'Incomplete').length : null,
         postTestComplete: postTest.available ? members.filter(learner => learner.postTestStatus === 'Complete').length : null,

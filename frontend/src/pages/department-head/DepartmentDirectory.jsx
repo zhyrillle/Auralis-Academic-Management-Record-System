@@ -21,6 +21,7 @@ import {
   useDepartmentContext,
 } from "../../services/deptHeadMonitoringApi";
 import DeptClassRecord from "./DeptClassRecord";
+import PhilIriOverview from "./PhilIriOverview";
 import DeptPhilIriDetail from "./DeptPhilIriDetail";
 import "../../styles/departmentMonitoring.css";
 
@@ -248,6 +249,7 @@ export default function DepartmentDirectory({ mode = "records" }) {
       ) : (
         <>
 
+          {philIri && <PhilIriOverview sections={filtered} available={directory.data?.availability?.screening} />}
           <div className="section-card-grid dept-monitor-grid">
             {filtered.map((section) => (
               <ClassCard key={section.sectionId} className="section-card dept-adviser-card"

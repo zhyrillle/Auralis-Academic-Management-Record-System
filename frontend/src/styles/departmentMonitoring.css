@@ -206,3 +206,15 @@
 @media(max-width:1050px) { .dept-monitor-page .dept-main-cards { grid-template-columns:minmax(0,1fr); } .dept-monitor-page .dept-stats-row { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media(max-width:640px) { .dept-monitor-page { width:calc(100% - 24px); padding-top:4px; } .dept-monitor-header { flex-direction:column; align-items:flex-start; gap:10px; } .dept-monitor-toolbar { padding:12px; gap:10px; } .dept-monitor-toolbar .search-bar-container { flex-basis:100%; } .dept-monitor-toolbar .dropdown-select { flex:1 1 135px; width:auto; } .dept-monitor-grid { grid-template-columns:minmax(0,1fr); } .dept-monitor-stats { grid-template-columns:1fr; gap:10px; } .dept-monitor-page .student-admin-pagination { flex-wrap:wrap; } .dept-monitor-panel-heading { flex-direction:column; align-items:stretch; } .dept-monitor-panel-heading .search-bar-container { max-width:none !important; } .dept-monitor-page .dept-card { padding:15px; } .dept-monitor-page .dept-comparative-row { grid-template-columns:32px minmax(30px,1fr) 90px 30px; gap:6px; } .dept-monitor-page .dept-comparative-counts { min-width:0; } .dept-monitor-page .dept-passed-count,.dept-monitor-page .dept-failed-count { font-size:10px; } }
 @media(prefers-reduced-motion:reduce) { .dept-monitor-details,.dept-monitor-spin { animation:none; } .dept-monitor-page * { transition:none !important; } }
+
+.dept-phil-overview { padding:24px; margin-bottom:24px; background:#fff; border:1px solid #e1e8f2; border-radius:16px; box-shadow:0 4px 16px rgb(15 23 42 / 4%); min-width:0; }
+.dept-phil-overview h2 { margin:0 0 6px; font-size:18px; color:#123062; }
+.dept-phil-overview header p,.dept-phil-overview__note { color:#52657f; font-size:12px; line-height:1.6; margin:0; }
+.dept-phil-overview__totals { display:flex; flex-wrap:wrap; gap:16px 28px; margin:20px 0; }
+.dept-phil-overview__totals span { display:inline-flex; align-items:center; gap:8px; }
+.dept-phil-overview__totals strong { color:#123062; font-size:20px; }
+.dept-phil-overview__totals i { width:10px; height:10px; border-radius:3px; }
+.dept-phil-overview__passed { background:#168449; }
+.dept-phil-overview__failed { background:#dc5252; }
+.dept-phil-overview__note { margin-top:14px; }
+@media(max-width:640px) { .dept-phil-overview { padding:16px; } }
