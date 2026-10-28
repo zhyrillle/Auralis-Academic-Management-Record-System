@@ -339,8 +339,7 @@ export default function PrincipalReports() {
                     <span className="pr-skeleton" style={{ width: "60%", height: 20 }} />
                     <span className="pr-skeleton" style={{ width: "40%", height: 14 }} />
                     <span className="pr-skeleton" style={{ width: "50%", height: 16 }} />
-                    <span className="pr-skeleton" style={{ width: "100%", height: 16, marginTop: "auto" }} />
-                    <span className="pr-skeleton" style={{ width: "100%", height: 38, borderRadius: 999 }} />
+                    <span className="pr-skeleton" style={{ width: "100%", height: 38, borderRadius: 999, marginTop: "auto" }} />
                   </div>
                 ))}
               </div>
@@ -374,14 +373,16 @@ export default function PrincipalReports() {
                         <span>{sec.studentCount} student{sec.studentCount === 1 ? "" : "s"}</span>
                       </div>
 
-                      <button
-                        type="button"
-                        className="pr-class-cta-btn"
-                        aria-label={`View reports for ${secGrade} ${secName}`}
-                        onClick={() => setSelectedSection(sec)}
-                      >
-                        <Eye size={17} aria-hidden="true" /> VIEW
-                      </button>
+                      <div className="pr-class-card-actions">
+                        <button
+                          type="button"
+                          className="pr-class-cta-btn"
+                          aria-label={`View reports for ${secGrade} ${secName}`}
+                          onClick={() => setSelectedSection(sec)}
+                        >
+                          <Eye size={17} aria-hidden="true" /> VIEW
+                        </button>
+                      </div>
                     </div>
                   );
                 })}
