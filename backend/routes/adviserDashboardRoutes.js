@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
+const { calculateStudentGrades, TRANSMUTATION_TABLE, weightsFromRows } = require('../utils/depedTransmutation');
 
 /**
  * Normalizes term string ('T1', 'term-1', 'Quarter 1', 1) to standard term code ('T1', 'T2', 'T3')
@@ -1099,12 +1100,7 @@ router.get('/core-values', async (req, res) => {
 router.get('/performance-filters', async (req, res) => {
   try {
     const userId = req.query.userId || req.headers['x-user-id'];
-    const schoolYearId = req.query.schoolYearId;
-    const terms = [
-      { value: '1', label: 'Term 1' },
-      { value: '2', label: 'Term 2' },
-      { value: '3', label: 'Term 3' },
-    ];
+    let schoolYearId = req.query.schoolYearId;
 
     const [syRows] = await db.execute(
       `SELECT school_year_id, starts_on, ends_on, status FROM SCHOOL_YEAR ORDER BY starts_on DESC`
@@ -1119,17 +1115,100 @@ router.get('/performance-filters', async (req, res) => {
       is_active: sy.status === 'ongoing',
     }));
 
+    // Target school year defaults to the ongoing/active year, or first available
+    const activeSy = schoolYears.find((sy) => sy.is_active) || schoolYears[0];
+    const targetSyId = schoolYearId && schoolYearId !== 'all' ? schoolYearId : (activeSy ? activeSy.school_year_id : null);
+
+    // Dynamic academic terms for the school year
+    let currentTermValue = '1';
+    let termOptions = [
+      { value: '1', label: 'Term 1', is_active: false, is_current: false },
+      { value: '2', label: 'Term 2', is_active: false, is_current: false },
+      { value: '3', label: 'Term 3', is_active: false, is_current: false },
+    ];
+
+    if (targetSyId) {
+      const [termRows] = await db.execute(
+        `SELECT term_id, school_year_id, term_name, status FROM ACADEMIC_TERM WHERE school_year_id = ? ORDER BY term_id ASC`,
+        [targetSyId]
+      ).catch(() => [[]]);
+
+      if (termRows && termRows.length > 0) {
+        termOptions = [1, 2, 3].map((pos) => {
+          const matched = termRows.find((tr) => {
+            const name = String(tr.term_name || '').toLowerCase();
+            if (pos === 1) return name.includes('1') || name.startsWith('first') || name.startsWith('1st');
+            if (pos === 2) return name.includes('2') || name.startsWith('second') || name.startsWith('2nd');
+            if (pos === 3) return name.includes('3') || name.startsWith('third') || name.startsWith('3rd');
+            return false;
+          });
+
+          const isOngoing = matched?.status === 'ongoing';
+          if (isOngoing) {
+            currentTermValue = String(pos);
+          }
+
+          return {
+            value: String(pos),
+            label: `Term ${pos}`,
+            term_name: matched?.term_name || `${pos}`,
+            status: matched?.status || null,
+            is_active: isOngoing,
+            is_current: isOngoing,
+          };
+        });
+
+        if (!termOptions.some((t) => t.is_current)) {
+          const completedCount = termRows.filter((r) => r.status === 'completed').length;
+          if (completedCount > 0 && completedCount < 3) {
+            currentTermValue = String(completedCount + 1);
+            if (termOptions[completedCount]) {
+              termOptions[completedCount].is_current = true;
+              termOptions[completedCount].is_active = true;
+            }
+          } else {
+            currentTermValue = '1';
+            termOptions[0].is_current = true;
+            termOptions[0].is_active = true;
+          }
+        }
+      }
+    }
+
     let subjects = [];
     if (userId) {
-      const subjSql = `
-        SELECT DISTINCT s.subject_id, s.subject_name, s.subject_code
-        FROM TEACHER_ASSIGNMENT ta
-        JOIN SUBJECT_OFFERING so ON so.subject_offering_id = ta.subject_offering_id
-        JOIN SUBJECT s ON s.subject_id = so.subject_id
-        WHERE ta.user_id = ? ${schoolYearId && schoolYearId !== 'all' ? 'AND so.school_year_id = ?' : ''}
-        ORDER BY s.subject_name ASC
-      `;
-      const subjParams = schoolYearId && schoolYearId !== 'all' ? [userId, schoolYearId] : [userId];
+      const [taCount] = await db.execute(
+        `SELECT COUNT(*) as cnt FROM TEACHER_ASSIGNMENT WHERE user_id = ?`,
+        [userId]
+      ).catch(() => [[{ cnt: 0 }]]);
+      const hasTeachingAssignments = (taCount?.[0]?.cnt || 0) > 0;
+
+      let subjSql = '';
+      let subjParams = [];
+
+      if (hasTeachingAssignments) {
+        subjSql = `
+          SELECT DISTINCT s.subject_id, s.subject_name, s.subject_code
+          FROM SUBJECT s
+          JOIN SUBJECT_OFFERING so ON so.subject_id = s.subject_id
+          JOIN TEACHER_ASSIGNMENT ta ON ta.subject_offering_id = so.subject_offering_id
+          WHERE ta.user_id = ? ${targetSyId && targetSyId !== 'all' ? 'AND so.school_year_id = ?' : ''}
+          ORDER BY s.subject_name ASC
+        `;
+        subjParams = [userId];
+        if (targetSyId && targetSyId !== 'all') subjParams.push(targetSyId);
+      } else {
+        subjSql = `
+          SELECT DISTINCT s.subject_id, s.subject_name, s.subject_code
+          FROM SUBJECT s
+          JOIN SUBJECT_OFFERING so ON so.subject_id = s.subject_id
+          JOIN SECTION_ADVISER_ASSIGNMENT saa ON saa.section_id = so.section_id AND (saa.school_year_id = so.school_year_id OR saa.school_year_id IS NULL)
+          WHERE saa.user_id = ? ${targetSyId && targetSyId !== 'all' ? 'AND so.school_year_id = ?' : ''}
+          ORDER BY s.subject_name ASC
+        `;
+        subjParams = [userId];
+        if (targetSyId && targetSyId !== 'all') subjParams.push(targetSyId);
+      }
 
       const [rows] = await db.execute(subjSql, subjParams).catch((err) => {
         console.error('Error fetching teacher subjects:', err.message);
@@ -1144,7 +1223,13 @@ router.get('/performance-filters', async (req, res) => {
       }));
     }
 
-    res.json({ schoolYears, terms, subjects });
+    res.json({
+      schoolYears,
+      currentSchoolYearId: activeSy ? activeSy.school_year_id : (schoolYears[0]?.school_year_id || null),
+      currentTerm: currentTermValue,
+      terms: termOptions,
+      subjects,
+    });
   } catch (err) {
     console.error('Error in /performance-filters endpoint:', err);
     res.status(500).json({ error: err.message });
@@ -1173,44 +1258,118 @@ router.get('/grade-range-report', async (req, res) => {
       termCodes = [rawTerm];
     }
 
-    let sectionSql = `
-      SELECT DISTINCT
-        gl.grade_level_id,
-        sec.section_id,
-        sec.section_name,
-        gl.grade_level_name,
-        so.subject_offering_id,
-        s.subject_id,
-        s.subject_name
-      FROM TEACHER_ASSIGNMENT ta
-      JOIN SUBJECT_OFFERING so ON so.subject_offering_id = ta.subject_offering_id
-      JOIN SECTION sec ON sec.section_id = so.section_id
-      JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
-      JOIN SUBJECT s ON s.subject_id = so.subject_id
-    `;
-    const whereConditions = [];
+    // Resolve academic term for target school year to find the accurate term_id
+    const termPos = parseInt(rawTerm, 10) || 1;
+    const termIdNum = termPos;
+    let targetTermId = null;
+    let targetTermName = null;
+
+    if (schoolYearId && schoolYearId !== 'all') {
+      const [termRows] = await db.execute(
+        `SELECT term_id, term_name, status FROM ACADEMIC_TERM WHERE school_year_id = ?`,
+        [schoolYearId]
+      ).catch(() => [[]]);
+
+      const matched = (termRows || []).find((tr) => {
+        const name = String(tr.term_name || '').toLowerCase();
+        if (termPos === 1) return name.includes('1') || name.startsWith('1st') || name.startsWith('first');
+        if (termPos === 2) return name.includes('2') || name.startsWith('2nd') || name.startsWith('second');
+        if (termPos === 3) return name.includes('3') || name.startsWith('3rd') || name.startsWith('third');
+        return false;
+      });
+
+      if (matched) {
+        targetTermId = matched.term_id;
+        targetTermName = matched.term_name;
+      }
+    }
+
+    let sectionSql = '';
     const sectionParams = [];
 
     if (userId) {
-      whereConditions.push(`ta.user_id = ?`);
-      sectionParams.push(userId);
-    }
+      const [taCount] = await db.execute(
+        `SELECT COUNT(*) as cnt FROM TEACHER_ASSIGNMENT WHERE user_id = ?`,
+        [userId]
+      ).catch(() => [[{ cnt: 0 }]]);
+      const hasTeachingAssignments = (taCount?.[0]?.cnt || 0) > 0;
 
-    if (subjectId && subjectId !== 'all') {
-      whereConditions.push(`s.subject_id = ?`);
-      sectionParams.push(subjectId);
+      if (hasTeachingAssignments) {
+        sectionSql = `
+          SELECT DISTINCT
+            gl.grade_level_id,
+            sec.section_id,
+            sec.section_name,
+            gl.grade_level_name,
+            so.subject_offering_id,
+            s.subject_id,
+            s.subject_name
+          FROM TEACHER_ASSIGNMENT ta
+          JOIN SUBJECT_OFFERING so ON so.subject_offering_id = ta.subject_offering_id
+          JOIN SECTION sec ON sec.section_id = so.section_id
+          JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
+          JOIN SUBJECT s ON s.subject_id = so.subject_id
+          WHERE ta.user_id = ?
+          ${schoolYearId && schoolYearId !== 'all' ? 'AND so.school_year_id = ?' : ''}
+          ${subjectId && subjectId !== 'all' ? 'AND s.subject_id = ?' : ''}
+          ORDER BY gl.grade_level_id ASC, sec.section_name ASC
+        `;
+        sectionParams.push(userId);
+        if (schoolYearId && schoolYearId !== 'all') sectionParams.push(schoolYearId);
+        if (subjectId && subjectId !== 'all') sectionParams.push(subjectId);
+      } else {
+        sectionSql = `
+          SELECT DISTINCT
+            gl.grade_level_id,
+            sec.section_id,
+            sec.section_name,
+            gl.grade_level_name,
+            so.subject_offering_id,
+            s.subject_id,
+            s.subject_name
+          FROM SECTION_ADVISER_ASSIGNMENT saa
+          JOIN SECTION sec ON sec.section_id = saa.section_id
+          JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
+          LEFT JOIN SUBJECT_OFFERING so ON so.section_id = sec.section_id AND (so.school_year_id = saa.school_year_id OR so.school_year_id IS NULL)
+          LEFT JOIN SUBJECT s ON s.subject_id = so.subject_id
+          WHERE saa.user_id = ?
+          ${schoolYearId && schoolYearId !== 'all' ? 'AND saa.school_year_id = ?' : ''}
+          ${subjectId && subjectId !== 'all' ? 'AND s.subject_id = ?' : ''}
+          ORDER BY gl.grade_level_id ASC, sec.section_name ASC
+        `;
+        sectionParams.push(userId);
+        if (schoolYearId && schoolYearId !== 'all') sectionParams.push(schoolYearId);
+        if (subjectId && subjectId !== 'all') sectionParams.push(subjectId);
+      }
+    } else {
+      sectionSql = `
+        SELECT DISTINCT
+          gl.grade_level_id,
+          sec.section_id,
+          sec.section_name,
+          gl.grade_level_name,
+          so.subject_offering_id,
+          s.subject_id,
+          s.subject_name
+        FROM SUBJECT_OFFERING so
+        JOIN SECTION sec ON sec.section_id = so.section_id
+        JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
+        JOIN SUBJECT s ON s.subject_id = so.subject_id
+      `;
+      const whereConditions = [];
+      if (subjectId && subjectId !== 'all') {
+        whereConditions.push(`s.subject_id = ?`);
+        sectionParams.push(subjectId);
+      }
+      if (schoolYearId && schoolYearId !== 'all') {
+        whereConditions.push(`so.school_year_id = ?`);
+        sectionParams.push(schoolYearId);
+      }
+      if (whereConditions.length > 0) {
+        sectionSql += ` WHERE ` + whereConditions.join(' AND ');
+      }
+      sectionSql += ` ORDER BY gl.grade_level_id ASC, sec.section_name ASC`;
     }
-
-    if (schoolYearId && schoolYearId !== 'all') {
-      whereConditions.push(`so.school_year_id = ?`);
-      sectionParams.push(schoolYearId);
-    }
-
-    if (whereConditions.length > 0) {
-      sectionSql += ` WHERE ` + whereConditions.join(' AND ');
-    }
-
-    sectionSql += ` ORDER BY gl.grade_level_id ASC, sec.section_name ASC`;
 
     let [sections] = await db.execute(sectionSql, sectionParams).catch((err) => {
       console.error('Error querying sections in grade-range-report:', err.message);
@@ -1227,12 +1386,14 @@ router.get('/grade-range-report', async (req, res) => {
       const { section_id, section_name, subject_offering_id } = secRow;
 
       // 1. Get enrolled students for this section
-      const [students] = await db.execute(
-        `SELECT DISTINCT ss.student_id
-         FROM STUDENT_SECTION ss
-         WHERE ss.section_id = ?`,
-        [section_id]
-      ).catch((err) => {
+      const studentSql = schoolYearId && schoolYearId !== 'all'
+        ? `SELECT DISTINCT ss.student_id, ss.student_section_id FROM STUDENT_SECTION ss WHERE ss.section_id = ? AND ss.school_year_id = ?`
+        : `SELECT DISTINCT ss.student_id, ss.student_section_id FROM STUDENT_SECTION ss WHERE ss.section_id = ?`;
+      const studentParams = schoolYearId && schoolYearId !== 'all'
+        ? [section_id, schoolYearId]
+        : [section_id];
+
+      const [students] = await db.execute(studentSql, studentParams).catch((err) => {
         console.error('Error querying students for section:', err.message);
         return [[]];
       });
@@ -1262,6 +1423,32 @@ router.get('/grade-range-report', async (req, res) => {
           validGradesList.push(numGrade);
         }
       });
+      // 2b. Check if this section's grade sheet for this term has been officially SUBMITTED
+      const [sheetCheck] = await db.execute(
+        `SELECT gs.grade_sheet_id, gs.workflow_status, gs.submitted_at
+         FROM GRADE_SHEET gs
+         LEFT JOIN ACADEMIC_TERM at ON at.term_id = gs.term_id
+         WHERE gs.subject_offering_id = ?
+           AND (
+             gs.term_id = ?
+             OR gs.term_id = ?
+             OR at.term_name LIKE ?
+             OR UPPER(at.term_name) = UPPER(?)
+           )
+         LIMIT 1`,
+        [
+          subject_offering_id,
+          targetTermId || termIdNum,
+          termIdNum,
+          `%${termIdNum}%`,
+          targetTermName || (rawTerm === '1' ? '1st' : rawTerm === '2' ? '2nd' : '3rd'),
+        ]
+      ).catch(() => [[]]);
+
+      const matchedSheet = sheetCheck && sheetCheck.length > 0 ? sheetCheck[0] : null;
+      const isSubmitted = matchedSheet
+        ? (matchedSheet.workflow_status === 'SUBMITTED' || matchedSheet.submitted_at !== null)
+        : (validGradesList.length > 0);
 
       let noGrade = 0;
       let r60_74 = 0;
@@ -1269,40 +1456,59 @@ router.get('/grade-range-report', async (req, res) => {
       let r80_84 = 0;
       let r85_89 = 0;
       let r90_100 = 0;
+      let total = 0;
 
-      (students || []).forEach((st) => {
-        if (!gradeMap.has(st.student_id)) {
-          noGrade++;
-        } else {
-          const g = gradeMap.get(st.student_id);
-          if (g < 75) r60_74++;
-          else if (g >= 75 && g <= 79) r75_79++;
-          else if (g >= 80 && g <= 84) r80_84++;
-          else if (g >= 85 && g <= 89) r85_89++;
-          else if (g >= 90 && g <= 100) r90_100++;
-          else r60_74++;
-        }
-      });
+      // Grade Range data is only calculated and displayed if the section's grades have been officially submitted
+      if (isSubmitted) {
+        (students || []).forEach((st) => {
+          if (!gradeMap.has(st.student_id)) {
+            noGrade++;
+          } else {
+            const g = gradeMap.get(st.student_id);
+            if (g < 75) r60_74++;
+            else if (g >= 75 && g <= 79) r75_79++;
+            else if (g >= 80 && g <= 84) r80_84++;
+            else if (g >= 85 && g <= 89) r85_89++;
+            else if (g >= 90 && g <= 100) r90_100++;
+            else r60_74++;
+          }
+        });
+        total = noGrade + r60_74 + r75_79 + r80_84 + r85_89 + r90_100;
+      }
 
-      const total = noGrade + r60_74 + r75_79 + r80_84 + r85_89 + r90_100;
-
-      // Calculate Mean and MPS for this section using Terminal Examination (TE) raw scores
+      // 3. Calculate Mean and MPS for this section using Terminal Examination (TE) raw scores
       let teTotalScore = 0;
       let teNumTakers = 0;
       let teScoreMean = 0;
       let teMps = 0;
+      let teMaxScore = 50;
 
-      const termIdNum = parseInt(rawTerm, 10) || 1;
       const [sheets] = await db.execute(
-        `SELECT grade_sheet_id FROM GRADE_SHEET WHERE subject_offering_id = ? AND (term_id = ? OR term_id = ?) LIMIT 1`,
-        [subject_offering_id, termIdNum, `T${termIdNum}`]
+        `SELECT gs.grade_sheet_id, gs.term_id
+         FROM GRADE_SHEET gs
+         LEFT JOIN ACADEMIC_TERM at ON at.term_id = gs.term_id
+         WHERE gs.subject_offering_id = ?
+           AND (
+             gs.term_id = ?
+             OR gs.term_id = ?
+             OR at.term_name LIKE ?
+             OR UPPER(at.term_name) = UPPER(?)
+           )
+         LIMIT 1`,
+        [
+          subject_offering_id,
+          targetTermId || termIdNum,
+          termIdNum,
+          `%${termIdNum}%`,
+          targetTermName || (rawTerm === '1' ? '1st' : rawTerm === '2' ? '2nd' : '3rd'),
+        ]
       ).catch(() => [[]]);
 
       if (sheets && sheets.length > 0) {
         const gradeSheetId = sheets[0].grade_sheet_id;
 
         const [activities] = await db.execute(
-          `SELECT ga.activity_id, ga.activity_name, ct.component_code
+          `SELECT ga.activity_id, ga.activity_name, ga.highest_possible_score, ct.component_code
            FROM GRADE_ACTIVITY ga
            LEFT JOIN SUBJECT_COMPONENT_WEIGHT scw ON scw.subj_comp_weight_id = ga.subj_comp_weight_id
            LEFT JOIN COMPONENT_TYPE ct ON ct.component_type_id = scw.component_type_id
@@ -1310,26 +1516,35 @@ router.get('/grade-range-report', async (req, res) => {
           [gradeSheetId]
         ).catch(() => [[]]);
 
-        let teActId = null;
-        (activities || []).forEach((a) => {
+        // Prioritize Terminal Exam / Quarterly Exam over regular daily works
+        let teAct = (activities || []).find((a) => {
           const aName = String(a.activity_name || '').toUpperCase();
           const code = String(a.component_code || '').toUpperCase();
-          if (code === 'QA' || code === 'STE' || code === 'EX' || aName.includes('EXAM') || aName.includes('QUARTERLY') || aName.includes('TE')) {
-            if (!/\b(ST1|ST2|SUMMATIVE\s*1|SUMMATIVE\s*2)\b/i.test(aName)) {
-              if (/\b(TE|TERM\s*EXAM|QUARTERLY\s*ASSESSMENT|QUARTERLY)\b/i.test(aName) || !teActId) {
-                teActId = a.activity_id;
-              }
-            }
-          }
+          return (code === 'QA' || code === 'EX' || /\b(TERM\s*EXAM|QUARTERLY\s*ASSESSMENT|QUARTERLY\s*EXAM|PERIODICAL\s*EXAM)\b/i.test(aName)) &&
+                 !/\b(WRITTEN|WORK|PERFORMANCE|TASK|ST1|ST2|SUMMATIVE)\b/i.test(aName);
         });
 
-        if (teActId) {
+        if (!teAct) {
+          teAct = (activities || []).find((a) => {
+            const aName = String(a.activity_name || '').toUpperCase();
+            const code = String(a.component_code || '').toUpperCase();
+            return (code === 'QA' || code === 'STE' || code === 'EX' || /\b(EXAM|QUARTERLY|TE)\b/i.test(aName)) &&
+                   !/\b(WRITTEN|WORK|PERFORMANCE|TASK)\b/i.test(aName);
+          });
+        }
+
+        if (!teAct && activities.length > 0) {
+          teAct = activities[activities.length - 1];
+        }
+
+        if (teAct) {
+          teMaxScore = Number(teAct.highest_possible_score) || 50;
           const [scoreRows] = await db.execute(
             `SELECT sc.raw_score
              FROM SCORE sc
              JOIN STUDENT_SECTION ss ON ss.student_section_id = sc.student_section_id
              WHERE sc.activity_id = ? AND ss.section_id = ? AND sc.raw_score IS NOT NULL AND sc.raw_score != ''`,
-            [teActId, section_id]
+            [teAct.activity_id, section_id]
           ).catch(() => [[]]);
 
           (scoreRows || []).forEach((sc) => {
@@ -1342,9 +1557,18 @@ router.get('/grade-range-report', async (req, res) => {
 
           if (teNumTakers > 0) {
             teScoreMean = Math.round((teTotalScore / teNumTakers) * 100) / 100;
-            teMps = Math.round(((teScoreMean / 50) * 100) * 100) / 100;
+            teMps = Math.round(((teScoreMean / teMaxScore) * 100) * 100) / 100;
           }
         }
+      }
+
+      // Fallback: If no activity score rows, but valid quarterly grades exist in STUDENT_GRADE
+      if (teNumTakers === 0 && validGradesList.length > 0) {
+        const sumGrades = validGradesList.reduce((acc, g) => acc + g, 0);
+        teTotalScore = Math.round(sumGrades * 100) / 100;
+        teNumTakers = validGradesList.length;
+        teScoreMean = Math.round((sumGrades / teNumTakers) * 100) / 100;
+        teMps = teScoreMean; // Quarterly grade is already on a 0-100 percentage scale
       }
 
       const displaySectionName = (subjectId === 'all' || !subjectId) && secRow.subject_name
@@ -1356,13 +1580,16 @@ router.get('/grade-range-report', async (req, res) => {
         section_name: displaySectionName,
         raw_section_name: secRow.section_name,
         subject_name: secRow.subject_name,
-        no_grade: noGrade,
-        r60_74,
-        r75_79,
-        r80_84,
-        r85_89,
-        r90_100,
-        total,
+        is_submitted: Boolean(isSubmitted),
+        submission_status: isSubmitted ? 'SUBMITTED' : (matchedSheet?.workflow_status || 'DRAFT'),
+        submitted_at: matchedSheet?.submitted_at || null,
+        no_grade: isSubmitted ? noGrade : null,
+        r60_74: isSubmitted ? r60_74 : null,
+        r75_79: isSubmitted ? r75_79 : null,
+        r80_84: isSubmitted ? r80_84 : null,
+        r85_89: isSubmitted ? r85_89 : null,
+        r90_100: isSubmitted ? r90_100 : null,
+        total: isSubmitted ? total : (students.length || 0),
         total_score: Math.round(teTotalScore * 100) / 100,
         num_takers: teNumTakers,
         score_mean: teScoreMean,
@@ -1374,21 +1601,36 @@ router.get('/grade-range-report', async (req, res) => {
     let averageRow = null;
 
     if (sectionCount > 0) {
-      const sumNoGrade = reportSections.reduce((a, b) => a + b.no_grade, 0);
-      const sum60_74 = reportSections.reduce((a, b) => a + b.r60_74, 0);
-      const sum75_79 = reportSections.reduce((a, b) => a + b.r75_79, 0);
-      const sum80_84 = reportSections.reduce((a, b) => a + b.r80_84, 0);
-      const sum85_89 = reportSections.reduce((a, b) => a + b.r85_89, 0);
-      const sum90_100 = reportSections.reduce((a, b) => a + b.r90_100, 0);
-      const sumTotal = reportSections.reduce((a, b) => a + b.total, 0);
+      const submittedSections = reportSections.filter((s) => s.is_submitted);
+      const sumNoGrade = submittedSections.reduce((a, b) => a + (Number(b.no_grade) || 0), 0);
+      const sum60_74 = submittedSections.reduce((a, b) => a + (Number(b.r60_74) || 0), 0);
+      const sum75_79 = submittedSections.reduce((a, b) => a + (Number(b.r75_79) || 0), 0);
+      const sum80_84 = submittedSections.reduce((a, b) => a + (Number(b.r80_84) || 0), 0);
+      const sum85_89 = submittedSections.reduce((a, b) => a + (Number(b.r85_89) || 0), 0);
+      const sum90_100 = submittedSections.reduce((a, b) => a + (Number(b.r90_100) || 0), 0);
+      const sumTotal = submittedSections.reduce((a, b) => a + (Number(b.total) || 0), 0);
 
-      const sumTotalScore = reportSections.reduce((a, b) => a + b.total_score, 0);
-      const sumNumTakers = reportSections.reduce((a, b) => a + b.num_takers, 0);
+      const sumTotalScore = reportSections.reduce((a, b) => a + (Number(b.total_score) || 0), 0);
+      const sumNumTakers = reportSections.reduce((a, b) => a + (Number(b.num_takers) || 0), 0);
       const overallMean = sumNumTakers > 0 ? Math.round((sumTotalScore / sumNumTakers) * 100) / 100 : 0;
-      const overallMps = sumNumTakers > 0 ? Math.round(((overallMean / 50) * 100) * 100) / 100 : 0;
+      
+      const weightedMpsSum = reportSections.reduce((acc, sec) => acc + (sec.mps * sec.num_takers), 0);
+      const overallMps = sumNumTakers > 0 ? Math.round((weightedMpsSum / sumNumTakers) * 100) / 100 : 0;
+
+      const sectionsWithScores = reportSections.filter((s) => (Number(s.num_takers) || 0) > 0 || (Number(s.score_mean) || 0) > 0);
+      const meanTargetList = sectionsWithScores.length > 0 ? sectionsWithScores : reportSections;
+      const avgScoreMean = meanTargetList.length > 0
+        ? Math.round((meanTargetList.reduce((acc, s) => acc + (Number(s.score_mean) || 0), 0) / meanTargetList.length) * 100) / 100
+        : 0;
+      const avgMps = meanTargetList.length > 0
+        ? Math.round((meanTargetList.reduce((acc, s) => acc + (Number(s.mps) || 0), 0) / meanTargetList.length) * 100) / 100
+        : 0;
 
       averageRow = {
-        section_name: 'Total',
+        section_name: submittedSections.length === reportSections.length ? 'Total' : 'Total (Submitted)',
+        has_submitted_data: submittedSections.length > 0,
+        submitted_count: submittedSections.length,
+        total_sections: reportSections.length,
         no_grade: sumNoGrade,
         r60_74: sum60_74,
         r75_79: sum75_79,
@@ -1400,6 +1642,8 @@ router.get('/grade-range-report', async (req, res) => {
         num_takers: sumNumTakers,
         score_mean: overallMean,
         mps: overallMps,
+        avg_score_mean: avgScoreMean,
+        avg_mps: avgMps,
       };
     }
 
