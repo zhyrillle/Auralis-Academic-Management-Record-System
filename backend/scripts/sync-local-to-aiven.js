@@ -348,21 +348,19 @@ async function pushLocalToAiven() {
     console.log('✅ Attendance sheets verified and synced to Aiven.');
 
     // 0m. Sync local attendance records to Aiven Cloud
-    const [localAtt] = await localConn.query('SELECT attendance_id, attendance_sheet_id, student_section_id, status, remarks FROM ATTENDANCE;');
+    const [localAtt] = await localConn.query('SELECT attendance_sheet_id, student_section_id, status, remarks FROM ATTENDANCE;');
     console.log(`📝 Checking ${localAtt.length} local attendance records...`);
     if (localAtt.length > 0) {
       const CHUNK_SIZE = 100;
       for (let i = 0; i < localAtt.length; i += CHUNK_SIZE) {
         const chunk = localAtt.slice(i, i + CHUNK_SIZE);
-        const placeholders = chunk.map(() => '(?, ?, ?, ?, ?)').join(', ');
+        const placeholders = chunk.map(() => '(?, ?, ?, ?)').join(', ');
         const flat = [];
-        for (const a of chunk) flat.push(a.attendance_id, a.attendance_sheet_id, a.student_section_id, a.status || 'P', a.remarks || null);
+        for (const a of chunk) flat.push(a.attendance_sheet_id, a.student_section_id, a.status || 'P', a.remarks || null);
         await aivenConn.query(
-          `INSERT INTO ATTENDANCE (attendance_id, attendance_sheet_id, student_section_id, status, remarks)
+          `INSERT INTO ATTENDANCE (attendance_sheet_id, student_section_id, status, remarks)
            VALUES ${placeholders}
            ON DUPLICATE KEY UPDATE
-             attendance_sheet_id = VALUES(attendance_sheet_id),
-             student_section_id = VALUES(student_section_id),
              status = VALUES(status),
              remarks = VALUES(remarks);`,
           flat
@@ -372,17 +370,15 @@ async function pushLocalToAiven() {
     console.log('✅ Attendance records verified and synced to Aiven.');
 
     // 0n. Sync local Phil-IRI assessments and screenings to Aiven Cloud
-    const [localAssessments] = await localConn.query('SELECT phil_iri_id, student_section_id, subject_offering_id, test_type, passage_words_count, words_correct, oral_reading_percent, oral_reading_level, total_comp_items, comp_correct, comp_score_percent, comp_reading_level, overall_reading_level, user_id FROM PHIL_IRI_ASSESSMENT;');
+    const [localAssessments] = await localConn.query('SELECT student_section_id, subject_offering_id, test_type, passage_words_count, words_correct, oral_reading_percent, oral_reading_level, total_comp_items, comp_correct, comp_score_percent, comp_reading_level, overall_reading_level, user_id FROM PHIL_IRI_ASSESSMENT;');
     console.log(`📖 Checking ${localAssessments.length} local Phil-IRI assessments...`);
     if (localAssessments.length > 0) {
       for (const p of localAssessments) {
         await aivenConn.query(
-          `INSERT INTO PHIL_IRI_ASSESSMENT (phil_iri_id, student_section_id, subject_offering_id, test_type, passage_words_count, words_correct, oral_reading_percent, oral_reading_level, total_comp_items, comp_correct, comp_score_percent, comp_reading_level, overall_reading_level, user_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `INSERT INTO PHIL_IRI_ASSESSMENT (student_section_id, subject_offering_id, test_type, passage_words_count, words_correct, oral_reading_percent, oral_reading_level, total_comp_items, comp_correct, comp_score_percent, comp_reading_level, overall_reading_level, user_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON DUPLICATE KEY UPDATE
-             student_section_id = VALUES(student_section_id),
              subject_offering_id = VALUES(subject_offering_id),
-             test_type = VALUES(test_type),
              passage_words_count = VALUES(passage_words_count),
              words_correct = VALUES(words_correct),
              oral_reading_percent = VALUES(oral_reading_percent),
@@ -393,22 +389,21 @@ async function pushLocalToAiven() {
              comp_reading_level = VALUES(comp_reading_level),
              overall_reading_level = VALUES(overall_reading_level),
              user_id = VALUES(user_id);`,
-          [p.phil_iri_id, p.student_section_id, p.subject_offering_id, p.test_type, p.passage_words_count, p.words_correct, p.oral_reading_percent, p.oral_reading_level, p.total_comp_items, p.comp_correct, p.comp_score_percent, p.comp_reading_level, p.overall_reading_level, p.user_id]
+          [p.student_section_id, p.subject_offering_id, p.test_type, p.passage_words_count, p.words_correct, p.oral_reading_percent, p.oral_reading_level, p.total_comp_items, p.comp_correct, p.comp_score_percent, p.comp_reading_level, p.overall_reading_level, p.user_id]
         );
       }
     }
     console.log('✅ Phil-IRI assessments verified and synced to Aiven.');
 
-    const [localScreenings] = await localConn.query('SELECT screening_id, student_section_id, assessed_on, test_level, literal_max, inferential_max, critical_max, score_threshold, test_taken, literal_score, inferential_score, critical_score, recorded_by FROM PHIL_IRI_SCREENING;');
+    const [localScreenings] = await localConn.query('SELECT student_section_id, assessed_on, test_level, literal_max, inferential_max, critical_max, score_threshold, test_taken, literal_score, inferential_score, critical_score, recorded_by FROM PHIL_IRI_SCREENING;');
     console.log(`📊 Checking ${localScreenings.length} local Phil-IRI screenings...`);
     if (localScreenings.length > 0) {
       for (const s of localScreenings) {
         const d = s.assessed_on instanceof Date ? s.assessed_on.toISOString().slice(0, 10) : s.assessed_on;
         await aivenConn.query(
-          `INSERT INTO PHIL_IRI_SCREENING (screening_id, student_section_id, assessed_on, test_level, literal_max, inferential_max, critical_max, score_threshold, test_taken, literal_score, inferential_score, critical_score, recorded_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `INSERT INTO PHIL_IRI_SCREENING (student_section_id, assessed_on, test_level, literal_max, inferential_max, critical_max, score_threshold, test_taken, literal_score, inferential_score, critical_score, recorded_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON DUPLICATE KEY UPDATE
-             student_section_id = VALUES(student_section_id),
              assessed_on = VALUES(assessed_on),
              test_level = VALUES(test_level),
              literal_max = VALUES(literal_max),
@@ -420,7 +415,7 @@ async function pushLocalToAiven() {
              inferential_score = VALUES(inferential_score),
              critical_score = VALUES(critical_score),
              recorded_by = VALUES(recorded_by);`,
-          [s.screening_id, s.student_section_id, d, s.test_level, s.literal_max, s.inferential_max, s.critical_max, s.score_threshold, s.test_taken, s.literal_score, s.inferential_score, s.critical_score, s.recorded_by]
+          [s.student_section_id, d, s.test_level, s.literal_max, s.inferential_max, s.critical_max, s.score_threshold, s.test_taken, s.literal_score, s.inferential_score, s.critical_score, s.recorded_by]
         );
       }
     }
@@ -503,6 +498,8 @@ async function pushLocalToAiven() {
         );
       }
     }
+    console.log('✅ Feedback records verified and synced to Aiven.');
+
     // 0r. Sync local grade sheets to Aiven Cloud
     const [localGradeSheets] = await localConn.query(
       'SELECT grade_sheet_id, subject_offering_id, term_id, workflow_status, lock_status, submitted_at, approved_at, locked_at FROM GRADE_SHEET;'
@@ -571,20 +568,19 @@ async function pushLocalToAiven() {
     }
     console.log('✅ Grade activities verified and synced to Aiven.');
 
-    // 0t. Sync local student grades to Aiven Cloud
+    // 0t. Sync local student grades to Aiven Cloud (omit surrogate student_grade_id to avoid unique key collision)
     const [localStudentGrades] = await localConn.query(
-      'SELECT student_grade_id, subject_offering_id, student_id, student_section_id, term, mapeh_component, mapeh_key, initial_grade, quarterly_grade, remarks FROM STUDENT_GRADE;'
+      'SELECT subject_offering_id, student_id, student_section_id, term, mapeh_component, mapeh_key, initial_grade, quarterly_grade, remarks FROM STUDENT_GRADE;'
     );
     console.log(`🎓 Checking ${localStudentGrades.length} local student quarterly grades...`);
     if (localStudentGrades.length > 0) {
       const CHUNK_SIZE = 100;
       for (let i = 0; i < localStudentGrades.length; i += CHUNK_SIZE) {
         const chunk = localStudentGrades.slice(i, i + CHUNK_SIZE);
-        const placeholders = chunk.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
+        const placeholders = chunk.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
         const flat = [];
         for (const sg of chunk) {
           flat.push(
-            sg.student_grade_id,
             sg.subject_offering_id,
             sg.student_id,
             sg.student_section_id || null,
@@ -597,15 +593,10 @@ async function pushLocalToAiven() {
           );
         }
         await aivenConn.query(
-          `INSERT INTO STUDENT_GRADE (student_grade_id, subject_offering_id, student_id, student_section_id, term, mapeh_component, mapeh_key, initial_grade, quarterly_grade, remarks)
+          `INSERT INTO STUDENT_GRADE (subject_offering_id, student_id, student_section_id, term, mapeh_component, mapeh_key, initial_grade, quarterly_grade, remarks)
            VALUES ${placeholders}
            ON DUPLICATE KEY UPDATE
-             subject_offering_id = VALUES(subject_offering_id),
-             student_id = VALUES(student_id),
              student_section_id = VALUES(student_section_id),
-             term = VALUES(term),
-             mapeh_component = VALUES(mapeh_component),
-             mapeh_key = VALUES(mapeh_key),
              initial_grade = VALUES(initial_grade),
              quarterly_grade = VALUES(quarterly_grade),
              remarks = VALUES(remarks);`,
@@ -615,9 +606,9 @@ async function pushLocalToAiven() {
     }
     console.log('✅ Student quarterly grades verified and synced to Aiven.');
 
-    // 1. Sync ALL local scores to Aiven Cloud
+    // 1. Sync ALL local scores to Aiven Cloud (omit surrogate score_id to avoid unique key collision)
     const [localScores] = await localConn.query(
-      'SELECT score_id, activity_id, student_section_id, raw_score, score_status, teacher_assignment_id, created_at, updated_at FROM SCORE;'
+      'SELECT activity_id, student_section_id, raw_score, score_status, teacher_assignment_id, created_at, updated_at FROM SCORE;'
     );
     console.log(`📊 Checking ${localScores.length} local scores...`);
 
@@ -626,11 +617,10 @@ async function pushLocalToAiven() {
       const CHUNK_SIZE = 100;
       for (let i = 0; i < localScores.length; i += CHUNK_SIZE) {
         const chunk = localScores.slice(i, i + CHUNK_SIZE);
-        const placeholders = chunk.map(() => '(?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
+        const placeholders = chunk.map(() => '(?, ?, ?, ?, ?, ?, ?)').join(', ');
         const flat = [];
         for (const sc of chunk) {
           flat.push(
-            sc.score_id,
             sc.activity_id,
             sc.student_section_id,
             sc.raw_score,
@@ -641,7 +631,7 @@ async function pushLocalToAiven() {
           );
         }
         await aivenConn.query(
-          `INSERT INTO SCORE (score_id, activity_id, student_section_id, raw_score, score_status, teacher_assignment_id, created_at, updated_at)
+          `INSERT INTO SCORE (activity_id, student_section_id, raw_score, score_status, teacher_assignment_id, created_at, updated_at)
            VALUES ${placeholders}
            ON DUPLICATE KEY UPDATE 
              raw_score = VALUES(raw_score),
