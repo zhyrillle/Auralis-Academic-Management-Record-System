@@ -943,7 +943,16 @@ router.get("/management-options", async (req, res) => {
         s.subject_name,
         s.subject_code,
         sec.section_name,
-        gl.grade_level_name
+        gl.grade_level_name,
+        (
+          SELECT ta.user_id
+          FROM TEACHER_ASSIGNMENT ta
+          LEFT JOIN USER u ON u.user_id = ta.user_id
+          WHERE ta.subject_offering_id = so.subject_offering_id
+            AND LOWER(COALESCE(u.account_status, 'active')) = 'active'
+          ORDER BY ta.teacher_assignment_id DESC
+          LIMIT 1
+        ) AS teacher_user_id
       FROM SUBJECT_OFFERING so
       INNER JOIN SECTION sec ON sec.section_id = so.section_id
       INNER JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
@@ -1180,6 +1189,49 @@ const validateSingleSectionAdviser = async (connection, sectionId, userId, schoo
   }
 };
 
+const validateSingleTeacherAssignment = async (connection, teachingAssignments, userId, schoolYear) => {
+  if (!Array.isArray(teachingAssignments) || teachingAssignments.length === 0) return;
+  const seenOfferings = new Set();
+  for (const assign of teachingAssignments) {
+    const soId = assign.subject_offering_id;
+    if (!soId) continue;
+    if (seenOfferings.has(String(soId))) {
+      throw new Error("Duplicate subject assignments detected. Please select distinct subjects.");
+    }
+    seenOfferings.add(String(soId));
+
+    const [existing] = await connection.execute(
+      `
+      SELECT 
+        ta.user_id,
+        CONCAT(COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, '')) AS teacher_name,
+        s.subject_name,
+        sec.section_name
+      FROM TEACHER_ASSIGNMENT ta
+      INNER JOIN USER u ON u.user_id = ta.user_id
+      INNER JOIN SUBJECT_OFFERING so ON so.subject_offering_id = ta.subject_offering_id
+      INNER JOIN SUBJECT s ON s.subject_id = so.subject_id
+      INNER JOIN SECTION sec ON sec.section_id = so.section_id
+      LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = so.school_year_id
+      WHERE ta.subject_offering_id = ?
+        AND ta.user_id <> ?
+        AND LOWER(COALESCE(u.account_status, 'active')) = 'active'
+        AND (sy.status IN ('ACTIVE', 'ONGOING') OR sy.school_year_id = ?)
+      LIMIT 1
+      `,
+      [soId, userId || 0, schoolYear?.school_year_id || 0]
+    );
+
+    if (existing.length > 0) {
+      const t = existing[0];
+      const name = t.teacher_name.trim() || `User #${t.user_id}`;
+      throw new Error(
+        `The subject ${t.subject_name} in section ${t.section_name} is already assigned to ${name}.`
+      );
+    }
+  }
+};
+
 const saveRoleAssignments = async (connection, userId, body, schoolYear) => {
   const { assignedFrom, assignedUntil } = getAssignmentDates(body, schoolYear);
   const role = normalizeRole(body.role);
@@ -1247,6 +1299,10 @@ router.post("/", async (req, res) => {
 
     if ((role === "subject teacher" || req.body.is_adviser) && req.body.adviser_section_id) {
       await validateSingleSectionAdviser(connection, req.body.adviser_section_id, 0, schoolYear);
+    }
+
+    if ((role === "subject teacher" || req.body.is_adviser) && Array.isArray(req.body.teaching_assignments)) {
+      await validateSingleTeacherAssignment(connection, req.body.teaching_assignments, 0, schoolYear);
     }
 
     const hashedPassword = await hashPassword(password);
@@ -1363,6 +1419,10 @@ router.put("/:id", async (req, res) => {
 
     if ((role === "subject teacher" || req.body.is_adviser) && req.body.adviser_section_id) {
       await validateSingleSectionAdviser(connection, req.body.adviser_section_id, userId, schoolYear);
+    }
+
+    if ((role === "subject teacher" || req.body.is_adviser) && Array.isArray(req.body.teaching_assignments)) {
+      await validateSingleTeacherAssignment(connection, req.body.teaching_assignments, userId, schoolYear);
     }
 
     let hashedPassword = null;

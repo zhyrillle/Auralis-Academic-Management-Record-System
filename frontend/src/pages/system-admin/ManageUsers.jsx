@@ -589,6 +589,32 @@ export default function UserManagement() {
       return;
     }
 
+    const subjectIds = nonRowEmptyAssignments.map((a) => String(a.subject_offering_id));
+    if (new Set(subjectIds).size !== subjectIds.length) {
+      setFormError("Duplicate subject assignments detected. Please select distinct subjects.");
+      return;
+    }
+
+    const hasAlreadyAssignedSubject = nonRowEmptyAssignments.some((assign) => {
+      const offering = subjectOfferings.find((so) => String(so.subject_offering_id) === String(assign.subject_offering_id));
+      if (offering?.teacher_user_id && String(offering.teacher_user_id) !== String(formData.user_id || "")) {
+        return true;
+      }
+      return users.some((u) => {
+        if (String(u.user_id) === String(formData.user_id || "")) return false;
+        const status = String(u.account_status || "active").toLowerCase();
+        if (status === "inactive" || status === "archived") return false;
+        return Array.isArray(u.teaching_assignments) && u.teaching_assignments.some(
+          (ta) => String(ta.subject_offering_id) === String(assign.subject_offering_id)
+        );
+      });
+    });
+
+    if (hasAlreadyAssignedSubject) {
+      setFormError("One or more selected subjects are already assigned to another teacher.");
+      return;
+    }
+
     const targetUserId = formData.user_id;
     const dbRole = DISPLAY_TO_DB_ROLE[formData.role] || formData.role.toLowerCase();
 
