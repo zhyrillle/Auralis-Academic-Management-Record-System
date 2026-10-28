@@ -1,32 +1,173 @@
 /* src/styles/attendanceSheet.css - Learner Attendance Conversion Tool (DepEd SF2 Layout) */
 
-.att-day-button { display: inline-flex; align-items: center; gap: 7px; min-height: 36px; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 9px; background: #fff; color: #334155; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
-.att-day-button.is-marked { background: #f1f5f9; }
-.att-day-button:disabled { opacity: .55; cursor: not-allowed; }
-.att-day-dialog { box-sizing: border-box; width: min(480px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: visible; border: 1px solid #e2e8f0; border-radius: 16px; padding: 24px; color: #0f172a; box-shadow: 0 24px 80px #0f172a30; }
-.att-day-dialog::backdrop { background: #0f172a66; }
-.att-day-dialog-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.att-day-dialog h2 { margin: 0; font-size: 18px; }
-.att-day-dialog p { color: #64748b; font-size: 13px; line-height: 1.6; }
-.att-day-dialog-header button { display: grid; place-items: center; border: 0; background: transparent; padding: 4px; cursor: pointer; color: #64748b; }
-.att-day-dialog .dropdown-select { width: 100%; }
-.att-day-dialog .att-day-preservation { background: #f8fafc; border-radius: 8px; padding: 12px; }
-.att-day-dialog .att-day-error { color: #b91c1c; }
-.app-toast.att-toast { position: static; }
-.att-day-dialog-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 20px; }
-.att-day-dialog-actions button { min-height: 36px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px 12px; font: inherit; font-size: 13px; cursor: pointer; }
-.att-day-dialog-actions .att-day-remove { margin-right: auto; color: #475569; background: #fff; }
-.att-day-dialog-actions button:disabled { opacity: .55; cursor: not-allowed; }
-.att-no-class-notice { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; color: #475569; font-size: 13px; line-height: 1.5; }
-.att-no-class-notice svg { flex-shrink: 0; }
-.sf2-table td.sf2-no-class-day, .sf2-table th.sf2-no-class-day { background: #f1f5f9 !important; color: #64748b !important; cursor: default; outline: none; }
-.att-mode-badge.no-classes { background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
-.sf2-no-class-day svg { display: block; margin: 2px auto 0; }
-.legend-badge-box.no-classes { background: #f1f5f9; border: 1px solid #cbd5e1; color: #64748b; }
-.sf2-remarks-input:disabled { background: #f8fafc; color: #64748b; cursor: not-allowed; }
-.att-class-days-note { margin: 0 0 12px; color: #64748b; font-size: 12px; line-height: 1.5; }
+.att-day-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 8px 14px;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  background: #ffffff;
+  color: #334155;
+  font-family: var(--font-dm-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  transition: all 0.18s ease;
+}
+.att-day-button:hover:not(:disabled) {
+  background: #f8fafc;
+  border-color: #94a3b8;
+  color: #1e293b;
+}
+.att-day-button.is-marked {
+  background: #fffbeb;
+  border-color: #fde68a;
+  color: #b45309;
+}
+.att-day-button.is-marked:hover:not(:disabled) {
+  background: #fef3c7;
+  border-color: #fcd34d;
+}
+.att-day-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+}
 
-@media (max-width: 540px) { .att-day-dialog { padding: 18px; } }
+/* Centered No Classes Modal (OverlayPanel variant="modal") */
+.app-overlay.att-day-overlay-modal {
+  z-index: 10000;
+}
+.att-day-overlay-modal .app-overlay__panel {
+  max-width: 490px;
+  overflow: visible;
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.22);
+}
+.att-day-overlay-modal .app-overlay__body {
+  overflow: visible;
+  padding: 22px 28px 24px;
+}
+.att-day-modal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.att-day-modal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.att-day-modal-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.att-day-modal-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+}
+.att-day-modal-date-tag {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  background: #f1f5f9;
+  padding: 3px 9px;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+}
+.att-day-overlay-modal .dropdown-select {
+  width: 100%;
+}
+.att-day-info-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: #f0f7ff;
+  border: 1px solid #bae6fd;
+  border-radius: 10px;
+  padding: 13px 15px;
+  color: #0369a1;
+}
+.att-day-info-card svg {
+  flex-shrink: 0;
+  color: #0284c7;
+  margin-top: 2px;
+}
+.att-day-info-card strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #0c4a6e;
+  margin-bottom: 3px;
+}
+.att-day-info-card p {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: #075985;
+}
+.att-day-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  width: 100%;
+}
+.att-day-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 8px 16px;
+  border-radius: 9px;
+  font-family: var(--font-dm-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  white-space: nowrap;
+}
+.att-day-btn--primary {
+  background: #123062;
+  border: 1px solid #123062;
+  color: #ffffff;
+  box-shadow: 0 1px 3px rgba(18, 48, 98, 0.2);
+}
+.att-day-btn--primary:hover:not(:disabled) {
+  background: #1a428a;
+  border-color: #1a428a;
+}
+.att-day-btn--secondary {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #475569;
+}
+.att-day-btn--secondary:hover:not(:disabled) {
+  background: #f8fafc;
+  border-color: #94a3b8;
+  color: #1e293b;
+}
+.att-day-btn--danger {
+  margin-right: auto;
+  background: #fff5f5;
+  border: 1px solid #fecaca;
+  color: #dc2626;
+}
+.att-day-btn--danger:hover:not(:disabled) {
+  background: #fee2e2;
+  border-color: #fca5a5;
+  color: #b91c1c;
+}
+.att-day-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
 
 .attendance-sheet-container {
   box-sizing: border-box;
@@ -229,6 +370,14 @@
   border: 1px solid #e2e8f0;
 }
 
+.att-mode-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
 .att-mode-badge {
   display: inline-flex;
   align-items: center;
@@ -250,6 +399,43 @@
   background-color: #fee2e2;
   color: #b91c1c;
   border: 1px solid #fecaca;
+}
+
+.att-mode-badge.no-classes {
+  background-color: #fffbeb;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
+/* No-Class Day Alert Banner */
+.att-no-class-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 18px;
+  border: 1px solid #fde68a;
+  border-radius: 10px;
+  background-color: #fffbeb;
+  color: #92400e;
+  font-family: var(--font-dm-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
+  font-size: 13.5px;
+  line-height: 1.5;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.att-no-class-notice svg {
+  flex-shrink: 0;
+  color: #d97706;
+  margin-top: 2px;
+}
+
+.att-no-class-notice span {
+  flex: 1;
+}
+
+.att-no-class-notice strong {
+  color: #78350f;
+  font-weight: 700;
 }
 
 /* ════════════════ SF2 SPREADSHEET TABLE ════════════════ */
@@ -646,7 +832,16 @@
   font-size: 15px;
   font-weight: 800;
   color: #0f172a;
-  margin: 0 0 12px 0;
+  margin: 0 0 4px 0;
+}
+
+.att-class-days-note {
+  font-family: var(--font-dm-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
+  font-size: 13px;
+  font-weight: 500;
+  color: #64748b;
+  margin: 0 0 14px 0;
+  line-height: 1.5;
 }
 
 .att-summary-table {
@@ -728,4 +923,17 @@
   font-size: 13px;
   font-weight: 600;
   color: #334155;
+}
+
+.legend-badge-box.no-classes {
+  background-color: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  color: #64748b;
+}
+
+.sf2-table td.sf2-no-class-day,
+.sf2-table th.sf2-no-class-day {
+  background-color: #f8fafc !important;
+  color: #94a3b8 !important;
+  cursor: default;
 }
