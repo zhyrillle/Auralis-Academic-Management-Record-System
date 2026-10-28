@@ -12,7 +12,7 @@ const parseResponse = async (response) => {
 };
 
 export const getUserProfile = async (userId) => {
-  const response = await fetch(`${API_BASE_URL}/users/${userId}/profile`);
+  const response = await fetch(`${API_BASE_URL}/users/${userId}/profile`, { cache: 'no-store' });
   return parseResponse(response);
 };
 

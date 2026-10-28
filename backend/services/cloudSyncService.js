@@ -1744,53 +1744,38 @@ async function syncClassRecordFromCloud(subjectOfferingId, timeoutMs = 4500) {
 
           const activeActIds = cloudActivities.map((a) => a.activity_id);
           if (activeActIds.length > 0) {
-            // 3. Sync SCORE for active activities
+            // 3. Sync SCORE for active activities using natural key (activity_id, student_section_id)
             const actPlaceholders = activeActIds.map(() => '?').join(',');
             const [cloudScores] = await db.cloudPool.query(
-              `SELECT score_id, activity_id, student_section_id, raw_score, score_status, teacher_assignment_id
+              `SELECT activity_id, student_section_id, raw_score, score_status, teacher_assignment_id
                FROM SCORE WHERE activity_id IN (${actPlaceholders})`,
               activeActIds
             );
 
-            if (cloudScores) {
+            if (cloudScores && cloudScores.length > 0) {
               const CHUNK_SIZE = 100;
               for (let i = 0; i < cloudScores.length; i += CHUNK_SIZE) {
                 const chunk = cloudScores.slice(i, i + CHUNK_SIZE);
-                const placeholders = chunk.map(() => '(?, ?, ?, ?, ?, ?)').join(', ');
+                const placeholders = chunk.map(() => '(?, ?, ?, ?, ?)').join(', ');
                 const flat = [];
                 for (const sc of chunk) {
                   flat.push(
-                    sc.score_id,
                     sc.activity_id,
                     sc.student_section_id,
-                    sc.raw_score !== undefined ? sc.raw_score : null,
-                    sc.score_status || null,
+                    sc.raw_score !== undefined && sc.raw_score !== null ? sc.raw_score : null,
+                    sc.score_status || 'NOT_ENCODED',
                     sc.teacher_assignment_id || null
                   );
                 }
                 await db.execute(
-                  `INSERT INTO SCORE (score_id, activity_id, student_section_id, raw_score, score_status, teacher_assignment_id)
+                  `INSERT INTO SCORE (activity_id, student_section_id, raw_score, score_status, teacher_assignment_id)
                    VALUES ${placeholders}
                    ON DUPLICATE KEY UPDATE
-                     activity_id = VALUES(activity_id),
-                     student_section_id = VALUES(student_section_id),
                      raw_score = VALUES(raw_score),
                      score_status = VALUES(score_status),
                      teacher_assignment_id = VALUES(teacher_assignment_id)`,
                   flat
-                ).catch(() => {});
-              }
-
-              // Prune local scores not in cloud
-              const cloudScoreIds = new Set(cloudScores.map((s) => Number(s.score_id)));
-              const [localScores] = await db.query(
-                `SELECT score_id FROM SCORE WHERE activity_id IN (${actPlaceholders})`,
-                activeActIds
-              );
-              for (const ls of localScores) {
-                if (!cloudScoreIds.has(Number(ls.score_id))) {
-                  await q('DELETE FROM SCORE WHERE score_id = ?', [ls.score_id]);
-                }
+                ).catch((err) => console.warn('[CloudClassRecordSync] Score upsert error:', err.message));
               }
             }
           }
@@ -1798,20 +1783,18 @@ async function syncClassRecordFromCloud(subjectOfferingId, timeoutMs = 4500) {
       }
     }
 
-    // 4. Sync STUDENT_GRADE for this subject offering
+    // 4. Sync STUDENT_GRADE for this subject offering using natural key (subject_offering_id, student_id, term, mapeh_key)
     const [cloudSG] = await db.cloudPool.query(
-      `SELECT student_grade_id, subject_offering_id, student_id, student_section_id, term, mapeh_component, initial_grade, quarterly_grade, remarks
+      `SELECT subject_offering_id, student_id, student_section_id, term, mapeh_component, initial_grade, quarterly_grade, remarks
        FROM STUDENT_GRADE WHERE subject_offering_id = ?`,
       [offId]
     );
-    if (cloudSG) {
+    if (cloudSG && cloudSG.length > 0) {
       for (const g of cloudSG) {
         await db.execute(
-          `INSERT INTO STUDENT_GRADE (student_grade_id, subject_offering_id, student_id, student_section_id, term, mapeh_component, initial_grade, quarterly_grade, remarks)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `INSERT INTO STUDENT_GRADE (subject_offering_id, student_id, student_section_id, term, mapeh_component, initial_grade, quarterly_grade, remarks)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
            ON DUPLICATE KEY UPDATE
-             subject_offering_id = VALUES(subject_offering_id),
-             student_id = VALUES(student_id),
              student_section_id = VALUES(student_section_id),
              term = VALUES(term),
              mapeh_component = VALUES(mapeh_component),
@@ -1819,26 +1802,16 @@ async function syncClassRecordFromCloud(subjectOfferingId, timeoutMs = 4500) {
              quarterly_grade = VALUES(quarterly_grade),
              remarks = VALUES(remarks)`,
           [
-            g.student_grade_id,
             g.subject_offering_id,
             g.student_id,
             g.student_section_id || null,
             g.term,
             g.mapeh_component || null,
-            g.initial_grade !== undefined ? g.initial_grade : null,
-            g.quarterly_grade !== undefined ? g.quarterly_grade : null,
+            g.initial_grade !== undefined && g.initial_grade !== null ? g.initial_grade : null,
+            g.quarterly_grade !== undefined && g.quarterly_grade !== null ? g.quarterly_grade : null,
             g.remarks || null,
           ]
-        ).catch(() => {});
-      }
-
-      // Prune deleted student grades
-      const cloudSgIds = new Set(cloudSG.map((g) => Number(g.student_grade_id)));
-      const [localSG] = await db.query('SELECT student_grade_id FROM STUDENT_GRADE WHERE subject_offering_id = ?', [offId]);
-      for (const lg of localSG) {
-        if (!cloudSgIds.has(Number(lg.student_grade_id))) {
-          await q('DELETE FROM STUDENT_GRADE WHERE student_grade_id = ?', [lg.student_grade_id]);
-        }
+        ).catch((err) => console.warn('[CloudClassRecordSync] Grade upsert error:', err.message));
       }
     }
   })();
