@@ -1,4 +1,4 @@
-import { cachedApiFetch as fetch } from "../../services/navigationCache";
+import { cachedApiFetch as fetch, clearNavigationCache } from "../../services/navigationCache";
 import useCachedQuery from "../../services/useCachedQuery";
 import { cacheKey } from "../../services/navigationCache";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -59,6 +59,15 @@ function Icon({ type, size = 22 }) {
       return (
         <svg {...common}>
           <path d="M12 5v14M5 12h14" />
+        </svg>
+      );
+    case "refresh":
+      return (
+        <svg {...common}>
+          <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+          <path d="M21 3v5h-5" />
+          <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+          <path d="M3 21v-5h5" />
         </svg>
       );
     default:
@@ -599,9 +608,11 @@ export default function UserManagement() {
             <h1>User Management</h1>
             <p>Manage accounts, roles, departments, and teaching assignments.</p>
           </div>
-          <button type="button" className="add-user-btn" onClick={handleAddUser}>
-            <Icon type="plusPerson" size={20} /> Add User
-          </button>
+          <div className="page-header-actions">
+            <button type="button" className="add-user-btn" onClick={handleAddUser}>
+              <Icon type="plusPerson" size={20} /> Add User
+            </button>
+          </div>
         </div>
 
         {userError && <div className="users-state-message users-state-message--error" role="alert">{userError}</div>}

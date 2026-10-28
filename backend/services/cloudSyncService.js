@@ -7,10 +7,86 @@ function formatDate(val) {
   return d.toISOString().slice(0, 10);
 }
 
+async function deleteAdviserAssignmentCascadeLocal(adviserAssignmentId) {
+  const q = (sql, params) => db.query(sql, params).catch(() => {});
+  await q('UPDATE ATTENDANCE_SHEET SET adviser_assignment_id = NULL WHERE adviser_assignment_id = ?', [adviserAssignmentId]);
+  await q('DELETE FROM SECTION_ADVISER_ASSIGNMENT WHERE adviser_assignment_id = ?', [adviserAssignmentId]);
+}
+
+async function deleteTeacherAssignmentCascadeLocal(teacherAssignmentId) {
+  const q = (sql, params) => db.query(sql, params).catch(() => {});
+  await q('UPDATE ATTENDANCE_SHEET SET teacher_assignment_id = NULL WHERE teacher_assignment_id = ?', [teacherAssignmentId]);
+  await q('DELETE tr FROM TEMPORARY_REOPENING tr JOIN GRADE_REOPEN_REQUEST grr ON grr.request_id = tr.request_id WHERE grr.teacher_assignment_id = ?', [teacherAssignmentId]);
+  await q('DELETE FROM GRADE_REOPEN_REQUEST WHERE teacher_assignment_id = ?', [teacherAssignmentId]);
+  await q('DELETE FROM TEACHER_ASSIGNMENT WHERE teacher_assignment_id = ?', [teacherAssignmentId]);
+}
+
+async function deleteSubjectOfferingCascadeLocal(subjectOfferingId) {
+  const q = (sql, params) => db.query(sql, params).catch(() => {});
+  const [taRows] = await db.query('SELECT teacher_assignment_id FROM TEACHER_ASSIGNMENT WHERE subject_offering_id = ?', [subjectOfferingId]).catch(() => [[]]);
+  for (const ta of taRows) {
+    await deleteTeacherAssignmentCascadeLocal(ta.teacher_assignment_id);
+  }
+  const [gsRows] = await db.query('SELECT grade_sheet_id FROM GRADE_SHEET WHERE subject_offering_id = ?', [subjectOfferingId]).catch(() => [[]]);
+  for (const gs of gsRows) {
+    await q('DELETE s FROM SCORE s JOIN GRADE_ACTIVITY ga ON ga.activity_id = s.activity_id WHERE ga.grade_sheet_id = ?', [gs.grade_sheet_id]);
+    await q('DELETE FROM GRADE_ACTIVITY WHERE grade_sheet_id = ?', [gs.grade_sheet_id]);
+    await q('DELETE tr FROM TEMPORARY_REOPENING tr JOIN GRADE_REOPEN_REQUEST grr ON grr.request_id = tr.request_id WHERE grr.grade_sheet_id = ?', [gs.grade_sheet_id]);
+    await q('DELETE FROM GRADE_REOPEN_REQUEST WHERE grade_sheet_id = ?', [gs.grade_sheet_id]);
+    await q('DELETE FROM GRADE_SHEET WHERE grade_sheet_id = ?', [gs.grade_sheet_id]);
+  }
+  await q('UPDATE PHIL_IRI_ASSESSMENT SET subject_offering_id = NULL WHERE subject_offering_id = ?', [subjectOfferingId]);
+  await q('DELETE FROM STUDENT_GRADE WHERE subject_offering_id = ?', [subjectOfferingId]);
+  await q('DELETE FROM SUBJECT_OFFERING WHERE subject_offering_id = ?', [subjectOfferingId]);
+}
+
+async function deleteSectionCascadeLocal(sectionId) {
+  const q = (sql, params) => db.query(sql, params).catch(() => {});
+  const [ssRows] = await db.query('SELECT student_section_id FROM STUDENT_SECTION WHERE section_id = ?', [sectionId]).catch(() => [[]]);
+  for (const ss of ssRows) {
+    await deleteStudentSectionCascadeLocal(ss.student_section_id);
+  }
+
+  const [saaRows] = await db.query('SELECT adviser_assignment_id FROM SECTION_ADVISER_ASSIGNMENT WHERE section_id = ?', [sectionId]).catch(() => [[]]);
+  for (const saa of saaRows) {
+    await deleteAdviserAssignmentCascadeLocal(saa.adviser_assignment_id);
+  }
+
+  const [soRows] = await db.query('SELECT subject_offering_id FROM SUBJECT_OFFERING WHERE section_id = ?', [sectionId]).catch(() => [[]]);
+  for (const so of soRows) {
+    await deleteSubjectOfferingCascadeLocal(so.subject_offering_id);
+  }
+
+  await q('DELETE FROM SECTION WHERE section_id = ?', [sectionId]);
+}
+
+async function deleteStudentCascadeLocal(studentId) {
+  const q = (sql, params) => db.query(sql, params).catch(() => {});
+  const [ssRows] = await db.query('SELECT student_section_id FROM STUDENT_SECTION WHERE student_id = ?', [studentId]).catch(() => [[]]);
+  for (const ss of ssRows) {
+    await q('DELETE FROM ATTENDANCE WHERE student_section_id = ?', [ss.student_section_id]);
+    await q('DELETE FROM PHIL_IRI_ASSESSMENT WHERE student_section_id = ?', [ss.student_section_id]);
+    await q('DELETE FROM PHIL_IRI_SCREENING WHERE student_section_id = ?', [ss.student_section_id]);
+    await q('DELETE FROM SCORE WHERE student_section_id = ?', [ss.student_section_id]);
+  }
+  await q('DELETE FROM STUDENT_GRADE WHERE student_id = ?', [studentId]);
+  await q('DELETE FROM STUDENT_SECTION WHERE student_id = ?', [studentId]);
+  await q('DELETE FROM STUDENT WHERE student_id = ?', [studentId]);
+}
+
+async function deleteStudentSectionCascadeLocal(studentSectionId) {
+  const q = (sql, params) => db.query(sql, params).catch(() => {});
+  await q('DELETE FROM ATTENDANCE WHERE student_section_id = ?', [studentSectionId]);
+  await q('DELETE FROM PHIL_IRI_ASSESSMENT WHERE student_section_id = ?', [studentSectionId]);
+  await q('DELETE FROM PHIL_IRI_SCREENING WHERE student_section_id = ?', [studentSectionId]);
+  await q('DELETE FROM SCORE WHERE student_section_id = ?', [studentSectionId]);
+  await q('DELETE FROM STUDENT_SECTION WHERE student_section_id = ?', [studentSectionId]);
+}
+
 /**
  * Automatically sync sections from Aiven Cloud into local MySQL.
  */
-async function syncSectionsFromCloud(timeoutMs = 2500) {
+async function syncSectionsFromCloud(timeoutMs = 4000) {
   if (!db.cloudPool) return;
 
   const timeoutPromise = new Promise((_, reject) =>
@@ -22,7 +98,7 @@ async function syncSectionsFromCloud(timeoutMs = 2500) {
       `SELECT section_id, section_name, grade_level_id, program_id, is_specialized FROM SECTION`
     );
 
-    if (cloudSections && cloudSections.length > 0) {
+    if (cloudSections) {
       for (const s of cloudSections) {
         await db.execute(
           `INSERT INTO SECTION (section_id, section_name, grade_level_id, program_id, is_specialized)
@@ -33,22 +109,16 @@ async function syncSectionsFromCloud(timeoutMs = 2500) {
              program_id = VALUES(program_id),
              is_specialized = VALUES(is_specialized)`,
           [s.section_id, s.section_name, s.grade_level_id, s.program_id, s.is_specialized]
-        );
+        ).catch(() => {});
       }
 
       // Cleanup sections deleted on Cloud
-      const cloudIds = cloudSections.map((s) => s.section_id);
-      const [localExtra] = await db.execute(
-        `SELECT section_id FROM SECTION WHERE section_id NOT IN (${cloudIds.map(() => '?').join(',')})`,
-        cloudIds
-      );
-      for (const extra of localExtra) {
-        try {
-          await db.execute('DELETE FROM STUDENT_SECTION WHERE section_id = ?', [extra.section_id]);
-          await db.execute('DELETE FROM SECTION_ADVISER_ASSIGNMENT WHERE section_id = ?', [extra.section_id]);
-          await db.execute('DELETE FROM SUBJECT_OFFERING WHERE section_id = ?', [extra.section_id]);
-          await db.execute('DELETE FROM SECTION WHERE section_id = ?', [extra.section_id]);
-        } catch (_) {}
+      const cloudIdSet = new Set(cloudSections.map((s) => Number(s.section_id)));
+      const [localSections] = await db.query('SELECT section_id FROM SECTION');
+      for (const ls of localSections) {
+        if (!cloudIdSet.has(Number(ls.section_id))) {
+          await deleteSectionCascadeLocal(ls.section_id);
+        }
       }
     }
   })();
@@ -63,7 +133,7 @@ async function syncSectionsFromCloud(timeoutMs = 2500) {
 /**
  * Automatically sync students from Aiven Cloud into local MySQL.
  */
-async function syncStudentsFromCloud(timeoutMs = 4000) {
+async function syncStudentsFromCloud(timeoutMs = 4500) {
   if (!db.cloudPool) return;
 
   const timeoutPromise = new Promise((_, reject) =>
@@ -76,7 +146,7 @@ async function syncStudentsFromCloud(timeoutMs = 4000) {
        FROM STUDENT`
     );
 
-    if (cloudStudents && cloudStudents.length > 0) {
+    if (cloudStudents) {
       const CHUNK_SIZE = 50;
       for (let i = 0; i < cloudStudents.length; i += CHUNK_SIZE) {
         const chunk = cloudStudents.slice(i, i + CHUNK_SIZE);
@@ -125,21 +195,16 @@ async function syncStudentsFromCloud(timeoutMs = 4000) {
              status = VALUES(status),
              program_id = VALUES(program_id)`,
           flatValues
-        );
+        ).catch(() => {});
       }
 
       // Cleanup students deleted on Cloud
-      const cloudIds = cloudStudents.map((s) => s.student_id);
-      const [localExtra] = await db.execute(
-        `SELECT student_id FROM STUDENT WHERE student_id NOT IN (${cloudIds.map(() => '?').join(',')})`,
-        cloudIds
-      );
-      for (const extra of localExtra) {
-        try {
-          await db.execute('DELETE FROM STUDENT_SECTION WHERE student_id = ?', [extra.student_id]);
-          await db.execute('DELETE FROM STUDENT_GRADE WHERE student_id = ?', [extra.student_id]);
-          await db.execute('DELETE FROM STUDENT WHERE student_id = ?', [extra.student_id]);
-        } catch (_) {}
+      const cloudIdSet = new Set(cloudStudents.map((s) => Number(s.student_id)));
+      const [localStudents] = await db.query('SELECT student_id FROM STUDENT');
+      for (const ls of localStudents) {
+        if (!cloudIdSet.has(Number(ls.student_id))) {
+          await deleteStudentCascadeLocal(ls.student_id);
+        }
       }
     }
   })();
@@ -154,7 +219,7 @@ async function syncStudentsFromCloud(timeoutMs = 4000) {
 /**
  * Automatically sync student section assignments from Aiven Cloud into local MySQL.
  */
-async function syncStudentSectionsFromCloud(timeoutMs = 4000) {
+async function syncStudentSectionsFromCloud(timeoutMs = 4500) {
   if (!db.cloudPool) return;
 
   const timeoutPromise = new Promise((_, reject) =>
@@ -167,7 +232,7 @@ async function syncStudentSectionsFromCloud(timeoutMs = 4000) {
       `SELECT student_section_id, student_id, section_id, school_year_id FROM STUDENT_SECTION`
     );
 
-    if (cloudSS && cloudSS.length > 0) {
+    if (cloudSS) {
       const CHUNK_SIZE = 100;
       for (let i = 0; i < cloudSS.length; i += CHUNK_SIZE) {
         const chunk = cloudSS.slice(i, i + CHUNK_SIZE);
@@ -206,15 +271,12 @@ async function syncStudentSectionsFromCloud(timeoutMs = 4000) {
       }
 
       // Cleanup unassigned / deleted student sections
-      const cloudIds = cloudSS.map((ss) => ss.student_section_id);
-      const [localExtra] = await db.execute(
-        `SELECT student_section_id FROM STUDENT_SECTION WHERE student_section_id NOT IN (${cloudIds.map(() => '?').join(',')})`,
-        cloudIds
-      );
-      for (const extra of localExtra) {
-        try {
-          await db.execute('DELETE FROM STUDENT_SECTION WHERE student_section_id = ?', [extra.student_section_id]);
-        } catch (_) {}
+      const cloudIdSet = new Set(cloudSS.map((ss) => Number(ss.student_section_id)));
+      const [localSS] = await db.query('SELECT student_section_id FROM STUDENT_SECTION');
+      for (const lss of localSS) {
+        if (!cloudIdSet.has(Number(lss.student_section_id))) {
+          await deleteStudentSectionCascadeLocal(lss.student_section_id);
+        }
       }
     }
   })();
@@ -313,7 +375,7 @@ async function forwardStudentUnassignToCloud(studentId, sectionId, schoolYearId,
 /**
  * Automatically sync academic calendar (SCHOOL_YEAR and ACADEMIC_TERM) from Aiven Cloud.
  */
-async function syncAcademicCalendarFromCloud(timeoutMs = 2500) {
+async function syncAcademicCalendarFromCloud(timeoutMs = 4000) {
   if (!db.cloudPool) return;
 
   const timeoutPromise = new Promise((_, reject) =>
@@ -325,7 +387,7 @@ async function syncAcademicCalendarFromCloud(timeoutMs = 2500) {
     const [cloudSY] = await db.cloudPool.query(
       `SELECT school_year_id, school_id, starts_on, ends_on, curriculum, status FROM SCHOOL_YEAR`
     );
-    if (cloudSY && cloudSY.length > 0) {
+    if (cloudSY) {
       for (const sy of cloudSY) {
         const startsOn = sy.starts_on instanceof Date ? sy.starts_on.toISOString().slice(0, 10) : sy.starts_on;
         const endsOn = sy.ends_on instanceof Date ? sy.ends_on.toISOString().slice(0, 10) : sy.ends_on;
@@ -341,6 +403,15 @@ async function syncAcademicCalendarFromCloud(timeoutMs = 2500) {
           [sy.school_year_id, sy.school_id, startsOn, endsOn, sy.curriculum, sy.status]
         ).catch(() => {});
       }
+
+      // Prune deleted school years
+      const cloudSyIdSet = new Set(cloudSY.map((s) => Number(s.school_year_id)));
+      const [localSY] = await db.query('SELECT school_year_id FROM SCHOOL_YEAR');
+      for (const lsy of localSY) {
+        if (!cloudSyIdSet.has(Number(lsy.school_year_id))) {
+          await db.query('DELETE FROM SCHOOL_YEAR WHERE school_year_id = ?', [lsy.school_year_id]).catch(() => {});
+        }
+      }
     }
 
     // 2. Sync ACADEMIC_TERM
@@ -348,7 +419,7 @@ async function syncAcademicCalendarFromCloud(timeoutMs = 2500) {
       `SELECT term_id, school_year_id, term_name, starts_at, ends_at, grade_submission_deadline_at, reopening_requests_open_at, reopening_requests_close_at, status
        FROM ACADEMIC_TERM`
     );
-    if (cloudTerms && cloudTerms.length > 0) {
+    if (cloudTerms) {
       for (const t of cloudTerms) {
         const toSqlDt = (d) => (d ? new Date(d).toISOString().slice(0, 19).replace('T', ' ') : null);
         await db.execute(
@@ -375,6 +446,15 @@ async function syncAcademicCalendarFromCloud(timeoutMs = 2500) {
             t.status,
           ]
         ).catch(() => {});
+      }
+
+      // Prune deleted academic terms
+      const cloudTermIdSet = new Set(cloudTerms.map((t) => Number(t.term_id)));
+      const [localTerms] = await db.query('SELECT term_id FROM ACADEMIC_TERM');
+      for (const lt of localTerms) {
+        if (!cloudTermIdSet.has(Number(lt.term_id))) {
+          await db.query('DELETE FROM ACADEMIC_TERM WHERE term_id = ?', [lt.term_id]).catch(() => {});
+        }
       }
     }
   })();
@@ -544,7 +624,7 @@ async function syncAcademicAssignmentsFromCloud(timeoutMs = 3000) {
     const [cloudSAA] = await db.cloudPool.query(
       `SELECT adviser_assignment_id, section_id, school_year_id, user_id, assigned_from, assigned_until FROM SECTION_ADVISER_ASSIGNMENT`
     );
-    if (cloudSAA && cloudSAA.length > 0) {
+    if (cloudSAA) {
       for (const saa of cloudSAA) {
         await db.execute(
           `INSERT INTO SECTION_ADVISER_ASSIGNMENT (adviser_assignment_id, section_id, school_year_id, user_id, assigned_from, assigned_until)
@@ -558,13 +638,12 @@ async function syncAcademicAssignmentsFromCloud(timeoutMs = 3000) {
           [saa.adviser_assignment_id, saa.section_id, saa.school_year_id, saa.user_id, formatDate(saa.assigned_from), formatDate(saa.assigned_until)]
         ).catch(() => {});
       }
-      const cloudIds = cloudSAA.map((r) => r.adviser_assignment_id);
-      const [extra] = await db.execute(
-        `SELECT adviser_assignment_id FROM SECTION_ADVISER_ASSIGNMENT WHERE adviser_assignment_id NOT IN (${cloudIds.map(() => '?').join(',')})`,
-        cloudIds
-      );
-      for (const row of extra) {
-        await db.execute('DELETE FROM SECTION_ADVISER_ASSIGNMENT WHERE adviser_assignment_id = ?', [row.adviser_assignment_id]).catch(() => {});
+      const cloudIds = new Set(cloudSAA.map((r) => Number(r.adviser_assignment_id)));
+      const [localSAA] = await db.query('SELECT adviser_assignment_id FROM SECTION_ADVISER_ASSIGNMENT');
+      for (const row of localSAA) {
+        if (!cloudIds.has(Number(row.adviser_assignment_id))) {
+          await deleteAdviserAssignmentCascadeLocal(row.adviser_assignment_id);
+        }
       }
     }
 
@@ -572,7 +651,7 @@ async function syncAcademicAssignmentsFromCloud(timeoutMs = 3000) {
     const [cloudSO] = await db.cloudPool.query(
       `SELECT subject_offering_id, subject_id, section_id, school_year_id FROM SUBJECT_OFFERING`
     );
-    if (cloudSO && cloudSO.length > 0) {
+    if (cloudSO) {
       const CHUNK_SIZE = 50;
       for (let i = 0; i < cloudSO.length; i += CHUNK_SIZE) {
         const chunk = cloudSO.slice(i, i + CHUNK_SIZE);
@@ -589,13 +668,12 @@ async function syncAcademicAssignmentsFromCloud(timeoutMs = 3000) {
           flat
         ).catch(() => {});
       }
-      const cloudIds = cloudSO.map((r) => r.subject_offering_id);
-      const [extra] = await db.execute(
-        `SELECT subject_offering_id FROM SUBJECT_OFFERING WHERE subject_offering_id NOT IN (${cloudIds.map(() => '?').join(',')})`,
-        cloudIds
-      );
-      for (const row of extra) {
-        await db.execute('DELETE FROM SUBJECT_OFFERING WHERE subject_offering_id = ?', [row.subject_offering_id]).catch(() => {});
+      const cloudIds = new Set(cloudSO.map((r) => Number(r.subject_offering_id)));
+      const [localSO] = await db.query('SELECT subject_offering_id FROM SUBJECT_OFFERING');
+      for (const row of localSO) {
+        if (!cloudIds.has(Number(row.subject_offering_id))) {
+          await deleteSubjectOfferingCascadeLocal(row.subject_offering_id);
+        }
       }
     }
 
@@ -603,7 +681,7 @@ async function syncAcademicAssignmentsFromCloud(timeoutMs = 3000) {
     const [cloudTA] = await db.cloudPool.query(
       `SELECT teacher_assignment_id, user_id, subject_offering_id, assigned_from, assigned_until FROM TEACHER_ASSIGNMENT`
     );
-    if (cloudTA && cloudTA.length > 0) {
+    if (cloudTA) {
       for (const ta of cloudTA) {
         await db.execute(
           `INSERT INTO TEACHER_ASSIGNMENT (teacher_assignment_id, user_id, subject_offering_id, assigned_from, assigned_until)
@@ -616,13 +694,12 @@ async function syncAcademicAssignmentsFromCloud(timeoutMs = 3000) {
           [ta.teacher_assignment_id, ta.user_id, ta.subject_offering_id, formatDate(ta.assigned_from), formatDate(ta.assigned_until)]
         ).catch(() => {});
       }
-      const cloudIds = cloudTA.map((r) => r.teacher_assignment_id);
-      const [extra] = await db.execute(
-        `SELECT teacher_assignment_id FROM TEACHER_ASSIGNMENT WHERE teacher_assignment_id NOT IN (${cloudIds.map(() => '?').join(',')})`,
-        cloudIds
-      );
-      for (const row of extra) {
-        await db.execute('DELETE FROM TEACHER_ASSIGNMENT WHERE teacher_assignment_id = ?', [row.teacher_assignment_id]).catch(() => {});
+      const cloudIds = new Set(cloudTA.map((r) => Number(r.teacher_assignment_id)));
+      const [localTA] = await db.query('SELECT teacher_assignment_id FROM TEACHER_ASSIGNMENT');
+      for (const row of localTA) {
+        if (!cloudIds.has(Number(row.teacher_assignment_id))) {
+          await deleteTeacherAssignmentCascadeLocal(row.teacher_assignment_id);
+        }
       }
     }
   })();
@@ -645,12 +722,14 @@ async function syncAttendanceFromCloud(timeoutMs = 4000) {
   );
 
   const syncWork = (async () => {
+    const q = (sql, params) => db.query(sql, params).catch(() => {});
+
     // 1. Sync ATTENDANCE_SHEET
     const [cloudSheets] = await db.cloudPool.query(
       `SELECT attendance_sheet_id, teacher_assignment_id, adviser_assignment_id, attendance_scope, attendance_date, no_class_reason
        FROM ATTENDANCE_SHEET`
     );
-    if (cloudSheets && cloudSheets.length > 0) {
+    if (cloudSheets) {
       const CHUNK_SIZE = 50;
       for (let i = 0; i < cloudSheets.length; i += CHUNK_SIZE) {
         const chunk = cloudSheets.slice(i, i + CHUNK_SIZE);
@@ -678,13 +757,23 @@ async function syncAttendanceFromCloud(timeoutMs = 4000) {
           flat
         ).catch(() => {});
       }
+
+      // Prune deleted sheets
+      const cloudSheetIds = new Set(cloudSheets.map((s) => Number(s.attendance_sheet_id)));
+      const [localSheets] = await db.query('SELECT attendance_sheet_id FROM ATTENDANCE_SHEET');
+      for (const ls of localSheets) {
+        if (!cloudSheetIds.has(Number(ls.attendance_sheet_id))) {
+          await q('DELETE FROM ATTENDANCE WHERE attendance_sheet_id = ?', [ls.attendance_sheet_id]);
+          await q('DELETE FROM ATTENDANCE_SHEET WHERE attendance_sheet_id = ?', [ls.attendance_sheet_id]);
+        }
+      }
     }
 
     // 2. Sync ATTENDANCE
     const [cloudAttendance] = await db.cloudPool.query(
       `SELECT attendance_id, attendance_sheet_id, student_section_id, status, remarks FROM ATTENDANCE`
     );
-    if (cloudAttendance && cloudAttendance.length > 0) {
+    if (cloudAttendance) {
       const CHUNK_SIZE = 100;
       for (let i = 0; i < cloudAttendance.length; i += CHUNK_SIZE) {
         const chunk = cloudAttendance.slice(i, i + CHUNK_SIZE);
@@ -703,6 +792,15 @@ async function syncAttendanceFromCloud(timeoutMs = 4000) {
              remarks = VALUES(remarks)`,
           flat
         ).catch(() => {});
+      }
+
+      // Prune deleted attendance records
+      const cloudAttIds = new Set(cloudAttendance.map((a) => Number(a.attendance_id)));
+      const [localAtt] = await db.query('SELECT attendance_id FROM ATTENDANCE');
+      for (const la of localAtt) {
+        if (!cloudAttIds.has(Number(la.attendance_id))) {
+          await q('DELETE FROM ATTENDANCE WHERE attendance_id = ?', [la.attendance_id]);
+        }
       }
     }
   })();
@@ -725,12 +823,14 @@ async function syncPhilIriFromCloud(timeoutMs = 3500) {
   );
 
   const syncWork = (async () => {
+    const q = (sql, params) => db.query(sql, params).catch(() => {});
+
     // 1. Sync PHIL_IRI_ASSESSMENT
     const [cloudAssessments] = await db.cloudPool.query(
       `SELECT phil_iri_id, student_section_id, subject_offering_id, test_type, passage_words_count, words_correct, oral_reading_percent, oral_reading_level, total_comp_items, comp_correct, comp_score_percent, comp_reading_level, overall_reading_level, user_id
        FROM PHIL_IRI_ASSESSMENT`
     );
-    if (cloudAssessments && cloudAssessments.length > 0) {
+    if (cloudAssessments) {
       const CHUNK_SIZE = 50;
       for (let i = 0; i < cloudAssessments.length; i += CHUNK_SIZE) {
         const chunk = cloudAssessments.slice(i, i + CHUNK_SIZE);
@@ -774,6 +874,15 @@ async function syncPhilIriFromCloud(timeoutMs = 3500) {
           flat
         ).catch(() => {});
       }
+
+      // Prune deleted assessments
+      const cloudIds = new Set(cloudAssessments.map((p) => Number(p.phil_iri_id)));
+      const [localAssessments] = await db.query('SELECT phil_iri_id FROM PHIL_IRI_ASSESSMENT');
+      for (const la of localAssessments) {
+        if (!cloudIds.has(Number(la.phil_iri_id))) {
+          await q('DELETE FROM PHIL_IRI_ASSESSMENT WHERE phil_iri_id = ?', [la.phil_iri_id]);
+        }
+      }
     }
 
     // 2. Sync PHIL_IRI_SCREENING
@@ -781,7 +890,7 @@ async function syncPhilIriFromCloud(timeoutMs = 3500) {
       `SELECT screening_id, student_section_id, assessed_on, test_level, literal_max, inferential_max, critical_max, score_threshold, test_taken, literal_score, inferential_score, critical_score, recorded_by
        FROM PHIL_IRI_SCREENING`
     );
-    if (cloudScreenings && cloudScreenings.length > 0) {
+    if (cloudScreenings) {
       const CHUNK_SIZE = 50;
       for (let i = 0; i < cloudScreenings.length; i += CHUNK_SIZE) {
         const chunk = cloudScreenings.slice(i, i + CHUNK_SIZE);
@@ -822,6 +931,15 @@ async function syncPhilIriFromCloud(timeoutMs = 3500) {
              recorded_by = VALUES(recorded_by)`,
           flat
         ).catch(() => {});
+      }
+
+      // Prune deleted screenings
+      const cloudIds = new Set(cloudScreenings.map((s) => Number(s.screening_id)));
+      const [localScreenings] = await db.query('SELECT screening_id FROM PHIL_IRI_SCREENING');
+      for (const ls of localScreenings) {
+        if (!cloudIds.has(Number(ls.screening_id))) {
+          await q('DELETE FROM PHIL_IRI_SCREENING WHERE screening_id = ?', [ls.screening_id]);
+        }
       }
     }
   })();
@@ -1139,12 +1257,14 @@ async function syncGradeReopenRequestsFromCloud(timeoutMs = 3000) {
   const toSqlDt = (d) => (d ? new Date(d).toISOString().slice(0, 19).replace('T', ' ') : null);
 
   const syncWork = (async () => {
+    const q = (sql, params) => db.query(sql, params).catch(() => {});
+
     // 1. Sync GRADE_REOPEN_REQUEST
     const [cloudGRR] = await db.cloudPool.query(
       `SELECT request_id, grade_sheet_id, teacher_assignment_id, reviewed_by_user_id, reason, status, file_name, file_path, file_type, file_size, requested_at, reviewed_at
        FROM GRADE_REOPEN_REQUEST`
     );
-    if (cloudGRR && cloudGRR.length > 0) {
+    if (cloudGRR) {
       for (const r of cloudGRR) {
         await db.execute(
           `INSERT INTO GRADE_REOPEN_REQUEST (request_id, grade_sheet_id, teacher_assignment_id, reviewed_by_user_id, reason, status, file_name, file_path, file_type, file_size, requested_at, reviewed_at)
@@ -1177,13 +1297,23 @@ async function syncGradeReopenRequestsFromCloud(timeoutMs = 3000) {
           ]
         ).catch(() => {});
       }
+
+      // Prune deleted reopen requests
+      const cloudIds = new Set(cloudGRR.map((r) => Number(r.request_id)));
+      const [localGRR] = await db.query('SELECT request_id FROM GRADE_REOPEN_REQUEST');
+      for (const lr of localGRR) {
+        if (!cloudIds.has(Number(lr.request_id))) {
+          await q('DELETE FROM TEMPORARY_REOPENING WHERE request_id = ?', [lr.request_id]);
+          await q('DELETE FROM GRADE_REOPEN_REQUEST WHERE request_id = ?', [lr.request_id]);
+        }
+      }
     }
 
     // 2. Sync TEMPORARY_REOPENING
     const [cloudTR] = await db.cloudPool.query(
       `SELECT temporary_reopening_id, request_id, starts_at, expires_at, status, created_at FROM TEMPORARY_REOPENING`
     );
-    if (cloudTR && cloudTR.length > 0) {
+    if (cloudTR) {
       for (const t of cloudTR) {
         await db.execute(
           `INSERT INTO TEMPORARY_REOPENING (temporary_reopening_id, request_id, starts_at, expires_at, status, created_at)
@@ -1203,6 +1333,15 @@ async function syncGradeReopenRequestsFromCloud(timeoutMs = 3000) {
             toSqlDt(t.created_at),
           ]
         ).catch(() => {});
+      }
+
+      // Prune deleted temporary reopenings
+      const cloudTrIds = new Set(cloudTR.map((t) => Number(t.temporary_reopening_id)));
+      const [localTR] = await db.query('SELECT temporary_reopening_id FROM TEMPORARY_REOPENING');
+      for (const lt of localTR) {
+        if (!cloudTrIds.has(Number(lt.temporary_reopening_id))) {
+          await q('DELETE FROM TEMPORARY_REOPENING WHERE temporary_reopening_id = ?', [lt.temporary_reopening_id]);
+        }
       }
     }
   })();
@@ -1227,11 +1366,13 @@ async function syncFeedbackFromCloud(timeoutMs = 3000) {
   const toSqlDt = (d) => (d ? new Date(d).toISOString().slice(0, 19).replace('T', ' ') : null);
 
   const syncWork = (async () => {
+    const q = (sql, params) => db.query(sql, params).catch(() => {});
+
     const [cloudFeedback] = await db.cloudPool.query(
       `SELECT feedback_id, evaluator_id, evaluee_id, q1_rate, q2_rate, q3_rate, q4_rate, q5_rate, q6_rate, q7_rate, q8_rate, strengths_comments, improvements_comments, status, created_at, reviewed_at
        FROM FEEDBACK`
     );
-    if (cloudFeedback && cloudFeedback.length > 0) {
+    if (cloudFeedback) {
       for (const f of cloudFeedback) {
         await db.execute(
           `INSERT INTO FEEDBACK (feedback_id, evaluator_id, evaluee_id, q1_rate, q2_rate, q3_rate, q4_rate, q5_rate, q6_rate, q7_rate, q8_rate, strengths_comments, improvements_comments, status, created_at, reviewed_at)
@@ -1271,6 +1412,15 @@ async function syncFeedbackFromCloud(timeoutMs = 3000) {
             toSqlDt(f.reviewed_at),
           ]
         ).catch(() => {});
+      }
+
+      // Prune deleted feedback
+      const cloudIds = new Set(cloudFeedback.map((f) => Number(f.feedback_id)));
+      const [localFeedback] = await db.query('SELECT feedback_id FROM FEEDBACK');
+      for (const lf of localFeedback) {
+        if (!cloudIds.has(Number(lf.feedback_id))) {
+          await q('DELETE FROM FEEDBACK WHERE feedback_id = ?', [lf.feedback_id]);
+        }
       }
     }
   })();
@@ -1446,6 +1596,214 @@ async function forwardFeedbackDeleteToCloud(id) {
   }
 }
 
+/**
+ * Automatically sync class record components (GRADE_SHEET, GRADE_ACTIVITY, SCORE, STUDENT_GRADE)
+ * for a subject offering from Aiven Cloud.
+ */
+async function syncClassRecordFromCloud(subjectOfferingId, timeoutMs = 4500) {
+  if (!db.cloudPool || !subjectOfferingId || isNaN(Number(subjectOfferingId))) return;
+  const offId = Number(subjectOfferingId);
+
+  const timeoutPromise = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error('Cloud class record sync timeout exceeded')), timeoutMs)
+  );
+
+  const toSqlDt = (d) => (d ? new Date(d).toISOString().slice(0, 19).replace('T', ' ') : null);
+  const q = (sql, params) => db.query(sql, params).catch(() => {});
+
+  const syncWork = (async () => {
+    // 1. Sync GRADE_SHEET for this subject offering
+    const [cloudSheets] = await db.cloudPool.query(
+      `SELECT grade_sheet_id, subject_offering_id, term_id, workflow_status, lock_status, submitted_at, approved_at, locked_at
+       FROM GRADE_SHEET WHERE subject_offering_id = ?`,
+      [offId]
+    );
+
+    if (cloudSheets && cloudSheets.length > 0) {
+      for (const s of cloudSheets) {
+        await db.execute(
+          `INSERT INTO GRADE_SHEET (grade_sheet_id, subject_offering_id, term_id, workflow_status, lock_status, submitted_at, approved_at, locked_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE
+             subject_offering_id = VALUES(subject_offering_id),
+             term_id = VALUES(term_id),
+             workflow_status = VALUES(workflow_status),
+             lock_status = VALUES(lock_status),
+             submitted_at = VALUES(submitted_at),
+             approved_at = VALUES(approved_at),
+             locked_at = VALUES(locked_at)`,
+          [
+            s.grade_sheet_id,
+            s.subject_offering_id,
+            s.term_id,
+            s.workflow_status || 'DRAFT',
+            s.lock_status || 'UNLOCKED',
+            toSqlDt(s.submitted_at),
+            toSqlDt(s.approved_at),
+            toSqlDt(s.locked_at),
+          ]
+        ).catch(() => {});
+      }
+
+      const activeSheetIds = cloudSheets.map((s) => s.grade_sheet_id);
+      if (activeSheetIds.length > 0) {
+        // 2. Sync GRADE_ACTIVITY for active sheets
+        const sheetPlaceholders = activeSheetIds.map(() => '?').join(',');
+        const [cloudActivities] = await db.cloudPool.query(
+          `SELECT activity_id, grade_sheet_id, subj_comp_weight_id, mapeh_component, activity_name, highest_possible_score, activity_date, status
+           FROM GRADE_ACTIVITY WHERE grade_sheet_id IN (${sheetPlaceholders})`,
+          activeSheetIds
+        );
+
+        if (cloudActivities) {
+          for (const a of cloudActivities) {
+            await db.execute(
+              `INSERT INTO GRADE_ACTIVITY (activity_id, grade_sheet_id, subj_comp_weight_id, mapeh_component, activity_name, highest_possible_score, activity_date, status)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+               ON DUPLICATE KEY UPDATE
+                 grade_sheet_id = VALUES(grade_sheet_id),
+                 subj_comp_weight_id = VALUES(subj_comp_weight_id),
+                 mapeh_component = VALUES(mapeh_component),
+                 activity_name = VALUES(activity_name),
+                 highest_possible_score = VALUES(highest_possible_score),
+                 activity_date = VALUES(activity_date),
+                 status = VALUES(status)`,
+              [
+                a.activity_id,
+                a.grade_sheet_id,
+                a.subj_comp_weight_id || null,
+                a.mapeh_component || null,
+                a.activity_name,
+                a.highest_possible_score,
+                formatDate(a.activity_date),
+                a.status || 'ACTIVE',
+              ]
+            ).catch(() => {});
+          }
+
+          // Prune local activities for these sheets not in cloud
+          const cloudActIds = new Set(cloudActivities.map((a) => Number(a.activity_id)));
+          const [localActivities] = await db.query(
+            `SELECT activity_id FROM GRADE_ACTIVITY WHERE grade_sheet_id IN (${sheetPlaceholders})`,
+            activeSheetIds
+          );
+          for (const la of localActivities) {
+            if (!cloudActIds.has(Number(la.activity_id))) {
+              await q('DELETE FROM SCORE WHERE activity_id = ?', [la.activity_id]);
+              await q('DELETE FROM GRADE_ACTIVITY WHERE activity_id = ?', [la.activity_id]);
+            }
+          }
+
+          const activeActIds = cloudActivities.map((a) => a.activity_id);
+          if (activeActIds.length > 0) {
+            // 3. Sync SCORE for active activities
+            const actPlaceholders = activeActIds.map(() => '?').join(',');
+            const [cloudScores] = await db.cloudPool.query(
+              `SELECT score_id, activity_id, student_section_id, raw_score, score_status, teacher_assignment_id
+               FROM SCORE WHERE activity_id IN (${actPlaceholders})`,
+              activeActIds
+            );
+
+            if (cloudScores) {
+              const CHUNK_SIZE = 100;
+              for (let i = 0; i < cloudScores.length; i += CHUNK_SIZE) {
+                const chunk = cloudScores.slice(i, i + CHUNK_SIZE);
+                const placeholders = chunk.map(() => '(?, ?, ?, ?, ?, ?)').join(', ');
+                const flat = [];
+                for (const sc of chunk) {
+                  flat.push(
+                    sc.score_id,
+                    sc.activity_id,
+                    sc.student_section_id,
+                    sc.raw_score !== undefined ? sc.raw_score : null,
+                    sc.score_status || null,
+                    sc.teacher_assignment_id || null
+                  );
+                }
+                await db.execute(
+                  `INSERT INTO SCORE (score_id, activity_id, student_section_id, raw_score, score_status, teacher_assignment_id)
+                   VALUES ${placeholders}
+                   ON DUPLICATE KEY UPDATE
+                     activity_id = VALUES(activity_id),
+                     student_section_id = VALUES(student_section_id),
+                     raw_score = VALUES(raw_score),
+                     score_status = VALUES(score_status),
+                     teacher_assignment_id = VALUES(teacher_assignment_id)`,
+                  flat
+                ).catch(() => {});
+              }
+
+              // Prune local scores not in cloud
+              const cloudScoreIds = new Set(cloudScores.map((s) => Number(s.score_id)));
+              const [localScores] = await db.query(
+                `SELECT score_id FROM SCORE WHERE activity_id IN (${actPlaceholders})`,
+                activeActIds
+              );
+              for (const ls of localScores) {
+                if (!cloudScoreIds.has(Number(ls.score_id))) {
+                  await q('DELETE FROM SCORE WHERE score_id = ?', [ls.score_id]);
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // 4. Sync STUDENT_GRADE for this subject offering
+    const [cloudSG] = await db.cloudPool.query(
+      `SELECT student_grade_id, subject_offering_id, student_id, student_section_id, term, mapeh_component, mapeh_key, initial_grade, quarterly_grade, remarks
+       FROM STUDENT_GRADE WHERE subject_offering_id = ?`,
+      [offId]
+    );
+    if (cloudSG) {
+      for (const g of cloudSG) {
+        await db.execute(
+          `INSERT INTO STUDENT_GRADE (student_grade_id, subject_offering_id, student_id, student_section_id, term, mapeh_component, mapeh_key, initial_grade, quarterly_grade, remarks)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE
+             subject_offering_id = VALUES(subject_offering_id),
+             student_id = VALUES(student_id),
+             student_section_id = VALUES(student_section_id),
+             term = VALUES(term),
+             mapeh_component = VALUES(mapeh_component),
+             mapeh_key = VALUES(mapeh_key),
+             initial_grade = VALUES(initial_grade),
+             quarterly_grade = VALUES(quarterly_grade),
+             remarks = VALUES(remarks)`,
+          [
+            g.student_grade_id,
+            g.subject_offering_id,
+            g.student_id,
+            g.student_section_id || null,
+            g.term,
+            g.mapeh_component || null,
+            g.mapeh_key || null,
+            g.initial_grade !== undefined ? g.initial_grade : null,
+            g.quarterly_grade !== undefined ? g.quarterly_grade : null,
+            g.remarks || null,
+          ]
+        ).catch(() => {});
+      }
+
+      // Prune deleted student grades
+      const cloudSgIds = new Set(cloudSG.map((g) => Number(g.student_grade_id)));
+      const [localSG] = await db.query('SELECT student_grade_id FROM STUDENT_GRADE WHERE subject_offering_id = ?', [offId]);
+      for (const lg of localSG) {
+        if (!cloudSgIds.has(Number(lg.student_grade_id))) {
+          await q('DELETE FROM STUDENT_GRADE WHERE student_grade_id = ?', [lg.student_grade_id]);
+        }
+      }
+    }
+  })();
+
+  try {
+    await Promise.race([syncWork, timeoutPromise]);
+  } catch (err) {
+    console.log(`[CloudClassRecordSync] Bypassed cloud class record sync (${err.message}). Serving local database.`);
+  }
+}
+
 module.exports = {
   formatDate,
   syncSectionsFromCloud,
@@ -1475,6 +1833,7 @@ module.exports = {
   forwardPhilIriScreeningBatchToCloud,
   syncGradeReopenRequestsFromCloud,
   syncFeedbackFromCloud,
+  syncClassRecordFromCloud,
   forwardReopenRequestToCloud,
   forwardReopenRequestStatusToCloud,
   forwardTemporaryReopeningToCloud,

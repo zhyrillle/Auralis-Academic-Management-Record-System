@@ -503,51 +503,160 @@ async function pushLocalToAiven() {
         );
       }
     }
-    console.log('✅ Feedback records verified and synced to Aiven.');
-
-    // 1. Check max score_id on Aiven
-    const [aivenStats] = await aivenConn.query('SELECT MAX(score_id) as max_id, COUNT(*) as count FROM SCORE;');
-    const aivenMaxId = aivenStats[0].max_id || 0;
-    console.log(`📊 Aiven current status: ${aivenStats[0].count} scores (Max ID: ${aivenMaxId})`);
-
-    // 2. Fetch all scores from local that are new or updated
-    const [localScores] = await localConn.query(
-      'SELECT score_id, activity_id, student_section_id, raw_score, score_status, teacher_assignment_id, created_at, updated_at FROM score WHERE score_id > ? ORDER BY score_id ASC;',
-      [aivenMaxId]
+    // 0r. Sync local grade sheets to Aiven Cloud
+    const [localGradeSheets] = await localConn.query(
+      'SELECT grade_sheet_id, subject_offering_id, term_id, workflow_status, lock_status, submitted_at, approved_at, locked_at FROM GRADE_SHEET;'
     );
-
-    console.log(`🔍 Found ${localScores.length} newly entered scores in local database.`);
-
-    if (localScores.length > 0) {
-      console.log('⏳ Uploading new scores to Aiven Cloud...');
-
-      for (const row of localScores) {
+    console.log(`📋 Checking ${localGradeSheets.length} local grade sheets...`);
+    if (localGradeSheets.length > 0) {
+      const toSqlDt = (d) => (d ? new Date(d).toISOString().slice(0, 19).replace('T', ' ') : null);
+      for (const gs of localGradeSheets) {
         await aivenConn.query(
-          `INSERT INTO SCORE (score_id, activity_id, student_section_id, raw_score, score_status, teacher_assignment_id, created_at, updated_at)
+          `INSERT INTO GRADE_SHEET (grade_sheet_id, subject_offering_id, term_id, workflow_status, lock_status, submitted_at, approved_at, locked_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-           ON DUPLICATE KEY UPDATE 
-             raw_score = VALUES(raw_score),
-             score_status = VALUES(score_status),
-             updated_at = VALUES(updated_at);`,
+           ON DUPLICATE KEY UPDATE
+             subject_offering_id = VALUES(subject_offering_id),
+             term_id = VALUES(term_id),
+             workflow_status = VALUES(workflow_status),
+             lock_status = VALUES(lock_status),
+             submitted_at = VALUES(submitted_at),
+             approved_at = VALUES(approved_at),
+             locked_at = VALUES(locked_at);`,
           [
-            row.score_id,
-            row.activity_id,
-            row.student_section_id,
-            row.raw_score,
-            row.score_status,
-            row.teacher_assignment_id,
-            row.created_at,
-            row.updated_at,
+            gs.grade_sheet_id,
+            gs.subject_offering_id,
+            gs.term_id,
+            gs.workflow_status || 'DRAFT',
+            gs.lock_status || 'EDITABLE',
+            toSqlDt(gs.submitted_at),
+            toSqlDt(gs.approved_at),
+            toSqlDt(gs.locked_at),
           ]
         );
       }
+    }
+    console.log('✅ Grade sheets verified and synced to Aiven.');
 
-      console.log(`✅ Successfully uploaded ${localScores.length} scores to Aiven!`);
+    // 0s. Sync local grade activities to Aiven Cloud
+    const [localActivities] = await localConn.query(
+      'SELECT activity_id, grade_sheet_id, subj_comp_weight_id, mapeh_component, activity_name, highest_possible_score, activity_date, status FROM GRADE_ACTIVITY;'
+    );
+    console.log(`📝 Checking ${localActivities.length} local grade activities...`);
+    if (localActivities.length > 0) {
+      for (const ga of localActivities) {
+        const actDate = ga.activity_date instanceof Date ? ga.activity_date.toISOString().slice(0, 10) : (ga.activity_date ? String(ga.activity_date).slice(0, 10) : null);
+        await aivenConn.query(
+          `INSERT INTO GRADE_ACTIVITY (activity_id, grade_sheet_id, subj_comp_weight_id, mapeh_component, activity_name, highest_possible_score, activity_date, status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE
+             grade_sheet_id = VALUES(grade_sheet_id),
+             subj_comp_weight_id = VALUES(subj_comp_weight_id),
+             mapeh_component = VALUES(mapeh_component),
+             activity_name = VALUES(activity_name),
+             highest_possible_score = VALUES(highest_possible_score),
+             activity_date = VALUES(activity_date),
+             status = VALUES(status);`,
+          [
+            ga.activity_id,
+            ga.grade_sheet_id,
+            ga.subj_comp_weight_id || null,
+            ga.mapeh_component || null,
+            ga.activity_name,
+            ga.highest_possible_score,
+            actDate,
+            ga.status || 'ACTIVE',
+          ]
+        );
+      }
+    }
+    console.log('✅ Grade activities verified and synced to Aiven.');
+
+    // 0t. Sync local student grades to Aiven Cloud
+    const [localStudentGrades] = await localConn.query(
+      'SELECT student_grade_id, subject_offering_id, student_id, student_section_id, term, mapeh_component, mapeh_key, initial_grade, quarterly_grade, remarks FROM STUDENT_GRADE;'
+    );
+    console.log(`🎓 Checking ${localStudentGrades.length} local student quarterly grades...`);
+    if (localStudentGrades.length > 0) {
+      const CHUNK_SIZE = 100;
+      for (let i = 0; i < localStudentGrades.length; i += CHUNK_SIZE) {
+        const chunk = localStudentGrades.slice(i, i + CHUNK_SIZE);
+        const placeholders = chunk.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
+        const flat = [];
+        for (const sg of chunk) {
+          flat.push(
+            sg.student_grade_id,
+            sg.subject_offering_id,
+            sg.student_id,
+            sg.student_section_id || null,
+            sg.term,
+            sg.mapeh_component || null,
+            sg.mapeh_key || null,
+            sg.initial_grade,
+            sg.quarterly_grade,
+            sg.remarks || null
+          );
+        }
+        await aivenConn.query(
+          `INSERT INTO STUDENT_GRADE (student_grade_id, subject_offering_id, student_id, student_section_id, term, mapeh_component, mapeh_key, initial_grade, quarterly_grade, remarks)
+           VALUES ${placeholders}
+           ON DUPLICATE KEY UPDATE
+             subject_offering_id = VALUES(subject_offering_id),
+             student_id = VALUES(student_id),
+             student_section_id = VALUES(student_section_id),
+             term = VALUES(term),
+             mapeh_component = VALUES(mapeh_component),
+             mapeh_key = VALUES(mapeh_key),
+             initial_grade = VALUES(initial_grade),
+             quarterly_grade = VALUES(quarterly_grade),
+             remarks = VALUES(remarks);`,
+          flat
+        );
+      }
+    }
+    console.log('✅ Student quarterly grades verified and synced to Aiven.');
+
+    // 1. Sync ALL local scores to Aiven Cloud
+    const [localScores] = await localConn.query(
+      'SELECT score_id, activity_id, student_section_id, raw_score, score_status, teacher_assignment_id, created_at, updated_at FROM SCORE;'
+    );
+    console.log(`📊 Checking ${localScores.length} local scores...`);
+
+    if (localScores.length > 0) {
+      const toSqlDt = (d) => (d ? new Date(d).toISOString().slice(0, 19).replace('T', ' ') : null);
+      const CHUNK_SIZE = 100;
+      for (let i = 0; i < localScores.length; i += CHUNK_SIZE) {
+        const chunk = localScores.slice(i, i + CHUNK_SIZE);
+        const placeholders = chunk.map(() => '(?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
+        const flat = [];
+        for (const sc of chunk) {
+          flat.push(
+            sc.score_id,
+            sc.activity_id,
+            sc.student_section_id,
+            sc.raw_score,
+            sc.score_status || 'ENCODED',
+            sc.teacher_assignment_id || null,
+            toSqlDt(sc.created_at),
+            toSqlDt(sc.updated_at)
+          );
+        }
+        await aivenConn.query(
+          `INSERT INTO SCORE (score_id, activity_id, student_section_id, raw_score, score_status, teacher_assignment_id, created_at, updated_at)
+           VALUES ${placeholders}
+           ON DUPLICATE KEY UPDATE 
+             raw_score = VALUES(raw_score),
+             score_status = VALUES(score_status),
+             teacher_assignment_id = VALUES(teacher_assignment_id),
+             updated_at = VALUES(updated_at);`,
+          flat
+        );
+      }
+      console.log(`✅ Successfully uploaded/verified ${localScores.length} scores to Aiven!`);
     } else {
-      console.log('✅ Aiven is already up to date with local scores.');
+      console.log('✅ No local scores to upload.');
     }
 
-    // 3. Verify final state on Aiven
+    // 2. Verify final state on Aiven
     const [finalStats] = await aivenConn.query('SELECT MAX(score_id) as max_id, COUNT(*) as count FROM SCORE;');
     console.log('\n====================================================');
     console.log(`🎉 SUCCESS! Aiven now has ${finalStats[0].count} scores (Max ID: ${finalStats[0].max_id})`);

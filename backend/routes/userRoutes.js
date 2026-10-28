@@ -90,7 +90,7 @@ async function syncUsersFromCloud() {
   if (!db.cloudPool) return;
 
   const timeoutPromise = new Promise((_, reject) =>
-    setTimeout(() => reject(new Error('Cloud user sync timeout (2.5s exceeded)')), 2500)
+    setTimeout(() => reject(new Error('Cloud user sync timeout (5s exceeded)')), 5000)
   );
 
   const syncWork = (async () => {
@@ -100,7 +100,7 @@ async function syncUsersFromCloud() {
        FROM USER`
     );
 
-    if (cloudUsers && cloudUsers.length > 0) {
+    if (cloudUsers) {
       for (const u of cloudUsers) {
         await db.execute(
           `INSERT INTO USER (user_id, role, department_id, first_name, middle_name, last_name, extension_name, email, password, account_status, pfp_url, last_login_at)
@@ -133,13 +133,15 @@ async function syncUsersFromCloud() {
         );
       }
 
-      const cloudIds = cloudUsers.map((u) => u.user_id);
-      if (cloudIds.length > 0) {
-        const placeholders = cloudIds.map(() => '?').join(',');
-        await db.execute(
-          `DELETE FROM USER WHERE user_id NOT IN (${placeholders}) AND role <> 'system_admin'`,
-          cloudIds
-        );
+      // Safely cascade-delete local users that were removed from cloud
+      const cloudIdSet = new Set(cloudUsers.map((u) => Number(u.user_id)));
+      const [localUsers] = await db.query(
+        `SELECT user_id FROM USER WHERE role NOT IN ('admin', 'system_admin')`
+      );
+      for (const lu of localUsers) {
+        if (!cloudIdSet.has(Number(lu.user_id))) {
+          await deleteUserCascade(db, lu.user_id);
+        }
       }
     }
 
@@ -168,6 +170,16 @@ async function syncUsersFromCloud() {
           // ignore single assignment error
         }
       }
+
+      // Prune local adviser assignments no longer in cloud
+      const cloudSaaIdSet = new Set(cloudSaa.map((s) => Number(s.adviser_assignment_id)));
+      const [localSaa] = await db.query(`SELECT adviser_assignment_id FROM SECTION_ADVISER_ASSIGNMENT`);
+      for (const row of localSaa) {
+        if (!cloudSaaIdSet.has(Number(row.adviser_assignment_id))) {
+          await db.query(`UPDATE ATTENDANCE_SHEET SET adviser_assignment_id = NULL WHERE adviser_assignment_id = ?`, [row.adviser_assignment_id]).catch(() => {});
+          await db.query(`DELETE FROM SECTION_ADVISER_ASSIGNMENT WHERE adviser_assignment_id = ?`, [row.adviser_assignment_id]).catch(() => {});
+        }
+      }
     }
 
     const [cloudTa] = await db.cloudPool.query(
@@ -191,6 +203,18 @@ async function syncUsersFromCloud() {
           );
         } catch (taErr) {
           // ignore single assignment error
+        }
+      }
+
+      // Prune local teacher assignments no longer in cloud
+      const cloudTaIdSet = new Set(cloudTa.map((t) => Number(t.teacher_assignment_id)));
+      const [localTa] = await db.query(`SELECT teacher_assignment_id FROM TEACHER_ASSIGNMENT`);
+      for (const row of localTa) {
+        if (!cloudTaIdSet.has(Number(row.teacher_assignment_id))) {
+          await db.query(`UPDATE ATTENDANCE_SHEET SET teacher_assignment_id = NULL WHERE teacher_assignment_id = ?`, [row.teacher_assignment_id]).catch(() => {});
+          await db.query(`DELETE tr FROM TEMPORARY_REOPENING tr JOIN GRADE_REOPEN_REQUEST grr ON grr.request_id = tr.request_id WHERE grr.teacher_assignment_id = ?`, [row.teacher_assignment_id]).catch(() => {});
+          await db.query(`DELETE FROM GRADE_REOPEN_REQUEST WHERE teacher_assignment_id = ?`, [row.teacher_assignment_id]).catch(() => {});
+          await db.query(`DELETE FROM TEACHER_ASSIGNMENT WHERE teacher_assignment_id = ?`, [row.teacher_assignment_id]).catch(() => {});
         }
       }
     }
@@ -217,6 +241,15 @@ async function syncUsersFromCloud() {
           );
         } catch (dhErr) {
           // ignore single assignment error
+        }
+      }
+
+      // Prune local department head appointments no longer in cloud
+      const cloudDhIdSet = new Set(cloudDh.map((d) => Number(d.department_head_id)));
+      const [localDh] = await db.query(`SELECT department_head_id FROM DEPARTMENT_HEAD`);
+      for (const row of localDh) {
+        if (!cloudDhIdSet.has(Number(row.department_head_id))) {
+          await db.query(`DELETE FROM DEPARTMENT_HEAD WHERE department_head_id = ?`, [row.department_head_id]).catch(() => {});
         }
       }
     }
