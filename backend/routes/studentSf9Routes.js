@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
 const MasterSheetService = require('../services/MasterSheetService');
-const { excludedDates, monthlyNoClassCounts } = require('../services/AttendanceSummaryService');
+const { dateKey, excludedDates, monthlyNoClassCounts } = require('../services/AttendanceSummaryService');
 const { decryptLrn, hashLrn, maskLrn } = require('../utils/encryption');
 const { generateSf9Pdf } = require('../services/Sf9PdfService');
 
@@ -455,6 +455,8 @@ async function fetchStudentSf9Data(cleanId, schoolYearId) {
     const rawPresent = new Array(11).fill(0);
     const rawLate = new Array(11).fill(0);
     const rawAbsent = new Array(11).fill(0);
+    const monthlyDaysPresent = new Array(11).fill(0);
+    const monthlyDaysAbsent = new Array(11).fill(0);
 
     if (sectionInfo && studentSectionId) {
       const [sheetRows] = await db.execute(
@@ -468,11 +470,9 @@ async function fetchStudentSf9Data(cleanId, schoolYearId) {
       const noClassDates = excludedDates(sheetRows);
       const exclusionsByMonth = monthlyNoClassCounts(sheetRows, sectionInfo.starts_on, sectionInfo.ends_on);
       exclusionsByMonth.forEach((count, index) => { monthlyClassDays[index] = Math.max(0, monthlyClassDays[index] - count); });
-      const classSheets = sheetRows.filter(sheet => !noClassDates.has(String(sheet.attendance_date instanceof Date
-        ? sheet.attendance_date.toISOString() : sheet.attendance_date).slice(0, 10)));
+      const classSheets = sheetRows.filter(sheet => !noClassDates.has(dateKey(sheet.attendance_date)));
       if (classSheets.length > 0) {
         const sheetIds = classSheets.map(s => s.attendance_sheet_id);
-        const sheetDateMap = new Map(classSheets.map(s => [s.attendance_sheet_id, s.attendance_date]));
 
         const ph = sheetIds.map(() => '?').join(',');
         const [attRows] = await db.execute(
@@ -481,36 +481,55 @@ async function fetchStudentSf9Data(cleanId, schoolYearId) {
           [...sheetIds, studentSectionId]
         );
 
-        for (const row of attRows) {
-          const attDate = sheetDateMap.get(row.attendance_sheet_id);
-          if (!attDate) continue;
-          const dt = new Date(attDate);
-          const mIndex = MONTH_INDEX_MAP[dt.getMonth()];
-          if (mIndex !== undefined) {
-            if (row.status === 'P') {
-              rawPresent[mIndex] += 1;
-            } else if (row.status === 'L') {
-              rawLate[mIndex] += 1;
-            } else if (row.status === 'A') {
-              rawAbsent[mIndex] += 1;
-            }
+        const statusBySheetId = new Map(attRows.map(row => [row.attendance_sheet_id, row.status]));
+
+        // Group class sheets by distinct date (deduplicating multiple sheets on the same date)
+        const sheetsByDate = new Map();
+        for (const sheet of classSheets) {
+          const dStr = dateKey(sheet.attendance_date);
+          if (!sheetsByDate.has(dStr)) {
+            sheetsByDate.set(dStr, { dateStr: dStr, sheetIds: [] });
+          }
+          sheetsByDate.get(dStr).sheetIds.push(sheet.attendance_sheet_id);
+        }
+
+        const activeMonths = new Set();
+        // For each unique recorded class day, evaluate learner attendance:
+        for (const [, { dateStr, sheetIds: daySheetIds }] of sheetsByDate) {
+          const parts = dateStr.split('-');
+          const monthNum = parseInt(parts[1], 10) - 1;
+          const mIndex = MONTH_INDEX_MAP[monthNum];
+          if (mIndex === undefined) continue;
+          activeMonths.add(mIndex);
+
+          const statuses = daySheetIds.map(id => statusBySheetId.get(id)).filter(Boolean);
+          if (statuses.includes('P')) {
+            rawPresent[mIndex] += 1;
+          } else if (statuses.includes('L')) {
+            rawLate[mIndex] += 1;
+          } else if (statuses.includes('A')) {
+            rawAbsent[mIndex] += 1;
+          }
+        }
+
+        const maxActiveMonth = activeMonths.size > 0 ? Math.max(...activeMonths) : -1;
+        let accumulatedLates = 0;
+
+        for (let i = 0; i < 11; i++) {
+          accumulatedLates += rawLate[i];
+          const convertedAbsent = Math.floor(accumulatedLates / 3);
+          accumulatedLates = accumulatedLates % 3; // remainder lates carry over to next month
+
+          monthlyDaysPresent[i] = Math.max(0, (rawPresent[i] + rawLate[i]) - convertedAbsent);
+
+          // In SF9, blank cells count as absent: Days Absent = Class Days - Days Present
+          if (i <= maxActiveMonth) {
+            monthlyDaysAbsent[i] = Math.max(0, monthlyClassDays[i] - monthlyDaysPresent[i]);
+          } else {
+            monthlyDaysAbsent[i] = 0;
           }
         }
       }
-    }
-
-    // Apply rule: Every 3 Lates = 1 Absent (accumulating chronologically across months)
-    const monthlyDaysPresent = new Array(11).fill(0);
-    const monthlyDaysAbsent = new Array(11).fill(0);
-    let accumulatedLates = 0;
-
-    for (let i = 0; i < 11; i++) {
-      accumulatedLates += rawLate[i];
-      const convertedAbsent = Math.floor(accumulatedLates / 3);
-      accumulatedLates = accumulatedLates % 3; // remainder lates carry over to next month
-
-      monthlyDaysAbsent[i] = rawAbsent[i] + convertedAbsent;
-      monthlyDaysPresent[i] = (rawPresent[i] + rawLate[i]) - convertedAbsent;
     }
 
     const attendanceData = {

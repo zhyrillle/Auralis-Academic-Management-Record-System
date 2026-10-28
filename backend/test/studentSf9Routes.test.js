@@ -105,7 +105,7 @@ test('SF9 excludes holiday attendance and deducts duplicate-marked dates only on
   assert.equal(response.statusCode, 200);
   assert.equal(response.body.attendanceData.classDays[0], 20); // June 2025 has 21 weekdays.
   assert.equal(response.body.attendanceData.daysPresent[0], 1);
-  assert.equal(response.body.attendanceData.daysAbsent[0], 0);
+  assert.equal(response.body.attendanceData.daysAbsent[0], 19);
   const sheetQuery = harness.calls.find(({ sql }) => sql.includes('FROM ATTENDANCE_SHEET ash'));
   assert.deepEqual(sheetQuery.params, [7, 2]);
   assert.match(sheetQuery.sql, /school_year_id = \?/);
@@ -118,4 +118,21 @@ test('SF9 general UI response masks student LRN for data privacy', async () => {
   assert.equal(response.statusCode, 200);
   assert.equal(response.body.studentProfile.lrn, '100000******');
 });
+
+test('SF9 counts blank cells on recorded attendance days as absent', async () => {
+  const harness = routeHarness({ attendanceSheets: [
+    { attendance_sheet_id: 1, attendance_date: '2025-06-13', no_class_reason: null },
+    { attendance_sheet_id: 2, attendance_date: '2025-06-16', no_class_reason: null },
+    { attendance_sheet_id: 3, attendance_date: '2025-06-17', no_class_reason: null },
+  ], attendanceRows: [
+    { attendance_sheet_id: 1, status: 'P' },
+    // Sheet 2 has no attendance row (blank / unmarked cell)
+    { attendance_sheet_id: 3, status: 'BLANK' }, // Sheet 3 has BLANK status
+  ] });
+  const response = await harness.run({ schoolYearId: '2' });
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.attendanceData.daysPresent[0], 1);
+  assert.equal(response.body.attendanceData.daysAbsent[0], 20); // 21 weekdays - 1 present = 20 absent
+});
+
 
