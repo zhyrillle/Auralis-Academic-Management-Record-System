@@ -273,8 +273,17 @@
   font-size: 12px;
 }
 
-.pr-class-card-actions {
+.pr-class-card-details {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   margin-top: auto;
+  padding-top: 16px;
+  min-width: 0;
+}
+
+.pr-class-card-actions {
+  margin-top: 0;
   padding-top: 14px;
   width: 100%;
 }

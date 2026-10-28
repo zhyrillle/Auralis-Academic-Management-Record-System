@@ -366,11 +366,13 @@ export default function PrincipalReports() {
                         {gradeLabel && <Badge className="pr-class-grade-badge">{gradeLabel}</Badge>}
                       </div>
 
-                      <div className="pr-class-subject" title={displaySubject}>{displaySubject}</div>
+                      <div className="pr-class-card-details">
+                        <div className="pr-class-subject" title={displaySubject}>{displaySubject}</div>
 
-                      <div className="pr-class-students">
-                        <Users size={16} className="pr-class-icon" />
-                        <span>{sec.studentCount} student{sec.studentCount === 1 ? "" : "s"}</span>
+                        <div className="pr-class-students">
+                          <Users size={16} className="pr-class-icon" />
+                          <span>{sec.studentCount} student{sec.studentCount === 1 ? "" : "s"}</span>
+                        </div>
                       </div>
 
                       <div className="pr-class-card-actions">
