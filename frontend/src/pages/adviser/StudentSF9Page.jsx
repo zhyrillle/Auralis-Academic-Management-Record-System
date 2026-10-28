@@ -57,7 +57,11 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
   const userRole = propUserRole || (normRole === "adviser" ? "adviser" : normRole === "principal" ? "principal" : "teacher");
   const isAdviser = typeof propIsAdviser === "boolean"
     ? propIsAdviser
-    : (userRole === "adviser" || userRole === "principal");
+    : typeof student?.isAdviser === "boolean"
+      ? student.isAdviser
+      : student?.assignmentType
+        ? student.assignmentType === "advisory"
+        : (userRole === "adviser" || userRole === "principal");
 
   const [requestedTab, setActiveTab] = useState(() => {
     if (!isAdviser) return "personal";
@@ -1139,17 +1143,19 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
                   <span className="profile-field-value">{studentProfile.name || "Unavailable"}</span>
                 </div>
 
-                <div className="profile-field-group">
-                  <span className="profile-field-label">Learner Reference Number (LRN)</span>
-                  <span className="profile-field-value">
-                    <MaskedLrn
-                      lrn={studentProfile.lrn}
-                      showToggle={false}
-                      allowCopy={false}
-                      badge={true}
-                    />
-                  </span>
-                </div>
+                {isAdviser && (
+                  <div className="profile-field-group">
+                    <span className="profile-field-label">Learner Reference Number (LRN)</span>
+                    <span className="profile-field-value">
+                      <MaskedLrn
+                        lrn={studentProfile.lrn}
+                        showToggle={false}
+                        allowCopy={false}
+                        badge={true}
+                      />
+                    </span>
+                  </div>
+                )}
 
                 <div className="profile-field-group">
                   <span className="profile-field-label">Sex</span>
