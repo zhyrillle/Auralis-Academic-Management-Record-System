@@ -109,7 +109,7 @@ async function loadGradeLevels() {
 /**
  * Aggregates multi-term subject performance from STUDENT_GRADE and joins.
  */
-async function querySubjectAnalytics({ schoolYearValue, gradeLevelValue }) {
+async function querySubjectAnalytics({ schoolYearValue, gradeLevelValue, includeUnrated = false }) {
   const startYear = parseInt(String(schoolYearValue || '2026').split('-')[0], 10);
   const glFilter = gradeLevelValue && gradeLevelValue !== 'all' ? Number(gradeLevelValue) : null;
 
@@ -189,7 +189,7 @@ async function querySubjectAnalytics({ schoolYearValue, gradeLevelValue }) {
       termPassRates: grades.map(values => values.length ? round(values.filter(grade => grade >= 75).length / values.length * 100) : 0),
       termGradeCounts: grades.map(values => values.length),
     };
-  }).filter(subject => subject.termGradeCounts.some(count => count > 0));
+  }).filter(subject => includeUnrated || subject.termGradeCounts.some(count => count > 0));
   const schoolWideGradeCounts = [0, 1, 2].map(index => subjects.reduce((total, subject) => total + subject.termGradeCounts[index], 0));
   const schoolWideAverages = [0, 1, 2].map(index => {
     const values = subjects.filter(subject => subject.termGradeCounts[index] > 0).map(subject => subject.termAverages[index]);
@@ -237,6 +237,7 @@ router.get('/subject-trend', async (req, res) => {
       querySubjectAnalytics({
         schoolYearValue: schoolYear,
         gradeLevelValue: gradeLevel,
+        includeUnrated: req.query.includeUnrated === "true",
       }),
       loadAvailableSchoolYears(),
       loadGradeLevels(),
