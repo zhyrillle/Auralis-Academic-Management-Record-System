@@ -32,6 +32,8 @@ async function pushLocalToAiven() {
   });
 
   try {
+    await aivenConn.query('SET FOREIGN_KEY_CHECKS = 0;').catch(() => {});
+
     // 0. Sync local users to Aiven Cloud
     const [localUsers] = await localConn.query('SELECT * FROM USER;');
     console.log(`👤 Checking ${localUsers.length} local users...`);
@@ -443,86 +445,7 @@ async function pushLocalToAiven() {
     }
     console.log('✅ Phil-IRI screenings verified and synced to Aiven.');
 
-    // 0o. Sync local grade reopening requests to Aiven Cloud
-    const [localGRR] = await localConn.query('SELECT request_id, grade_sheet_id, teacher_assignment_id, reviewed_by_user_id, reason, status, file_name, file_path, file_type, file_size, requested_at, reviewed_at FROM GRADE_REOPEN_REQUEST;');
-    console.log(`🔓 Checking ${localGRR.length} local reopen requests...`);
-    if (localGRR.length > 0) {
-      const toSqlDt = (d) => (d ? new Date(d).toISOString().slice(0, 19).replace('T', ' ') : null);
-      for (const r of localGRR) {
-        await aivenConn.query(
-          `INSERT INTO GRADE_REOPEN_REQUEST (request_id, grade_sheet_id, teacher_assignment_id, reviewed_by_user_id, reason, status, file_name, file_path, file_type, file_size, requested_at, reviewed_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-           ON DUPLICATE KEY UPDATE
-             grade_sheet_id = VALUES(grade_sheet_id),
-             teacher_assignment_id = VALUES(teacher_assignment_id),
-             reviewed_by_user_id = VALUES(reviewed_by_user_id),
-             reason = VALUES(reason),
-             status = VALUES(status),
-             file_name = VALUES(file_name),
-             file_path = VALUES(file_path),
-             file_type = VALUES(file_type),
-             file_size = VALUES(file_size),
-             requested_at = VALUES(requested_at),
-             reviewed_at = VALUES(reviewed_at);`,
-          [r.request_id, r.grade_sheet_id, r.teacher_assignment_id, r.reviewed_by_user_id || null, r.reason, r.status || 'PENDING', r.file_name || null, r.file_path || null, r.file_type || null, r.file_size || null, toSqlDt(r.requested_at), toSqlDt(r.reviewed_at)]
-        );
-      }
-    }
-    console.log('✅ Reopen requests verified and synced to Aiven.');
-
-    // 0p. Sync local temporary reopenings to Aiven Cloud
-    const [localTR] = await localConn.query('SELECT temporary_reopening_id, request_id, starts_at, expires_at, status, created_at FROM TEMPORARY_REOPENING;');
-    console.log(`⏱️ Checking ${localTR.length} local temporary reopenings...`);
-    if (localTR.length > 0) {
-      const toSqlDt = (d) => (d ? new Date(d).toISOString().slice(0, 19).replace('T', ' ') : null);
-      for (const t of localTR) {
-        await aivenConn.query(
-          `INSERT INTO TEMPORARY_REOPENING (temporary_reopening_id, request_id, starts_at, expires_at, status, created_at)
-           VALUES (?, ?, ?, ?, ?, ?)
-           ON DUPLICATE KEY UPDATE
-             request_id = VALUES(request_id),
-             starts_at = VALUES(starts_at),
-             expires_at = VALUES(expires_at),
-             status = VALUES(status),
-             created_at = VALUES(created_at);`,
-          [t.temporary_reopening_id, t.request_id, toSqlDt(t.starts_at), toSqlDt(t.expires_at), t.status || 'ACTIVE', toSqlDt(t.created_at)]
-        );
-      }
-    }
-    console.log('✅ Temporary reopenings verified and synced to Aiven.');
-
-    // 0q. Sync local feedback to Aiven Cloud
-    const [localFB] = await localConn.query('SELECT feedback_id, evaluator_id, evaluee_id, q1_rate, q2_rate, q3_rate, q4_rate, q5_rate, q6_rate, q7_rate, q8_rate, strengths_comments, improvements_comments, status, created_at, reviewed_at FROM FEEDBACK;');
-    console.log(`💬 Checking ${localFB.length} local feedback records...`);
-    if (localFB.length > 0) {
-      const toSqlDt = (d) => (d ? new Date(d).toISOString().slice(0, 19).replace('T', ' ') : null);
-      for (const f of localFB) {
-        await aivenConn.query(
-          `INSERT INTO FEEDBACK (feedback_id, evaluator_id, evaluee_id, q1_rate, q2_rate, q3_rate, q4_rate, q5_rate, q6_rate, q7_rate, q8_rate, strengths_comments, improvements_comments, status, created_at, reviewed_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-           ON DUPLICATE KEY UPDATE
-             evaluator_id = VALUES(evaluator_id),
-             evaluee_id = VALUES(evaluee_id),
-             q1_rate = VALUES(q1_rate),
-             q2_rate = VALUES(q2_rate),
-             q3_rate = VALUES(q3_rate),
-             q4_rate = VALUES(q4_rate),
-             q5_rate = VALUES(q5_rate),
-             q6_rate = VALUES(q6_rate),
-             q7_rate = VALUES(q7_rate),
-             q8_rate = VALUES(q8_rate),
-             strengths_comments = VALUES(strengths_comments),
-             improvements_comments = VALUES(improvements_comments),
-             status = VALUES(status),
-             created_at = VALUES(created_at),
-             reviewed_at = VALUES(reviewed_at);`,
-          [f.feedback_id, f.evaluator_id, f.evaluee_id, f.q1_rate, f.q2_rate, f.q3_rate, f.q4_rate, f.q5_rate, f.q6_rate, f.q7_rate, f.q8_rate, f.strengths_comments || null, f.improvements_comments || null, f.status || 'OPEN', toSqlDt(f.created_at), toSqlDt(f.reviewed_at)]
-        );
-      }
-    }
-    console.log('✅ Feedback records verified and synced to Aiven.');
-
-    // 0r. Sync local grade sheets to Aiven Cloud
+    // 0o. Sync local grade sheets to Aiven Cloud
     const [localGradeSheets] = await localConn.query(
       'SELECT grade_sheet_id, subject_offering_id, term_id, workflow_status, lock_status, submitted_at, approved_at, locked_at FROM GRADE_SHEET;'
     );
@@ -556,7 +479,7 @@ async function pushLocalToAiven() {
     }
     console.log('✅ Grade sheets verified and synced to Aiven.');
 
-    // 0s. Sync local grade activities to Aiven Cloud
+    // 0p. Sync local grade activities to Aiven Cloud
     const [localActivities] = await localConn.query(
       'SELECT activity_id, grade_sheet_id, subj_comp_weight_id, mapeh_component, activity_name, highest_possible_score, activity_date, status FROM GRADE_ACTIVITY;'
     );
@@ -589,6 +512,85 @@ async function pushLocalToAiven() {
       }
     }
     console.log('✅ Grade activities verified and synced to Aiven.');
+
+    // 0q. Sync local grade reopening requests to Aiven Cloud
+    const [localGRR] = await localConn.query('SELECT request_id, grade_sheet_id, teacher_assignment_id, reviewed_by_user_id, reason, status, file_name, file_path, file_type, file_size, requested_at, reviewed_at FROM GRADE_REOPEN_REQUEST;');
+    console.log(`🔓 Checking ${localGRR.length} local reopen requests...`);
+    if (localGRR.length > 0) {
+      const toSqlDt = (d) => (d ? new Date(d).toISOString().slice(0, 19).replace('T', ' ') : null);
+      for (const r of localGRR) {
+        await aivenConn.query(
+          `INSERT INTO GRADE_REOPEN_REQUEST (request_id, grade_sheet_id, teacher_assignment_id, reviewed_by_user_id, reason, status, file_name, file_path, file_type, file_size, requested_at, reviewed_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE
+             grade_sheet_id = VALUES(grade_sheet_id),
+             teacher_assignment_id = VALUES(teacher_assignment_id),
+             reviewed_by_user_id = VALUES(reviewed_by_user_id),
+             reason = VALUES(reason),
+             status = VALUES(status),
+             file_name = VALUES(file_name),
+             file_path = VALUES(file_path),
+             file_type = VALUES(file_type),
+             file_size = VALUES(file_size),
+             requested_at = VALUES(requested_at),
+             reviewed_at = VALUES(reviewed_at);`,
+          [r.request_id, r.grade_sheet_id, r.teacher_assignment_id, r.reviewed_by_user_id || null, r.reason, r.status || 'PENDING', r.file_name || null, r.file_path || null, r.file_type || null, r.file_size || null, toSqlDt(r.requested_at), toSqlDt(r.reviewed_at)]
+        );
+      }
+    }
+    console.log('✅ Reopen requests verified and synced to Aiven.');
+
+    // 0r. Sync local temporary reopenings to Aiven Cloud
+    const [localTR] = await localConn.query('SELECT temporary_reopening_id, request_id, starts_at, expires_at, status, created_at FROM TEMPORARY_REOPENING;');
+    console.log(`⏱️ Checking ${localTR.length} local temporary reopenings...`);
+    if (localTR.length > 0) {
+      const toSqlDt = (d) => (d ? new Date(d).toISOString().slice(0, 19).replace('T', ' ') : null);
+      for (const t of localTR) {
+        await aivenConn.query(
+          `INSERT INTO TEMPORARY_REOPENING (temporary_reopening_id, request_id, starts_at, expires_at, status, created_at)
+           VALUES (?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE
+             request_id = VALUES(request_id),
+             starts_at = VALUES(starts_at),
+             expires_at = VALUES(expires_at),
+             status = VALUES(status),
+             created_at = VALUES(created_at);`,
+          [t.temporary_reopening_id, t.request_id, toSqlDt(t.starts_at), toSqlDt(t.expires_at), t.status || 'ACTIVE', toSqlDt(t.created_at)]
+        );
+      }
+    }
+    console.log('✅ Temporary reopenings verified and synced to Aiven.');
+
+    // 0s. Sync local feedback to Aiven Cloud
+    const [localFB] = await localConn.query('SELECT feedback_id, evaluator_id, evaluee_id, q1_rate, q2_rate, q3_rate, q4_rate, q5_rate, q6_rate, q7_rate, q8_rate, strengths_comments, improvements_comments, status, created_at, reviewed_at FROM FEEDBACK;');
+    console.log(`💬 Checking ${localFB.length} local feedback records...`);
+    if (localFB.length > 0) {
+      const toSqlDt = (d) => (d ? new Date(d).toISOString().slice(0, 19).replace('T', ' ') : null);
+      for (const f of localFB) {
+        await aivenConn.query(
+          `INSERT INTO FEEDBACK (feedback_id, evaluator_id, evaluee_id, q1_rate, q2_rate, q3_rate, q4_rate, q5_rate, q6_rate, q7_rate, q8_rate, strengths_comments, improvements_comments, status, created_at, reviewed_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE
+             evaluator_id = VALUES(evaluator_id),
+             evaluee_id = VALUES(evaluee_id),
+             q1_rate = VALUES(q1_rate),
+             q2_rate = VALUES(q2_rate),
+             q3_rate = VALUES(q3_rate),
+             q4_rate = VALUES(q4_rate),
+             q5_rate = VALUES(q5_rate),
+             q6_rate = VALUES(q6_rate),
+             q7_rate = VALUES(q7_rate),
+             q8_rate = VALUES(q8_rate),
+             strengths_comments = VALUES(strengths_comments),
+             improvements_comments = VALUES(improvements_comments),
+             status = VALUES(status),
+             created_at = VALUES(created_at),
+             reviewed_at = VALUES(reviewed_at);`,
+          [f.feedback_id, f.evaluator_id, f.evaluee_id, f.q1_rate, f.q2_rate, f.q3_rate, f.q4_rate, f.q5_rate, f.q6_rate, f.q7_rate, f.q8_rate, f.strengths_comments || null, f.improvements_comments || null, f.status || 'OPEN', toSqlDt(f.created_at), toSqlDt(f.reviewed_at)]
+        );
+      }
+    }
+    console.log('✅ Feedback records verified and synced to Aiven.');
 
     // 0t. Sync local student grades to Aiven Cloud (omit surrogate student_grade_id and generated column mapeh_key)
     const [localStudentGrades] = await localConn.query(
@@ -675,6 +677,7 @@ async function pushLocalToAiven() {
   } catch (err) {
     console.error('❌ Failed to push to Aiven:', err.message);
   } finally {
+    await aivenConn.query('SET FOREIGN_KEY_CHECKS = 1;').catch(() => {});
     await localConn.end();
     await aivenConn.end();
   }
