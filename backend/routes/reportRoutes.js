@@ -394,19 +394,6 @@ router.get('/sf10/:studentId', async (req, res) => {
           finalGenAvg = Math.round(sumFinal / mainSubjects.length);
         }
         genAvgRemarks = finalGenAvg >= 75 ? "Passed" : "Failed";
-
-        if (mainSubjects.every((s) => typeof s.t1 === 'number')) {
-          const sumT1 = mainSubjects.reduce((sum, s) => sum + s.t1, 0);
-          genAvgT1 = Math.round(sumT1 / mainSubjects.length);
-        }
-        if (mainSubjects.every((s) => typeof s.t2 === 'number')) {
-          const sumT2 = mainSubjects.reduce((sum, s) => sum + s.t2, 0);
-          genAvgT2 = Math.round(sumT2 / mainSubjects.length);
-        }
-        if (mainSubjects.every((s) => typeof s.t3 === 'number')) {
-          const sumT3 = mainSubjects.reduce((sum, s) => sum + s.t3, 0);
-          genAvgT3 = Math.round(sumT3 / mainSubjects.length);
-        }
       }
 
       const isEnrolledOrHasGrades = !!matchingEnrollment || matchingGrades.length > 0;

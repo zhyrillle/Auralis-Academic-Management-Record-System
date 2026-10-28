@@ -211,9 +211,10 @@ async function getTeacherAssignedClasses(userId) {
   for (const cls of classes) {
     // 1. Direct enrollee count in this section
     const [sCount] = await db.execute(
-      `SELECT COUNT(DISTINCT student_id) AS student_count
-       FROM STUDENT_SECTION
-       WHERE section_id = ?`,
+      `SELECT COUNT(DISTINCT ss.student_id) AS student_count
+       FROM STUDENT_SECTION ss
+       INNER JOIN STUDENT s ON s.student_id = ss.student_id
+       WHERE ss.section_id = ? AND (s.status = 'ACTIVE' OR s.status IS NULL)`,
       [cls.section_id]
     ).catch(() => [[{ student_count: 0 }]]);
     cls.studentCount = Number(sCount[0]?.student_count || 0);
@@ -978,12 +979,14 @@ router.get('/subject-area-performance', async (req, res) => {
       `SELECT
          s.subject_name,
          s.subject_code,
-         COUNT(DISTINCT ss.student_id) AS student_count,
+         COUNT(DISTINCT st.student_id) AS student_count,
          AVG(COALESCE(sg.quarterly_grade, sg.initial_grade)) AS avg_grade
        FROM SUBJECT_OFFERING so
        JOIN SUBJECT s ON s.subject_id = so.subject_id
        LEFT JOIN STUDENT_SECTION ss ON ss.section_id = so.section_id
+       LEFT JOIN STUDENT st ON st.student_id = ss.student_id AND (st.status = 'ACTIVE' OR st.status IS NULL)
        LEFT JOIN STUDENT_GRADE sg ON sg.subject_offering_id = so.subject_offering_id
+         AND sg.student_id = st.student_id
          AND (UPPER(sg.term) LIKE ? OR UPPER(sg.term) LIKE ?)
        WHERE so.section_id = ?
        GROUP BY s.subject_id, s.subject_name, s.subject_code
@@ -1387,8 +1390,14 @@ router.get('/grade-range-report', async (req, res) => {
 
       // 1. Get enrolled students for this section
       const studentSql = schoolYearId && schoolYearId !== 'all'
-        ? `SELECT DISTINCT ss.student_id, ss.student_section_id FROM STUDENT_SECTION ss WHERE ss.section_id = ? AND ss.school_year_id = ?`
-        : `SELECT DISTINCT ss.student_id, ss.student_section_id FROM STUDENT_SECTION ss WHERE ss.section_id = ?`;
+        ? `SELECT DISTINCT ss.student_id, ss.student_section_id
+           FROM STUDENT_SECTION ss
+           INNER JOIN STUDENT s ON s.student_id = ss.student_id
+           WHERE ss.section_id = ? AND ss.school_year_id = ? AND (s.status = 'ACTIVE' OR s.status IS NULL)`
+        : `SELECT DISTINCT ss.student_id, ss.student_section_id
+           FROM STUDENT_SECTION ss
+           INNER JOIN STUDENT s ON s.student_id = ss.student_id
+           WHERE ss.section_id = ? AND (s.status = 'ACTIVE' OR s.status IS NULL)`;
       const studentParams = schoolYearId && schoolYearId !== 'all'
         ? [section_id, schoolYearId]
         : [section_id];

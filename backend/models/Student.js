@@ -287,6 +287,16 @@ class Student {
   }
 
   static async delete(id) {
+    const q = (sql, params) => db.execute(sql, params).catch(() => {});
+    const [ssRows] = await db.execute('SELECT student_section_id FROM STUDENT_SECTION WHERE student_id = ?', [id]).catch(() => [[]]);
+    for (const ss of ssRows) {
+      await q('DELETE FROM ATTENDANCE WHERE student_section_id = ?', [ss.student_section_id]);
+      await q('DELETE FROM PHIL_IRI_ASSESSMENT WHERE student_section_id = ?', [ss.student_section_id]);
+      await q('DELETE FROM PHIL_IRI_SCREENING WHERE student_section_id = ?', [ss.student_section_id]);
+      await q('DELETE FROM SCORE WHERE student_section_id = ?', [ss.student_section_id]);
+    }
+    await q('DELETE FROM STUDENT_GRADE WHERE student_id = ?', [id]);
+    await q('DELETE FROM STUDENT_SECTION WHERE student_id = ?', [id]);
     const [result] = await db.execute('DELETE FROM STUDENT WHERE student_id = ?', [id]);
     return result.affectedRows > 0;
   }

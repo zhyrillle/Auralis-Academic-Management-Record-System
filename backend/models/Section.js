@@ -51,11 +51,12 @@ class Section {
         COALESCE(gl.grade_level_name, 'G7') AS grade_level_name,
         COALESCE(gl.grade_level_name, 'G7') AS level,
         'Active' AS status,
-        COUNT(DISTINCT ss.student_id) AS student_count
+        COUNT(DISTINCT s.student_id) AS student_count
       FROM SECTION sec
       LEFT JOIN PROGRAM p ON p.program_id = sec.program_id
       LEFT JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
       LEFT JOIN STUDENT_SECTION ss ON ss.section_id = sec.section_id
+      LEFT JOIN STUDENT s ON s.student_id = ss.student_id AND (s.status = 'ACTIVE' OR s.status IS NULL)
       GROUP BY sec.section_id, sec.section_name, sec.grade_level_id, sec.program_id, p.program_code, p.program_name, p.is_specialized, gl.grade_level_name
       ORDER BY sec.grade_level_id ASC, sec.section_name ASC
     `);
@@ -89,11 +90,12 @@ class Section {
         COALESCE(gl.grade_level_name, 'G7') AS grade_level_name,
         COALESCE(gl.grade_level_name, 'G7') AS level,
         'Active' AS status,
-        COUNT(DISTINCT ss.student_id) AS student_count
+        COUNT(DISTINCT s.student_id) AS student_count
       FROM SECTION sec
       LEFT JOIN PROGRAM p ON p.program_id = sec.program_id
       LEFT JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
       LEFT JOIN STUDENT_SECTION ss ON ss.section_id = sec.section_id
+      LEFT JOIN STUDENT s ON s.student_id = ss.student_id AND (s.status = 'ACTIVE' OR s.status IS NULL)
       WHERE sec.section_id = ?
       GROUP BY sec.section_id, sec.section_name, sec.grade_level_id, sec.program_id, p.program_code, p.program_name, p.is_specialized, gl.grade_level_name
     `, [id]);
