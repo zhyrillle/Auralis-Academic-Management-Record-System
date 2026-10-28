@@ -29,9 +29,9 @@ function harness(overrides = {}) {
     if (sql.includes('FROM SUBJECT_OFFERING so JOIN SECTION')) return [[section]];
     if (sql.includes('FROM PHIL_IRI_SCREENING')) {
       if (overrides.screeningError) throw overrides.screeningError;
-      return [[screening, { ...screening, student_section_id: 102, critical_score: null }]];
+      return [overrides.screenings ?? [screening, { ...screening, student_section_id: 102, critical_score: null }]];
     }
-    if (sql.includes('FROM PHIL_IRI_ASSESSMENT')) return [[post]];
+    if (sql.includes('FROM PHIL_IRI_ASSESSMENT')) return [overrides.posts ?? [post]];
     if (sql.includes('FROM STUDENT_SECTION ss')) return [[101, 102, 103].map(student_section_id => ({ student_section_id,
       section_id: 7, lrn: 'encrypted', first_name: 'Demo', last_name: String(student_section_id),
       sex: student_section_id === 101 ? 'M' : student_section_id === 102 ? 'F' : null }))];
@@ -108,4 +108,53 @@ test('missing assessment tables are unavailable, while database failures remain 
   assert.equal(unavailable.sections[0].screeningComplete, null);
   assert.equal(unavailable.learners[0].screeningStatus, 'Unavailable');
   await assert.rejects(harness({ screeningError: new Error('Connection lost') }).DeptHeadMonitoringService.philIri(user, 12), /Connection lost/);
+});
+
+test('screening and post-test outcomes are counted separately; incomplete and absent results are excluded', async () => {
+  const h = harness({ screenings: [{ ...screening, score_threshold: 5 }, { ...screening, student_section_id: 102, score_threshold: 6 }],
+    posts: [{ ...post, overall_reading_level: 'INDEPENDENT' }, { ...post, student_section_id: 102 }] });
+  const result = await h.DeptHeadMonitoringService.philIri(user, 12);
+  const row = result.sections[0];
+  assert.equal(row.screeningPassed, 1);
+  assert.equal(row.screeningFailed, 1);
+  assert.equal(row.postTestIndependent, 1);
+  assert.equal(row.postTestFrustration, 1);
+  assert.equal(row.learnerCount, 3);
+  assert.equal(result.learners, undefined);
+  const missing = await harness({ screenings: [], posts: [] }).DeptHeadMonitoringService.philIri(user, 12);
+  assert.equal(missing.sections[0].screeningFailed, 0);
+  assert.equal(missing.sections[0].postTestFrustration, 0);
+});
+
+test('post-test preserves all three reading levels and screening includes the threshold boundary', async () => {
+  const posts = ['INDEPENDENT', 'INSTRUCTIONAL', 'FRUSTRATION'].map((level, index) => ({ ...post, student_section_id: 101 + index, overall_reading_level: level }));
+  const screenings = [27, 28, 29].map((total, index) => ({ ...screening, student_section_id: 101 + index,
+    literal_score: 10, inferential_score: 10, critical_score: total - 20, score_threshold: 28 }));
+  const result = await harness({ posts, screenings }).DeptHeadMonitoringService.philIri(user, 12);
+  const row = result.sections[0];
+  assert.equal(row.screeningFailed, 1);
+  assert.equal(row.screeningPassed, 2);
+  assert.deepEqual(Array.from(row.screeningThresholds), [28]);
+  assert.equal(row.screeningThresholdCounts[28].passed, 2);
+  assert.equal(row.screeningThresholdCounts[28].failed, 1);
+  assert.equal(row.postTestIndependent, 1);
+  assert.equal(row.postTestInstructional, 1);
+  assert.equal(row.postTestFrustration, 1);
+});
+
+test('screening pass counts use each saved threshold rather than a fixed cutoff', async () => {
+  const screenings = [4, 5, 6].map((threshold, index) => ({ ...screening, student_section_id: 101 + index, score_threshold: threshold }));
+  const result = await harness({ screenings }).DeptHeadMonitoringService.philIri(user, 12);
+  assert.equal(result.sections[0].screeningPassed, 2);
+  assert.equal(result.sections[0].screeningFailed, 1);
+});
+
+test('pre-test summary reads numeric-string score_threshold database values', async () => {
+  const screenings = [27, 28, 29].map((total, index) => ({ ...screening,
+    student_section_id: 101 + index, test_taken: '1', literal_max: '14', inferential_max: '12', critical_max: '14',
+    literal_score: '10', inferential_score: '10', critical_score: String(total - 20), score_threshold: '28' }));
+  const data = await harness({ screenings }).DeptHeadMonitoringService.philIri(user, 12);
+  assert.deepEqual(Array.from(data.sections[0].screeningThresholds), [28]);
+  assert.equal(data.sections[0].screeningThresholdCounts['28'].passed, 2);
+  assert.equal(data.sections[0].screeningThresholdCounts['28'].failed, 1);
 });
