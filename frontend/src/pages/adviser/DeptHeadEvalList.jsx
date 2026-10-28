@@ -1,11 +1,11 @@
 import { cachedApiFetch as fetch } from "../../services/navigationCache.js";
 import React, { useState, useEffect } from "react";
-import { Search, Pencil, X, Check } from "lucide-react";
+import { Search, Pencil, X, Check, Lock } from "lucide-react";
 import backIconUrl from "../../assets/backButton.svg";
 import "../../styles/teacherEvalList.css";
 import { getStoredUser } from "../../utils/auth";
 
-export default function DeptHeadEvalList({ onBack, onCreateFeedback }) {
+export default function DeptHeadEvalList({ onBack, onCreateFeedback, windowStatus }) {
   const currentUser = getStoredUser();
   const [deptHeads, setDeptHeads] = useState([]);
   const [evaluatedUserIds, setEvaluatedUserIds] = useState(new Set());
@@ -149,15 +149,31 @@ export default function DeptHeadEvalList({ onBack, onCreateFeedback }) {
                       <p className="tel-meta">{head.dept}</p>
                     </div>
                     <button
-                      className={`tel-create-btn ${isEvaluated ? "submitted" : ""}`}
-                      disabled={isEvaluated}
-                      style={isEvaluated ? { opacity: 0.6, cursor: "not-allowed", backgroundColor: "#64748b" } : {}}
-                      onClick={() => !isEvaluated && onCreateFeedback && onCreateFeedback(head)}
+                      className={`tel-create-btn ${isEvaluated ? "submitted" : ""} ${!windowStatus?.can_submit && !isEvaluated ? "locked" : ""}`}
+                      disabled={isEvaluated || (windowStatus && !windowStatus.can_submit)}
+                      style={
+                        isEvaluated
+                          ? { opacity: 0.6, cursor: "not-allowed", backgroundColor: "#64748b" }
+                          : windowStatus && !windowStatus.can_submit
+                          ? { opacity: 0.65, cursor: "not-allowed", backgroundColor: "#94a3b8" }
+                          : {}
+                      }
+                      title={
+                        !windowStatus?.can_submit
+                          ? `Feedback is currently closed (Deadline: ${windowStatus?.formatted_deadline || "passed"}).`
+                          : undefined
+                      }
+                      onClick={() => !isEvaluated && windowStatus?.can_submit && onCreateFeedback && onCreateFeedback(head)}
                     >
                       {isEvaluated ? (
                         <>
                           <Check size={14} />
                           Feedback Submitted
+                        </>
+                      ) : windowStatus && !windowStatus.can_submit ? (
+                        <>
+                          <Lock size={14} />
+                          Feedback Closed
                         </>
                       ) : (
                         <>

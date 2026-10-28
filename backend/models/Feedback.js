@@ -32,11 +32,14 @@ class Feedback {
     return rows;
   }
 
-  static async checkExistingFeedback(evaluatorId, evalueeId) {
-    const [rows] = await db.execute(
-      'SELECT * FROM FEEDBACK WHERE evaluator_id = ? AND evaluee_id = ?',
-      [evaluatorId, evalueeId]
-    );
+  static async checkExistingFeedback(evaluatorId, evalueeId, startDate = null, endDate = null) {
+    let query = 'SELECT * FROM FEEDBACK WHERE evaluator_id = ? AND evaluee_id = ?';
+    const params = [evaluatorId, evalueeId];
+    if (startDate && endDate) {
+      query += ' AND created_at >= ? AND created_at <= ?';
+      params.push(startDate, endDate);
+    }
+    const [rows] = await db.execute(query, params);
     return rows.length > 0 ? rows[0] : null;
   }
 
