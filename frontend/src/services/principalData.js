@@ -56,6 +56,7 @@ export function usePrincipalQuery(name, filters, loader, { comparison = false } 
   const requestedYear = comparison ? filters.primarySchoolYear : filters.schoolYear;
   const primary = options.find(year => year.value === requestedYear) || options.find(year => year.isCurrent) || options[0];
   const comparisonYear = options.find(year => year.value === filters.comparisonSchoolYear && year.value !== primary?.value)
+    || (primary?.value ? options.find(year => year.value < primary.value) : null)
     || options.find(year => year.value !== primary?.value);
   const resolved = comparison
     ? { ...filters, primarySchoolYear: primary?.value || '', comparisonSchoolYear: comparisonYear?.value || '' }

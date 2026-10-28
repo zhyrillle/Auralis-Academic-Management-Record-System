@@ -292,9 +292,11 @@ if (typeof window !== 'undefined') {
   };
 
   window.addEventListener('focus', revalidateOnFocus);
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') {
-      revalidateOnFocus();
-    }
-  });
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        revalidateOnFocus();
+      }
+    });
+  }
 }

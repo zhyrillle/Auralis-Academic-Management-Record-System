@@ -11,7 +11,7 @@ function predict(records) {
 
   return new Promise((resolve, reject) => {
     const child = execFile(pythonExecutable(), [path.join(modelDirectory, 'predict.py')], {
-      timeout: 35000, maxBuffer: 4 * 1024 * 1024, windowsHide: true,
+      timeout: 60000, maxBuffer: 4 * 1024 * 1024, windowsHide: true,
     }, (error, stdout) => {
       let result;
       try { result = JSON.parse(stdout); } catch { /* Missing runtime or invalid worker output. */ }

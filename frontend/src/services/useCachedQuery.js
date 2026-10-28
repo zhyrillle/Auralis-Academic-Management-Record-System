@@ -2,6 +2,9 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from '
 import { getNavigationSnapshot, loadCached, subscribeNavigationCache } from './navigationCache';
 
 export default function useCachedQuery(key, loader, { enabled = true, keepPreviousData = false } = {}) {
+  const loaderRef = useRef(loader);
+  loaderRef.current = loader;
+
   const snapshot = useCallback(() => enabled ? getNavigationSnapshot(key) : undefined, [key, enabled]);
   const entry = useSyncExternalStore(subscribeNavigationCache, snapshot, snapshot);
   const [keys, setKeys] = useState({ current: key, previous: key });
@@ -13,20 +16,20 @@ export default function useCachedQuery(key, loader, { enabled = true, keepPrevio
   const attemptedKey = useRef(null);
   useEffect(() => {
     if (!enabled) return;
-    loadCached(key, loader).catch(() => {});
-  }, [key, loader, enabled]);
+    loadCached(key, () => loaderRef.current()).catch(() => {});
+  }, [key, enabled]);
 
   // Periodic automatic sync: revalidate in background every 20s while tab is visible
   useEffect(() => {
     if (!enabled) return;
     const interval = setInterval(() => {
       if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-        loadCached(key, loader).catch(() => {});
+        loadCached(key, () => loaderRef.current()).catch(() => {});
       }
     }, 20_000);
     return () => clearInterval(interval);
-  }, [key, loader, enabled]);
-  const refresh = useCallback(() => loadCached(key, loader, { force: true }).catch(() => {}), [key, loader]);
+  }, [key, enabled]);
+  const refresh = useCallback(() => loadCached(key, () => loaderRef.current(), { force: true }).catch(() => {}), [key]);
   return {
     data: enabled ? data : undefined,
     loading: enabled && data === undefined && !entry?.error,
