@@ -72,14 +72,16 @@ export default function GroupedBarChart({
           return (
             <g key={group.id}>
               {group.values.map((bar, barIndex) => {
-                if (bar.value == null || bar.value === "" || !Number.isFinite(Number(bar.value))) return null;
+                const missing = bar.value == null || bar.value === "" || !Number.isFinite(Number(bar.value));
+                if (missing && !bar.showPlaceholder) return null;
                 const x =
                   centerX - (seriesCount * barWidth) / 2 + barIndex * barWidth;
                 const safeValue = bar.value <= 0 ? minimum : Math.max(bar.value, minimum);
-                const y = yFor(safeValue);
-                const barHeight = bar.value <= 0 ? 0 : Math.max(0, yFor(minimum) - y);
+                const y = missing || (bar.showPlaceholder && Number(bar.value) === 0) ? yFor(minimum) - 4 : yFor(safeValue);
+                const barHeight = missing || (bar.showPlaceholder && Number(bar.value) === 0) ? 4 : bar.value <= 0 ? 0 : Math.max(0, yFor(minimum) - y);
                 const detail = {
                   ...bar,
+                  value: missing ? "No grades" : bar.value,
                   group: group.label,
                   x: x + barWidth / 2,
                   y,
@@ -94,10 +96,10 @@ export default function GroupedBarChart({
                       width={barWidth - 8}
                       height={barHeight}
                       rx="6"
-                      fill={bar.color}
+                      fill={missing ? "#cbd5e1" : bar.color}
                       tabIndex="0"
                       role="button"
-                      aria-label={`${group.label}, ${bar.label}: ${bar.value}${suffix}${bar.detail ? `, ${bar.detail}` : ""}`}
+                      aria-label={`${group.label}, ${bar.label}: ${missing ? "No grades" : bar.value}${suffix}${bar.detail ? `, ${bar.detail}` : ""}`}
                       style={{
                         animationDelay: `${groupIndex * 55 + barIndex * 70}ms`,
                       }}
@@ -111,7 +113,7 @@ export default function GroupedBarChart({
                       y={y - 8}
                       textAnchor="middle"
                     >
-                      {bar.value}
+                      {missing ? "No grades" : bar.value}
                     </text>}
                   </g>
                 );

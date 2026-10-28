@@ -41,7 +41,7 @@ export default function SubjectPerformanceTrend() {
   const [viewMode, setViewMode] = useState("trend");
   const [rankingTerm, setRankingTerm] = useState("term-1");
   const { data, loading, refreshing, error, refresh, schoolYear, schoolYears } = usePrincipalQuery(
-    "analytics:subject-trend", { schoolYear: requestedYear, gradeLevel, term: viewMode === "trend" ? "overall" : rankingTerm }, getSubjectPerformanceTrend,
+    "analytics:subject-trend", { schoolYear: requestedYear, gradeLevel, includeUnrated: viewMode === "ranking" ? "true" : "false", term: viewMode === "trend" ? "overall" : rankingTerm }, getSubjectPerformanceTrend,
   );
   const [selectedSubjectIds, setSelectedSubjectIds] = useState(null);
 
@@ -362,7 +362,7 @@ export default function SubjectPerformanceTrend() {
                     <h2>Term {termIndex(displayedTerm) + 1} Subject Ranking</h2>
                     <p>
                       Subject average grades ranked against the DepEd passing
-                      grade of 75.
+                      grade of 75. Subjects without grades appear last with a muted placeholder bar.
                     </p>
                   </div>
                   <div className="pa-ranking-term-tabs">
@@ -376,14 +376,13 @@ export default function SubjectPerformanceTrend() {
                     />
                   </div>
                 </div>
-                {data.subjects.some(subject => subject.termGradeCounts[termIndex(displayedTerm)] > 0) ? <GroupedBarChart
+                {data.subjects.length ? <GroupedBarChart
                   ariaLabel={`Subject average grades for Term ${termIndex(displayedTerm) + 1}`}
                   groups={[...data.subjects]
-                    .filter(subject => subject.termGradeCounts[termIndex(displayedTerm)] > 0)
                     .sort(
                       (a, b) =>
-                        b.termAverages[termIndex(displayedTerm)] -
-                        a.termAverages[termIndex(displayedTerm)],
+                        Number(b.termGradeCounts[termIndex(displayedTerm)] > 0) - Number(a.termGradeCounts[termIndex(displayedTerm)] > 0) ||
+                        b.termAverages[termIndex(displayedTerm)] - a.termAverages[termIndex(displayedTerm)],
                     )
                     .map((subject) => ({
                       id: subject.id,
@@ -393,13 +392,14 @@ export default function SubjectPerformanceTrend() {
                         {
                           id: `${subject.id}-${displayedTerm}`,
                           label: `Term ${termIndex(displayedTerm) + 1}`,
-                          value: subject.termAverages[termIndex(displayedTerm)],
-                          detail: `${subject.learnerCount} learners`,
+                          value: subject.termGradeCounts[termIndex(displayedTerm)] > 0 ? subject.termAverages[termIndex(displayedTerm)] : null,
+                          showPlaceholder: true,
+                          detail: `${subject.termGradeCounts[termIndex(displayedTerm)]} recorded grades`,
                           color: "#123062",
                         },
                       ],
                     }))}
-                /> : <EmptyState className="pa-empty-state" icon={BookOpenCheck} title="No recorded grades for this term" description="Choose a term with saved grades to view its ranking." />}
+                /> : <EmptyState className="pa-empty-state" icon={BookOpenCheck} title="No subjects configured" description="Subjects will appear here once they are added to the subject catalog." />}
               </section>
             )}
           </>

@@ -10,7 +10,7 @@ const grades = [0, 88].map((grade, index) => ({
   subject_offering_id: 12, section_id: 7, grade_level_id: 1, grade_level_name: 'G7',
   starts_on: 2026, term: index ? 'T3' : 'T1', grade,
 }));
-function harness(file, { empty = false, fail = '', gradeRows = grades } = {}) {
+function harness(file, { empty = false, fail = '', gradeRows = grades, subjects = [{ subject_id: 1, subject_name: 'English', subject_code: 'ENG' }] } = {}) {
   const handlers = new Map(); const calls = [];
   const module = { exports: {} };
   const db = { execute: async (sql, params = []) => {
@@ -24,7 +24,7 @@ function harness(file, { empty = false, fail = '', gradeRows = grades } = {}) {
     if (sql.includes('FROM SECTION sec')) return [empty ? [] : [{ section_id: 7, section_name: 'Test Section', grade_level_id: 1, grade_level_name: 'G7', learners: 1 }]];
     if (sql.includes('FROM TEACHER_ASSIGNMENT')) return [empty ? [] : [{ user_id: 42, first_name: 'Test', last_name: 'Teacher', subject_offering_id: 12, subject_name: 'English', subject_code: 'ENG', section_id: 7, section_name: 'Test Section', grade_level_id: 1, grade_level_name: 'G7' }]];
     if (sql.includes('FROM GRADE_SHEET')) return [[]];
-    if (sql.includes('FROM SUBJECT')) return [empty ? [] : [{ subject_id: 1, subject_name: 'English', subject_code: 'ENG' }]];
+    if (sql.includes('FROM SUBJECT')) return [empty ? [] : subjects];
     if (sql.includes('FROM FEEDBACK')) return [[{ total_responses: 0, avg_rating: null, total_comments: 0 }]];
     throw new Error('Unexpected SQL: ' + sql);
   }};
@@ -104,3 +104,13 @@ test('Feedback empty success retains legitimate survey text; failures are not em
     }
   }
 });
+
+ test('Subject ranking retains specialization subjects without grades when requested', async () => {
+  const subjects = ['Journalism', 'Research', 'SPA specialization'].map((name, i) => ({ subject_id: i + 1, subject_name: name, subject_code: 'SPEC' + i }));
+  const h = harness('routes/principalAnalyticsRoutes.js', { subjects, gradeRows: [] });
+  const ranking = (await h.request('/subject-trend', { includeUnrated: 'true', term: 'term-1' })).body;
+  assert.equal(ranking.subjects.length, 3);
+  assert(ranking.subjects.every(subject => subject.termGradeCounts.every(count => count === 0)));
+  const trend = (await h.request('/subject-trend')).body;
+  assert.deepEqual(trend.subjects, []);
+ });
