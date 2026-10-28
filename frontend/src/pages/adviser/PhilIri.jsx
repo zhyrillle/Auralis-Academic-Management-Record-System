@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 import backIconUrl from "../../assets/backButton.svg";
 import depedLogoUrl from "../../assets/deped_logo.png";
 import gccnhsLogoUrl from "../../assets/gccnhs_logo.png";
+import gingoogGoldLogoUrl from "../../assets/gingoog_gold_logo.png";
 import { getClassRecord, API_BASE_URL } from "../../services/classRecordApi";
 import { getPhilIriRecords, savePhilIriBatch } from "../../services/philIriApi";
 import { getStoredUser } from "../../utils/auth";
@@ -672,6 +673,7 @@ export default function PhilIri({ activeClass: propActiveClass, onBack }) {
   });
   const [depedLogoBase64, setDepedLogoBase64] = useState("");
   const [gccnhsLogoBase64, setGccnhsLogoBase64] = useState("");
+  const [gingoogGoldLogoBase64, setGingoogGoldLogoBase64] = useState("");
   const pdfRef = useRef(null);
   const isLoadedRef = useRef(false);
   const debounceTimerRef = useRef(null);
@@ -679,13 +681,16 @@ export default function PhilIri({ activeClass: propActiveClass, onBack }) {
   // Pre-load logos as Base64 data URIs for 100% CORS-safe canvas rendering
   useEffect(() => {
     let isCurrent = true;
-    Promise.all([toBase64(depedLogoUrl), toBase64(gccnhsLogoUrl)]).then(
-      ([d, g]) => {
-        if (!isCurrent) return;
-        if (d) setDepedLogoBase64(d);
-        if (g) setGccnhsLogoBase64(g);
-      },
-    );
+    Promise.all([
+      toBase64(depedLogoUrl),
+      toBase64(gccnhsLogoUrl),
+      toBase64(gingoogGoldLogoUrl),
+    ]).then(([d, g, gg]) => {
+      if (!isCurrent) return;
+      if (d) setDepedLogoBase64(d);
+      if (g) setGccnhsLogoBase64(g);
+      if (gg) setGingoogGoldLogoBase64(gg);
+    });
     return () => {
       isCurrent = false;
     };
@@ -1371,22 +1376,15 @@ export default function PhilIri({ activeClass: propActiveClass, onBack }) {
               object-fit: contain;
             }
             .phil-iri-gold-seal {
-              font-family: Impact, "Arial Black", sans-serif;
-              font-size: 11pt;
-              color: #ca8a04;
-              letter-spacing: 0.5px;
-              font-style: italic;
               display: flex;
-              flex-direction: column;
               align-items: center;
-              line-height: 1;
+              justify-content: flex-end;
             }
-            .phil-iri-gold-seal-sub {
-              font-size: 5pt;
-              font-family: Arial, sans-serif;
-              color: #334155;
-              letter-spacing: 0.2px;
-              margin-top: 1px;
+            .phil-iri-gold-logo {
+              height: 38px;
+              width: auto;
+              max-width: 120px;
+              object-fit: contain;
             }
           </style>
           ${screeningActive ? `<style>${screeningPrintStyles}</style>` : ""}
@@ -1749,10 +1747,12 @@ export default function PhilIri({ activeClass: propActiveClass, onBack }) {
                 </div>
 
                 <div className="phil-iri-gold-seal">
-                  <span>GINGOOG GOLD</span>
-                  <span className="phil-iri-gold-seal-sub">
-                    LEARNING • OUTSTANDING LEADERSHIP • DEPED
-                  </span>
+                  <img
+                    src={gingoogGoldLogoBase64 || gingoogGoldLogoUrl}
+                    alt="Gingoog Gold"
+                    className="phil-iri-gold-logo"
+                    crossOrigin="anonymous"
+                  />
                 </div>
               </div>
             </div>

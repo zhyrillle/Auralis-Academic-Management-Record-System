@@ -207,5 +207,5 @@
   .post-test-page .phil-iri-sheet-signatures { flex-direction: column; gap: 20px; }
   .post-test-page .phil-iri-sig-col { width: 100%; }
   .post-test-page .phil-iri-sheet-footer { flex-wrap: wrap; gap: 12px; }
-  .post-test-page .phil-iri-gold-seal { width: 100%; }
+  .post-test-page .phil-iri-gold-seal { width: 100%; justify-content: center; }
 }
