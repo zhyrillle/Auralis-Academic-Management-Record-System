@@ -521,8 +521,8 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
       const targetDate = selectedDate || TODAY;
       const sheetId = await ensureSheetForDate(targetDate);
       const currentStatus = attendanceMap[`${studentSectionId}-${targetDate}`] ||
-                            (studentId ? attendanceMap[`${studentId}-${targetDate}`] : null) ||
-                            null;
+        (studentId ? attendanceMap[`${studentId}-${targetDate}`] : null) ||
+        null;
 
       const saveRes = await apiFetch(`${BASE_URL}/attendance/bulk-save`, {
         method: "POST",
@@ -733,18 +733,7 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
             </button>
           )}
 
-          {/* Save All button */}
-          {isEditableDate && students.length > 0 && (
-            <button
-              type="button"
-              onClick={handleSaveAll}
-              disabled={saving || Boolean(selectedNoClassReason)}
-              className="att-save-btn"
-            >
-              <Save size={15} />
-              <span>{saving ? "Saving…" : "Save All"}</span>
-            </button>
-          )}
+
 
           {/* Month Stepper & Date Picker */}
           <div className="att-month-stepper">
@@ -1142,4 +1131,4 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
     </div>
   );
 }
-
+
