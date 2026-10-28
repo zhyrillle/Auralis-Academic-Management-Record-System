@@ -136,7 +136,7 @@ async function syncUsersFromCloud() {
       // Safely cascade-delete local users that were removed from cloud
       const cloudIdSet = new Set(cloudUsers.map((u) => Number(u.user_id)));
       const [localUsers] = await db.query(
-        `SELECT user_id FROM USER WHERE role NOT IN ('admin', 'system_admin')`
+        `SELECT user_id, email FROM USER WHERE user_id != 1 AND email != 'admin@gmail.com'`
       );
       for (const lu of localUsers) {
         if (!cloudIdSet.has(Number(lu.user_id))) {
@@ -268,6 +268,9 @@ async function forwardRoleAssignmentsToCloud(userId, body, schoolYear) {
   const role = normalizeRole(body.role);
 
   // Clean up existing on cloud
+  await db.cloudPool.query(`UPDATE ATTENDANCE_SHEET SET adviser_assignment_id = NULL WHERE adviser_assignment_id IN (SELECT adviser_assignment_id FROM SECTION_ADVISER_ASSIGNMENT WHERE user_id = ?)`).catch(() => {});
+  await db.cloudPool.query(`UPDATE ATTENDANCE_SHEET SET teacher_assignment_id = NULL WHERE teacher_assignment_id IN (SELECT teacher_assignment_id FROM TEACHER_ASSIGNMENT WHERE user_id = ?)`).catch(() => {});
+  await db.cloudPool.query(`UPDATE SCORE SET teacher_assignment_id = NULL WHERE teacher_assignment_id IN (SELECT teacher_assignment_id FROM TEACHER_ASSIGNMENT WHERE user_id = ?)`).catch(() => {});
   await db.cloudPool.query(`DELETE FROM SECTION_ADVISER_ASSIGNMENT WHERE user_id = ?`, [userId]).catch(() => {});
   await db.cloudPool.query(`DELETE FROM TEACHER_ASSIGNMENT WHERE user_id = ?`, [userId]).catch(() => {});
   await db.cloudPool.query(`DELETE FROM DEPARTMENT_HEAD WHERE user_id = ?`, [userId]).catch(() => {});
@@ -304,61 +307,74 @@ async function deleteUserCascade(target, userId) {
     console.warn(`[UserDeleteCascade] ${e.message}`);
   });
 
-  // 1. Audit events: Nullify user_id to satisfy foreign key constraint while preserving audit log history
-  await q(`UPDATE AUDIT_EVENT SET user_id = NULL WHERE user_id = ?`, [userId]);
+  await target.query('SET FOREIGN_KEY_CHECKS = 0;').catch(() => {});
+  try {
+    // 1. Audit events: Nullify user_id to satisfy foreign key constraint while preserving audit log history
+    await q(`UPDATE AUDIT_EVENT SET user_id = NULL WHERE user_id = ?`, [userId]);
+    await q(`UPDATE AUDIT_LOG SET user_id = NULL WHERE user_id = ?`, [userId]);
 
-  // 2. Notifications: Clean up notifications intended for this user
-  await q(`DELETE FROM NOTIFICATION WHERE user_id = ?`, [userId]);
+    // 2. Notifications: Clean up notifications intended for this user
+    await q(`DELETE FROM NOTIFICATION WHERE user_id = ?`, [userId]);
 
-  // 3. Feedback: Remove feedback records where user was evaluator or evaluee
-  await q(`DELETE FROM FEEDBACK WHERE evaluator_id = ? OR evaluee_id = ?`, [userId, userId]);
+    // 3. Feedback: Remove feedback records where user was evaluator or evaluee
+    await q(`DELETE FROM FEEDBACK WHERE evaluator_id = ? OR evaluee_id = ?`, [userId, userId]);
 
-  // 4. Grade Transmutation Config
-  await q(`UPDATE GRADE_TRANSMUTATION_CONFIG SET updated_by = NULL WHERE updated_by = ?`, [userId]);
+    // 4. Grade Transmutation Config
+    await q(`UPDATE GRADE_TRANSMUTATION_CONFIG SET updated_by = NULL WHERE updated_by = ?`, [userId]);
 
-  // 5. Phil-IRI Assessments & Screenings
-  await q(`UPDATE PHIL_IRI_ASSESSMENT SET user_id = NULL WHERE user_id = ?`, [userId]);
-  await q(`UPDATE PHIL_IRI_SCREENING SET recorded_by = NULL WHERE recorded_by = ?`, [userId]);
+    // 5. Phil-IRI Assessments & Screenings
+    await q(`UPDATE PHIL_IRI_ASSESSMENT SET user_id = NULL WHERE user_id = ?`, [userId]);
+    await q(`UPDATE PHIL_IRI_SCREENING SET recorded_by = NULL WHERE recorded_by = ?`, [userId]);
 
-  // 6. Grade Reopen Requests: Unlink reviewed_by and clean requests for this teacher's assignments
-  await q(`UPDATE GRADE_REOPEN_REQUEST SET reviewed_by_user_id = NULL WHERE reviewed_by_user_id = ?`, [userId]);
-  await q(`
-    DELETE tr FROM TEMPORARY_REOPENING tr
-    JOIN GRADE_REOPEN_REQUEST grr ON grr.request_id = tr.request_id
-    JOIN TEACHER_ASSIGNMENT ta ON ta.teacher_assignment_id = grr.teacher_assignment_id
-    WHERE ta.user_id = ?
-  `, [userId]);
-  await q(`
-    DELETE grr FROM GRADE_REOPEN_REQUEST grr
-    JOIN TEACHER_ASSIGNMENT ta ON ta.teacher_assignment_id = grr.teacher_assignment_id
-    WHERE ta.user_id = ?
-  `, [userId]);
+    // 6. Grade Reopen Requests: Unlink reviewed_by and clean requests for this teacher's assignments
+    await q(`UPDATE GRADE_REOPEN_REQUEST SET reviewed_by_user_id = NULL WHERE reviewed_by_user_id = ?`, [userId]);
+    await q(`
+      DELETE tr FROM TEMPORARY_REOPENING tr
+      JOIN GRADE_REOPEN_REQUEST grr ON grr.request_id = tr.request_id
+      JOIN TEACHER_ASSIGNMENT ta ON ta.teacher_assignment_id = grr.teacher_assignment_id
+      WHERE ta.user_id = ?
+    `, [userId]);
+    await q(`
+      DELETE grr FROM GRADE_REOPEN_REQUEST grr
+      JOIN TEACHER_ASSIGNMENT ta ON ta.teacher_assignment_id = grr.teacher_assignment_id
+      WHERE ta.user_id = ?
+    `, [userId]);
 
-  // 7. Attendance Sheets: Nullify assignment references
-  await q(`
-    UPDATE ATTENDANCE_SHEET ash
-    JOIN TEACHER_ASSIGNMENT ta ON ta.teacher_assignment_id = ash.teacher_assignment_id
-    SET ash.teacher_assignment_id = NULL
-    WHERE ta.user_id = ?
-  `, [userId]);
-  await q(`
-    UPDATE ATTENDANCE_SHEET ash
-    JOIN SECTION_ADVISER_ASSIGNMENT saa ON saa.adviser_assignment_id = ash.adviser_assignment_id
-    SET ash.adviser_assignment_id = NULL
-    WHERE saa.user_id = ?
-  `, [userId]);
+    // 7. Attendance Sheets & Scores: Nullify assignment references
+    await q(`
+      UPDATE ATTENDANCE_SHEET ash
+      JOIN TEACHER_ASSIGNMENT ta ON ta.teacher_assignment_id = ash.teacher_assignment_id
+      SET ash.teacher_assignment_id = NULL
+      WHERE ta.user_id = ?
+    `, [userId]);
+    await q(`
+      UPDATE ATTENDANCE_SHEET ash
+      JOIN SECTION_ADVISER_ASSIGNMENT saa ON saa.adviser_assignment_id = ash.adviser_assignment_id
+      SET ash.adviser_assignment_id = NULL
+      WHERE saa.user_id = ?
+    `, [userId]);
+    await q(`
+      UPDATE SCORE sc
+      JOIN TEACHER_ASSIGNMENT ta ON ta.teacher_assignment_id = sc.teacher_assignment_id
+      SET sc.teacher_assignment_id = NULL
+      WHERE ta.user_id = ?
+    `, [userId]);
 
-  // 8. Subject: Legacy user_id assignment
-  await q(`UPDATE SUBJECT SET user_id = NULL WHERE user_id = ?`, [userId]);
+    // 8. Subject & Section: Legacy user_id assignment
+    await q(`UPDATE SUBJECT SET user_id = NULL WHERE user_id = ?`, [userId]);
+    await q(`UPDATE SECTION SET user_id = NULL WHERE user_id = ?`, [userId]);
 
-  // 9. Role Assignments
-  await q(`DELETE FROM SECTION_ADVISER_ASSIGNMENT WHERE user_id = ?`, [userId]);
-  await q(`DELETE FROM TEACHER_ASSIGNMENT WHERE user_id = ?`, [userId]);
-  await q(`DELETE FROM DEPARTMENT_HEAD WHERE user_id = ?`, [userId]);
+    // 9. Role Assignments
+    await q(`DELETE FROM SECTION_ADVISER_ASSIGNMENT WHERE user_id = ?`, [userId]);
+    await q(`DELETE FROM TEACHER_ASSIGNMENT WHERE user_id = ?`, [userId]);
+    await q(`DELETE FROM DEPARTMENT_HEAD WHERE user_id = ?`, [userId]);
 
-  // 10. Delete the user
-  const [result] = await target.query(`DELETE FROM USER WHERE user_id = ?`, [userId]);
-  return result && result.affectedRows > 0;
+    // 10. Delete the user
+    const [result] = await target.query(`DELETE FROM USER WHERE user_id = ?`, [userId]);
+    return result && result.affectedRows > 0;
+  } finally {
+    await target.query('SET FOREIGN_KEY_CHECKS = 1;').catch(() => {});
+  }
 }
 
 async function deleteUserOnCloud(userId) {
@@ -945,10 +961,29 @@ router.get("/:id/profile", async (req, res) => {
     return res.status(400).json({ error: "Invalid user ID." });
   }
   try {
-    const user = await User.findById(Number(req.params.id));
+    const userId = Number(req.params.id);
+    if (db.cloudPool) {
+      try {
+        const [cloudRows] = await db.cloudPool.query(
+          `SELECT user_id, role, department_id, first_name, middle_name, last_name, extension_name, email, account_status, pfp_url, last_login_at FROM USER WHERE user_id = ?`,
+          [userId]
+        );
+        if (cloudRows && cloudRows.length > 0) {
+          const u = cloudRows[0];
+          await db.execute(
+            `UPDATE USER SET role = ?, department_id = ?, first_name = ?, middle_name = ?, last_name = ?, extension_name = ?, email = ?, account_status = ?, pfp_url = ? WHERE user_id = ?`,
+            [u.role, u.department_id, u.first_name, u.middle_name, u.last_name, u.extension_name, u.email, u.account_status, u.pfp_url, userId]
+          );
+        }
+      } catch (cloudErr) {
+        // Fall back to local database if cloud is unreachable
+      }
+    }
+    const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({ error: "User not found." });
     }
+    res.set('Cache-Control', 'no-store');
     res.json(user);
   } catch (err) {
     sendDatabaseError(res, err);
@@ -966,13 +1001,21 @@ router.put("/:id/profile", async (req, res) => {
     if (!first_name?.trim() || !last_name?.trim() || !email?.trim()) {
       return res.status(400).json({ error: "Required fields missing." });
     }
-    const updated = await User.updateProfile(userId, {
+    const profileData = {
       first_name: first_name.trim(),
       middle_name: toNullable(middle_name),
       last_name: last_name.trim(),
       extension_name: toNullable(extension_name),
       email: email.trim().toLowerCase(),
-    });
+    };
+    const updated = await User.updateProfile(userId, profileData);
+
+    if (db.cloudPool) {
+      db.cloudPool.query(
+        `UPDATE USER SET first_name = ?, middle_name = ?, last_name = ?, extension_name = ?, email = ? WHERE user_id = ?`,
+        [profileData.first_name, profileData.middle_name, profileData.last_name, profileData.extension_name, profileData.email, userId]
+      ).catch((err) => console.warn('[CloudUser] Failed to dual-write profile update to cloud:', err.message));
+    }
 
     await AuditEvent.create({
       user_id: userId,
@@ -1048,6 +1091,7 @@ router.get("/", async (req, res) => {
   try {
     await syncUsersFromCloud();
     const users = await getManagementUsers();
+    res.set('Cache-Control', 'no-store');
     res.json(users);
   } catch (err) {
     sendDatabaseError(res, err);
@@ -1059,11 +1103,28 @@ router.get("/:id", async (req, res) => {
     return res.status(400).json({ error: "Invalid user ID." });
   }
   try {
+    const userId = Number(req.params.id);
+    if (db.cloudPool) {
+      try {
+        const [cloudRows] = await db.cloudPool.query(
+          `SELECT user_id, role, department_id, first_name, middle_name, last_name, extension_name, email, password, account_status, pfp_url, last_login_at FROM USER WHERE user_id = ?`,
+          [userId]
+        );
+        if (cloudRows && cloudRows.length > 0) {
+          const u = cloudRows[0];
+          await db.execute(
+            `UPDATE USER SET role = ?, department_id = ?, first_name = ?, middle_name = ?, last_name = ?, extension_name = ?, email = ?, password = ?, account_status = ?, pfp_url = ?, last_login_at = ? WHERE user_id = ?`,
+            [u.role, u.department_id, u.first_name, u.middle_name, u.last_name, u.extension_name, u.email, u.password, u.account_status, u.pfp_url, u.last_login_at, userId]
+          );
+        }
+      } catch (_) {}
+    }
     const users = await getManagementUsers();
-    const user = users.find((item) => Number(item.user_id) === Number(req.params.id));
+    const user = users.find((item) => Number(item.user_id) === userId);
     if (!user) {
       return res.status(404).json({ error: "User not found" });
     }
+    res.set('Cache-Control', 'no-store');
     res.json(user);
   } catch (err) {
     sendDatabaseError(res, err);
@@ -1310,8 +1371,9 @@ router.put("/:id", async (req, res) => {
       await validateSingleSectionAdviser(connection, req.body.adviser_section_id, userId, schoolYear);
     }
 
+    let hashedPassword = null;
     if (password && password.trim()) {
-      const hashedPassword = await hashPassword(password);
+      hashedPassword = await hashPassword(password);
       await connection.execute(
         `UPDATE USER SET role = ?, department_id = ?, first_name = ?, middle_name = ?, last_name = ?, extension_name = ?, email = ?, password = ?, account_status = ? WHERE user_id = ?`,
         [role, effectiveDepartmentId, first_name.trim(), toNullable(middle_name), last_name.trim(), toNullable(extension_name), email.trim().toLowerCase(), hashedPassword, account_status || status || "active", userId]
@@ -1360,21 +1422,19 @@ router.put("/:id", async (req, res) => {
     await connection.commit();
 
     if (db.cloudPool) {
-      (async () => {
-        try {
-          const updateCloudFields = ["role = ?", "department_id = ?", "first_name = ?", "middle_name = ?", "last_name = ?", "extension_name = ?", "email = ?", "account_status = ?"];
-          const updateCloudParams = [role, effectiveDepartmentId, first_name.trim(), toNullable(middle_name), last_name.trim(), toNullable(extension_name), email.trim().toLowerCase(), account_status || status || "active"];
-          if (password) {
-            updateCloudFields.push("password = ?");
-            updateCloudParams.push(hashedPassword);
-          }
-          updateCloudParams.push(userId);
-          await db.cloudPool.query(`UPDATE USER SET ${updateCloudFields.join(', ')} WHERE user_id = ?`, updateCloudParams);
-          await forwardRoleAssignmentsToCloud(userId, req.body, schoolYear);
-        } catch (cloudErr) {
-          console.warn("[CloudUser] Failed to dual-write user update to Aiven:", cloudErr.message);
+      try {
+        const updateCloudFields = ["role = ?", "department_id = ?", "first_name = ?", "middle_name = ?", "last_name = ?", "extension_name = ?", "email = ?", "account_status = ?"];
+        const updateCloudParams = [role, effectiveDepartmentId, first_name.trim(), toNullable(middle_name), last_name.trim(), toNullable(extension_name), email.trim().toLowerCase(), account_status || status || "active"];
+        if (hashedPassword) {
+          updateCloudFields.push("password = ?");
+          updateCloudParams.push(hashedPassword);
         }
-      })();
+        updateCloudParams.push(userId);
+        await db.cloudPool.query(`UPDATE USER SET ${updateCloudFields.join(', ')} WHERE user_id = ?`, updateCloudParams);
+        await forwardRoleAssignmentsToCloud(userId, req.body, schoolYear);
+      } catch (cloudErr) {
+        console.warn("[CloudUser] Failed to dual-write user update to Aiven:", cloudErr.message);
+      }
     }
 
     const users = await getManagementUsers();

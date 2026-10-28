@@ -47,6 +47,21 @@ class GradeSheet {
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [subject_offering_id, term_id, workflow_status || 'DRAFT', lock_status || 'EDITABLE', submitted_at, approved_at, locked_at]
     );
+    if (db.cloudPool && result.insertId) {
+      db.cloudPool.execute(
+        `INSERT INTO GRADE_SHEET (grade_sheet_id, subject_offering_id, term_id, workflow_status, lock_status, submitted_at, approved_at, locked_at) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE
+           subject_offering_id = VALUES(subject_offering_id),
+           term_id = VALUES(term_id),
+           workflow_status = VALUES(workflow_status),
+           lock_status = VALUES(lock_status),
+           submitted_at = VALUES(submitted_at),
+           approved_at = VALUES(approved_at),
+           locked_at = VALUES(locked_at)`,
+        [result.insertId, subject_offering_id, term_id, workflow_status || 'DRAFT', lock_status || 'EDITABLE', submitted_at, approved_at, locked_at]
+      ).catch((err) => console.warn('[CloudDualWrite] Failed to create GRADE_SHEET on Aiven:', err.message));
+    }
     return result.insertId;
   }
 
@@ -60,6 +75,12 @@ class GradeSheet {
     const values = entries.map(([, value]) => value);
     const setClause = keys.map(key => `${key} = ?`).join(', ');
     await connection.execute(`UPDATE GRADE_SHEET SET ${setClause}, updated_at = UTC_TIMESTAMP(6) WHERE grade_sheet_id = ?`, [...values, id]);
+    if (db.cloudPool) {
+      db.cloudPool.execute(
+        `UPDATE GRADE_SHEET SET ${setClause}, updated_at = UTC_TIMESTAMP(6) WHERE grade_sheet_id = ?`,
+        [...values, id]
+      ).catch((err) => console.warn('[CloudDualWrite] Failed to update GRADE_SHEET on Aiven:', err.message));
+    }
     return this.findById(id, connection);
   }
 

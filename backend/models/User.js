@@ -366,6 +366,13 @@ class User {
       ]
     );
 
+    if (db.cloudPool) {
+      db.cloudPool.query(
+        `UPDATE USER SET first_name = ?, middle_name = ?, last_name = ?, extension_name = ?, email = ? WHERE user_id = ?`,
+        [first_name, middle_name || null, last_name, extension_name || null, email, id]
+      ).catch((err) => console.warn('[CloudUser] Failed to dual-write profile update to cloud:', err.message));
+    }
+
     return this.findById(id);
   }
 
@@ -378,6 +385,13 @@ class User {
       `,
       [profilePictureUrl, id]
     );
+
+    if (db.cloudPool) {
+      db.cloudPool.query(
+        `UPDATE USER SET pfp_url = ? WHERE user_id = ?`,
+        [profilePictureUrl, id]
+      ).catch((err) => console.warn('[CloudUser] Failed to dual-write profile picture to cloud:', err.message));
+    }
 
     return this.findById(id);
   }

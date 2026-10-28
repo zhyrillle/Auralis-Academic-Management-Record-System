@@ -174,14 +174,14 @@ function StatusBadge({ status }) {
 }
 
 async function loadUsers() {
-  const response = await fetch(`${API_URL}/users`);
+  const response = await fetch(`${API_URL}/users`, { cache: 'no-store' });
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || "Failed to load users.");
   return Array.isArray(data) ? data : [];
 }
 
 async function loadManagementOptions() {
-  const response = await fetch(`${API_URL}/users/management-options`);
+  const response = await fetch(`${API_URL}/users/management-options`, { cache: 'no-store' });
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || "Failed to load form options.");
   return data;
@@ -324,7 +324,7 @@ export default function UserManagement() {
       closeProfile();
 
       // Fetch user details from API
-      const response = await fetch(`${API_URL}/users/${user.user_id}`);
+      const response = await fetch(`${API_URL}/users/${user.user_id}`, { cache: 'no-store' });
       if (!response.ok) throw new Error("User information could not be loaded.");
       const fullUser = await response.json();
       if (requestId !== formRequestId.current) return;
