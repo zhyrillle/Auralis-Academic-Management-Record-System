@@ -26,6 +26,31 @@ async function checkIsAdviser(userId) {
 }
 
 /**
+ * Resolves the currently active academic term from ACADEMIC_TERM
+ */
+async function resolveCurrentActiveTerm() {
+  try {
+    const [rows] = await db.execute(
+      `SELECT term_id, school_year_id, term_name, starts_at, ends_at, status
+       FROM ACADEMIC_TERM
+       WHERE (LOWER(status) = 'ongoing' OR LOWER(status) = 'open')
+          OR (starts_at IS NOT NULL AND ends_at IS NOT NULL AND CURRENT_TIMESTAMP() BETWEEN starts_at AND ends_at)
+       ORDER BY (LOWER(status) = 'ongoing') DESC, term_id DESC
+       LIMIT 1`
+    );
+    if (rows.length > 0) {
+      const t = rows[0];
+      const code = normalizeTerm(t.term_name);
+      return { termId: t.term_id, termCode: code, termName: t.term_name };
+    }
+    return { termId: 1, termCode: 'T1', termName: '1st' };
+  } catch (err) {
+    console.warn('Error resolving current active term:', err.message);
+    return { termId: 1, termCode: 'T1', termName: '1st' };
+  }
+}
+
+/**
  * Helper to fetch assigned classes and sections for a teacher/adviser
  */
 async function getTeacherClasses(userId) {
@@ -196,19 +221,6 @@ async function getTeacherAssignedClasses(userId) {
     if (cls.subject_offering_ids.length > 0) {
       const placeholders = cls.subject_offering_ids.map(() => '?').join(',');
 
-      const [gradeCount] = await db.execute(
-        `SELECT COUNT(DISTINCT student_id) AS graded_count
-         FROM STUDENT_GRADE
-         WHERE subject_offering_id IN (${placeholders})
-           AND COALESCE(quarterly_grade, initial_grade) IS NOT NULL`,
-        cls.subject_offering_ids
-      ).catch(() => [[{ graded_count: 0 }]]);
-
-      const graded = Number(gradeCount[0]?.graded_count || 0);
-      if (cls.studentCount > 0) {
-        cls.entryProgress = Math.min(100, Math.round((graded / cls.studentCount) * 100));
-      }
-
       const [sheetStatus] = await db.execute(
         `SELECT workflow_status, lock_status
          FROM GRADE_SHEET
@@ -218,25 +230,58 @@ async function getTeacherAssignedClasses(userId) {
         cls.subject_offering_ids
       ).catch(() => [[]]);
 
-      if (sheetStatus.length > 0) {
-        const s = sheetStatus[0];
-        if (s.workflow_status === 'SUBMITTED' || s.lock_status === 'TERM_LOCKED') {
-          cls.status = 'Submitted';
-          cls.entryProgress = 100;
-        } else if (cls.entryProgress > 0) {
-          cls.status = 'In Progress';
-        } else {
-          cls.status = 'Pending';
-        }
-      } else if (cls.entryProgress >= 100) {
+      const [gradeCount] = await db.execute(
+        `SELECT COUNT(DISTINCT student_id) AS graded_count
+         FROM STUDENT_GRADE
+         WHERE subject_offering_id IN (${placeholders})
+           AND COALESCE(quarterly_grade, initial_grade) IS NOT NULL`,
+        cls.subject_offering_ids
+      ).catch(() => [[{ graded_count: 0 }]]);
+
+      const graded = Number(gradeCount[0]?.graded_count || 0);
+      const s = sheetStatus[0] || null;
+
+      if (s && (s.workflow_status === 'SUBMITTED' || s.lock_status === 'TERM_LOCKED')) {
         cls.status = 'Submitted';
-      } else if (cls.entryProgress > 0) {
-        cls.status = 'In Progress';
+        cls.entryProgress = 100;
+      } else if (graded > 0 && cls.studentCount > 0) {
+        cls.entryProgress = Math.min(100, Math.round((graded / cls.studentCount) * 100));
+        cls.status = cls.entryProgress >= 100 ? 'Submitted' : 'In Progress';
       } else {
-        cls.status = 'Pending';
+        // Fallback: check draft encoding progress from SCORE table for active activities
+        const [scoreStats] = await db.execute(
+          `SELECT
+             COUNT(DISTINCT sc.student_section_id) AS scored_students,
+             COUNT(sc.score_id) AS encoded_scores,
+             COUNT(DISTINCT ga.activity_id) AS total_activities
+           FROM GRADE_SHEET gs
+           JOIN GRADE_ACTIVITY ga ON ga.grade_sheet_id = gs.grade_sheet_id
+           LEFT JOIN SCORE sc ON sc.activity_id = ga.activity_id AND sc.raw_score IS NOT NULL
+           WHERE gs.subject_offering_id IN (${placeholders})
+             AND (ga.status = 'ACTIVE' OR ga.status IS NULL)`,
+          cls.subject_offering_ids
+        ).catch(() => [[{ scored_students: 0, encoded_scores: 0, total_activities: 0 }]]);
+
+        const scoredStudents = Number(scoreStats[0]?.scored_students || 0);
+        const encodedScores = Number(scoreStats[0]?.encoded_scores || 0);
+        const totalActivities = Number(scoreStats[0]?.total_activities || 0);
+
+        if (totalActivities > 0 && cls.studentCount > 0) {
+          const expectedTotal = totalActivities * cls.studentCount;
+          const cellProgress = Math.min(100, Math.round((encodedScores / expectedTotal) * 100));
+          const studentProgress = Math.min(100, Math.round((scoredStudents / cls.studentCount) * 100));
+          cls.entryProgress = Math.max(cellProgress, studentProgress);
+        } else if (cls.studentCount > 0 && scoredStudents > 0) {
+          cls.entryProgress = Math.min(100, Math.round((scoredStudents / cls.studentCount) * 100));
+        } else {
+          cls.entryProgress = 0;
+        }
+
+        cls.status = cls.entryProgress > 0 ? 'In Progress' : 'Pending';
       }
     } else {
       cls.status = 'In Progress';
+      cls.entryProgress = 0;
     }
   }
 
@@ -298,8 +343,9 @@ router.get('/summary', async (req, res) => {
       new Set(teachingRows.map((r) => r.subject_offering_id).filter(Boolean))
     );
 
+    const activeTermInfo = await resolveCurrentActiveTerm();
     let sectionAverage = 0;
-    let sectionAverageDiff = '0% from Q1';
+    let sectionAverageDiff = `0% from ${activeTermInfo.termCode}`;
     let lowestPerformingSection = '—';
     let lowestPerformingSectionNote = 'No data';
     let atRiskStudentsCount = 0;
@@ -309,7 +355,7 @@ router.get('/summary', async (req, res) => {
     if (offeringIds.length > 0) {
       const placeholders = offeringIds.map(() => '?').join(',');
 
-      // 1. Overall average
+      // 1. Overall average from official STUDENT_GRADE
       const [gradeStatsRows] = await db.execute(
         `SELECT
            AVG(COALESCE(sg.quarterly_grade, sg.initial_grade)) AS avg_grade,
@@ -323,6 +369,25 @@ router.get('/summary', async (req, res) => {
 
       if (gradeStatsRows[0]?.avg_grade) {
         sectionAverage = Math.round(Number(gradeStatsRows[0].avg_grade) * 10) / 10;
+      } else {
+        // Fallback: estimate provisional average from SCORE table if in draft
+        const [draftStatsRows] = await db.execute(
+          `SELECT
+             AVG((sc.raw_score / NULLIF(ga.highest_possible_score, 0)) * 100) AS raw_avg
+           FROM SCORE sc
+           JOIN GRADE_ACTIVITY ga ON ga.activity_id = sc.activity_id
+           JOIN GRADE_SHEET gs ON gs.grade_sheet_id = ga.grade_sheet_id
+           WHERE gs.subject_offering_id IN (${placeholders})
+             AND sc.raw_score IS NOT NULL
+             AND ga.highest_possible_score > 0`,
+          offeringIds
+        ).catch(() => [[{ raw_avg: null }]]);
+
+        if (draftStatsRows[0]?.raw_avg !== null && draftStatsRows[0]?.raw_avg !== undefined) {
+          const rawPct = Number(draftStatsRows[0].raw_avg);
+          const estimatedTransmuted = Math.min(100, Math.max(60, 60 + (rawPct * 0.4)));
+          sectionAverage = Math.round(estimatedTransmuted * 10) / 10;
+        }
       }
 
       // 2. Average by term to compute diff
@@ -341,9 +406,9 @@ router.get('/summary', async (req, res) => {
       const t2Obj = termAvgRows.find((r) => String(r.term).toUpperCase().includes('2'));
       if (t1Obj && t2Obj) {
         const diff = Math.round((Number(t2Obj.term_avg) - Number(t1Obj.term_avg)) * 10) / 10;
-        sectionAverageDiff = `${diff >= 0 ? '+' : ''}${diff}% from Q1`;
-      } else if (t1Obj) {
-        sectionAverageDiff = '0% from Q1';
+        sectionAverageDiff = `${diff >= 0 ? '+' : ''}${diff}% from T1`;
+      } else {
+        sectionAverageDiff = `0% from ${activeTermInfo.termCode}`;
       }
 
       // 3. Lowest performing section
@@ -366,6 +431,33 @@ router.get('/summary', async (req, res) => {
         lowestPerformingSection = secPerformanceRows[0].section_name;
         const avgNum = Math.round(Number(secPerformanceRows[0].sec_avg) * 10) / 10;
         lowestPerformingSectionNote = `${avgNum}% avg`;
+      } else {
+        // Fallback to draft score average by section
+        const [draftSecRows] = await db.execute(
+          `SELECT
+             sec.section_name,
+             AVG((sc.raw_score / NULLIF(ga.highest_possible_score, 0)) * 100) AS raw_sec_avg
+           FROM SCORE sc
+           JOIN GRADE_ACTIVITY ga ON ga.activity_id = sc.activity_id
+           JOIN GRADE_SHEET gs ON gs.grade_sheet_id = ga.grade_sheet_id
+           JOIN SUBJECT_OFFERING so ON so.subject_offering_id = gs.subject_offering_id
+           JOIN SECTION sec ON sec.section_id = so.section_id
+           WHERE gs.subject_offering_id IN (${placeholders})
+             AND sc.raw_score IS NOT NULL
+             AND ga.highest_possible_score > 0
+           GROUP BY sec.section_id, sec.section_name
+           ORDER BY raw_sec_avg ASC
+           LIMIT 1`,
+          offeringIds
+        ).catch(() => [[]]);
+
+        if (draftSecRows.length > 0 && draftSecRows[0].raw_sec_avg !== null) {
+          lowestPerformingSection = draftSecRows[0].section_name;
+          const rawSecPct = Number(draftSecRows[0].raw_sec_avg);
+          const estGrade = Math.min(100, Math.max(60, 60 + (rawSecPct * 0.4)));
+          const avgNum = Math.round(estGrade * 10) / 10;
+          lowestPerformingSectionNote = `${avgNum}% avg`;
+        }
       }
 
       // 4. At-risk students count (students with average grade < 75)
@@ -378,13 +470,33 @@ router.get('/summary', async (req, res) => {
       ).catch(() => [[{ at_risk_count: 0 }]]);
 
       atRiskStudentsCount = Number(atRiskRows[0]?.at_risk_count || 0);
+
+      if (atRiskStudentsCount === 0) {
+        // Check draft scores for any students averaging below 60%
+        const [draftAtRiskRows] = await db.execute(
+          `SELECT sc.student_section_id
+           FROM SCORE sc
+           JOIN GRADE_ACTIVITY ga ON ga.activity_id = sc.activity_id
+           JOIN GRADE_SHEET gs ON gs.grade_sheet_id = ga.grade_sheet_id
+           WHERE gs.subject_offering_id IN (${placeholders})
+             AND sc.raw_score IS NOT NULL
+             AND ga.highest_possible_score > 0
+           GROUP BY sc.student_section_id
+           HAVING AVG((sc.raw_score / ga.highest_possible_score) * 100) < 60`,
+          offeringIds
+        ).catch(() => [[]]);
+
+        atRiskStudentsCount = (draftAtRiskRows || []).length;
+      }
       atRiskStudentsNote = atRiskStudentsCount > 0 ? 'Requires academic support' : 'No students at risk';
 
-      // 5. Entry progress calculation based on active classes
+      // 5. Entry progress calculation based on active teaching classes
       if (assignedClasses.length > 0) {
+        const teachingClasses = assignedClasses.filter(c => c.subject_offering_ids && c.subject_offering_ids.length > 0);
+        const targetClasses = teachingClasses.length > 0 ? teachingClasses : assignedClasses;
         const avgProgress =
-          assignedClasses.reduce((acc, c) => acc + (c.entryProgress || 0), 0) /
-          assignedClasses.length;
+          targetClasses.reduce((acc, c) => acc + (c.entryProgress || 0), 0) /
+          targetClasses.length;
         entryProgress = Math.round(avgProgress);
       }
     } else {
@@ -400,6 +512,8 @@ router.get('/summary', async (req, res) => {
       isAdviser,
       role: isAdviser ? 'adviser' : 'subject teacher',
       displayRole: isAdviser ? 'Adviser' : 'Subject Teacher',
+      activeTerm: activeTermInfo.termCode,
+      activeTermName: activeTermInfo.termName,
       sectionAverage: `${sectionAverage}%`,
       sectionAverageDiff,
       lowestPerformingSection,
@@ -480,6 +594,29 @@ router.get('/subject-performance', async (req, res) => {
 
         if (rows[0]?.avg_score) {
           score = Math.round(Number(rows[0].avg_score) * 10) / 10;
+        } else {
+          // Fallback to draft score average from SCORE
+          const termNum = term.replace(/[^0-9]/g, '');
+          const [draftRows] = await db.execute(
+            `SELECT AVG((sc.raw_score / NULLIF(ga.highest_possible_score, 0)) * 100) AS draft_avg
+             FROM SCORE sc
+             JOIN GRADE_ACTIVITY ga ON ga.activity_id = sc.activity_id
+             JOIN GRADE_SHEET gs ON gs.grade_sheet_id = ga.grade_sheet_id
+             JOIN SUBJECT_OFFERING so ON so.subject_offering_id = gs.subject_offering_id
+             JOIN ACADEMIC_TERM at ON at.term_id = gs.term_id
+             WHERE so.section_id = ?
+               AND gs.subject_offering_id IN (${placeholders})
+               AND (UPPER(at.term_name) LIKE ? OR gs.term_id IN (SELECT term_id FROM ACADEMIC_TERM WHERE term_name LIKE ?))
+               AND sc.raw_score IS NOT NULL
+               AND ga.highest_possible_score > 0`,
+            [sec.id, ...offeringIds, `%${termNum}%`, `%${termNum}%`]
+          ).catch(() => [[{ draft_avg: null }]]);
+
+          if (draftRows[0]?.draft_avg !== null && draftRows[0]?.draft_avg !== undefined) {
+            const rawPct = Number(draftRows[0].draft_avg);
+            const estGrade = Math.min(100, Math.max(60, 60 + (rawPct * 0.4)));
+            score = Math.round(estGrade * 10) / 10;
+          }
         }
       }
 
