@@ -146,15 +146,26 @@ class DeptHeadMonitoringService {
     const sections = directory.sections.filter(section => selectedId === null || section.sectionId === selectedId).map(section => {
       const members = learners.filter(learner => learner.sectionId === section.sectionId);
       const results = { passed: 0, failed: 0 };
+      const thresholds = new Set();
+      const thresholdCounts = {};
+      members.forEach(learner => {
+        const threshold = Number(learner.screening?.score_threshold);
+        if (Number.isInteger(threshold) && threshold > 0) thresholds.add(threshold);
+      });
       for (const learner of members) {
         if (learner.screeningStatus !== 'Complete') continue;
         const row = learner.screening;
         const threshold = Number(row.score_threshold);
         if (!Number.isInteger(threshold) || threshold <= 0) continue;
         const total = ['literal', 'inferential', 'critical'].reduce((sum, part) => sum + Number(row[part + '_score']), 0);
-        results[total >= threshold ? 'passed' : 'failed']++;
+        const band = total >= threshold ? 'passed' : 'failed';
+        results[band]++;
+        thresholdCounts[threshold] ??= { passed: 0, failed: 0 };
+        thresholdCounts[threshold][band]++;
       }
       return { ...section, learnerCount: members.length,
+        screeningThresholdCounts: thresholdCounts,
+        screeningThresholds: [...thresholds].sort((a, b) => a - b),
         screeningPassed: screening.available ? results.passed : null,
         screeningFailed: screening.available ? results.failed : null,
         postTestIndependent: postTest.available ? members.filter(learner => learner.postTestStatus === 'Complete'

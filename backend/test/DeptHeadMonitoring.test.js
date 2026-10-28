@@ -134,6 +134,9 @@ test('post-test preserves all three reading levels and screening includes the th
   const row = result.sections[0];
   assert.equal(row.screeningFailed, 1);
   assert.equal(row.screeningPassed, 2);
+  assert.deepEqual(Array.from(row.screeningThresholds), [28]);
+  assert.equal(row.screeningThresholdCounts[28].passed, 2);
+  assert.equal(row.screeningThresholdCounts[28].failed, 1);
   assert.equal(row.postTestIndependent, 1);
   assert.equal(row.postTestInstructional, 1);
   assert.equal(row.postTestFrustration, 1);
