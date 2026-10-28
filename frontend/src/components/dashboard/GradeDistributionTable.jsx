@@ -110,7 +110,7 @@ export default function GradeDistributionTable({ schoolYear }) {
 
     if (drillDown.level === 'teacher') {
       const selectedGrade = reportData.grades.find(g => g.id === drillDown.gradeId);
-      const teachers = selectedGrade?.teachers || [];
+      const teachers = (selectedGrade?.teachers || []).filter(teacher => teacher.id !== "unassigned");
 
       // Summary row for this grade level
       const gradeSummary = selectedGrade ? {
@@ -360,7 +360,7 @@ export default function GradeDistributionTable({ schoolYear }) {
                       <td>
                         <div className="dept-name-cell">
                           <span>{row.name}</span>
-                          {row.canDrillDown ? (
+                          {drillDown.level !== 'section' && (row.canDrillDown ? (
                             <button
                               type="button"
                               className="dept-eye-btn"
@@ -375,13 +375,13 @@ export default function GradeDistributionTable({ schoolYear }) {
                               type="button"
                               className="dept-eye-btn disabled"
                               disabled
-                              title={drillDown.level === 'section' ? 'End of breakdown' : 'No data available'}
+                              title="No data available"
                               aria-label="No data available"
                               tabIndex={-1}
                             >
                               <Eye size={16} />
                             </button>
-                          )}
+                          ))}
                         </div>
                       </td>
                       <td>{row.total_score !== undefined ? Number(row.total_score).toFixed(2) : '0.00'}</td>
@@ -455,7 +455,7 @@ export default function GradeDistributionTable({ schoolYear }) {
                       <td style={{ textAlign: 'left' }}>
                         <div className="dept-name-cell">
                           <span>{row.name}</span>
-                          {row.canDrillDown ? (
+                          {drillDown.level !== 'section' && (row.canDrillDown ? (
                             <button
                               type="button"
                               className="dept-eye-btn"
@@ -470,13 +470,13 @@ export default function GradeDistributionTable({ schoolYear }) {
                               type="button"
                               className="dept-eye-btn disabled"
                               disabled
-                              title={drillDown.level === 'section' ? 'End of breakdown' : 'No data available'}
+                              title="No data available"
                               aria-label="No data available"
                               tabIndex={-1}
                             >
                               <Eye size={16} />
                             </button>
-                          )}
+                          ))}
                         </div>
                       </td>
                       <td>{row.no_grade ?? 0}</td>
