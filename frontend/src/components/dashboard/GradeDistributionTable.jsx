@@ -89,7 +89,7 @@ export default function GradeDistributionTable({ schoolYear }) {
         currentRows: reportData.grades.map(g => ({
           id: g.id,
           name: g.name,
-          canDrillDown: g.teachers?.some(hasTeacherData),
+          canDrillDown: hasReportData(g) || Boolean(g.teachers?.some(hasTeacherData)),
           total_score: g.total_score,
           num_takers: g.num_takers,
           score_mean: g.score_mean,

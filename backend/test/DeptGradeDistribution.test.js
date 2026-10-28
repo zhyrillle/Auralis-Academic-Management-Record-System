@@ -3,13 +3,13 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
-async function report(departmentId, fallback = false) {
+async function report(departmentId, fallback = false, unassigned = false) {
  const handlers = new Map();
  const db = { query: async (sql, args) => {
   if (sql.includes('FROM USER')) return [[{department_id:departmentId}]];
   if (sql.includes('FROM DEPARTMENT')) return [[{department_name:departmentId === 9 ? 'English' : 'Math'}]];
   if (sql.includes('FROM SCHOOL_YEAR')) return [[{school_year_id:12,starts_on:2026,ends_on:2027,status:'ongoing'}]];
-  if (sql.includes('FROM SUBJECT_OFFERING so')) { assert.match(sql,/s.department_id = \?/); assert.equal(args[0],departmentId); return [[{subject_offering_id:88,section_id:7,school_year_id:12,section_name:'A',grade_level_name:'G7',user_id:1,first_name:'T',last_name:'One'}]]; }
+  if (sql.includes('FROM SUBJECT_OFFERING so')) { assert.match(sql,/s.department_id = \?/); assert.equal(args[0],departmentId); return [[{subject_offering_id:88,section_id:7,school_year_id:12,section_name:'A',grade_level_name:'G7',user_id:unassigned ? null : 1,first_name:unassigned ? null : 'T',last_name:unassigned ? null : 'One'}]]; }
   if (sql.includes('FROM STUDENT_SECTION ss') && sql.includes('SELECT DISTINCT')) { assert.match(sql,/ss.school_year_id = \?/); assert.deepEqual(Array.from(args),[7,12]); return [[{student_id:1}]]; }
   if (sql.includes('FROM STUDENT_GRADE')) return [[{student_id:1,quarterly_grade:80}]];
   if (sql.includes('SELECT at.term_id')) return [[{term_id:5}]];
@@ -34,4 +34,13 @@ for (const department of [9,10]) test(`department ${department}: actual exam max
 });
 test('quarterly grade fallback remains on percentage scale in every rollup',async()=>{
  const data=await report(9,true); assert.equal(data.summary.mps,80);
+});
+
+test('grade totals retain a teacher drilldown for unassigned sections with takers', async () => {
+ const data = await report(9, false, true);
+ const grade = data.grades[0];
+ assert.equal(grade.num_takers, 1);
+ assert.equal(grade.teachers.length, 1);
+ assert.equal(grade.teachers[0].name, 'Unassigned teacher');
+ assert.equal(grade.teachers[0].sections[0].num_takers, 1);
 });

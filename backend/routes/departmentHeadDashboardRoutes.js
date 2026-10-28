@@ -595,12 +595,13 @@ router.get('/grade-distribution-report', async (req, res) => {
       if (!gradeSections.has(glKey)) gradeSections.set(glKey, []);
       gradeSections.get(glKey).push(secObj);
 
-      // Only add to teacher hierarchy if a teacher is assigned
-      if (user_id && first_name) {
-        const teacherName = `${first_name} ${last_name}`.trim();
-        if (!glObj.teachers.has(user_id)) {
-          glObj.teachers.set(user_id, {
-            id: user_id,
+      // Retain sections with results even when a teacher assignment is missing.
+      {
+        const teacherKey = user_id || "unassigned";
+        const teacherName = [first_name, last_name].filter(Boolean).join(" ").trim() || (user_id ? "Assigned teacher" : "Unassigned teacher");
+        if (!glObj.teachers.has(teacherKey)) {
+          glObj.teachers.set(teacherKey, {
+            id: teacherKey,
             name: teacherName,
             total_score: 0,
             num_takers: 0,
@@ -616,7 +617,7 @@ router.get('/grade-distribution-report', async (req, res) => {
           });
         }
 
-        const tObj = glObj.teachers.get(user_id);
+        const tObj = glObj.teachers.get(teacherKey);
         tObj.sections.push(secObj);
         tObj.total_score += secObj.total_score;
         tObj.num_takers += secObj.num_takers;
