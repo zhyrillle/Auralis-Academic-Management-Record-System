@@ -19,7 +19,10 @@
 .tf-page .pp-table th:first-child { width: 60px; }
 .tf-page .pp-table th:last-child { width: 260px; }
 .tf-page .pp-table th, .tf-page .pp-table td { font-size: 12px; padding: 12px 14px; }
-.tf-page .tf-empty { padding: 12px; }
+.tf-page .tf-empty { padding: clamp(24px, 5vw, 56px) 20px; }
+.tf-page .tf-empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; min-height: 180px; text-align: center; color: #7184a1; }
+.tf-page .tf-empty-state strong { color: #123062; font-size: 16px; line-height: 1.5; }
+.tf-page .tf-empty-state p { max-width: 480px; margin: 0; font-size: 13px; line-height: 1.65; }
 .tf-page .progress-bar__fill--blue { background: #123062; }
 .tf-page .progress-bar__fill--gold { background: #C27C20; }
 @media(max-width:640px) {
