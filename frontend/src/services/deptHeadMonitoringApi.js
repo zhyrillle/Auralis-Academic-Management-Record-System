@@ -4,7 +4,7 @@ import { getStoredUser, normalizeRole } from '../utils/auth';
 
 const base = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api').replace(/\/$/, '');
 // A new report contract must not reuse older cached rosters without learner sex.
-export const PHIL_IRI_REPORT_VERSION = 4;
+export const PHIL_IRI_REPORT_VERSION = 6;
 async function read(path, params = {}) {
   const user = getStoredUser();
   const query = new URLSearchParams(params);
