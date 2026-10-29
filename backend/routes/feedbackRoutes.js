@@ -3,6 +3,7 @@ const router = express.Router();
 const db = require('../config/db');
 const Feedback = require('../models/Feedback');
 const cloudSync = require('../services/cloudSyncService');
+const testingWindow = require('../config/feedbackTestingWindow');
 
 async function getFeedbackWindowStatus(specifiedSchoolYearId = null, overrideNow = null) {
   let syQuery = 'SELECT school_year_id, starts_on, ends_on, status FROM SCHOOL_YEAR';
@@ -66,12 +67,23 @@ async function getFeedbackWindowStatus(specifiedSchoolYearId = null, overrideNow
   }
 
   // Deadline: 2 weeks (14 days) before school year ends
-  const deadlineAt = new Date(schoolYearEndDate.getTime() - 14 * 24 * 60 * 60 * 1000);
+  let deadlineAt = new Date(schoolYearEndDate.getTime() - 14 * 24 * 60 * 60 * 1000);
   deadlineAt.setHours(23, 59, 59, 999);
 
   // Window Opens: 2 weeks (14 days) before deadline (i.e. 28 days before school year ends)
-  const windowOpensAt = new Date(deadlineAt.getTime() - 14 * 24 * 60 * 60 * 1000);
+  let windowOpensAt = new Date(deadlineAt.getTime() - 14 * 24 * 60 * 60 * 1000);
   windowOpensAt.setHours(0, 0, 0, 0);
+
+  const isTestingWindow = testingWindow.enabled
+    && ['active', 'ongoing'].includes(String(schoolYear.status).toLowerCase());
+  if (isTestingWindow) {
+    windowOpensAt = new Date(testingWindow.opensAt);
+    deadlineAt = new Date(testingWindow.deadlineAt);
+    if (!Number.isFinite(windowOpensAt.getTime()) || !Number.isFinite(deadlineAt.getTime())
+      || deadlineAt < windowOpensAt) {
+      throw new Error('The feedback testing dates are invalid. Please contact the system administrator.');
+    }
+  }
 
   const now = overrideNow ? new Date(overrideNow) : new Date();
   const nowMs = now.getTime();
@@ -95,7 +107,10 @@ async function getFeedbackWindowStatus(specifiedSchoolYearId = null, overrideNow
   const endYr = schoolYear.ends_on ? String(schoolYear.ends_on).slice(0, 4) : '';
   const syLabel = startYr && endYr ? `${startYr}–${endYr}` : (startYr || 'Current School Year');
 
-  const formatDate = d => d ? d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : '';
+  const formatDate = d => d ? d.toLocaleDateString('en-US', {
+    month: 'long', day: 'numeric', year: 'numeric',
+    timeZone: isTestingWindow ? 'Asia/Manila' : undefined,
+  }) : '';
 
   return {
     has_school_year: true,
@@ -105,6 +120,11 @@ async function getFeedbackWindowStatus(specifiedSchoolYearId = null, overrideNow
     school_year_ends_on: schoolYearEndDate.toISOString(),
     window_opens_at: windowOpensAt.toISOString(),
     deadline_at: deadlineAt.toISOString(),
+    is_testing_window: Boolean(isTestingWindow),
+    time_zone: isTestingWindow ? 'Asia/Manila' : undefined,
+    formatted_deadline_time: deadlineAt.toLocaleTimeString('en-US', {
+      hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Manila',
+    }),
     status,
     can_submit: canSubmit,
     days_remaining: daysRemaining,
