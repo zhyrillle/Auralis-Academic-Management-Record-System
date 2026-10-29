@@ -7,7 +7,7 @@ export const TERM_OPTIONS = [
 export const RISK_BANDS = [
   { level: 'low', key: 'lowRisk', label: 'Low Risk', caption: 'Continue regular monitoring', tone: 'green', color: '#168449', icon: AlertCircle,
     meaning: 'The model indicates a lower risk of next-term English failure. This does not guarantee a passing grade.',
-    action: 'Continue regular monitoring and check any missing or substituted records.' },
+    action: 'Continue regular monitoring and review the recorded learner information.' },
   { level: 'medium', key: 'mediumRisk', label: 'Medium Risk', caption: 'Review and monitor closely', tone: 'gold', color: '#C27C20', icon: MinusCircle,
     meaning: 'The model indicates an intermediate risk of next-term English failure. A closer review may help identify support needs.',
     action: 'Review recent English work with the teacher and adviser, and monitor progress.' },
@@ -18,6 +18,12 @@ export const RISK_BANDS = [
 
 export const RISK_FILTERS = [{ id: 'all', label: 'All learners' },
   ...[...RISK_BANDS].reverse().map(band => ({ id: band.level, label: band.label }))];
+
+export function missingRiskSourcesText(sources = []) {
+  const labels = { attendance: 'Attendance', phil_iri: 'PHIL-IRI' };
+  const names = sources.map(source => labels[source]).filter(Boolean);
+  return names.length ? `${names.join(' and ')} needed` : '';
+}
 
 export function learnerCountScale(highestCount) {
   // Leave room for bar labels while keeping the learner-count axis in whole numbers.

@@ -106,7 +106,7 @@ function fixture(options = {}) {
   const routes = new Map(), auth = () => {};
   const router = Object.fromEntries(['get', 'post', 'put', 'patch', 'delete'].map(method =>
     [method, (url, ...handlers) => routes.set(method + ' ' + url, handlers)]));
-  const database = { getConnection: async () => connection, execute: (...args) => connection.execute(...args) };
+  const database = { getConnection: async () => connection, execute: (...args) => connection.execute(...args), cloudPool: options.cloudPool };
   load('../routes/classRecordRoutes.js', {
     express: { Router: () => router }, '../config/db': database,
     '../models/GradeSheet': sheets,
@@ -119,15 +119,28 @@ function fixture(options = {}) {
       emitCommittedGradePublications(records) { assert.equal(transactionEvents.at(-1), 'commit'); if (options.emitFailure) throw Error('SSE unavailable'); emitted.push(...records); },
     },
     '../services/GradeComputationService': calculator,
+    '../services/cloudSyncService': { syncClassRecordFromCloud: async () => {} },
     '../utils/depedTransmutation': require('../utils/depedTransmutation'), '../utils/encryption': { decryptLrn: value => value },
     '../services/GradingSheetWorkbookService': {},
   });
   const Service = router.__test;
   return { get state() { return state; }, calls, transactionEvents, emitted, connection, routes,
+    ensureSheet: (term = 'T2') => Service.ensureGradeSheet(131, 1, term, connection),
     autosave: async (scores, actor = teacher) => { const res = { statusCode: 200, status(code) { this.statusCode = code; return this; }, json(value) { this.body = value; return this; } }; await Service.handleBatchScores({ body: { subject_offering_id: 131, term: 'T2', scores }, currentUser: actor }, res); return res; },
     submit: (body = request, actor = teacher) => Service.submitClassGrades(body, actor, database),
     summary: (body = request, actor = teacher) => Service.gradingSummary(body, actor, database) };
 }
+test('duplicate sheets require review without reparenting assessments or deleting local or cloud records', async () => {
+  const cloudCalls = [];
+  const f = fixture({ cloudPool: { query: async (...args) => { cloudCalls.push(args); return []; } } });
+  f.state.sheets.push({ ...f.state.sheets[1], grade_sheet_id: 138, workflow_status: 'SUBMITTED' });
+  const before = structuredClone(f.state);
+  await assert.rejects(f.ensureSheet(), error => error.code === 'DUPLICATE_GRADE_SHEETS' && error.statusCode === 409);
+  assert.deepEqual(f.state, before);
+  assert(f.calls.every(call => /^SELECT\b/.test(call.sql.trim())), 'Inspection must not mutate sheet data');
+  assert.deepEqual(cloudCalls, [], 'Duplicate inspection must not delete shared sheets');
+});
+
 test('T2 submission uses server scores and preserves T1/T3, identifiers and both grade values', async () => {
   const f = fixture(), before = structuredClone(f.state.saved);
   const result = await f.submit({ ...request, students: [{ student_id: 195, term1: 1, term2: 2, term3: 3 }] });
@@ -301,7 +314,7 @@ test('the HTTP submission route preserves authentication and never reports datab
   const f = fixture({ failSql: 'INSERT INTO AUDIT_EVENT' });
   const handlers = f.routes.get('post /class-record/submit');
   assert.equal(typeof handlers[0], 'function');
-  const res = { code: 200, status(code) { this.code = code; return this; }, json(body) { this.body = body; } };
+  const res = { code: 200, set() { return this; }, status(code) { this.code = code; return this; }, json(body) { this.body = body; } };
   await handlers.at(-1)({ body: request, currentUser: teacher }, res);
   assert.equal(res.code, 500); assert.notEqual(res.body.submitted, true);
   for (const endpoint of ['post /scores/batch', 'post /assessments', 'put /assessments/:id', 'delete /assessments/:id']) {
@@ -311,7 +324,7 @@ test('the HTTP submission route preserves authentication and never reports datab
 
 test('opening a class record is scoped and never rewrites accepted grades', async () => {
   const f = fixture(); await f.submit(); const before = structuredClone(f.state.saved), start = f.calls.length;
-  const res = { code: 200, status(code) { this.code = code; return this; }, json(body) { this.body = body; } };
+  const res = { code: 200, set() { return this; }, status(code) { this.code = code; return this; }, json(body) { this.body = body; } };
   await f.routes.get('get /class-record/:subject_offering_id').at(-1)({
     params: { subject_offering_id: '131' }, query: { term: 'T2', section_id: '18' }, currentUser: teacher,
   }, res);
@@ -323,7 +336,7 @@ test('opening a class record is scoped and never rewrites accepted grades', asyn
 
 const departmentHead = { user_id: 4, normalized_role: 'department_head', department_id: 1 };
 async function readRecord(f, actor, term = 'T2', query = {}) {
-  const res = { code: 200, status(code) { this.code = code; return this; }, json(body) { this.body = body; return this; } };
+  const res = { code: 200, set() { return this; }, status(code) { this.code = code; return this; }, json(body) { this.body = body; return this; } };
   await f.routes.get('get /class-record/:subject_offering_id').at(-1)({
     params: { subject_offering_id: '131' }, query: { term, section_id: '18', read_only: '1', ...query }, currentUser: actor,
   }, res);

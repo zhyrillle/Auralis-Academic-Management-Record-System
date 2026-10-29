@@ -117,8 +117,8 @@ export function AtRiskAvailability({ data, origin, filterQuery }) {
   return (
     <div className="ar-record-availability">
       <span>
-        {data.summary.unavailable} learners awaiting complete records · Not
-        assigned a prediction
+        {data.summary.unavailable} learners awaiting complete records · English grades,
+        attendance and PHIL-IRI are required
       </span>
       <Link to={learnerListPath(origin, "unavailable", filterQuery)}>
         View records needed

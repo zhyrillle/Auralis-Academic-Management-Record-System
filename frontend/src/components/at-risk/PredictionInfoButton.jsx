@@ -20,7 +20,8 @@ export default function PredictionInfoButton() {
           <p>Uses the completed previous term’s English grade and assessment percentages, eligible screening sub-scores, and an absence-rate input. Term 2 uses Term 1 records; Term 3 uses Term 2 records.</p></section>
         <section><h3>Still preliminary</h3>
           <p>Trained on historical quarterly English records from 84 learners. Performance on the current three-term calendar has not yet been validated.</p>
-          <p>Complete screening sub-scores are used when dated within the school year and before the predicted term. Complete previous-term attendance is used, excluding marked holidays and suspensions. Missing or incomplete inputs use training-data medians. These substitutes are not verified learner records.</p></section>
+          <p>A risk label requires complete English grades and assessment scores, complete previous-term attendance, and valid PHIL-IRI screening. Screening must be dated within the school year, by the source term’s end and before the predicted term. Attendance must account for every source-term weekday, excluding marked holidays and suspensions.</p>
+          <p>Missing or invalid attendance or screening shows “Insufficient data” with the records needed. Complete recorded inputs are required before a prediction is assigned.</p></section>
         <section><h3>What the labels mean</h3>
           <p>Low, Medium and High summarize the model’s internal output. They are not verified probabilities or official grades. Low risk does not guarantee a passing grade, and High risk does not confirm failure.</p>
           <p>Review available learner records to support professional judgment; they are not an exact explanation of the model’s decision. Incomplete English records receive no prediction—not a Low label. No automatic alerts are sent.</p></section>

@@ -2,6 +2,21 @@ const db = require('../config/db');
 const { loadInputs, schoolYearRange } = require('../services/EnglishRiskFeatures');
 const model = require('../services/EnglishRiskModel');
 
+function missingRecordSources({ profile, features }) {
+  const valid = (value, maximum) => Number.isFinite(value) && value >= 0 && value <= maximum;
+  const sources = [];
+  if (profile.attendanceStatus !== 'available' || !valid(features.absence_rate, 1)) {
+    sources.push({ source: 'attendance', label: 'Attendance',
+      reason: profile.attendanceReason || 'Complete, valid source-term attendance records are needed.' });
+  }
+  if (profile.screeningStatus !== 'available' || features.phil_iri_unavailable !== 0
+    || !['literal', 'inferential', 'critical'].every(part => valid(features[`phil_iri_${part}_pct`], 100))) {
+    sources.push({ source: 'phil_iri', label: 'PHIL-IRI',
+      reason: profile.screeningReason || 'Complete, valid and dated screening sub-scores are needed.' });
+  }
+  return sources;
+}
+
 class AtRiskPrediction {
   static async getOptions() {
     const [years] = await db.execute(`SELECT school_year_id, starts_on, ends_on, status
@@ -17,25 +32,29 @@ class AtRiskPrediction {
 
   static async getPreview(filters, { database = db, scope = {}, now = new Date() } = {}) {
     const input = await loadInputs(database, filters, now, scope);
+    const complete = [], unavailable = [...input.unavailable];
+    for (const row of input.eligible) {
+      const missing = missingRecordSources(row);
+      if (!missing.length) complete.push(row);
+      else unavailable.push({ ...row.profile, status: 'insufficient_data',
+        missingSources: missing.map(item => item.source),
+        reason: missing.map(item => `${item.label} needed: ${item.reason}`).join(' ') });
+    }
+    // App labels require recorded inputs; the saved worker retains its research imputer.
     // An empty batch still checks the trusted model and matching runtime.
-    const result = await model.predict(input.eligible.map(row => row.features));
-    const students = input.eligible.map((row, index) => {
+    const result = await model.predict(complete.map(row => row.features));
+    const students = complete.map((row, index) => {
       const prediction = result.predictions[index];
       return {
         ...row.profile, riskScore: Number((prediction.score * 100).toFixed(1)),
         score: prediction.score, riskLevel: prediction.riskLevel,
         predictedAtRisk: prediction.predictedAtRisk, modelVersion: result.modelVersion,
-        // Null remains null: a training substitute is not a recorded learner value.
         modelInputs: { ...row.features },
         missingInputs: Object.entries(row.features).filter(([, value]) => value == null).map(([key]) => key),
         flags: [
           { icon: 'trending-down', label: `Previous English grade: ${row.features.previous_final_grade}` },
-          { icon: 'document', label: row.features.phil_iri_unavailable
-            ? `${row.profile.screeningReason || 'Screening sub-scores unavailable.'} Training medians used.`
-            : `Screening sub-scores recorded (${row.profile.screeningAssessmentDate}).` },
-          { icon: 'calendar', label: row.features.absence_rate == null
-            ? 'Attendance: source-term records are incomplete or need review.'
-            : `Attendance: ${row.profile.attendanceSummary.absentDays} absent day${row.profile.attendanceSummary.absentDays === 1 ? '' : 's'} across ${row.profile.attendanceSummary.classDays} recorded class days.` },
+          { icon: 'document', label: `Screening sub-scores recorded (${row.profile.screeningAssessmentDate}).` },
+          { icon: 'calendar', label: `Attendance: ${row.profile.attendanceSummary.absentDays} absent day${row.profile.attendanceSummary.absentDays === 1 ? '' : 's'} across ${row.profile.attendanceSummary.classDays} recorded class days.` },
         ],
       };
     });
@@ -53,13 +72,13 @@ class AtRiskPrediction {
       automaticAlertsEnabled: false, termTransferValidated: false,
       warnings: [
         'Research preview only. This quarterly-trained model has not been validated on three-term outcomes.',
-        'Complete, dated screening sub-scores from the enrollment year are used when assessed before the target term. Missing, incomplete or out-of-period results use training medians and the unavailable flag.',
-        'Complete previous-term section attendance supplies the recorded absence rate. Weekdays marked Holiday or Suspension are excluded; blanks, conflicting entries or unverified periods use the training median. Late marks are not converted into absences for the model.',
-        'Scores are not calibrated probabilities. The current deployment and its missing-input patterns have not been validated in the study.',
+        'Predictions require complete, dated screening sub-scores from the enrollment year, assessed by the source term end and before the target term. Missing, invalid or out-of-period screening receives no risk label.',
+        'Predictions require complete previous-term section attendance. All source-term weekdays must be accounted for, excluding marked Holiday or Suspension dates. Missing, conflicting or unverified attendance receives no risk label. Late marks are not converted into absences for the model.',
+        'Scores are not calibrated probabilities. Requiring complete recorded inputs does not establish prediction accuracy on the current three-term calendar.',
       ],
-      summary: { ...summary, unavailable: input.unavailable.length, eligible: students.length,
-        totalEnglish: students.length + input.unavailable.length },
-      students, unavailable: input.unavailable,
+      summary: { ...summary, unavailable: unavailable.length, eligible: students.length,
+        totalEnglish: students.length + unavailable.length },
+      students, unavailable,
       distribution: {
         ...Object.fromEntries(['low', 'medium', 'high'].map(level => {
           const count = students.filter(row => row.riskLevel === level).length;

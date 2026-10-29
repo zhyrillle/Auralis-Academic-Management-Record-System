@@ -1,5 +1,6 @@
 import { cachedApiFetch as fetch } from "./navigationCache.js";
 import { cacheKey, loadCached } from './navigationCache.js';
+import { RISK_INPUT_POLICY, SECTION_DETAILS_CACHE } from './riskInputPolicy.js';
 
 const API_BASE_URL = (
   import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api"
@@ -32,7 +33,7 @@ export const getSectionDetails = async ({
 }) => {
   const read = async () => {
     const response = await fetch(
-      `${API_BASE_URL}/section-details/${encodeURIComponent(assignmentType)}/${encodeURIComponent(assignmentId)}?term=${encodeURIComponent(term)}`,
+      `${API_BASE_URL}/section-details/${encodeURIComponent(assignmentType)}/${encodeURIComponent(assignmentId)}?term=${encodeURIComponent(term)}&inputPolicy=${RISK_INPUT_POLICY}`,
       { queueOffline: false,
         headers: { "X-Auralis-User-Id": String(userId) },
         signal,
@@ -50,6 +51,6 @@ export const getSectionDetails = async ({
   };
   // Shared reads must not inherit one caller's abort signal.
   if (signal) return read();
-  return loadCached(cacheKey('section-details:v3', { assignmentType, assignmentId: Number(assignmentId),
+  return loadCached(cacheKey(SECTION_DETAILS_CACHE, { assignmentType, assignmentId: Number(assignmentId),
     term, userId: Number(userId) }), read, { force });
 };

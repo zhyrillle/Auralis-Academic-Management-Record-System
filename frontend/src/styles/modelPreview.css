@@ -82,6 +82,7 @@
 .ar-awaiting-card h2 { margin: 0; color: #112d61; font-size: 14px; }
 .ar-awaiting-card p { margin: 4px 0 0; font-size: 12px; color: #64748b; }
 .ar-awaiting-card .ar-awaiting-reason { color: #526580; line-height: 1.5; }
+.ar-insufficient-label { color: #526580; font-size: 12px; }
 .ar-list-pagination { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; color: #526580; font-size: 12px; }
 .ar-list-pagination > div { display: flex; align-items: center; gap: 12px; }
 .ar-list-pagination button { padding: 8px 12px; background: #fff; color: #112d61; border: 1px solid #cbd5e1; border-radius: 8px; cursor: pointer; }

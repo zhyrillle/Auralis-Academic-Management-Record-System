@@ -223,31 +223,13 @@ async function ensureGradeSheet(subjectOfferingId, schoolYearId, termName, conne
     'SELECT * FROM GRADE_SHEET WHERE subject_offering_id = ? AND term_id = ? ORDER BY grade_sheet_id ASC',
     [subjectOfferingId, selected.term_id]);
 
-  let sheet;
   if (sheets.length > 1) {
-    console.warn(`[ensureGradeSheet] Detected ${sheets.length} duplicate sheets for offering ${subjectOfferingId}, term ${selected.term_id}. Self-healing...`);
-    // Rank sheets: 1. SUBMITTED, 2. lowest ID
-    sheets.sort((a, b) => {
-      const aSub = (a.workflow_status === 'SUBMITTED' || a.submitted_at) ? 1 : 0;
-      const bSub = (b.workflow_status === 'SUBMITTED' || b.submitted_at) ? 1 : 0;
-      if (bSub !== aSub) return bSub - aSub;
-      return a.grade_sheet_id - b.grade_sheet_id;
-    });
-    sheet = sheets[0];
-
-    // Re-link and delete redundant duplicates in background
-    for (let i = 1; i < sheets.length; i++) {
-      const redundantId = sheets[i].grade_sheet_id;
-      connection.execute(`UPDATE GRADE_REOPEN_REQUEST SET grade_sheet_id = ? WHERE grade_sheet_id = ?`, [sheet.grade_sheet_id, redundantId]).catch(() => {});
-      connection.execute(`UPDATE GRADE_ACTIVITY SET grade_sheet_id = ? WHERE grade_sheet_id = ?`, [sheet.grade_sheet_id, redundantId]).catch(() => {});
-      connection.execute(`DELETE FROM GRADE_SHEET WHERE grade_sheet_id = ?`, [redundantId]).catch(() => {});
-      if (db.cloudPool) {
-        db.cloudPool.query(`DELETE FROM GRADE_SHEET WHERE grade_sheet_id = ?`, [redundantId]).catch(() => {});
-      }
-    }
-  } else {
-    sheet = sheets[0];
+    // Choosing an ID here can discard conflicting scores or delete the shared sheet.
+    // Reconcile duplicates explicitly after archiving and reviewing both copies.
+    throw problem('DUPLICATE_GRADE_SHEETS',
+      'This class has duplicate grade sheets for the selected term. Ask the administrator to review them before opening or editing the class record.');
   }
+  let sheet = sheets[0];
 
   if (!sheet && !create) {
     return { gradeSheetId: null, termId: selected.term_id, termName: selected.term_name,
@@ -2775,6 +2757,6 @@ router.post('/class-record/export-grading-sheet-pdf', async (req, res) => {
   }
 });
 
-router.__test = { submitClassGrades, gradingSummary, handleBatchScores };
+router.__test = { submitClassGrades, gradingSummary, handleBatchScores, ensureGradeSheet };
 module.exports = router;
 

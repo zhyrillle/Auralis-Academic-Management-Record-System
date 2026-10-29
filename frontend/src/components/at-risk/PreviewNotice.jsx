@@ -3,7 +3,7 @@ export default function PreviewNotice({ data }) {
     <aside className="ar-preview-notice" aria-label="Research preview limitations">
       <strong>English only · Research preview · No automatic alerts</strong>
       <p>Predicts next-term English failure from completed previous-term records, not a weekly or mid-term warning.</p>
-      <p>PHIL-IRI sub-scores are unavailable and attendance rates are unverified. Preview scores use training medians for these missing inputs.</p>
+      <p>Risk labels require complete English academic records, source-term attendance and valid PHIL-IRI screening. Incomplete attendance or screening shows “Insufficient data” with no prediction assigned.</p>
       {data && <>
         <p>{data.sourceTerm || 'No previous term'} → {data.targetTerm} · Model: {data.modelVersion} · Threshold: {data.threshold.toFixed(2)}</p>
         <details><summary>Missing data and model limitations</summary>

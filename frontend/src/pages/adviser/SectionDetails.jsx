@@ -8,7 +8,7 @@ import SearchBar from "../../components/common/SearchBar.jsx";
 import SelectFilter from "../../components/common/SelectFilter.jsx";
 import TermToggleGroup from "../../components/common/TermToggleGroup.jsx";
 import PredictionInfoButton from "../../components/at-risk/PredictionInfoButton.jsx";
-import { RISK_BANDS } from "../../utils/riskPresentation.js";
+import { RISK_BANDS, missingRiskSourcesText } from "../../utils/riskPresentation.js";
 import { getStoredUser } from "../../utils/auth.js";
 import {
   getSectionDetails,
@@ -465,10 +465,13 @@ export default function SectionDetails({
                   <tr key={learner.studentSectionId}>
                     <td className="text-center">{index + 1}</td>
                     <td className="text-left section-learner-name">{learner.name}</td>
-                    {showEnglishRisk && <td className="text-center" title={learner.riskAssessment?.reason || "Preliminary next-term English risk; not an official grade."}>
+                    {showEnglishRisk && <td className="text-center">
                       <Badge className={`badge-rect ${learner.riskAssessment?.status === "available"
                         ? `badge-risk-${learner.riskAssessment.riskLevel === "high" ? "atrisk" : learner.riskAssessment.riskLevel}`
-                        : "badge-risk-unavailable"}`}>
+                        : "badge-risk-unavailable"}`}
+                        title={learner.riskAssessment?.reason
+                          || missingRiskSourcesText(learner.riskAssessment?.missingSources)
+                          || "Preliminary next-term English risk; not an official grade."}>
                         {learner.riskAssessment?.label || "Awaiting records"}
                       </Badge>
                     </td>}
