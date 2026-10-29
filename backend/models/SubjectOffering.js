@@ -14,7 +14,7 @@ class SubjectOffering {
   static async create(data) {
     const { subject_id, section_id, school_year_id } = data;
     const [result] = await db.execute(
-      `INSERT INTO SUBJECT_OFFERING (subject_id, section_id, school_year_id) VALUES (?, ?, ?)`,
+      `INSERT INTO SUBJECT_OFFERING (subject_id, section_id, school_year_id) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE subject_offering_id = LAST_INSERT_ID(subject_offering_id)`,
       [subject_id, section_id, school_year_id]
     );
     return result.insertId;

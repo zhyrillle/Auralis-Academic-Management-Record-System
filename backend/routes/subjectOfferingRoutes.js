@@ -31,7 +31,7 @@ router.post('/', async (req, res) => {
       try {
         const [cloudRes] = await db.cloudPool.query(
           `INSERT INTO SUBJECT_OFFERING (subject_id, section_id, school_year_id)
-           VALUES (?, ?, ?)`,
+           VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE subject_offering_id = LAST_INSERT_ID(subject_offering_id)`,
           [req.body.subject_id, req.body.section_id, req.body.school_year_id]
         );
         cloudId = cloudRes.insertId;
