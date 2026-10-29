@@ -28,7 +28,7 @@ export default function TeacherFeedback() {
   const [requestedYear, setSchoolYear] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
-  const { data, loading, refreshing, error, refresh, schoolYear, schoolYears } = usePrincipalQuery(
+  const { data, loading, isPreviousData, error, refresh, schoolYear, schoolYears } = usePrincipalQuery(
     "principal:feedback", { schoolYear: requestedYear }, getPrincipalFeedback,
   );
   const filteredComments = useMemo(() => (data?.comments || []).filter(comment => {
@@ -63,11 +63,11 @@ export default function TeacherFeedback() {
   return <main className="pa-page tf-page">
     <header className="pa-page-header"><div><h1>Teacher Feedback</h1><p>Anonymous teacher evaluation of principal leadership</p></div></header>
     <FilterToolbar className="pa-navigation" label="Feedback filters" end={
-      <DropdownSelect label="School year" value={schoolYear} options={schoolYears} onChange={setSchoolYear} disabled={refreshing} />
+      <DropdownSelect label="School year" value={schoolYear} options={schoolYears} onChange={setSchoolYear} disabled={isPreviousData} />
     }><span className="tf-filter-caption">Leadership evaluation</span></FilterToolbar>
     {error && <div className="pa-inline-error" role="alert"><span>Unable to load updates. {error}</span><button type="button" onClick={refresh}>Retry</button></div>}
-    <div className={`pa-content${refreshing ? " is-busy" : ""}`} aria-busy={refreshing}>
-      {refreshing && <div className="pa-busy-overlay" role="status" aria-label="Updating feedback"><span className="pa-spinner pa-spinner--large" /></div>}
+    <div className={`pa-content${isPreviousData ? " is-busy" : ""}`} aria-busy={isPreviousData}>
+      {isPreviousData && <div className="pa-busy-overlay" role="status" aria-label="Updating feedback"><span className="pa-spinner pa-spinner--large" /></div>}
       <section className="pa-stat-grid" aria-label="Feedback overview">{cards.map(card => <AnalyticsStatCard key={card.label} {...card} />)}</section>
       {Number(summary.totalResponses) === 0 ? <section className="pa-panel tf-empty" aria-label="No feedback"><EmptyState className="tf-empty-state" icon={MessageSquareOff} title="No teacher feedback for this school year" description="Ratings and comments will appear here once teachers submit their evaluations. You can select another school year to view earlier feedback." /></section> : <>
       <PerformanceProgressTable title="Likert Scale Result - Leadership Evaluation" subtitle="Recorded question ratings on a five-point scale." columns={columns} data={likertResults} emptyMessage="No survey questions are configured." />

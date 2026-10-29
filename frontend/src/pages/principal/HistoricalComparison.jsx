@@ -38,7 +38,7 @@ export default function HistoricalComparison() {
   const [requestedPrimaryYear, setPrimarySchoolYear] = useState("");
   const [requestedComparisonYear, setComparisonSchoolYear] = useState("");
   const [term, setTerm] = useState("overall");
-  const { data, loading, refreshing, error, refresh, primarySchoolYear, comparisonSchoolYear, schoolYears } = usePrincipalQuery(
+  const { data, loading, isPreviousData, error, refresh, primarySchoolYear, comparisonSchoolYear, schoolYears } = usePrincipalQuery(
     "analytics:historical", { primarySchoolYear: requestedPrimaryYear, comparisonSchoolYear: requestedComparisonYear, term }, getHistoricalComparison, { comparison: true },
   );
 
@@ -129,7 +129,7 @@ export default function HistoricalComparison() {
   const comparisonOptions = allYears
     .filter((year) => year.value !== primarySchoolYear)
     .map((year) => ({ value: year.value, label: year.label }));
-  const isFiltering = refreshing;
+  const isFiltering = isPreviousData;
   const displayedTerm = data.term;
   const selectedTermIndex =
     displayedTerm === "overall" ? null : termIndex(displayedTerm);

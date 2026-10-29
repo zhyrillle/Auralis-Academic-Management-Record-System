@@ -31,7 +31,7 @@ export default function PerformanceSubjects() {
   const [term, setTerm] = useState("overall");
   const [requestedYear, setSchoolYear] = useState("");
   const [gradeLevel, setGradeLevel] = useState("all");
-  const { data, loading, refreshing, error, refresh, schoolYear, schoolYears } = usePrincipalQuery(
+  const { data, loading, isPreviousData, error, refresh, schoolYear, schoolYears } = usePrincipalQuery(
     "performance:subjects", { term, schoolYear: requestedYear, gradeLevel }, getSubjectPerformance,
   );
 
@@ -58,7 +58,7 @@ export default function PerformanceSubjects() {
       </main>
     );
 
-  const isFiltering = refreshing;
+  const isFiltering = isPreviousData;
   // Render the full layout whenever a payload exists; charts/tables show their own empty states.
   const hasData = data.subjects.some(hasRecordedGrades);
   const schoolYearOptions = schoolYears.map((year) => ({
