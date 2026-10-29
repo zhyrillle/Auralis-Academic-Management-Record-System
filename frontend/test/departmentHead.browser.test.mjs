@@ -82,7 +82,7 @@ try {
   await page.getByRole('heading', { name: 'English Department', exact: true }).waitFor();
   await page.getByText('Pass rate 3 / 4 students', { exact: true }).waitFor();
   await page.getByRole('heading', { name: 'Submission Monitor', exact: true }).waitFor();
-  await page.getByRole('heading', { name: 'Performance Analysis Matrix', exact: true }).waitFor();
+  assert.equal(await page.getByRole('heading', { name: 'Performance Analysis Matrix', exact: true }).count(), 0);
   assert.equal(await page.getByRole('button', { name: 'Submissions', exact: true }).count(), 0);
   assert.equal(await page.getByRole('button', { name: 'Performance', exact: true }).count(), 0);
   assert.equal(await page.locator('.dept-stats-row .summary-stat-card').count(), 4);

@@ -5,14 +5,12 @@ import OverallPassRateCard from "../../components/dashboard/OverallPassRateCard"
 import StatCard from "../../components/common/StatCard";
 import { Users, ClipboardCheck, Clock3, AlertTriangle } from "lucide-react";
 import SubmissionMonitorTable from "../../components/dashboard/SubmissionMonitorTable";
-import PerformanceMatrixTable from "../../components/dashboard/PerformanceMatrixTable";
 import GradeDistributionTable from "../../components/dashboard/GradeDistributionTable";
 import {
   getComparativeAnalysis,
   getOverallPassRate,
   getDashboardStats,
   getSubmissionMonitor,
-  getPerformanceMatrix,
   getGradeDistribution,
 } from "../../services/dashboardApi";
 import "../../styles/departmentHeadDashboard.css";
@@ -29,7 +27,6 @@ const EMPTY_STATS = {
   atRiskStudents: 0,
 };
 const EMPTY_SUBMISSIONS = [];
-const EMPTY_MATRIX = [];
 const EMPTY_DISTRIBUTION = [];
 
 export default function DeptDashboard() {
@@ -46,7 +43,6 @@ export default function DeptDashboard() {
   const [passRate, setPassRate] = useState(EMPTY_PASS_RATE);
   const [stats, setStats] = useState(EMPTY_STATS);
   const [submissions, setSubmissions] = useState(EMPTY_SUBMISSIONS);
-  const [matrix, setMatrix] = useState(EMPTY_MATRIX);
   const [distribution, setDistribution] = useState(EMPTY_DISTRIBUTION);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -60,13 +56,12 @@ export default function DeptDashboard() {
       setError(null);
 
       try {
-        const [comparativeData, passRateData, statsData, submissionsData, matrixData, distributionData] =
+        const [comparativeData, passRateData, statsData, submissionsData, distributionData] =
           await Promise.all([
             getComparativeAnalysis(activeFilters).catch(() => EMPTY_COMPARATIVE),
             getOverallPassRate(activeFilters).catch(() => EMPTY_PASS_RATE),
             getDashboardStats(activeFilters).catch(() => EMPTY_STATS),
             getSubmissionMonitor(activeFilters).catch(() => EMPTY_SUBMISSIONS),
-            getPerformanceMatrix(activeFilters).catch(() => EMPTY_MATRIX),
             getGradeDistribution({ schoolYear: activeFilters.schoolYear }).catch(() => EMPTY_DISTRIBUTION),
           ]);
 
@@ -76,7 +71,6 @@ export default function DeptDashboard() {
         setPassRate(passRateData);
         setStats(statsData);
         setSubmissions(submissionsData);
-        setMatrix(matrixData);
         setDistribution(distributionData);
       } catch (err) {
         if (!cancelled) {
@@ -146,10 +140,6 @@ export default function DeptDashboard() {
           loading={loading}
           term={activeFilters.quarter}
           onTermChange={value => handleFilterChange('quarter', value)}
-        />
-        <PerformanceMatrixTable
-          data={matrix}
-          loading={loading}
         />
 
         <GradeDistributionTable
