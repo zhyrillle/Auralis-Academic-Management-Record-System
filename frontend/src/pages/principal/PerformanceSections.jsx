@@ -46,7 +46,7 @@ const matchesSearch = (section, query) => {
 export default function PerformanceSections() {
   const [term, setTerm] = useState("overall");
   const [requestedYear, setSchoolYear] = useState("");
-  const { data, loading, refreshing, error, refresh, schoolYear, schoolYears } = usePrincipalQuery(
+  const { data, loading, isPreviousData, error, refresh, schoolYear, schoolYears } = usePrincipalQuery(
     "performance:sections", { term, schoolYear: requestedYear }, getSectionPerformance,
   );
   const [distributionQuery, setDistributionQuery] = useState("");
@@ -79,7 +79,7 @@ export default function PerformanceSections() {
       </main>
     );
 
-  const isFiltering = refreshing;
+  const isFiltering = isPreviousData;
   // Render the full layout whenever a payload exists; charts/tables show their own empty states.
   const hasData = data.sections.some(row => row.gradedLearners > 0);
   const schoolYearOptions = schoolYears.map((year) => ({

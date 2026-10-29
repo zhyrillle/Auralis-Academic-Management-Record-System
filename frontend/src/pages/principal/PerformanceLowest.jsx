@@ -27,7 +27,7 @@ export default function PerformanceLowest() {
   const [term, setTerm] = useState("overall");
   const [requestedYear, setSchoolYear] = useState("");
   const [gradeLevel, setGradeLevel] = useState("all");
-  const { data, loading, refreshing, error, refresh, schoolYear, schoolYears } = usePrincipalQuery(
+  const { data, loading, isPreviousData, error, refresh, schoolYear, schoolYears } = usePrincipalQuery(
     "performance:lowest", { term, schoolYear: requestedYear, gradeLevel }, getLowestPerformers,
   );
 
@@ -54,7 +54,7 @@ export default function PerformanceLowest() {
       </main>
     );
 
-  const isFiltering = refreshing;
+  const isFiltering = isPreviousData;
   // Empty results never generate placeholder rankings.
   const hasData =
     [...data.gradeLevels, ...data.sections, ...data.subjects].some(hasRecordedGrades);

@@ -28,7 +28,7 @@ import "../../styles/principalPerformance.css";
 export default function PerformanceGradeLevels() {
   const [term, setTerm] = useState("overall");
   const [requestedYear, setSchoolYear] = useState("");
-  const { data, loading, refreshing, error, refresh, schoolYear, schoolYears } = usePrincipalQuery(
+  const { data, loading, isPreviousData, error, refresh, schoolYear, schoolYears } = usePrincipalQuery(
     "performance:grades", { term, schoolYear: requestedYear }, getGradeLevelPerformance,
   );
 
@@ -56,7 +56,7 @@ export default function PerformanceGradeLevels() {
     );
   }
 
-  const isFiltering = refreshing;
+  const isFiltering = isPreviousData;
   const hasData = data.gradeLevels.some(row => row.gradedLearners > 0);
   const schoolYearOptions = schoolYears.map((year) => ({
     value: year.value,

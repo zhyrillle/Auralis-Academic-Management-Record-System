@@ -8,7 +8,6 @@ import {
 // Shared memory cache backed by session-scoped, expiring IndexedDB page data.
 const entries = new Map();
 const listeners = new Set();
-const FRESH_FOR_MS = 120_000;
 const MAX_ENTRIES = 100;
 let identity = '';
 let generation = 0;
@@ -137,11 +136,9 @@ export function loadCached(key, loader, { force = false } = {}) {
     verify();
     if (startedGeneration !== generation) return loadCached(key, loader);
     if (entries.get(key) === entry) {
-      const hasChanged = previous?.data === undefined || JSON.stringify(previous.data) !== JSON.stringify(data);
       entries.set(key, { data, updatedAt: Date.now(), error: '', pending: null });
-      if (hasChanged) {
-        notify();
-      }
+      // Subscribers also need completion when the server returns unchanged data.
+      notify();
       await setPersistentCache(key, data, undefined, scope);
     }
     verify();
@@ -168,13 +165,14 @@ export function loadCached(key, loader, { force = false } = {}) {
     if (oldest) entries.delete(oldest[0]);
   }
 
-  // If cached data was already available and not forced, return cached data immediately (0ms)
-  // while background revalidation executes seamlessly
+  notify();
+  // Keep cached data immediately available while its refresh runs in the background.
   if (!force && previous?.data !== undefined) {
+    // The caller receives cached data, so observe failures of the background task here.
+    pending.catch(() => {});
     return Promise.resolve(previous.data);
   }
 
-  notify();
   return pending;
 }
 

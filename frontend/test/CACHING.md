@@ -25,7 +25,7 @@ offline writes retain that behavior; previously native online-only writes use
 
 | Data | Navigation / refresh | Logout |
 | --- | --- | --- |
-| Page responses | Memory is fresh for two minutes. IndexedDB can supply an unexpired response while the server refreshes it or when the network fails. Persistent copies expire after 24 hours by default. | Memory and persistent page copies are cleared; old-session requests cannot recreate them. |
+| Page responses | Memory serves cached data immediately while revalidating, with a two-second throttle for repeated reads. Visible queries check every 60 seconds and on return to the tab/window. IndexedDB can supply an unexpired response while the server refreshes it or when the network fails. Persistent copies expire after 24 hours by default. | Memory and persistent page copies are cleared; old-session requests cannot recreate them. |
 | Pending offline edits | Remain in the existing IndexedDB outbox and score overlay, tied to the account and role that created them. | Retained for that original account. They are not displayed or sent by a different account. |
 | PHIL-IRI local backups and SF9 comment drafts | Existing local-draft workflows remain, with account and school-year keys. | Retained for their original account, not treated as disposable page responses. |
 | Application assets / harmless preferences | Normal browser behavior. | Not cleared by this implementation. |

@@ -40,7 +40,7 @@ export default function SubjectPerformanceTrend() {
   const [gradeLevel, setGradeLevel] = useState("all");
   const [viewMode, setViewMode] = useState("trend");
   const [rankingTerm, setRankingTerm] = useState("term-1");
-  const { data, loading, refreshing, error, refresh, schoolYear, schoolYears } = usePrincipalQuery(
+  const { data, loading, isPreviousData, error, refresh, schoolYear, schoolYears } = usePrincipalQuery(
     "analytics:subject-trend", { schoolYear: requestedYear, gradeLevel, includeUnrated: viewMode === "ranking" ? "true" : "false", term: viewMode === "trend" ? "overall" : rankingTerm }, getSubjectPerformanceTrend,
   );
   const [selectedSubjectIds, setSelectedSubjectIds] = useState(null);
@@ -179,7 +179,7 @@ export default function SubjectPerformanceTrend() {
         };
       }),
   ];
-  const isFiltering = refreshing;
+  const isFiltering = isPreviousData;
   const displayedTerm = data.term;
 
   return (

@@ -43,6 +43,7 @@ From frontend:
     node test/navigationCache.test.mjs
     node test/atRiskPresentation.test.mjs
     node test/principalUi.browser.test.mjs
+    node test/principalRefresh.browser.test.mjs
     node test/offlineCache.browser.test.mjs
     node test/departmentHead.browser.test.mjs
     node test/studentManagement.browser.test.mjs
@@ -55,6 +56,26 @@ malformed results, missing historical years, zero, retries, filters, old-cache
 bypass, verified offline records and unsent-work preservation. Existing account,
 logout, System Admin, Department Head and adviser regressions remain intact.
 Focused source lint and frontend build pass; the existing bundle-size warning remains.
+
+## Background updates
+
+Visible cached queries check for updates every 60 seconds and when the user returns
+to the tab/window. Principal performance, analytics and feedback retain usable
+content and controls during these checks, applying new results without resetting
+filters or scroll. Only a filter change awaiting its own results uses the content
+overlay; initial reads without any usable data retain the loading skeleton.
+
+Cache subscribers receive completion even when the response has not changed.
+The refresh regression uses a virtual clock and intercepted responses to check
+the one-minute interval, unchanged/changed/failed reads, overlapping requests,
+filter transitions, hidden tabs and return refreshes without contacting school data.
+
+Validation of the refresh fix: the dedicated refresh browser regression, Principal
+data contracts, focused lint and frontend build pass. The broader Principal UI
+suite currently expects the absent text "No recorded grades for this term";
+the offline-cache suite fails because an existing fallback hides a 403 rejection.
+Both failures were reproduced using the committed source as well as the refresh
+changes. Those separate behaviors are outside this loading fix.
 
 ## Handoff
 

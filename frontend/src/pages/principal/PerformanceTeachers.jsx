@@ -41,7 +41,7 @@ const matchesTeacher = (teacher, query) => {
 export default function PerformanceTeachers() {
   const [term, setTerm] = useState("overall");
   const [requestedYear, setSchoolYear] = useState("");
-  const { data, loading, refreshing, error, refresh, schoolYear, schoolYears } = usePrincipalQuery(
+  const { data, loading, isPreviousData, error, refresh, schoolYear, schoolYears } = usePrincipalQuery(
     "performance:teachers", { term, schoolYear: requestedYear }, getTeacherPerformance,
   );
   const [rankingQuery, setRankingQuery] = useState("");
@@ -72,7 +72,7 @@ export default function PerformanceTeachers() {
       </main>
     );
 
-  const isFiltering = refreshing;
+  const isFiltering = isPreviousData;
   // Render the full layout whenever a payload exists; charts/tables show their own empty states.
   const hasData = data.teachers.length > 0;
   const schoolYearOptions = schoolYears.map((year) => ({
