@@ -581,7 +581,7 @@ export default function AdviserFeedback() {
             <span className="fb-status-dot" />
             <span>
               {windowStatus.status === "OPEN"
-                ? `Window Active · Deadline: ${windowStatus.formatted_deadline}`
+                ? `Window Active · Deadline: ${windowStatus.formatted_deadline}${windowStatus.is_testing_window ? `, ${windowStatus.formatted_deadline_time} Philippine time` : ""}`
                 : windowStatus.status === "UPCOMING"
                 ? `Opens: ${windowStatus.formatted_window_open}`
                 : `Closed · Deadline Was ${windowStatus.formatted_deadline}`}
@@ -604,14 +604,24 @@ export default function AdviserFeedback() {
           </div>
           <div className="fb-window-banner-content">
             <h4>
-              {windowStatus.status === "OPEN"
+              {windowStatus.is_testing_window
+                ? windowStatus.status === "OPEN"
+                  ? "Feedback Testing Period is Open"
+                  : windowStatus.status === "UPCOMING"
+                  ? "Feedback Testing Period Has Not Started"
+                  : "Feedback Testing Period Has Closed"
+                : windowStatus.status === "OPEN"
                 ? "Annual Peer Feedback Window is Open"
                 : windowStatus.status === "UPCOMING"
                 ? "Peer Feedback is Currently Closed (Read-Only Mode)"
                 : "Peer Feedback Window Has Closed (Read-Only Mode)"}
             </h4>
             <p>
-              {windowStatus.status === "OPEN" ? (
+              {windowStatus.is_testing_window ? (
+                <>
+                  The feedback testing period runs from <strong>{windowStatus.formatted_window_open}</strong> through <strong>{windowStatus.formatted_deadline}, {windowStatus.formatted_deadline_time} Philippine time</strong>. Please submit your feedback during these dates. Each person may be evaluated once per school year.
+                </>
+              ) : windowStatus.status === "OPEN" ? (
                 <>
                   Feedback takes place <strong>once per school year</strong>. Please submit all peer evaluations before the deadline on <strong>{windowStatus.formatted_deadline}</strong> (2 weeks before S.Y. {windowStatus.school_year} ends).
                 </>
