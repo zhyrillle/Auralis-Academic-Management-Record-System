@@ -3,9 +3,9 @@ import ProgressBar from '../common/ProgressBar';
 import DropdownSelect from '../common/DropdownSelect';
 import TablePagination from '../common/TablePagination';
 
-const STATUS_CONFIG = { Pending: 'dept-pill-amber', Submitted: 'dept-pill-green', Overdue: 'dept-pill-red' };
+const STATUS_CONFIG = { Pending: 'dept-pill-amber', Submitted: 'dept-pill-green', Overdue: 'dept-pill-red', 'Submitted late': 'dept-pill-amber', 'Not configured': 'dept-pill-neutral' };
 
-export default function SubmissionMonitorTable({ data, loading, term, onTermChange }) {
+export default function SubmissionMonitorTable({ data, loading, error, onRetry, term, onTermChange }) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(5);
   const safePage = Math.min(page, Math.max(1, Math.ceil(data.length / pageSize)));
@@ -42,14 +42,22 @@ export default function SubmissionMonitorTable({ data, loading, term, onTermChan
         />
       </div>
     </div>
-    {loading ? <div className="dept-skeleton-table" role="status" aria-label="Loading submissions" /> : <>
+    {loading ? <div className="dept-skeleton-table" role="status" aria-label="Loading submissions" /> : error ? <div className="dept-error-banner" role="alert">
+      <p>Couldn’t load submissions. Please try again.</p>
+      <button type="button" onClick={onRetry}>Retry submissions</button>
+    </div> : <>
       <div className="dept-table-wrap"><table className="dept-table">
-        <thead><tr><th>Teacher</th><th>Grade/Section</th><th>Status</th><th>Completion</th></tr></thead>
-        <tbody>{!data.length && <tr><td colSpan={4} className="dept-no-data-row">No data provided yet</td></tr>}
-          {data.slice((safePage - 1) * pageSize, safePage * pageSize).map((row, index) => <tr key={index}>
-            <td>{row.teacher}</td><td>{row.gradeSection}</td>
+        <thead><tr><th>Teacher</th><th>Grade/Section</th><th>Subject</th><th>Status</th><th>Submission Progress</th></tr></thead>
+        <tbody>{!data.length && <tr><td colSpan={5} className="dept-no-data-row">No submissions match the selected filters.</td></tr>}
+          {data.slice((safePage - 1) * pageSize, safePage * pageSize).map(row => <tr key={row.subjectOfferingId}>
+            <td>{row.teacher}</td><td>{row.gradeSection}</td><td>{row.subject}</td>
             <td><span className={'dept-pill ' + (STATUS_CONFIG[row.status] || STATUS_CONFIG.Pending)}><span className="dept-pill-icon" aria-hidden="true">●</span>{row.status}</span></td>
-            <td><div className="dept-progress-cell"><ProgressBar className="dept-progress-track" value={row.completion} ariaLabel={row.teacher + ' submission completion'} /><span className="dept-progress-text">{row.completion}%</span></div></td>
+            <td>{row.expectedTerms > 0 ? <>
+              <div>{row.submittedTerms} of {row.expectedTerms} submitted</div>
+              <div className="dept-progress-cell"><ProgressBar className="dept-progress-track" value={row.completion} ariaLabel={`${row.teacher} ${row.subject} submission progress`} /><span className="dept-progress-text">{row.completion}%</span></div>
+              {row.overdueTerms > 0 && <small>{row.overdueTerms} overdue</small>}
+              {row.lateTerms > 0 && <small> {row.lateTerms} submitted late</small>}
+            </> : 'No configured terms'}</td>
           </tr>)}</tbody>
       </table></div>
       <TablePagination page={safePage} pageSize={pageSize} total={data.length} onPageChange={setPage} itemLabel="submission" />

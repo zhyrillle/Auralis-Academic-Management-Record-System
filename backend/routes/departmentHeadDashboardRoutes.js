@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
+const { getSubmissionMonitor, submissionTotals } = require('../services/DeptSubmissionMonitorService');
 const DeptHeadClassRecordService = require('../services/DeptHeadClassRecordService');
 router.use('/monitoring', require('./deptHeadMonitoringRoutes'));
 
@@ -120,22 +121,7 @@ router.get('/stats', async (req, res) => {
     teacherQuery += buildFilters(req.query, teacherParams, null);
     const [teacherRows] = await db.query(teacherQuery, teacherParams);
 
-    let subQuery = `
-      SELECT 
-        COUNT(gs.grade_sheet_id) AS totalSheets,
-        SUM(CASE WHEN gs.workflow_status = 'SUBMITTED' THEN 1 ELSE 0 END) AS submittedGrades
-      FROM GRADE_SHEET gs
-      JOIN SUBJECT_OFFERING so ON gs.subject_offering_id = so.subject_offering_id
-      JOIN SUBJECT s ON so.subject_id = s.subject_id
-      JOIN SECTION sec ON so.section_id = sec.section_id
-      JOIN GRADE_LEVEL gl ON sec.grade_level_id = gl.grade_level_id
-      JOIN SCHOOL_YEAR sy ON so.school_year_id = sy.school_year_id
-      LEFT JOIN ACADEMIC_TERM at ON gs.term_id = at.term_id
-      WHERE s.department_id = ? 
-    `;
-    const subParams = [departmentId];
-    subQuery += buildFilters(req.query, subParams, 'at');
-    const [subRows] = await db.query(subQuery, subParams);
+    const submissionStats = submissionTotals(await getSubmissionMonitor(db, departmentId, req.query));
 
     let riskQuery = `
       SELECT COUNT(DISTINCT sg.student_id) AS atRisk
@@ -151,13 +137,9 @@ router.get('/stats', async (req, res) => {
     riskQuery += buildFilters(req.query, riskParams, 'sg');
     const [riskRows] = await db.query(riskQuery, riskParams);
 
-    const totalSheets = Number(subRows[0]?.totalSheets) || 0;
-    const submittedGrades = Number(subRows[0]?.submittedGrades) || 0;
     res.json({
       totalTeachers: Number(teacherRows[0]?.totalTeachers) || 0,
-      submittedGrades,
-      submittedGradesPercent: totalSheets > 0 ? Math.round((submittedGrades / totalSheets) * 100) : 0,
-      delayedSubmissions: Math.max(0, totalSheets - submittedGrades),
+      ...submissionStats,
       atRiskStudents: Number(riskRows[0]?.atRisk) || 0,
     });
   } catch (err) {
@@ -168,79 +150,7 @@ router.get('/stats', async (req, res) => {
 router.get('/submission-monitor', async (req, res) => {
   try {
     const departmentId = await getDepartmentId(req.headers['x-auralis-user-id']);
-    const quarterParam = req.query.quarter;
-    const isOverall = quarterParam === 'all' || quarterParam === 'overall' || quarterParam === 'All';
-    const quarter = (!isOverall && (quarterParam || '1')) || null;
-    const termNameMap = { '1': '1st', '2': '2nd', '3': '3rd' };
-    const termName = quarter ? (termNameMap[quarter] || quarter) : null;
-
-    let query = `
-      SELECT 
-        so.subject_offering_id,
-        gl.grade_level_name,
-        sec.section_name,
-        GROUP_CONCAT(DISTINCT CONCAT(u.first_name, ' ', u.last_name) SEPARATOR ', ') AS teacher_name,
-        COUNT(gs.grade_sheet_id) AS total_sheets,
-        SUM(CASE WHEN gs.workflow_status = 'SUBMITTED' THEN 1 ELSE 0 END) AS submitted_sheets
-      FROM SUBJECT_OFFERING so
-      JOIN SUBJECT s ON so.subject_id = s.subject_id
-      JOIN SECTION sec ON so.section_id = sec.section_id
-      JOIN GRADE_LEVEL gl ON sec.grade_level_id = gl.grade_level_id
-      JOIN SCHOOL_YEAR sy ON so.school_year_id = sy.school_year_id
-      INNER JOIN TEACHER_ASSIGNMENT ta ON ta.subject_offering_id = so.subject_offering_id
-      INNER JOIN USER u ON ta.user_id = u.user_id
-      LEFT JOIN ACADEMIC_TERM at ON at.school_year_id = sy.school_year_id ${termName ? 'AND at.term_name = ? ' : ''}
-      LEFT JOIN GRADE_SHEET gs ON gs.subject_offering_id = so.subject_offering_id AND gs.term_id = at.term_id
-      WHERE s.department_id = ? AND u.user_id IS NOT NULL AND u.first_name IS NOT NULL
-    `;
-    const params = [];
-    if (termName) params.push(termName);
-    params.push(departmentId);
-
-    if (req.query.schoolYear && req.query.schoolYear !== 'All') {
-      const startsOn = req.query.schoolYear.split('-')[0];
-      query += ' AND sy.starts_on = ?';
-      params.push(startsOn);
-    }
-    if (req.query.gradeLevel && req.query.gradeLevel !== 'All') {
-      query += ' AND gl.grade_level_name = ?';
-      params.push(req.query.gradeLevel);
-    }
-
-    query += `
-      GROUP BY so.subject_offering_id, gl.grade_level_name, sec.section_name
-      ORDER BY gl.grade_level_name, sec.section_name
-    `;
-
-    const [rows] = await db.query(query, params);
-    const results = rows.map(r => {
-      const submitted = Number(r.submitted_sheets) || 0;
-      const total = Number(r.total_sheets) || 0;
-      let isSubmitted = false;
-      let completion = 40;
-
-      if (quarter) {
-        isSubmitted = submitted > 0;
-        completion = isSubmitted ? 100 : 40;
-      } else {
-        const expectedTerms = Math.max(total, 3);
-        isSubmitted = submitted >= expectedTerms && expectedTerms > 0;
-        if (isSubmitted) {
-          completion = 100;
-        } else if (submitted > 0) {
-          completion = Math.round((submitted / expectedTerms) * 100);
-        } else {
-          completion = 40;
-        }
-      }
-
-      return {
-        teacher: r.teacher_name,
-        gradeSection: `${r.grade_level_name} - ${r.section_name}`,
-        status: isSubmitted ? 'Submitted' : 'Pending',
-        completion
-      };
-    });
+    const results = await getSubmissionMonitor(db, departmentId, req.query);
     res.json(results);
   } catch (err) {
     res.status(500).json({ error: err.message });
