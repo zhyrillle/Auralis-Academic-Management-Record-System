@@ -26,7 +26,7 @@ export default function AtRiskPrediction() {
       {!loading && data && !data.students.length
         ? <EmptyState className="ar-preview-empty pa-empty-state" icon={ChartColumn}
           title="No predictions for this period"
-          description="Learners awaiting complete records are not counted as Low Risk." />
+          description="Predictions require complete English grades, source-term attendance and valid PHIL-IRI screening. View records needed for details." />
         : <section className="ar-charts-row" aria-label="Risk distribution breakdown">
           <OverallDistributionChart data={data?.distribution} loading={loading} />
           <GradeLevelBreakdownChart data={data?.gradeBreakdown} gradeLevels={preview.options?.gradeLevels} loading={loading} />

@@ -129,6 +129,24 @@ test('English teaching risk reuses the owned offering/section/year pipeline, mat
   assert.deepEqual(result.summary.riskCounts, { low: 0, medium: 1, high: 0, awaiting: 1 });
 });
 
+test('insufficient attendance and screening propagate to class details without risk labels', async () => {
+  const result = await Service.attachPredictions(englishResponse(), assignment, {}, {
+    getPreview: async () => preview([], [
+      profile(501, { status: 'insufficient_data', missingSources: ['attendance'], reason: 'Attendance needed: 3 weekdays missing.' }),
+      profile(502, { status: 'insufficient_data', missingSources: ['attendance', 'phil_iri'], reason: 'Attendance and PHIL-IRI needed.' }),
+    ]),
+  });
+  assert.equal(result.learners[0].riskAssessment.status, 'insufficient_data');
+  assert.equal(result.learners[0].riskAssessment.label, 'Insufficient data');
+  assert.deepEqual(result.learners[0].riskAssessment.missingSources, ['attendance']);
+  assert.match(result.learners[0].riskAssessment.reason, /3 weekdays/);
+  assert.deepEqual(result.learners[1].riskAssessment.missingSources, ['attendance', 'phil_iri']);
+  assert.ok(result.learners.every(row => row.riskAssessment.riskLevel === undefined));
+  assert.deepEqual(result.summary.riskCounts, { low: 0, medium: 0, high: 0, awaiting: 2 });
+  assert.equal(result.summary.atRiskCount, 0);
+  assert.equal(result.learners[0].termGrade, 95);
+});
+
 test('all-subject advisory standing does not request or expose an English risk count', async () => {
   let calls = 0;
   const result = await Service.attachPredictions(response(), assignment, {}, {

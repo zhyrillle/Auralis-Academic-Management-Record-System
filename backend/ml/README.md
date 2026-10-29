@@ -5,6 +5,12 @@ The Principal prediction and breakdown pages use the same saved nine-input Rando
 Forest export as the notebook and simulator. No fitting, threshold search,
 notification, grade write, or prediction database write takes place.
 
+App risk labels require complete recorded English academic inputs, source-term
+attendance and valid, dated PHIL-IRI screening. Academically eligible learners
+with missing or invalid attendance or screening receive **Insufficient data** and
+the records needed. They are not sent to model inference or counted in risk bands.
+This rule also applies to English teaching-class details.
+
 ## Run
 
 After pulling the repository, run these commands in `backend`:
@@ -103,13 +109,20 @@ them executes Python code. Runtime mismatches fail closed.
   that a complete official school calendar or transfer history exists. Historical
   half-day/excused marks cannot be represented by the current P/A/L enum and must
   not be synthesized. Support for them would require a separately approved change.
-- The saved pipeline imputes these null values with **training** medians. It is never
-  refitted on live records. Complete attendance supplies the real rate, including a
-  genuine zero; only missing attendance is substituted. The current saved absence
-  median is zero, but that is not evidence of perfect recorded attendance. Raw inputs
-  remain null in API learner records, with `missingInputs` and `attendanceSummary`
-  available for provenance. Deployment missingness and term transfer remain unvalidated;
-  inference working is not validation.
+- The adapters still preserve unavailable inputs as null. The app gate in
+  `AtRiskPrediction.getPreview` requires available source statuses and valid recorded
+  attendance and screening values; it does not fill these nulls. Genuine zero
+  absences and screening scores remain valid.
+- The saved pipeline and Python worker retain their original **training median**
+  imputation for independent research use. No model retraining or artifact change is
+  part of the complete-records app policy. The saved absence median is zero; it is
+  not evidence of perfect recorded attendance. Worker missing-value tests continue
+  to cover this baseline, but app endpoints expose no bypass or research toggle.
+- The frontend's `complete-records-v1` page and API cache identities retire cached
+  responses from the former app imputation policy. The request identity does not
+  select or override backend policy. Deploy the frontend and backend together.
+- Complete records do not establish prediction accuracy. Term transfer remains
+  unvalidated; inference working is not validation.
 - Task counts and coverage are not model inputs. No fictitious student fallback exists.
 
 ## Output and boundaries
@@ -120,6 +133,14 @@ unavailable learners separately. Bands: Low ≤0.30, Moderate >0.30 and <0.70,
 High ≥0.70. `predictedAtRisk` uses the saved **0.35** threshold independently.
 The UI shows Low/Medium/High labels, not numeric model scores. Internal scores are
 not calibrated failure probabilities.
+
+The existing `unavailable` list also includes withheld learners with
+`status: "insufficient_data"`, `missingSources` (`attendance`, `phil_iri`, or both),
+and a readable `reason`. Existing academic exclusion reasons are preserved. The
+summary's `unavailable` includes all withheld learners, while `eligible`, `total`
+and distributions include scored learners only. English class details propagate
+the same status and reasons and count these learners in `riskCounts.awaiting`.
+Source/model failures still report Unavailable rather than Insufficient data.
 
 No notifications or automated decisions are made. School-year/term validation errors
 are explicit 400 responses; source/model failures are 503, never empty-success results.

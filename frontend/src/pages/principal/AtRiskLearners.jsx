@@ -75,7 +75,9 @@ function LearnerList({ level }) {
             <div className="ar-full-learner-list">{visible.map((student, index) => unavailable
               ? <article className="ar-awaiting-card" key={`${student.id}-${index}`}>
                 <div><h2>{student.name}</h2><p>Grade {student.grade} · Section {student.section}{student.adviser ? ` · Adviser: ${student.adviser}` : ''}</p></div>
-                <p className="ar-awaiting-reason">{student.reason}</p>
+                <div>{student.status === 'insufficient_data' && <strong className="ar-insufficient-label">Insufficient data</strong>}
+                  <p className="ar-awaiting-reason">{student.reason}</p>
+                </div>
               </article>
               : <StudentRiskCard key={student.id} {...student} onView={() => setSelectedStudent(student)} />)}</div>
             <nav className="ar-list-pagination" aria-label="Learner list pages">

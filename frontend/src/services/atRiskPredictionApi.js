@@ -1,4 +1,5 @@
 import { cachedApiFetch as fetch } from "./navigationCache.js";
+import { RISK_INPUT_POLICY } from './riskInputPolicy.js';
 const BASE = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api').replace(/\/$/, '');
 
 export async function requestRiskPreview(path, filters = {}, signal) {
@@ -6,6 +7,7 @@ export async function requestRiskPreview(path, filters = {}, signal) {
   for (const [key, value] of Object.entries(filters)) {
     if (value != null && value !== '') params.set(key, value);
   }
+  params.set('inputPolicy', RISK_INPUT_POLICY);
   const user = JSON.parse(localStorage.getItem('user') || 'null');
   const response = await fetch(`${BASE}/principal/at-risk-prediction/${path}?${params}`, { queueOffline: false,
     headers: { 'X-Auralis-User-Id': String(user?.user_id || user?.id || '') }, signal,

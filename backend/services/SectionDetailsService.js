@@ -284,13 +284,16 @@ class SectionDetailsService {
         } else {
           counts.awaiting++;
           const review = rows.length > 1 || (row && (!RISK_LEVELS.has(row.riskLevel) || unavailable.has(learner.studentSectionId)));
-          learner.riskAssessment = { status: review ? 'needs_review' : 'awaiting_records',
-            label: review ? 'Needs review' : 'Awaiting records', targetTerm,
-            reason: review ? 'Conflicting predictions need review.' : unavailable.get(learner.studentSectionId)?.reason || 'Complete previous-term English records are needed.' };
+          const withheld = unavailable.get(learner.studentSectionId);
+          const insufficient = !review && withheld?.status === 'insufficient_data';
+          learner.riskAssessment = { status: review ? 'needs_review' : insufficient ? 'insufficient_data' : 'awaiting_records',
+            label: review ? 'Needs review' : insufficient ? 'Insufficient data' : 'Awaiting records', targetTerm,
+            reason: review ? 'Conflicting predictions need review.' : withheld?.reason || 'Complete previous-term English records are needed.',
+            ...(insufficient ? { missingSources: withheld.missingSources } : {}) };
         }
       }
       context.status = 'available';
-      context.message = `English risk for Term ${targetTerm[1]} uses completed Term ${sourceTerm[1]} records. Labels are preliminary, not official grades.`;
+      context.message = `English risk for Term ${targetTerm[1]} requires complete Term ${sourceTerm[1]} English records, attendance and valid PHIL-IRI screening. Labels are preliminary, not official grades.`;
       response.capabilities.atRiskAvailable = true;
       response.summary.riskCounts = counts;
       response.summary.atRiskCount = counts.medium + counts.high;

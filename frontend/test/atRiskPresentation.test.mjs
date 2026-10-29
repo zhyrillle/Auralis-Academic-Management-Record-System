@@ -10,6 +10,7 @@ import { createServer } from 'vite';
 
 globalThis.localStorage = { getItem: () => null };
 globalThis.window = { location: { origin: 'http://localhost' }, addEventListener: () => {}, console };
+globalThis.document = { addEventListener: () => {}, visibilityState: 'visible' };
 globalThis.fetch = async () => { throw new Error('Unexpected network request'); };
 const server = await createServer({ cacheDir: mkdtempSync(path.join(os.tmpdir(), 'auralis-risk-render-')),
   plugins: [{ name: 'stub-browser-only-report', enforce: 'pre', load(id) {
@@ -19,22 +20,28 @@ const server = await createServer({ cacheDir: mkdtempSync(path.join(os.tmpdir(),
   } }], server: { middlewareMode: true, ws: false }, appType: 'custom' });
 try {
   const { loadCached, cacheKey } = await server.ssrLoadModule('/src/services/navigationCache.js');
+  const { RISK_INPUT_POLICY, RISK_PREVIEW_CACHE, SECTION_DETAILS_CACHE } = await server.ssrLoadModule('/src/services/riskInputPolicy.js');
   const options = { schoolYears: [{ value: '2026-2027', label: 'SY 2026–2027' }], gradeLevels: [{ value: 'all', label: 'All Grade Levels' }, { value: '7', label: 'Grade 7' }, { value: '8', label: 'Grade 8' }] };
   const features = { previous_final_grade: 84, ww_pct: 80, pt_pct: 82, qa_pct: 75,
-    phil_iri_literal_pct: null, phil_iri_inferential_pct: null, phil_iri_critical_pct: null, phil_iri_unavailable: 1, absence_rate: null };
+    phil_iri_literal_pct: 50, phil_iri_inferential_pct: 75, phil_iri_critical_pct: 0, phil_iri_unavailable: 0, absence_rate: 0.1 };
   const students = ['high', 'medium', 'low', 'low'].map((riskLevel, index) => ({
     id: String(index + 1), studentId: index + 1, studentSectionId: 501 + index, schoolYearId: 3,
     name: `Sample Learner ${index + 1}`, grade: 8, section: 'Demo', adviser: 'Demo Adviser',
     riskLevel, riskScore: 92.5 - index * 20, score: 0.925 - index * 0.2,
     sourceTerm: 'T1', targetTerm: 'T2', schoolYear: '2026-2027', modelInputs: features,
-    screeningReason: 'No screening result recorded.', flags: [{ icon: 'calendar', label: 'Attendance rate unverified; training median used.' }],
+    screeningStatus: 'available', screeningAssessmentDate: '2026-06-15', attendanceStatus: 'available',
+    attendanceSummary: { absentDays: 2, classDays: 20 }, flags: [],
   }));
-  const payload = { summary: { lowRisk: 2, mediumRisk: 1, highRisk: 1, total: 4, unavailable: 1, totalEnglish: 5 },
-    students, unavailable: [{ id: '5', grade: 8, name: 'Awaiting Learner', section: 'Demo', reason: 'English records incomplete.' }],
+  const payload = { summary: { lowRisk: 2, mediumRisk: 1, highRisk: 1, total: 4, unavailable: 2, totalEnglish: 6 },
+    students, unavailable: [{ id: '5', grade: 8, name: 'Awaiting Learner', section: 'Demo', reason: 'English records incomplete.' },
+      { id: '6', grade: 7, name: 'Incomplete Sources Learner', section: 'Demo', status: 'insufficient_data',
+        missingSources: ['attendance', 'phil_iri'], reason: 'Attendance needed: 3 weekdays missing. PHIL-IRI needed: No screening recorded.' }],
     distribution: { low: { count: 2 }, medium: { count: 1 }, high: { count: 1 }, totalFlagged: 4 },
     gradeBreakdown: [{ grade: 'Grade 8', low: 2, medium: 1, high: 1 }] };
   await loadCached(cacheKey('risk:options'), async () => options);
-  await loadCached(cacheKey('risk:preview:v3', { schoolYear: '2026-2027', term: 'T2' }), async () => payload);
+  await loadCached(cacheKey('risk:preview:v3', { schoolYear: '2026-2027', term: 'T2' }), async () => ({ ...payload,
+    students: [{ ...students[0], name: 'Stale Imputed Learner' }] }));
+  await loadCached(cacheKey(RISK_PREVIEW_CACHE, { schoolYear: '2026-2027', term: 'T2' }), async () => payload);
   const render = (Page, url, route = '*') => renderToString(React.createElement(MemoryRouter, { initialEntries: [url] },
     React.createElement(Routes, null, React.createElement(Route, { path: route, element: React.createElement(Page) })))).replace(/<!-- -->/g, '');
   const base = '/principal/at-risk-students/prediction?schoolYear=2026-2027&term=T2&gradeLevel=all';
@@ -46,6 +53,9 @@ try {
   assert.doesNotMatch(prediction, /92\.5|risk score|Score ≤|Score ≥|Preliminary scores|Moderate Risk/);
   assert.match(prediction, /learners\/all/);
   assert.match(prediction, /Student Risk Review/);
+  assert.doesNotMatch(prediction, /Stale Imputed Learner/, 'Old page-cache labels are not reused');
+  assert.match(prediction, /English grades, attendance and PHIL-IRI are required/);
+  assert.doesNotMatch(prediction, /inputs use training-data medians/);
   const { default: StudentRiskCard } = await server.ssrLoadModule('/src/components/at-risk/StudentRiskCard.jsx');
   const attendanceCard = renderToString(React.createElement(StudentRiskCard, { ...students[0],
     flags: [{ icon: 'calendar', label: 'Attendance: 2 absences / 54 class days' }] }));
@@ -56,13 +66,13 @@ try {
   assert.match(prediction, /aria-label="Prediction period: Predicting Term 2"/);
   assert.match(prediction, /Based on Term 1 records/);
   assert.doesNotMatch(prediction, /Subject: Mathematics|Subject: Science/);
-  await loadCached(cacheKey('risk:preview:v3', { schoolYear: '2026-2027', term: 'T3' }), async () => ({
+  await loadCached(cacheKey(RISK_PREVIEW_CACHE, { schoolYear: '2026-2027', term: 'T3' }), async () => ({
     ...payload, students: students.map(student => ({ ...student, sourceTerm: 'T2', targetTerm: 'T3' })),
   }));
   const targetTerm3 = render(Prediction, base.replace('term=T2', 'term=T3'));
   assert.match(targetTerm3, /aria-label="Prediction period: Predicting Term 3"/);
   assert.match(targetTerm3, /Based on Term 2 records/);
-  assert.match(prediction, /Complete previous-term attendance is used/);
+  assert.match(prediction, /complete previous-term attendance/);
   assert.doesNotMatch(prediction, /Attendance rates are still unverified/);
   assert.match(prediction, /OVERALL DISTRIBUTION/);
   assert.match(prediction, /Breakdown by Grade Level/);
@@ -89,6 +99,11 @@ try {
   const { default: Learners } = await server.ssrLoadModule('/src/pages/principal/AtRiskLearners.jsx');
   const list = render(Learners, '/principal/at-risk-students/prediction/learners/all?schoolYear=2026-2027&term=T2&gradeLevel=all', '/principal/at-risk-students/:origin/learners/:level');
   assert.equal((list.match(/Review records for/g) || []).length, 4);
+  const recordsNeeded = render(Learners, '/principal/at-risk-students/prediction/learners/unavailable?schoolYear=2026-2027&term=T2&gradeLevel=7', '/principal/at-risk-students/:origin/learners/:level');
+  assert.match(recordsNeeded, /Insufficient data/);
+  assert.match(recordsNeeded, /Attendance needed: 3 weekdays missing/);
+  assert.match(recordsNeeded, /PHIL-IRI needed: No screening recorded/);
+  assert.doesNotMatch(recordsNeeded, /Awaiting Learner|ar-student-card|Review records for/);
   const noListMatches = render(Learners, '/principal/at-risk-students/prediction/learners/high?schoolYear=2026-2027&term=T2&gradeLevel=all&search=NoMatch', '/principal/at-risk-students/:origin/learners/:level');
   assert.match(noListMatches, /class="ar-preview-empty pa-empty-state"/);
   assert.match(noListMatches, /lucide-search-x/);
@@ -110,7 +125,7 @@ try {
   assert.match(legacyList, /href="\/principal\/at-risk-students\/prediction\?[^\"]*risk=low/);
   const { default: LearnerPredictionDialog } = await server.ssrLoadModule('/src/components/at-risk/LearnerPredictionDialog.jsx');
   const { predictionInputRows, predictionRecordGroups } = await server.ssrLoadModule('/src/utils/riskPresentation.js');
-  const rows = predictionInputRows(students[0]);
+  const rows = predictionInputRows({ modelInputs: { ...features, absence_rate: null, phil_iri_literal_pct: null } });
   assert.equal(rows.find(row => row.key === 'absence_rate').value, 'Not available');
   assert(rows.every(row => !Object.hasOwn(row, 'status')), 'Learner-facing rows do not include developer statuses');
   assert.equal(rows.find(row => row.key === 'phil_iri_literal_pct').value, 'Not available');
@@ -144,6 +159,31 @@ try {
   assert.equal(noAbsences.metrics[0].value, '0 absences / 20 class days');
   assert.equal(noAbsences.metrics[1].value, '0%');
   const { learnerReportPath, learnerCountScale } = await server.ssrLoadModule('/src/utils/riskPresentation.js');
+  const { filterRiskPreview } = await server.ssrLoadModule('/src/utils/filterRiskPreview.js');
+  const awaitingGrade = filterRiskPreview(payload, '7');
+  assert.equal(awaitingGrade.summary.total, 0);
+  assert.equal(awaitingGrade.summary.unavailable, 1);
+  assert.equal(awaitingGrade.summary.totalEnglish, 1);
+  assert.equal(awaitingGrade.distribution.high.count, 0);
+  const { missingRiskSourcesText } = await server.ssrLoadModule('/src/utils/riskPresentation.js');
+  assert.equal(missingRiskSourcesText(['attendance', 'phil_iri']), 'Attendance and PHIL-IRI needed');
+
+  // Exercise both real request services: old request-cache URLs must not be reused.
+  const { getAtRiskPreview } = await server.ssrLoadModule('/src/services/atRiskPredictionApi.js');
+  const { getSectionDetails } = await server.ssrLoadModule('/src/services/sectionDetailsService.js');
+  const requests = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async url => { requests.push(new URL(url)); return new Response('{}', { headers: { 'Content-Type': 'application/json' } }); };
+  try {
+    await loadCached(cacheKey('section-details:v3', { assignmentType: 'teaching', assignmentId: 1, term: 'T1', userId: 1 }),
+      async () => ({ staleRisk: true }));
+    await getAtRiskPreview({ schoolYear: '2026-2027', term: 'T2', inputPolicy: 'old-imputation' });
+    const details = await getSectionDetails({ assignmentType: 'teaching', assignmentId: 1, term: 'T1', userId: 1 });
+    assert.equal(details.staleRisk, undefined);
+    assert.equal(requests.length, 2);
+    assert(requests.every(url => url.searchParams.get('inputPolicy') === RISK_INPUT_POLICY));
+    assert.notEqual(SECTION_DETAILS_CACHE, 'section-details:v3');
+  } finally { globalThis.fetch = originalFetch; }
   assert.deepEqual(learnerCountScale(4), { maximum: 5, ticks: [0, 1, 2, 3, 4, 5] });
   for (const count of [0, 1, 5, 12, 40, 100, 999]) {
     const scale = learnerCountScale(count);
