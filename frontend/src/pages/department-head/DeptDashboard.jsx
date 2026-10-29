@@ -28,6 +28,7 @@ const EMPTY_STATS = {
 };
 const EMPTY_SUBMISSIONS = [];
 const EMPTY_DISTRIBUTION = [];
+const readResult = promise => promise.then(data => ({ data, error: null }), error => ({ data: null, error }));
 
 export default function DeptDashboard() {
   const context = useDepartmentContext();
@@ -46,6 +47,9 @@ export default function DeptDashboard() {
   const [distribution, setDistribution] = useState(EMPTY_DISTRIBUTION);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [submissionError, setSubmissionError] = useState(null);
+  const [statsError, setStatsError] = useState(null);
+  const [retryVersion, setRetryVersion] = useState(0);
 
   useEffect(() => {
     if (!activeFilters.schoolYear) return undefined;
@@ -60,8 +64,8 @@ export default function DeptDashboard() {
           await Promise.all([
             getComparativeAnalysis(activeFilters).catch(() => EMPTY_COMPARATIVE),
             getOverallPassRate(activeFilters).catch(() => EMPTY_PASS_RATE),
-            getDashboardStats(activeFilters).catch(() => EMPTY_STATS),
-            getSubmissionMonitor(activeFilters).catch(() => EMPTY_SUBMISSIONS),
+            readResult(getDashboardStats(activeFilters)),
+            readResult(getSubmissionMonitor(activeFilters)),
             getGradeDistribution({ schoolYear: activeFilters.schoolYear }).catch(() => EMPTY_DISTRIBUTION),
           ]);
 
@@ -69,8 +73,10 @@ export default function DeptDashboard() {
 
         setComparative(comparativeData);
         setPassRate(passRateData);
-        setStats(statsData);
-        setSubmissions(submissionsData);
+        setStats(statsData.data || EMPTY_STATS);
+        setStatsError(statsData.error);
+        setSubmissions(submissionsData.data || EMPTY_SUBMISSIONS);
+        setSubmissionError(submissionsData.error);
         setDistribution(distributionData);
       } catch (err) {
         if (!cancelled) {
@@ -88,7 +94,7 @@ export default function DeptDashboard() {
     return () => {
       cancelled = true;
     };
-  }, [activeFilters]);
+  }, [activeFilters, retryVersion]);
 
   const handleFilterChange = (key, value) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
@@ -127,17 +133,22 @@ export default function DeptDashboard() {
           />
         </div>
 
+        {statsError && !loading && <div className="dept-error-banner" role="alert">
+          Couldn’t load dashboard counts. <button type="button" onClick={() => setRetryVersion(value => value + 1)}>Retry counts</button>
+        </div>}
         <div className="dept-stats-row">
-          <StatCard title="Total Teachers" value={stats.totalTeachers} description="Department wide" icon={Users} variant="info" />
-          <StatCard title="Submitted Grades" value={stats.submittedGradesPercent + '%'} description={stats.submittedGrades + ' submitted'} icon={ClipboardCheck} variant="success" />
-          <StatCard title="Delayed Submissions" value={stats.delayedSubmissions} description="Requires follow-up" icon={Clock3} variant="warning" />
-          <StatCard title="At-Risk Students" value={stats.atRiskStudents} description="Need intervention" icon={AlertTriangle} variant="warning" />
+          <StatCard title="Total Teachers" value={statsError || loading ? '—' : stats.totalTeachers} description="Department wide" icon={Users} variant="info" />
+          <StatCard title="Submitted Grades" value={statsError || loading ? '—' : stats.submittedGradesPercent + '%'} description={statsError || loading ? 'Submission count unavailable' : stats.submittedGrades + ' submitted'} icon={ClipboardCheck} variant="success" />
+          <StatCard title="Delayed Submissions" value={statsError || loading ? '—' : stats.delayedSubmissions} description="Past deadline, not submitted" icon={Clock3} variant="warning" />
+          <StatCard title="At-Risk Students" value={statsError || loading ? '—' : stats.atRiskStudents} description="Need intervention" icon={AlertTriangle} variant="warning" />
         </div>
 
         <div className="dept-monitor-details">
         <SubmissionMonitorTable
           data={submissions}
           loading={loading}
+          error={submissionError}
+          onRetry={() => setRetryVersion(value => value + 1)}
           term={activeFilters.quarter}
           onTermChange={value => handleFilterChange('quarter', value)}
         />

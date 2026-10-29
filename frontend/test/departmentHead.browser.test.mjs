@@ -69,7 +69,7 @@ try {
       if (path === '/department-head/comparative-analysis') return json([{ gradeLevel: 'G7', aboveAverage: 2, fail: 1, passingRate: 75 }]);
       if (path === '/department-head/pass-rate') return json({ passed: 3, failed: 1, total: 4, passRatePercentage: 75 });
       if (path === '/department-head/stats') return json({ totalTeachers: 8, submittedGrades: 3, submittedGradesPercent: 60, delayedSubmissions: 2, atRiskStudents: 1 });
-      if (path === '/department-head/submission-monitor') return json(Array.from({ length: 8 }, (_, i) => ({ teacher: i ? 'Demo Teacher ' + (i + 1) : 'Demo Teacher', gradeSection: 'G7 - Carrots', status: 'Pending', completion: 40 })));
+      if (path === '/department-head/submission-monitor') return json(Array.from({ length: 8 }, (_, i) => ({ subjectOfferingId: i + 88, subject: 'English', teacher: i ? 'Demo Teacher ' + (i + 1) : 'Demo Teacher', gradeSection: 'G7 - Carrots', status: 'Pending', completion: 0, submittedTerms: 0, expectedTerms: 3, overdueTerms: 0, lateTerms: 0 })));
       if (path === '/department-head/performance-matrix') return json([{ section: 'G7 - Carrots', mean: 83.2, mps: 83.2, examDistribution: 'Average' }]);
       if (path === '/department-head/grade-distribution') return json([{ gradeLevel: 'G7', term1Mean: 83.2, term2Mean: null, term3Mean: null, term1Mps: 83.2, term2Mps: null, term3Mps: null }]);
       return json([]);
@@ -130,7 +130,7 @@ try {
   assert.equal(await page.locator('.dept-submission-monitor tbody tr').count(), 8);
   await page.getByRole('button', { name: /^Submission rows:/ }).click();
   await page.getByRole('option', { name: '5 rows', exact: true }).click();
-  await page.getByText('40%', { exact: true }).first().waitFor();
+  await page.locator('.dept-submission-monitor').getByText('0%', { exact: true }).first().waitFor();
   assert.equal(await page.getByRole('group', { name: 'Academic term' }).count(), 0);
   await page.getByRole('button', { name: /^Term: Overall$/ }).waitFor();
   await page.getByRole('button', { name: /^School year:/ }).click();

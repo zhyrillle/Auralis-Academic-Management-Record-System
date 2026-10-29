@@ -1,7 +1,7 @@
 import { cachedApiFetch as fetch } from "./navigationCache.js";
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
 
-async function fetchApi(endpoint, queryParams = {}) {
+async function fetchApi(endpoint, queryParams = {}, options = {}) {
   const url = new URL(API_BASE_URL + endpoint);
   Object.keys(queryParams).forEach(key => {
     if (queryParams[key]) {
@@ -18,7 +18,7 @@ async function fetchApi(endpoint, queryParams = {}) {
     }
   } catch (e) {}
 
-  const response = await fetch(url.toString(), { queueOffline: false,
+  const response = await fetch(url.toString(), { queueOffline: false, ...options,
     headers: {
       'Authorization': `Bearer ${token}`,
       'X-Auralis-User-Id': userId,
@@ -42,11 +42,11 @@ export async function getOverallPassRate({ schoolYear, gradeLevel, quarter }) {
 }
 
 export async function getDashboardStats({ schoolYear, gradeLevel, quarter }) {
-  return fetchApi('/department-head/stats', { schoolYear, gradeLevel, quarter });
+  return fetchApi('/department-head/stats', { schoolYear, gradeLevel, quarter }, { cacheRead: false });
 }
 
 export async function getSubmissionMonitor({ schoolYear, gradeLevel, quarter }) {
-  return fetchApi('/department-head/submission-monitor', { schoolYear, gradeLevel, quarter });
+  return fetchApi('/department-head/submission-monitor', { schoolYear, gradeLevel, quarter: quarter || 'overall' }, { cacheRead: false });
 }
 
 export async function getPerformanceMatrix({ schoolYear, gradeLevel, quarter }) {
