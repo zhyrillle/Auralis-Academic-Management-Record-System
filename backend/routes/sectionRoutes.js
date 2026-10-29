@@ -167,7 +167,11 @@ router.post('/', async (req, res) => {
 router.get('/:id/subjects', async (req, res) => {
   try {
     await cloudSync.syncAcademicAssignmentsFromCloud().catch(() => {});
-    const subjects = await Section.findSubjectsBySection(req.params.id);
+    const schoolYearId = req.query.schoolYearId || req.query.school_year_id || null;
+    if (schoolYearId !== null && (!Number.isSafeInteger(Number(schoolYearId)) || Number(schoolYearId) <= 0)) {
+      return res.status(400).json({ error: 'Choose a valid school year.' });
+    }
+    const subjects = await Section.findSubjectsBySection(req.params.id, schoolYearId);
     res.json(subjects);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -208,7 +212,7 @@ router.post('/:id/subjects', async (req, res) => {
           );
           if (cloudSec.length > 0) {
             const [cloudRes] = await db.cloudPool.query(
-              `INSERT INTO SUBJECT_OFFERING (subject_id, section_id, school_year_id) VALUES (?, ?, ?)`,
+              `INSERT INTO SUBJECT_OFFERING (subject_id, section_id, school_year_id) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE subject_offering_id = LAST_INSERT_ID(subject_offering_id)`,
               [subId, sectionId, finalSchoolYearId]
             );
             cloudId = cloudRes.insertId;
@@ -232,7 +236,7 @@ router.post('/:id/subjects', async (req, res) => {
         newId = cloudId;
       } else {
         const [localRes] = await db.execute(
-          `INSERT INTO SUBJECT_OFFERING (subject_id, section_id, school_year_id) VALUES (?, ?, ?)`,
+          `INSERT INTO SUBJECT_OFFERING (subject_id, section_id, school_year_id) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE subject_offering_id = LAST_INSERT_ID(subject_offering_id)`,
           [subId, sectionId, finalSchoolYearId]
         );
         newId = localRes.insertId;
