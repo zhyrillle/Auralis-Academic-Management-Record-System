@@ -217,4 +217,5 @@
 .dept-phil-overview__passed { background:#168449; }
 .dept-phil-overview__failed { background:#dc5252; }
 .dept-phil-overview__note { margin-top:14px; }
+.dept-phil-overview .chart-scroll-hint { display:block; }
 @media(max-width:640px) { .dept-phil-overview { padding:16px; } }
