@@ -13,13 +13,15 @@ export default function GroupedBarChart({
   benchmark = 75,
   suffix = "",
   showZeroValues = true,
+  minimumGroupWidth = 0,
 }) {
   const [activeBar, setActiveBar] = useState(null);
   const recordedValues = groups.flatMap(group => group.values).filter(bar => bar.value != null && bar.value !== "" && Number.isFinite(Number(bar.value))).map(bar => Number(bar.value));
   minimum = Math.min(minimum, ...recordedValues);
   maximum = Math.max(maximum, ...recordedValues);
   ticks = [...new Set([minimum, ...ticks, maximum, benchmark])].filter(value => value != null && value >= minimum && value <= maximum).sort((a, b) => a - b);
-  const chartWidth = WIDTH - PADDING.left - PADDING.right;
+  const width = Math.max(WIDTH, groups.length * minimumGroupWidth + PADDING.left + PADDING.right);
+  const chartWidth = width - PADDING.left - PADDING.right;
   const groupWidth = chartWidth / Math.max(groups.length, 1);
   const seriesCount = Math.max(groups[0]?.values.length || 1, 1);
   const barWidth = Math.min(38, (groupWidth - 20) / seriesCount);
@@ -28,18 +30,10 @@ export default function GroupedBarChart({
     ((maximum - value) / Math.max(maximum - minimum, 1)) *
       (HEIGHT - PADDING.top - PADDING.bottom);
 
-  return (
-    <div className="chart-scroll-shell">
-      <div
-        className="chart-viewport chart-viewport--wide grouped-bar-chart"
-        onMouseLeave={() => setActiveBar(null)}
-        tabIndex="0"
-        role="region"
-        aria-label={`${ariaLabel}. Horizontally scrollable chart.`}
-      >
+  const plot = <>
       <svg
         className="chart-svg chart-svg--wide"
-        viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
+        viewBox={`0 0 ${width} ${HEIGHT}`}
         role="img"
         aria-label={ariaLabel}
       >
@@ -50,7 +44,7 @@ export default function GroupedBarChart({
           >
             <line
               x1={PADDING.left}
-              x2={WIDTH - PADDING.right}
+              x2={width - PADDING.right}
               y1={yFor(value)}
               y2={yFor(value)}
             />
@@ -62,7 +56,7 @@ export default function GroupedBarChart({
         <line
           className="chart-baseline"
           x1={PADDING.left}
-          x2={WIDTH - PADDING.right}
+          x2={width - PADDING.right}
           y1={yFor(minimum)}
           y2={yFor(minimum)}
         />
@@ -135,7 +129,7 @@ export default function GroupedBarChart({
           <div
             className="chart-tooltip chart-tooltip--wide"
             style={{
-              left: `clamp(76px, ${(activeBar.x / WIDTH) * 100}%, calc(100% - 76px))`,
+              left: `clamp(76px, ${(activeBar.x / width) * 100}%, calc(100% - 76px))`,
               top: `clamp(56px, ${(activeBar.y / HEIGHT) * 100}%, calc(100% - 18px))`,
             }}
             role="status"
@@ -148,6 +142,18 @@ export default function GroupedBarChart({
             {activeBar.detail && <small>{activeBar.detail}</small>}
           </div>
         )}
+  </>;
+
+  return (
+    <div className="chart-scroll-shell">
+      <div
+        className="chart-viewport chart-viewport--wide grouped-bar-chart"
+        onMouseLeave={() => setActiveBar(null)}
+        tabIndex="0"
+        role="region"
+        aria-label={`${ariaLabel}. Horizontally scrollable chart.`}
+      >
+        {minimumGroupWidth > 0 ? <div style={{ position: "relative", minWidth: width }}>{plot}</div> : plot}
       </div>
       <span className="chart-scroll-hint" aria-hidden="true">
         Swipe or scroll to view all categories

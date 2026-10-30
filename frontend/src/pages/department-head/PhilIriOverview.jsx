@@ -26,6 +26,9 @@ export default function PhilIriOverview({ sections, available, testPhase }) {
       value: pre ? Number(section.screeningThresholdCounts?.[category.threshold]?.[category.band]) || 0 : Number(section[category.key]) || 0,
       color: category.color })),
   }));
+  // Keep each section label and its bars together, even with many sections or thresholds.
+  const minimumGroupWidth = Math.max(128, categories.length * 32 + 24,
+    ...sections.map(section => String(section.sectionName || "").length * 7 + 24));
   const totals = categories.map((category, index) => ({ ...category,
     value: groups.reduce((sum, group) => sum + group.values[index].value, 0),
   }));
@@ -39,7 +42,7 @@ export default function PhilIriOverview({ sections, available, testPhase }) {
       <div className="dept-phil-overview__totals" aria-label={`${label} totals`}>
         {totals.map(category => <span key={category.key}><i style={{ background: category.color }} />{category.label} <strong>{category.value}</strong></span>)}
       </div>
-      <GroupedBarChart groups={groups} minimum={0} maximum={Math.max(1, ...groups.flatMap(group => group.values.map(bar => bar.value)))} ticks={[]} benchmark={null} ariaLabel={`${label} learner counts by section`} />
+      <GroupedBarChart groups={groups} minimumGroupWidth={minimumGroupWidth} minimum={0} maximum={Math.max(1, ...groups.flatMap(group => group.values.map(bar => bar.value)))} ticks={[]} benchmark={null} ariaLabel={`${label} learner counts by section`} />
       <p className="dept-phil-overview__note">{classified === 0 ? "No complete results available for this test phase yet. " : ""}{excluded} learners not classified. {pre ? "Incomplete, unassessed, and missing-threshold records are excluded." : "Incomplete, unassessed, and unrecognized reading levels are excluded."}</p>
     </>}
   </section>;
