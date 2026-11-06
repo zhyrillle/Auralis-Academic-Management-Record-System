@@ -132,7 +132,7 @@ async function loadInputs(db, { schoolYear, term = 'T2', gradeLevel = 'all' }, n
     && sourceEnd <= now && sourceEnd < targetStart;
   const candidateScope = `${scope.sectionId ? ' AND ss.section_id = ?' : ''}${scope.subjectOfferingId ? ' AND so.subject_offering_id = ?' : ''}`;
   const scopeParameters = [scope.sectionId, scope.subjectOfferingId].filter(value => value != null).map(Number);
-  const [candidates] = await db.execute(`
+  const candidatesRead = db.execute(`
     SELECT ss.student_section_id, ss.student_id, ss.section_id, st.LRN AS lrn,
       CONCAT_WS(' ', st.first_name, NULLIF(st.middle_name, ''), st.last_name) AS name,
       sec.section_name AS section, gl.grade_level_name, so.subject_offering_id, so.subject_id,
@@ -154,24 +154,14 @@ async function loadInputs(db, { schoolYear, term = 'T2', gradeLevel = 'all' }, n
     ORDER BY sec.section_name, st.last_name, st.first_name`, [source?.term_id || null, sourceCode, yearId, ...scopeParameters]);
   // Scope baseline scores to the enrollment year. Do not substitute year-end Post-Test data.
   // Query errors must propagate; an unavailable database is not a missing learner result.
-  const [screenings] = await db.execute(`SELECT ps.student_section_id,
+  const screeningsRead = db.execute(`SELECT ps.student_section_id,
     DATE_FORMAT(ps.assessed_on, '%Y-%m-%d') AS assessed_on, ps.test_taken,
     ps.literal_score, ps.inferential_score, ps.critical_score,
     ps.literal_max, ps.inferential_max, ps.critical_max
     FROM PHIL_IRI_SCREENING ps JOIN STUDENT_SECTION ss ON ss.student_section_id = ps.student_section_id
     WHERE ss.school_year_id = ?${scope.sectionId ? ' AND ss.section_id = ?' : ''}`,
   scope.sectionId ? [yearId, Number(scope.sectionId)] : [yearId]);
-  const screeningMap = new Map();
-  for (const row of screenings) {
-    const key = String(row.student_section_id);
-    if (!screeningMap.has(key)) screeningMap.set(key, []);
-    screeningMap.get(key).push(row);
-  }
-  const firstTerms = terms.filter(row => termCode(row.term_name) === 'T1');
-  const screeningPeriod = { schoolYearStart: firstTerms.length === 1 ? firstTerms[0].starts_at : null,
-    sourceEnd: source?.ends_at, targetStart: matches[0].starts_at };
-  const filtered = candidates.filter(row => gradeLevel === 'all' || String(row.grade_level_name).match(/\d+/)?.[0] === String(gradeLevel));
-  const [activities] = source ? await db.execute(`
+  const activitiesRead = source ? db.execute(`
     SELECT gs.grade_sheet_id, ga.activity_id, ga.activity_name, ga.highest_possible_score,
       ct.component_code, sc.student_section_id, sc.score_id, sc.raw_score, sc.score_status
     FROM GRADE_SHEET gs JOIN SUBJECT_OFFERING so ON so.subject_offering_id = gs.subject_offering_id
@@ -183,9 +173,37 @@ async function loadInputs(db, { schoolYear, term = 'T2', gradeLevel = 'all' }, n
     WHERE gs.term_id = ? AND so.school_year_id = ? AND (UPPER(sub.subject_code) IN ('ENG', 'ENGLISH') OR UPPER(sub.subject_name) = 'ENGLISH')
       AND (ga.status = 'ACTIVE' OR ga.status IS NULL) AND ga.mapeh_component IS NULL
       ${scope.sectionId ? ' AND so.section_id = ?' : ''}${scope.subjectOfferingId ? ' AND so.subject_offering_id = ?' : ''}
-    ORDER BY gs.grade_sheet_id, ga.activity_id, sc.score_id`, [source.term_id, yearId, ...scopeParameters]) : [[]];
-  const [weights] = await db.execute(`SELECT cw.subject_id, cw.percentage, ct.component_code FROM SUBJECT_COMPONENT_WEIGHT cw
+    ORDER BY gs.grade_sheet_id, ga.activity_id, sc.score_id`, [source.term_id, yearId, ...scopeParameters]) : Promise.resolve([[]]);
+  const weightsRead = db.execute(`SELECT cw.subject_id, cw.percentage, ct.component_code FROM SUBJECT_COMPONENT_WEIGHT cw
     JOIN COMPONENT_TYPE ct ON ct.component_type_id = cw.component_type_id WHERE cw.school_year_id = ?`, [yearId]);
+  const [[candidates], [screenings], [activities], [weights]] = await Promise.all([
+    candidatesRead, screeningsRead, activitiesRead, weightsRead,
+  ]);
+  const screeningMap = new Map();
+  for (const row of screenings) {
+    const key = String(row.student_section_id);
+    if (!screeningMap.has(key)) screeningMap.set(key, []);
+    screeningMap.get(key).push(row);
+  }
+  const firstTerms = terms.filter(row => termCode(row.term_name) === 'T1');
+  const screeningPeriod = { schoolYearStart: firstTerms.length === 1 ? firstTerms[0].starts_at : null,
+    sourceEnd: source?.ends_at, targetStart: matches[0].starts_at };
+  const filtered = candidates.filter(row => gradeLevel === 'all' || String(row.grade_level_name).match(/\d+/)?.[0] === String(gradeLevel));
+  // Index once instead of rescanning all school scores for each learner.
+  const activitiesBySheet = new Map(), weightsBySubject = new Map();
+  for (const activity of activities) {
+    if (!activitiesBySheet.has(activity.grade_sheet_id)) activitiesBySheet.set(activity.grade_sheet_id, new Map());
+    const sheet = activitiesBySheet.get(activity.grade_sheet_id);
+    if (!sheet.has(activity.activity_id)) sheet.set(activity.activity_id, { template: activity, byLearner: new Map() });
+    const group = sheet.get(activity.activity_id).byLearner;
+    const learnerId = Number(activity.student_section_id);
+    if (!group.has(learnerId)) group.set(learnerId, []);
+    group.get(learnerId).push(activity);
+  }
+  for (const weight of weights) {
+    if (!weightsBySubject.has(weight.subject_id)) weightsBySubject.set(weight.subject_id, []);
+    weightsBySubject.get(weight.subject_id).push(weight);
+  }
   const grouped = new Map();
   for (const row of filtered) {
     const key = `${row.student_section_id}:${row.subject_offering_id}`;
@@ -208,17 +226,12 @@ async function loadInputs(db, { schoolYear, term = 'T2', gradeLevel = 'all' }, n
     else if (rows.length !== 1) result = { reason: 'Duplicate English grade sheets or saved grades need review.' };
     else {
       // A LEFT JOIN score belonging to another learner must not look like an encoded zero.
-      const learnerActivities = new Map();
-      for (const activity of activities.filter(item => item.grade_sheet_id === row.grade_sheet_id)) {
-        if (!learnerActivities.has(activity.activity_id)) learnerActivities.set(activity.activity_id, []);
-        learnerActivities.get(activity.activity_id).push(activity);
-      }
       const ownActivities = [];
-      for (const group of learnerActivities.values()) {
-        const own = group.filter(item => Number(item.student_section_id) === Number(row.student_section_id));
-        ownActivities.push(...(own.length ? own : [{ ...group[0], score_id: null, raw_score: null, score_status: 'NOT_ENCODED' }]));
+      for (const group of (activitiesBySheet.get(row.grade_sheet_id) || new Map()).values()) {
+        const own = group.byLearner.get(Number(row.student_section_id));
+        ownActivities.push(...(own?.length ? own : [{ ...group.template, score_id: null, raw_score: null, score_status: 'NOT_ENCODED' }]));
       }
-      result = academicFeatures(row, ownActivities, weights.filter(item => item.subject_id === row.subject_id));
+      result = academicFeatures(row, ownActivities, weightsBySubject.get(row.subject_id) || []);
     }
     if (result.features) {
       const rows = screeningMap.get(String(row.student_section_id)) || [];
