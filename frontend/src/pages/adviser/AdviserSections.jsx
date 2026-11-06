@@ -67,22 +67,23 @@ export default function AdviserSections({ userRole: propUserRole }) {
   const [activeSelectedClass, setactiveSelectedClass] = useState(
     location.state?.activeSelectedClass || null
   );
+  const classKey = activeSelectedClass?.id;
+  const sectionId = activeSelectedClass?.section_id || activeSelectedClass?.id;
+  const offeringId = activeSelectedClass?.subject_offering_id || activeSelectedClass?.offering_id || null;
+  const subjectId = activeSelectedClass?.subject_id || null;
+  const subjectName = activeSelectedClass?.subject || activeSelectedClass?.subject_name || null;
+  const schoolYearId = activeSelectedClass?.school_year_id || activeSelectedClass?.schoolYearId;
 
   // Fetch students when a section is opened
   useEffect(() => {
     let cancelled = false;
     async function fetchSectionStudents() {
-      if (!activeSelectedClass) return;
-      const sectionId = activeSelectedClass.section_id || activeSelectedClass.id;
-      if (!sectionId) return;
-      const classKey = activeSelectedClass.id;
-      const offeringId = activeSelectedClass.subject_offering_id || activeSelectedClass.offering_id || null;
-      const subjectId = activeSelectedClass.subject_id || null;
-      const subjectName = activeSelectedClass.subject || activeSelectedClass.subject_name || null;
+      // Section Details and Class Record load their own records. Only the grading
+      // sheet needs this read; depending on the whole class object repeated it.
+      if (currentView !== "grading-sheet" || !sectionId) return;
       setRecordReadError("");
 
       try {
-        const schoolYearId = activeSelectedClass.school_year_id || activeSelectedClass.schoolYearId;
         const summary = offeringId && schoolYearId ? await getTeacherGradingSummary({
           subject_offering_id: offeringId, section_id: sectionId, school_year_id: schoolYearId,
         }, { force: recordReadVersion > 0 }) : null;
@@ -132,7 +133,7 @@ export default function AdviserSections({ userRole: propUserRole }) {
 
     fetchSectionStudents();
     return () => { cancelled = true; };
-  }, [activeSelectedClass, recordReadVersion]);
+  }, [currentView, classKey, sectionId, offeringId, subjectId, subjectName, schoolYearId, recordReadVersion]);
 
   // Controls Filters and Sorting
   const [filterSubject, setFilterSubject] = useState("All");
@@ -183,6 +184,10 @@ export default function AdviserSections({ userRole: propUserRole }) {
     }
 
     result.sort((a, b) => {
+      // Pin whole-class advisory cards ahead of subject cards, even when a
+      // subject card also carries the adviser's star label.
+      const advisoryPriority = Number(b.assignmentType === "advisory") - Number(a.assignmentType === "advisory");
+      if (advisoryPriority) return advisoryPriority;
       let valA = a[sortBy] ? a[sortBy].toLowerCase() : "";
       let valB = b[sortBy] ? b[sortBy].toLowerCase() : "";
       if (sortBy === "gradeLevel") {
@@ -389,6 +394,7 @@ export default function AdviserSections({ userRole: propUserRole }) {
               {filteredAndSortedClasses.map((cls) => (
                 <ClassCard
                   key={cls.id} cls={cls}
+                  showSecondaryActions={cls.assignmentType !== "advisory"}
                   secondaryActionsDisabled={!(Number.isInteger(Number(cls.subject_offering_id || cls.offering_id))
                     && Number(cls.subject_offering_id || cls.offering_id) > 0)}
                   secondaryActionsDisabledReason="No teaching subject is assigned to you for this class. Use View to see the advisory section."

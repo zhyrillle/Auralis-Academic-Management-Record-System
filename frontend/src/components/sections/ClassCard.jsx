@@ -12,6 +12,8 @@ export default function ClassCard({ cls, onView, onGradingSheet, onEdit, childre
   );
   const isAdviser = Boolean(cls?.isAdviser === true || (cls?.classType && String(cls.classType).startsWith("Advisory Class")));
   const isAdvisory = isAdviser;
+  const isAdvisoryCard = cls?.assignmentType === "advisory";
+  const advisoryColor = isAdvisoryCard ? "#112d61" : "#16a34a";
 
   const programCode = cls?.program_code || cls?.programCode || cls?.program_name || null;
   const validProgCode = programCode && String(programCode).toUpperCase() !== "EBEC" ? String(programCode).toUpperCase() : null;
@@ -27,14 +29,12 @@ export default function ClassCard({ cls, onView, onGradingSheet, onEdit, childre
     displayClassType = "Regular Class";
   }
 
-  const isGreenBadge = isAdviser || isSpecialized;
-
 
 
   return (
     <div className={className} role={className ? 'article' : undefined} aria-label={className ? `${cls.sectionName}, ${cls.gradeLevel}` : undefined}
       style={{
-        background: "#ffffff",
+        background: isAdvisoryCard ? "#fff8e1" : "#ffffff",
         borderRadius: "15px",
         border: "1px solid #eef2f6",
         padding: "24px",
@@ -89,15 +89,19 @@ export default function ClassCard({ cls, onView, onGradingSheet, onEdit, childre
             className={gradeId == null ? undefined : 'section-card__grade'}
             data-grade-level={gradeId}
             style={{
-              backgroundColor: gradeId != null ? undefined : isSpecialized
+              backgroundColor: gradeId != null ? undefined : isAdvisoryCard
+                ? "rgba(17,45,97,0.06)"
+                : isSpecialized
                 ? "rgba(201, 162, 39, 0.1)"
-                : isGreenBadge
+                : isAdviser && !isAdvisoryCard
                 ? "rgba(22,163,74,0.1)"
                 : "rgba(17,45,97,0.06)",
-              color: gradeId != null ? undefined : isSpecialized
+              color: gradeId != null ? undefined : isAdvisoryCard
+                ? "#112d61"
+                : isSpecialized
                 ? "#c9a227"
-                : isGreenBadge
-                ? "#16a34a"
+                : isAdviser
+                ? advisoryColor
                 : "#112d61",
               padding: "4px 10px",
               borderRadius: "20px",
@@ -134,7 +138,7 @@ export default function ClassCard({ cls, onView, onGradingSheet, onEdit, childre
             fontSize: "var(--fs-subtext)",
             fontWeight: "var(--fw-medium)",
             fontFamily: "var(--font-dm-sans)",
-            color: isSpecialized ? "#c9a227" : isAdvisory ? "#16a34a" : "#64748b",
+            color: isAdvisoryCard ? "#112d61" : isSpecialized ? "#c9a227" : isAdvisory ? advisoryColor : "#64748b",
           }}
         >
 
