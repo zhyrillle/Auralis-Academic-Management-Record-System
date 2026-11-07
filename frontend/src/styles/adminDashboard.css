@@ -177,10 +177,10 @@
 
 .summary-skeleton {
   display: block;
-  background: linear-gradient(90deg, #f2f5f9 25%, #e4eaf1 37%, #f2f5f9 63%);
-  background-size: 400% 100%;
+
+
   border-radius: 999px;
-  animation: dashboard-shimmer 1.25s ease infinite;
+
 }
 
 .summary-skeleton--label { width: 6.5rem; height: 0.7rem; margin-bottom: 0.75rem; }
@@ -232,12 +232,12 @@
   border: 0;
 }
 
-@keyframes dashboard-shimmer { to { background-position: -100% 0; } }
+
 
 @media (prefers-reduced-motion: reduce) {
   .summary-skeleton,
   .audit-row-skeleton {
-    animation: none;
+
   }
 }
 
@@ -594,10 +594,10 @@
   display: block;
   width: 75%;
   height: 12px;
-  background: linear-gradient(90deg, #f1f5f9 25%, #e5ebf3 37%, #f1f5f9 63%);
-  background-size: 400% 100%;
+
+
   border-radius: 99px;
-  animation: dashboard-shimmer 1.25s ease infinite;
+
 }
 
 .audit-trail .badge {

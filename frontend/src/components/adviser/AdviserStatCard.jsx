@@ -1,3 +1,4 @@
+import { SkeletonBlock } from '../common/PageSkeleton.jsx';
 import React from "react";
 
 export default function AdviserStatCard({
@@ -12,9 +13,9 @@ export default function AdviserStatCard({
 }) {
   if (loading) {
     return (
-      <div className={`adviser-dashboard__stat-card adviser-dashboard__stat-card--skeleton ${className}`}>
-        <div className="adviser-dashboard__skeleton-line adviser-dashboard__skeleton-line--short" />
-        <div className="adviser-dashboard__skeleton-line adviser-dashboard__skeleton-line--title" />
+      <div className={`adviser-dashboard__stat-card adviser-dashboard__stat-card--skeleton ${className}`} role="status" aria-busy="true" aria-label={`Loading ${title}`}>
+        <SkeletonBlock className="adviser-dashboard__skeleton-line adviser-dashboard__skeleton-line--short" />
+        <SkeletonBlock className="adviser-dashboard__skeleton-line adviser-dashboard__skeleton-line--title" />
       </div>
     );
   }

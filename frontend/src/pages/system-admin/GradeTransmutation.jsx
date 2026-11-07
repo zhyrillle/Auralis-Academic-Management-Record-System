@@ -1,3 +1,4 @@
+import PageSkeleton, { SkeletonBlock, SkeletonTableRows } from '../../components/common/PageSkeleton.jsx';
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -162,6 +163,8 @@ function ConfirmDialog({ config, onCancel, onConfirm }) {
 export default function GradeTransmutation() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [isCustomEnabled, setIsCustomEnabled] = useState(false);
   const [savedCustomEnabled, setSavedCustomEnabled] = useState(false);
   const [defaultRanges, setDefaultRanges] = useState(OFFICIAL_DEPED_RANGES);
@@ -210,8 +213,9 @@ export default function GradeTransmutation() {
   useEffect(() => {
     let isMounted = true;
     const fetchConfig = async () => {
+      setIsLoading(true);
+      setLoadError("");
       try {
-        setIsLoading(true);
         const data = await getGradeTransmutationConfig();
         if (!isMounted) return;
 
@@ -233,7 +237,7 @@ export default function GradeTransmutation() {
         setTransmutationConfig(data);
       } catch (err) {
         if (!isMounted) return;
-        showToast(err.message || "Failed to load grade transmutation configuration.");
+        setLoadError(err.message || "Failed to load grade transmutation configuration.");
       } finally {
         if (isMounted) setIsLoading(false);
       }
@@ -243,7 +247,7 @@ export default function GradeTransmutation() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [loadAttempt]);
 
   const handleToggle = async () => {
     const turningOn = !isCustomEnabled;
@@ -439,6 +443,29 @@ export default function GradeTransmutation() {
     setPendingAction(null);
   };
 
+  if (isLoading || loadError) return <div className="ws-config-page gt-page">
+    <header className="ws-config-header"><div className="ws-config-header__copy">
+      <h1>Grade Transmutation</h1>
+      <p>Define how initial grades are converted into transmuted grades for report cards (DepEd SY 2026–2027 MATATAG Standard).</p>
+    </div></header>
+    {loadError ? <section className="ws-config-error" role="alert">
+      <h2>Transmutation settings are unavailable</h2><p>{loadError}</p>
+      <button type="button" className="ws-config-button" onClick={() => setLoadAttempt(value => value + 1)}>Retry</button>
+    </section> : <PageSkeleton label="Loading transmutation settings">
+      <div className="app-skeleton-stack">
+        <section className="gt-toggle-card"><div className="app-skeleton-stack">
+          <SkeletonBlock width={180} /><SkeletonBlock width="90%" />
+        </div><SkeletonBlock width={76} height={36} /></section>
+        <div className="gt-grid">
+          <section className="app-skeleton-panel"><SkeletonBlock width="35%" />
+            <table className="app-skeleton-table"><tbody><SkeletonTableRows columns={7} /></tbody></table>
+          </section>
+          <section className="app-skeleton-panel"><SkeletonBlock width="60%" /><SkeletonBlock height={42} /><SkeletonBlock height={150} /></section>
+        </div>
+      </div>
+    </PageSkeleton>}
+  </div>;
+
   return (
     <div className="ws-config-page gt-page">
       <header className="ws-config-header">
@@ -593,11 +620,7 @@ export default function GradeTransmutation() {
                 </thead>
                 <tbody>
                   {isLoading ? (
-                    <tr>
-                      <td colSpan={7} className="ws-config-table-state">
-                        Loading grade transmutation table...
-                      </td>
-                    </tr>
+                    <SkeletonTableRows columns={7} />
                   ) : ranges.length === 0 ? (
                     <tr>
                       <td colSpan={7} className="ws-config-table-state">

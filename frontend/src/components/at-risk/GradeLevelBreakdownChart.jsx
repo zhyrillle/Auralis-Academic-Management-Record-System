@@ -1,3 +1,4 @@
+import { SkeletonBlock } from '../common/PageSkeleton.jsx';
 import GroupedBarChart from '../charts/GroupedBarChart';
 import { RISK_BANDS, learnerCountScale } from '../../utils/riskPresentation';
 
@@ -20,10 +21,10 @@ export default function GradeLevelBreakdownChart({ data = [], gradeLevels = [], 
   const { maximum, ticks } = learnerCountScale(highestCount);
   return <div className="ar-chart-card ar-grade-chart">
     <div className="ar-chart-header-vertical">
-      <h2 className="ar-chart-title">Breakdown by Grade Level</h2>
-      <p className="ar-chart-subtitle">English learners with predictions · Learners awaiting records excluded</p>
+      <h2 className="ar-chart-title">{loading ? <SkeletonBlock width="45%" height={18} /> : <>Breakdown by Grade Level</>}</h2>
+      <p className="ar-chart-subtitle">{loading ? <SkeletonBlock width="70%" /> : "English learners with predictions · Learners awaiting records excluded"}</p>
     </div>
-    {loading ? <div className="ar-skeleton-bars" /> : <>
+    {loading ? <SkeletonBlock className="ar-skeleton-bars"  /> : <>
       <div className="ar-grade-chart-legend">{RISK_BANDS.map(band => <span key={band.level}>
         <i style={{ backgroundColor: band.color }} aria-hidden="true" />{band.label}
       </span>)}</div>

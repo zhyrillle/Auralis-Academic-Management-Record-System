@@ -1,3 +1,4 @@
+import PageSkeleton, { SkeletonValue, SkeletonBlock } from '../../components/common/PageSkeleton.jsx';
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Users, Eye, Settings2, LayoutGrid, UserPlus, AlertCircle, Trash2, Loader2, BookOpen, CheckCircle2, Check } from "lucide-react";
 import useCachedQuery from "../../services/useCachedQuery";
@@ -534,21 +535,23 @@ export default function StudentSectionManagement() {
       <section className="student-admin-panel">
         <div className="student-admin-panel-heading">
           <div>
-            <h2>
+            <h2>{loading ? <SkeletonBlock width={220} height={20} /> : <>
               {view === "sections" && "Manage sections"}
               {view === "subjects" && "Manage subjects"}
               {view === "assign" && "Assign students"}
-            </h2>
-            <p>
+            </>}</h2>
+            <p>{loading ? <SkeletonBlock width={280} /> : <>
               {view === "sections" && "A clear view of each section’s program and class size."}
               {view === "subjects" && "Curriculum subjects assigned to each grade level and program."}
               {view === "assign" && "Select learners, review your selection, then assign a section."}
-            </p>
+            </>}</p>
           </div>
           <span className="student-admin-count">
-            {view === "sections" && `${filteredSections.length} ${filteredSections.length === 1 ? "section" : "sections"}`}
-            {view === "subjects" && `${filteredGradeSubjects.length} ${filteredGradeSubjects.length === 1 ? "subject" : "subjects"}`}
-            {view === "assign" && `${filteredStudents.length} ${filteredStudents.length === 1 ? "student" : "students"}`}
+            {loading && <SkeletonValue label="Loading directory count" />}
+            {!loading && query.error && "Unavailable"}
+            {!loading && !query.error && view === "sections" && `${filteredSections.length} ${filteredSections.length === 1 ? "section" : "sections"}`}
+            {!loading && !query.error && view === "subjects" && `${filteredGradeSubjects.length} ${filteredGradeSubjects.length === 1 ? "subject" : "subjects"}`}
+            {!loading && !query.error && view === "assign" && `${filteredStudents.length} ${filteredStudents.length === 1 ? "student" : "students"}`}
           </span>
         </div>
 
@@ -577,9 +580,7 @@ export default function StudentSectionManagement() {
             </div>
 
             {loading ? (
-              <div className="section-card-grid" role="status" aria-label="Loading sections">
-                {[1, 2, 3, 4, 5, 6].map(id => <div className="section-card section-card--skeleton student-admin-loading" key={id} />)}
-              </div>
+              <PageSkeleton label="Loading sections" layout="cards" rows={6} />
             ) : query.error ? (
               <div className="student-admin-empty">
                 <EmptyState icon={AlertCircle} title="Sections are unavailable" description={query.error} />
@@ -668,9 +669,7 @@ export default function StudentSectionManagement() {
             </div>
 
             {loading ? (
-              <div className="section-card-grid" role="status" aria-label="Loading subjects">
-                {[1, 2, 3, 4, 5, 6].map(id => <div className="section-card section-card--skeleton student-admin-loading" key={id} />)}
-              </div>
+              <PageSkeleton label="Loading subjects" layout="cards" rows={6} />
             ) : query.error ? (
               <div className="student-admin-empty">
                 <EmptyState icon={AlertCircle} title="Subjects are unavailable" description={query.error} />
@@ -797,7 +796,7 @@ export default function StudentSectionManagement() {
             </div>
 
             {loading ? (
-              <EmptyState className="student-admin-empty student-admin-loading" icon={Users} title="Loading students…" />
+              <PageSkeleton label="Loading students" columns={6} />
             ) : query.error ? (
               <div className="student-admin-empty">
                 <EmptyState icon={AlertCircle} title="Students are unavailable" description={query.error} />

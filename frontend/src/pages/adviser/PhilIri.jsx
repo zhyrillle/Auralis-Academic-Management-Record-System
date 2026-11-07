@@ -1,3 +1,4 @@
+import { SkeletonBlock } from '../../components/common/PageSkeleton.jsx';
 import { cachedApiFetch as fetch } from "../../services/navigationCache.js";
 import { Fragment, useState, useEffect, useMemo, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -106,22 +107,22 @@ function PhilIriDocumentSkeleton({ label }) {
       <span className="screening-visually-hidden">Loading {label}…</span>
       <div aria-hidden="true">
         <div className="phil-iri-skeleton-heading">
-          <span className="phil-iri-skeleton-block phil-iri-skeleton-seal" />
-          <span className="phil-iri-skeleton-block phil-iri-skeleton-title" />
-          <span className="phil-iri-skeleton-block phil-iri-skeleton-subtitle" />
+          <SkeletonBlock className="phil-iri-skeleton-block phil-iri-skeleton-seal" />
+          <SkeletonBlock className="phil-iri-skeleton-block phil-iri-skeleton-title" />
+          <SkeletonBlock className="phil-iri-skeleton-block phil-iri-skeleton-subtitle" />
         </div>
         <div className="phil-iri-skeleton-meta">
-          <span className="phil-iri-skeleton-block" /><span className="phil-iri-skeleton-block" />
+          <SkeletonBlock className="phil-iri-skeleton-block" /><SkeletonBlock className="phil-iri-skeleton-block" />
         </div>
         <div className="phil-iri-skeleton-table">
           {Array.from({ length: 9 }, (_, row) => (
             <div className="phil-iri-skeleton-row" key={row}>
-              {Array.from({ length: 9 }, (_, column) => <span className="phil-iri-skeleton-block" key={column} />)}
+              {Array.from({ length: 9 }, (_, column) => <SkeletonBlock className="phil-iri-skeleton-block" key={column} />)}
             </div>
           ))}
         </div>
         <div className="phil-iri-skeleton-footer">
-          {Array.from({ length: 3 }, (_, index) => <span className="phil-iri-skeleton-block" key={index} />)}
+          {Array.from({ length: 3 }, (_, index) => <SkeletonBlock className="phil-iri-skeleton-block" key={index} />)}
         </div>
       </div>
     </div>

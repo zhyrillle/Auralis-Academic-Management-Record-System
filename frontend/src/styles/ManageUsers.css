@@ -1196,10 +1196,10 @@
 
 :is(.user-management-page, .user-management-overlay) .manage-users-skeleton__block {
   display: block;
-  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 38%, #f1f5f9 63%);
-  background-size: 400% 100%;
+
+
   border-radius: 999px;
-  animation: manage-users-shimmer 1.3s ease infinite;
+
 }
 
 .user-management-page .manage-users-skeleton__panel-header > div {
@@ -1244,12 +1244,10 @@
 }
 
 .user-management-page .manage-users-skeleton__table-header {
-  background: #edf2f7;
+
 }
 
-@keyframes manage-users-shimmer {
-  to { background-position: -100% 0; }
-}
+
 
 @media (min-width: 1101px) and (max-width: 1600px) {
   .user-management-page .content-wrapper {
@@ -1584,4 +1582,16 @@
   .user-profile-tray .profile-details { grid-template-columns: 1fr; }
   .user-profile-tray .profile-summary { flex-wrap: wrap; }
   .user-profile-tray .profile-status { flex: 0 0 calc(100% - 64px); margin-left: 64px; }
+}
+
+/* Existing form popup appearance; page placeholders use the shared style. */
+:is(.user-management-page, .user-management-overlay) .manage-users-skeleton__block:not(.app-skeleton-block) {
+  display: block;
+  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 38%, #f1f5f9 63%);
+  background-size: 400% 100%;
+  border-radius: 999px;
+  animation: manage-users-shimmer 1.3s ease infinite;
+}
+@keyframes manage-users-shimmer {
+  to { background-position: -100% 0; }
 }

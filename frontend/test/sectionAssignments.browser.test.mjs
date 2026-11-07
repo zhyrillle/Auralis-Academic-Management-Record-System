@@ -29,6 +29,8 @@ const details = (type, id, term) => ({
     honorStatus: 'NONE', riskAssessment: { status: 'available', riskLevel: 'medium', label: 'Medium Risk' } }],
 });
 let browser;
+let heldTerm = null;
+let heldReport = null;
 try {
   await server.listen();
   browser = await chromium.launch({ headless: true,
@@ -38,7 +40,7 @@ try {
     user_id: 92001, role: 'subject_teacher', is_adviser: true, first_name: 'Fixture', last_name: 'Adviser',
   })));
   const reads = [], writes = [], errors = [];
-  await context.route('**/*', route => {
+  await context.route('**/*', async route => {
     const request = route.request(), url = new URL(request.url());
     if (!url.pathname.startsWith('/api/')) return url.href.startsWith(server.resolvedUrls.local[0]) ? route.continue() : route.abort();
     const json = payload => route.fulfill({ contentType: 'application/json', body: JSON.stringify(payload),
@@ -46,6 +48,7 @@ try {
     if (request.method() === 'OPTIONS') return json({});
     if (request.method() !== 'GET') { writes.push(url.pathname); return json({}); }
     reads.push(url.pathname);
+    if (heldReport && url.pathname.startsWith('/api/student-sf9/')) await heldReport;
     if (url.pathname === '/api/sections/adviser/92001') {
       assert.equal(url.searchParams.get('classContextVersion'), '3'); return json(cards);
     }
@@ -54,7 +57,11 @@ try {
     if (url.pathname === '/api/grade-submission-status') return json({ statusVersion: 1,
       context: { subjectOfferingId: '81' }, subjects: [] });
     const match = url.pathname.match(/^\/api\/section-details\/(advisory|teaching)\/(\d+)$/);
-    if (match) return json(details(match[1], Number(match[2]), url.searchParams.get('term')));
+    if (match) {
+      const held = heldTerm;
+      if (held && url.searchParams.get('term') === held.term) { held.started(); await held.gate; }
+      return json(details(match[1], Number(match[2]), url.searchParams.get('term')));
+    }
     return json([]);
   });
   const page = await context.newPage();
@@ -86,6 +93,44 @@ try {
   assert.equal(await page.getByRole('columnheader', { name: 'Honor Status' }).count(), 0);
   assert.equal(reads.filter(path => path === '/api/section-details/teaching/41').length, 1);
   assert.equal(reads.some(path => /grading-summary|students$/.test(path)), false, 'details must not start a separate grading-sheet read');
+  const hold = term => {
+    let started, resume;
+    const begun = new Promise(resolve => { started = resolve; });
+    const gate = new Promise(resolve => { resume = resolve; });
+    heldTerm = { term, started, gate };
+    return { begun, resume };
+  };
+  const term2 = hold('T2');
+  await page.getByRole('button', { name: 'T2', exact: true }).click();
+  await term2.begun;
+  assert(await page.locator('.app-skeleton-region').first().isVisible());
+  assert.equal(await page.getByText('Fixture Learner', { exact: true }).count(), 0, 'old-term records are replaced by placeholders');
+  assert(await page.getByRole('button', { name: 'Back to Classes', exact: true }).isVisible());
+  // A newer selection wins even when the older request finishes later.
+  heldTerm = null;
+  await page.getByRole('button', { name: 'T3', exact: true }).click();
+  await page.getByRole('columnheader', { name: 'Term 3 Grade' }).waitFor();
+  const oldTermFinished = page.waitForResponse(response => response.url().includes('/section-details/teaching/41') && response.url().includes('term=T2'));
+  term2.resume(); await oldTermFinished;
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await page.getByRole('columnheader', { name: 'Term 3 Grade' }).waitFor();
+  const refresh3 = hold('T3');
+  await page.getByRole('button', { name: 'Refresh grades and statuses', exact: true }).click();
+  await refresh3.begun;
+  assert.equal(await page.locator('.app-skeleton-region, .section-details-busy-overlay').count(), 0, 'same-context refresh retains the current table');
+  assert(await page.getByRole('columnheader', { name: 'Term 3 Grade' }).isVisible());
+  heldTerm = null; refresh3.resume();
+  await page.getByRole('button', { name: 'T1', exact: true }).click();
+  await page.getByRole('columnheader', { name: /At-risk Status/ }).waitFor();
+  let finishReport;
+  heldReport = new Promise(resolve => { finishReport = resolve; });
+  await page.getByRole('button', { name: 'View Fixture Learner', exact: true }).click();
+  await page.getByRole('status', { name: 'Loading learner report', exact: true }).waitFor();
+  assert(await page.locator('.student-sf9-container h1').isVisible());
+  assert(await page.locator('.student-sf9-container .app-skeleton-block').first().isVisible());
+  await page.getByRole('button', { name: 'Back', exact: true }).click();
+  heldReport = null; finishReport();
+  await page.getByRole('columnheader', { name: /At-risk Status/ }).waitFor();
   await page.screenshot({ path: join(artifacts, 'english-details.png'), fullPage: true, animations: 'disabled' });
   await page.getByRole('button', { name: 'Back to Classes', exact: true }).click();
   await advisory.getByRole('button', { name: 'VIEW', exact: true }).click();

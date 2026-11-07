@@ -1,3 +1,4 @@
+import { SkeletonBlock } from '../common/PageSkeleton.jsx';
 import React, { useState } from "react";
 
 export default function AdviserCoreValuesDonut({
@@ -38,13 +39,13 @@ export default function AdviserCoreValuesDonut({
 
   return (
     <div className="adviser-dashboard__core-values-card">
-      <h3 className="adviser-dashboard__core-values-heading">
+      <h3 className="adviser-dashboard__core-values-heading">{loading ? <SkeletonBlock width="55%" height={18} /> : <>
         Core Values: Term Comparison
-      </h3>
+      </>}</h3>
 
       {/* Legend */}
       <div className="adviser-dashboard__core-legend">
-        {defaultLegend.map((item) => (
+        {loading ? <SkeletonBlock width="80%" /> : defaultLegend.map((item) => (
           <span key={item.key} className="adviser-dashboard__core-legend-item">
             <span
               className="adviser-dashboard__core-legend-dot"
@@ -58,7 +59,7 @@ export default function AdviserCoreValuesDonut({
       {/* Donut Chart with Center Term Label */}
       <div className="adviser-dashboard__core-donut-wrap">
         {loading ? (
-          <div className="adviser-dashboard__skeleton-circle" />
+          <SkeletonBlock className="adviser-dashboard__skeleton-circle" />
         ) : (
           <div className="adviser-dashboard__core-donut-inner">
             <svg

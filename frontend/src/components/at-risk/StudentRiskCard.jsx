@@ -1,3 +1,4 @@
+import { SkeletonBlock } from '../common/PageSkeleton.jsx';
 import { Calendar, TrendingDown, FileText, UserRound, FolderOpen } from "lucide-react";
 import { RISK_BANDS } from '../../utils/riskPresentation';
 
@@ -45,15 +46,15 @@ export default function StudentRiskCard({ name, grade, section, adviser, flags, 
 
   if (loading) {
     return (
-      <div className="ar-student-card" style={{ borderLeftColor: config.accent }} role="status" aria-label="Loading learner prediction">
+      <div className="ar-student-card" style={{ borderLeftColor: "#e8edf4" }} role="status" aria-label="Loading learner prediction">
         <div className="ar-student-main">
-          <div className="ar-student-avatar-skeleton" />
+          <SkeletonBlock className="ar-student-avatar-skeleton" />
           <div className="ar-student-info">
-            <div className="ar-skeleton-line" style={{ width: "60%" }} />
-            <div className="ar-skeleton-line" style={{ width: "80%" }} />
+            <SkeletonBlock className="ar-skeleton-line" style={{ width: "60%" }} />
+            <SkeletonBlock className="ar-skeleton-line" style={{ width: "80%" }} />
           </div>
         </div>
-        <div className="ar-student-score-skeleton" />
+        <SkeletonBlock className="ar-student-score-skeleton" />
       </div>
     );
   }

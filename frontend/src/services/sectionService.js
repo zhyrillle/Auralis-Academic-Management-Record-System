@@ -74,6 +74,7 @@ export const getAdviserSections = async (userId) => {
   // 2. Fallback: Fetch user details from /api/users
   try {
     const resUsers = await fetch(`${API_BASE_URL}/users`);
+    if (!resUsers.ok) throw new Error('Assigned classes could not be loaded. Please retry.');
     if (resUsers.ok) {
       const usersList = await resUsers.json();
       const targetUser = Array.isArray(usersList)
@@ -142,6 +143,7 @@ export const getAdviserSections = async (userId) => {
     }
   } catch (e) {
     console.warn("Fallback fetch /api/users failed:", e);
+    throw new Error('Assigned classes could not be loaded. Please retry.', { cause: e });
   }
 
   return combinedClasses;

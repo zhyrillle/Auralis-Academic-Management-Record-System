@@ -1,3 +1,4 @@
+import PageSkeleton from '../../components/common/PageSkeleton.jsx';
 import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import "../../styles/adviserNotifications.css";
@@ -70,10 +71,12 @@ export default function DeptHeadNotifications() {
   const [activeFilter, setActiveFilter] = useState("all");
   const [items, setItems] = useState({ today: [], yesterday: [] });
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
 
   const loadNotifications = useCallback(async () => {
     try {
       setLoading(true);
+      setLoadError("");
       const user = getStoredUser();
       const userId = user?.user_id || user?.id || null;
       const res = await fetchDeptHeadNotifications(userId);
@@ -83,11 +86,10 @@ export default function DeptHeadNotifications() {
           yesterday: res.notifications.yesterday || [],
         });
       } else {
-        setItems({ today: [], yesterday: [] });
+        throw new Error("Notifications could not be loaded.");
       }
     } catch (err) {
-      console.warn("Could not fetch department notifications:", err);
-      setItems({ today: [], yesterday: [] });
+      setLoadError(err.message || "Notifications could not be loaded.");
     } finally {
       setLoading(false);
     }
@@ -182,6 +184,9 @@ export default function DeptHeadNotifications() {
         )}
       </div>
 
+      {loadError && <div className="notifications-load-error" role="alert">
+        <p>{loadError}</p><button type="button" onClick={loadNotifications}>Retry</button>
+      </div>}
       <div className="notifications-filter-group">
         <button
           type="button"
@@ -231,15 +236,11 @@ export default function DeptHeadNotifications() {
           </>
         )}
 
-        {!hasToday && !hasYesterday && (
+        {!loadError && !hasToday && !hasYesterday && (
           <div className="notifications-empty-state">
-            <p>
-              {loading
-                ? "Loading notifications..."
-                : activeFilter === "unread"
+            {loading ? <PageSkeleton label="Loading notifications" layout="cards" rows={3} /> : <p>{activeFilter === "unread"
                 ? "No unread notifications."
-                : "No notifications available."}
-            </p>
+                : "No notifications available."}</p>}
           </div>
         )}
       </div>

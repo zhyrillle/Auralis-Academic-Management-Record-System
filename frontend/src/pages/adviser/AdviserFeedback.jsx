@@ -1,6 +1,7 @@
+import PageSkeleton from '../../components/common/PageSkeleton';
 import { cachedApiFetch as fetch } from "../../services/navigationCache.js";
 import { API_BASE_URL } from "../../services/apiConfig.js";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
   Users,
@@ -206,6 +207,11 @@ function DonutChart({ data, hoveredQ, onHoverQ }) {
 
 export default function AdviserFeedback() {
   const currentUser = getStoredUser();
+  const feedbackRequest = useRef(0);
+  const hasFeedback = useRef(false);
+  const [hasLoadedFeedback, setHasLoadedFeedback] = useState(false);
+  const [feedbackLoading, setFeedbackLoading] = useState(true);
+  const [feedbackError, setFeedbackError] = useState("");
   const [progressReady, setProgressReady] = useState(false);
   // currentView: "dashboard" | "teacher-list" | "eval-form" | "dept-head-list" | "dept-head-form" | "principal-list" | "principal-form"
   const [currentView, setCurrentView] = useState("dashboard");
@@ -240,6 +246,9 @@ export default function AdviserFeedback() {
   const fetchFeedbackData = () => {
     if (!currentUser?.user_id) return;
 
+    const request = ++feedbackRequest.current;
+    const isCurrent = () => feedbackRequest.current === request;
+    queueMicrotask(() => { if (isCurrent()) { setFeedbackLoading(!hasFeedback.current); setFeedbackError(''); } });
     // 1. Fetch backend stats, active users list, and evaluator feedback in parallel
     const statsPromise = fetch(`${API_BASE_URL}/feedback/stats/${currentUser.user_id}`)
       .then((res) => (res.ok ? res.json() : null))
@@ -260,8 +269,12 @@ export default function AdviserFeedback() {
       .then((res) => (res.ok ? res.json() : null))
       .catch(() => null);
 
-    Promise.all([statsPromise, usersPromise, evalFeedbacksPromise, windowPromise]).then(
+    const statsRead = Promise.all([statsPromise, usersPromise, evalFeedbacksPromise, windowPromise]).then(
       ([statsData, usersData, evalFeedbacksData, windowData]) => {
+        if (!isCurrent()) return;
+        if (!statsData) { setFeedbackError('Peer feedback records could not be loaded.'); return; }
+        hasFeedback.current = true;
+        setHasLoadedFeedback(true);
         if (windowData) {
           setWindowStatus(windowData);
         } else if (statsData?.window_status) {
@@ -341,9 +354,10 @@ export default function AdviserFeedback() {
     );
 
     // 2. Fetch recent peer comments where currentUser is evaluee
-    fetch(`${API_BASE_URL}/feedback/evaluee/${currentUser.user_id}`)
+    const commentsRead = fetch(`${API_BASE_URL}/feedback/evaluee/${currentUser.user_id}`)
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
+        if (!isCurrent()) return;
         if (Array.isArray(data)) {
           const comments = [];
           data.forEach((item) => {
@@ -380,12 +394,13 @@ export default function AdviserFeedback() {
         }
       })
       .catch((err) => console.error("Error fetching evaluee comments:", err));
+    Promise.allSettled([statsRead, commentsRead]).then(() => { if (isCurrent()) setFeedbackLoading(false); });
   };
 
   useEffect(() => {
     fetchFeedbackData();
     window.addEventListener("focus", fetchFeedbackData);
-    return () => window.removeEventListener("focus", fetchFeedbackData);
+    return () => { feedbackRequest.current += 1; window.removeEventListener("focus", fetchFeedbackData); };
   }, [currentUser?.user_id, currentView]);
 
   const handleEvaluatePeer = (person) => {
@@ -566,6 +581,14 @@ export default function AdviserFeedback() {
   }
 
   const displayedComments = recentComments.length > 0 ? recentComments : RECENT_COMMENTS;
+  if (feedbackLoading) return <div className="fb-container">
+    <div className="fb-header-wrap"><div><h1 className="fb-page-title">Peer Feedback</h1><p className="fb-page-subtitle">Annual peer evaluation &amp; professional development feedback</p></div></div>
+    <PageSkeleton label="Loading peer feedback" cards={3} layout="charts" />
+  </div>;
+  if (feedbackError && !hasLoadedFeedback) return <div className="fb-container">
+    <h1 className="fb-page-title">Peer Feedback</h1><div role="alert">{feedbackError}<button type="button" onClick={fetchFeedbackData}>Retry</button></div>
+  </div>;
+
 
   return (
     <div className="fb-container">

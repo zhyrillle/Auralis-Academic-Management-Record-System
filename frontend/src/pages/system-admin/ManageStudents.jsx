@@ -1,3 +1,4 @@
+import PageSkeleton, { SkeletonValue, SkeletonBlock } from '../../components/common/PageSkeleton.jsx';
 import { useEffect, useMemo, useState } from "react";
 import { Users, Plus, Pencil, Trash2, GraduationCap, AlertCircle } from "lucide-react";
 import useCachedQuery from "../../services/useCachedQuery";
@@ -153,10 +154,10 @@ export default function ManageStudents() {
         description: "Learners with a grade assignment",
         icon: GraduationCap,
         variant: ["info", "warning", "primary", "info"][index]
-      }))].map(card => <StatCard key={card.key} title={card.title} value={query.loading ? "—" : counts[card.key]} description={card.description} icon={card.icon} variant={card.variant} />)}
+      }))].map(card => <StatCard loading={query.loading} key={card.key} title={card.title} value={query.loading || query.error ? "—" : counts[card.key]} description={card.description} icon={card.icon} variant={card.variant} />)}
     </section>
     <section className="student-admin-panel">
-      <div className="student-admin-panel-heading"><div><h2>Student directory</h2><p>Select a student row to view their profile. Use the actions to edit or delete.</p></div><span className="student-admin-count">{filtered.length} {filtered.length === 1 ? "student" : "students"}</span></div>
+      <div className="student-admin-panel-heading"><div>{query.loading ? <><SkeletonBlock width={180} height={18} /><SkeletonBlock width={300} /></> : <><h2>Student directory</h2><p>Select a student row to view their profile. Use the actions to edit or delete.</p></>}</div><span className="student-admin-count">{query.loading ? <SkeletonValue label="Loading student count" /> : query.error ? "Unavailable" : <>{filtered.length} {filtered.length === 1 ? "student" : "students"}</>}</span></div>
       <div className="student-admin-toolbar"><SearchBar query={search} setQuery={value => {
           setSearch(value);
           setPage(1);
@@ -175,7 +176,7 @@ export default function ManageStudents() {
           setProgramFilter(value);
           setPage(1);
         }} /></div>
-      {query.loading ? <EmptyState className="student-admin-empty student-admin-loading" icon={Users} title="Loading student records…" /> : query.error ? <div className="student-admin-empty"><EmptyState icon={AlertCircle} title="Students are unavailable" description={query.error} /><button type="button" className="student-admin-button" onClick={query.refresh}>Retry</button></div> : !shown.length ? <EmptyState className="student-admin-empty" icon={Users} title="No students found" description="Try another grade level, program, or search." /> : <><div className="student-admin-table-scroll"><table className="student-admin-table student-directory-table"><colgroup><col style={{
+      {query.loading ? <PageSkeleton label="Loading student records" columns={7} /> : query.error ? <div className="student-admin-empty"><EmptyState icon={AlertCircle} title="Students are unavailable" description={query.error} /><button type="button" className="student-admin-button" onClick={query.refresh}>Retry</button></div> : !shown.length ? <EmptyState className="student-admin-empty" icon={Users} title="No students found" description="Try another grade level, program, or search." /> : <><div className="student-admin-table-scroll"><table className="student-admin-table student-directory-table"><colgroup><col style={{
                 width: "16%"
               }} /><col style={{
                 width: "25%"

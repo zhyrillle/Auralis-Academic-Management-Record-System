@@ -1,5 +1,7 @@
-import { cachedApiFetch as fetch } from "../../services/navigationCache";
-import { useState, useEffect } from "react";
+import PageSkeleton, { SkeletonBlock, SkeletonList, SkeletonRegion } from '../../components/common/PageSkeleton.jsx';
+import { cachedApiFetch as fetch, cacheKey } from "../../services/navigationCache";
+import useCachedQuery from "../../services/useCachedQuery";
+import { useState } from "react";
 import { createPortal } from "react-dom";
 import { useLocation } from "react-router-dom";
 import {
@@ -28,18 +30,71 @@ function requestDateLabel(value) {
   return Number.isNaN(date.getTime()) ? "Unavailable" : date.toLocaleString("en-PH", { timeZone: "Asia/Manila" });
 }
 
+async function loadReopeningData(userId) {
+  const headers = { "X-Auralis-User-Id": String(userId) };
+  const responses = await Promise.all([
+    fetch(`${API_BASE_URL}/grading-periods/grade-sheets/reopening-options`, { headers, cacheRead: false }),
+    fetch(`${API_BASE_URL}/reopen-requests/user/${userId}`, { headers, cacheRead: false }),
+  ]);
+  const payloads = await Promise.all(responses.map(response => response.json()));
+  if (responses.some(response => !response.ok)) throw new Error(payloads.find(payload => payload.error || payload.message)?.error || "Reopening data could not be loaded.");
+  const [options, history] = payloads;
+  if (!Array.isArray(options.gradeSheets) || !Array.isArray(history)) throw new Error("Reopening response is incomplete.");
+  if (options.gradeSheets.some(sheet => !sheet.section_id || !sheet.subject_id || !sheet.term_id || !sheet.school_year_id)) {
+    throw new Error("Grade-sheet identifiers are unavailable. Restart the updated backend and try again.");
+  }
+  if (options.gradeSheets.length && !options.defaultSchoolYearId) {
+    throw new Error("The default school year is unavailable. Restart the updated backend and try again.");
+  }
+  return { options, history: history.map(item => ({
+    id: `#REQ-${String(item.request_id).padStart(3, "0")}`,
+    gradeSheetId: String(item.grade_sheet_id),
+    status: String(item.status || "").charAt(0).toUpperCase() + String(item.status || "").slice(1).toLowerCase(),
+    subject: `${item.subject_name || "Subject"} — ${item.section_name || "Section"}`,
+    term: item.term_name || "Term unavailable",
+    requestType: item.request_type || "Grade Reopening",
+    requestedDate: requestDateLabel(item.requested_at),
+    approvedDate: item.reviewed_at ? requestDateLabel(item.reviewed_at) : null,
+    accessUntil: item.access_until ? requestDateLabel(item.access_until) : "Not assigned",
+    reason: item.reason || "", file: item.file_name || null,
+    adminNote: item.admin_note, adminRemarks: item.admin_remarks,
+  })) };
+}
+
+function resolveSelection(options, prefillId, previous = { yearId: "", sectionId: "", subjectId: "", termId: "" }) {
+  const sheets = options?.gradeSheets || [];
+  const prefilled = prefillId && sheets.find(sheet => String(sheet.grade_sheet_id) === prefillId);
+  return prefilled ? {
+    yearId: String(prefilled.school_year_id), sectionId: String(prefilled.section_id),
+    subjectId: String(prefilled.subject_id), termId: String(prefilled.term_id),
+  } : {
+    ...previous, yearId: sheets.some(sheet => String(sheet.school_year_id) === previous.yearId)
+      ? previous.yearId : String(options?.defaultSchoolYearId ?? ""),
+  };
+}
+
 export default function GradeReopeningRequest() {
   const currentUser = getStoredUser();
   const location = useLocation();
   const prefillId = new URLSearchParams(location.search).get("gradeSheetId");
 
   // Sheet IDs distinguish terms and subjects even when section names repeat.
-  const [gradeSheets, setGradeSheets] = useState([]);
-  const [optionsLoading, setOptionsLoading] = useState(true);
-  const [optionsError, setOptionsError] = useState("");
-  const [refreshAttempt, setRefreshAttempt] = useState(0);
-  const [selection, setSelection] = useState({ yearId: "", sectionId: "", subjectId: "", termId: "" });
-  const [prefillError, setPrefillError] = useState("");
+  const query = useCachedQuery(cacheKey('adviser:reopening-data', { userId: currentUser?.user_id }),
+    () => loadReopeningData(currentUser.user_id),
+    { enabled: Boolean(currentUser?.user_id), refreshInterval: 0, revalidateOnFocus: false });
+  const gradeSheets = query.data?.options.gradeSheets || INITIAL_REQUESTS;
+  const optionsLoading = query.loading;
+  const optionsError = query.error || (!currentUser?.user_id ? "Your account is unavailable. Please sign in again." : "");
+  const [selectionChoice, setSelectionChoice] = useState(null);
+  const choice = selectionChoice?.prefillId === prefillId ? selectionChoice : null;
+  const selection = resolveSelection(query.data?.options, choice ? null : prefillId, choice?.value);
+  const setSelection = update => setSelectionChoice(previous => {
+    const saved = previous?.prefillId === prefillId ? previous : null;
+    const current = resolveSelection(query.data?.options, saved ? null : prefillId, saved?.value);
+    return { prefillId, value: typeof update === "function" ? update(current) : update };
+  });
+  const prefillError = query.data && prefillId && !choice && !gradeSheets.some(sheet => String(sheet.grade_sheet_id) === prefillId)
+    ? "The linked grade sheet is not available among your assigned sheets." : "";
   const [reason, setReason] = useState("");
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [formError, setFormError] = useState("");
@@ -49,66 +104,13 @@ export default function GradeReopeningRequest() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Requests Data & Modals State
-  const [requests, setRequests] = useState(INITIAL_REQUESTS);
+  const [optimisticRequests, setOptimisticRequests] = useState(INITIAL_REQUESTS);
+  const history = query.data?.history || INITIAL_REQUESTS;
+  const requests = [...optimisticRequests.filter(item => !history.some(saved => saved.id === item.id)), ...history];
   const [activeModalRequest, setActiveModalRequest] = useState(null);
   const [isViewDetailsOpen, setIsViewDetailsOpen] = useState(false);
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
   const [lastSubmittedRequest, setLastSubmittedRequest] = useState(null);
-
-  useEffect(() => {
-    if (!currentUser?.user_id) return;
-    let isCurrent = true;
-    const headers = { "X-Auralis-User-Id": String(currentUser.user_id) };
-    async function load() {
-      setOptionsLoading(true);
-      setOptionsError("");
-      try {
-        const responses = await Promise.all([
-          fetch(`${API_BASE_URL}/grading-periods/grade-sheets/reopening-options`, { headers, force: refreshAttempt > 0 }),
-          fetch(`${API_BASE_URL}/reopen-requests/user/${currentUser.user_id}`, { headers, force: refreshAttempt > 0 }),
-        ]);
-        const payloads = await Promise.all(responses.map(response => response.json()));
-        if (responses.some(response => !response.ok)) throw new Error(payloads.find(payload => payload.error || payload.message)?.error || "Reopening data could not be loaded.");
-        const [options, history] = payloads;
-        if (!Array.isArray(options.gradeSheets) || !Array.isArray(history)) throw new Error("Reopening response is incomplete.");
-        if (options.gradeSheets.some(sheet => !sheet.section_id || !sheet.subject_id || !sheet.term_id || !sheet.school_year_id)) {
-          throw new Error("Grade-sheet identifiers are unavailable. Restart the updated backend and try again.");
-        }
-        if (options.gradeSheets.length && !options.defaultSchoolYearId) {
-          throw new Error("The default school year is unavailable. Restart the updated backend and try again.");
-        }
-        if (!isCurrent) return;
-        setGradeSheets(options.gradeSheets);
-        const prefilled = prefillId && options.gradeSheets.find(sheet => String(sheet.grade_sheet_id) === prefillId);
-        setPrefillError(prefillId && !prefilled ? "The linked grade sheet is not available among your assigned sheets." : "");
-        setSelection(previous => prefilled ? {
-          yearId: String(prefilled.school_year_id), sectionId: String(prefilled.section_id),
-          subjectId: String(prefilled.subject_id), termId: String(prefilled.term_id),
-        } : {
-          ...previous,
-          yearId: options.gradeSheets.some(sheet => String(sheet.school_year_id) === previous.yearId)
-            ? previous.yearId : String(options.defaultSchoolYearId ?? ""),
-        });
-        setRequests(history.map(item => ({
-          id: `#REQ-${String(item.request_id).padStart(3, "0")}`,
-          gradeSheetId: String(item.grade_sheet_id),
-          status: String(item.status || "").charAt(0).toUpperCase() + String(item.status || "").slice(1).toLowerCase(),
-          subject: `${item.subject_name || "Subject"} — ${item.section_name || "Section"}`,
-          term: item.term_name || "Term unavailable",
-          requestType: item.request_type || "Grade Reopening",
-          requestedDate: requestDateLabel(item.requested_at),
-          approvedDate: item.reviewed_at ? requestDateLabel(item.reviewed_at) : null,
-          accessUntil: item.access_until ? requestDateLabel(item.access_until) : "Not assigned",
-          reason: item.reason || "", file: item.file_name || null,
-          adminNote: item.admin_note, adminRemarks: item.admin_remarks,
-        })));
-      } catch (error) {
-        if (isCurrent) setOptionsError(error.message || "Reopening data could not be loaded.");
-      } finally { if (isCurrent) setOptionsLoading(false); }
-    }
-    load();
-    return () => { isCurrent = false; };
-  }, [currentUser?.user_id, refreshAttempt, prefillId]);
 
   // Compute Stats
   const totalCount = requests.length;
@@ -168,7 +170,6 @@ export default function GradeReopeningRequest() {
 
   const handleClear = () => {
     setSelection(previous => ({ ...previous, sectionId: "", subjectId: "", termId: "" }));
-    setPrefillError("");
     setReason("");
     setSelectedFiles([]);
     setFormError("");
@@ -206,7 +207,6 @@ export default function GradeReopeningRequest() {
       ...(field === "sectionId" ? { subjectId: "", termId: "" } : {}),
       ...(field === "subjectId" ? { termId: "" } : {}),
     }));
-    setPrefillError("");
     setSubjectError("");
     setFormError("");
   };
@@ -305,9 +305,9 @@ export default function GradeReopeningRequest() {
           : null,
       };
 
-      setRequests((prev) => [newReq, ...prev]);
+      setOptimisticRequests((prev) => [newReq, ...prev]);
 
-      setRefreshAttempt(value => value + 1);
+      query.refresh();
 
       setLastSubmittedRequest(newReq);
       setIsSuccessModalOpen(true);
@@ -343,10 +343,44 @@ export default function GradeReopeningRequest() {
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Cancellation failed.");
-      setRefreshAttempt(value => value + 1);
+      query.refresh();
       setIsViewDetailsOpen(false);
     } catch (error) { setFormError(error.message || "Cancellation failed."); }
   };
+
+  if (optionsLoading) return <div className="grr-container">
+    <h1 className="grr-page-title">Grade Reopening Request</h1>
+    <PageSkeleton label="Loading request summary" layout="cards" rows={4} />
+    <div className="grr-main-grid">
+      <section className="grr-form-card">
+        <SkeletonBlock width="42%" height={22} />
+        <SkeletonRegion label="Loading request form">
+          <div className="grr-loading-fields">
+            <SkeletonBlock width="25%" /><SkeletonBlock width="35%" height={24} />
+            <div className="grr-form-row three-col">{[1, 2, 3].map(field => <div className="grr-field-group" key={field}>
+              <SkeletonBlock width="45%" /><SkeletonBlock height={40} />
+            </div>)}</div>
+            <SkeletonBlock width="35%" /><SkeletonBlock height={140} />
+            <SkeletonBlock width="40%" /><SkeletonBlock height={100} />
+            <SkeletonBlock width="30%" height={40} />
+          </div>
+        </SkeletonRegion>
+      </section>
+      <section className="grr-requests-card">
+        <SkeletonBlock width="45%" height={22} />
+        <SkeletonRegion label="Loading request history"><SkeletonList rows={3} /></SkeletonRegion>
+      </section>
+    </div>
+  </div>;
+
+  if (optionsError && !query.data) return <div className="grr-container">
+    <h1 className="grr-page-title">Grade Reopening Request</h1>
+    <section className="grr-window-notice closed" role="alert">
+      <AlertCircle size={16} /><div><h2>Unable to load reopening requests</h2><p>{optionsError}</p>
+        <button type="button" onClick={query.refresh}>Retry</button>
+      </div>
+    </section>
+  </div>;
 
   return (
     <div className="grr-container">
@@ -462,7 +496,7 @@ export default function GradeReopeningRequest() {
               <div className="grr-window-notice closed" role="alert">
                 <AlertCircle size={16} />
                 <div><strong>Unable to load grade sheets</strong><p>{optionsError}</p>
-                  <button type="button" onClick={() => setRefreshAttempt(value => value + 1)}>Retry</button>
+                  <button type="button" onClick={() => query.refresh()}>Retry</button>
                 </div>
               </div>
             )}

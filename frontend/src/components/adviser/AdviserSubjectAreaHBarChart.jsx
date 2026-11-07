@@ -1,3 +1,4 @@
+import { SkeletonBlock } from '../common/PageSkeleton.jsx';
 import React, { useState } from "react";
 
 export default function AdviserSubjectAreaHBarChart({
@@ -47,10 +48,10 @@ export default function AdviserSubjectAreaHBarChart({
     <div className="adviser-dashboard__chart-card">
       <div className="adviser-dashboard__chart-header">
         <div>
-          <h3 className="adviser-dashboard__chart-title">
+          <h3 className="adviser-dashboard__chart-title">{loading ? <SkeletonBlock width={210} height={18} /> : <>
             Subject Area Performance Breakdown
-          </h3>
-          {sectionName && (
+          </>}</h3>
+          {loading ? <SkeletonBlock className="adviser-dashboard__skeleton-subtitle" width={140} height={12} /> : sectionName && (
             <span className="adviser-dashboard__hbar-section-subtitle">
               Section: <strong>{sectionName}</strong>
             </span>
@@ -72,7 +73,7 @@ export default function AdviserSubjectAreaHBarChart({
 
       <div className="adviser-dashboard__hbar-body">
         {loading ? (
-          <div className="adviser-dashboard__skeleton-chart" />
+          <SkeletonBlock className="adviser-dashboard__skeleton-chart" />
         ) : (
           <svg
             viewBox={`0 0 ${chartWidth} ${chartHeight}`}

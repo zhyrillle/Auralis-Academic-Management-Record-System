@@ -1,3 +1,4 @@
+import PageSkeleton, { SkeletonCards, SkeletonContent, SkeletonChart, SkeletonTable } from '../../components/common/PageSkeleton.jsx';
 import { usePrincipalQuery } from "../../services/principalData";
 import FilterToolbar from "../../components/common/FilterToolbar";
 import { useMemo, useState } from "react";
@@ -15,7 +16,6 @@ import {
   getHistoricalComparison,
   principalAnalyticsTerms,
 } from "../../services/principalAnalyticsService";
-import AnalyticsSkeleton from "./analytics/AnalyticsSkeleton";
 import AnalyticsStatCard from "./analytics/AnalyticsStatCard";
 import AnalyticsTermTabs from "./analytics/AnalyticsTermTabs";
 import LineChart from "../../components/charts/LineChart";
@@ -97,11 +97,61 @@ export default function HistoricalComparison() {
     ];
   }, [data, rows]);
 
-  if (loading && !data) return <AnalyticsSkeleton table />;
+  const pageHeader = (<header className="pa-page-header">
+        <div>
+          <div className="pa-title-row">
+            <h1>Historical Comparison</h1>
+          </div>
+          <p>Compare average grades and pass rates across two school years.</p>
+        </div>
+      </header>);
+
+  const loadingSkeleton = (
+    <PageSkeleton className="pa-skeleton pa-skeleton--content" label="Loading performance analytics">
+      <SkeletonCards count={4} />
+      <div className="app-skeleton-stack">
+        <SkeletonChart /><SkeletonTable columns={5} />
+      </div>
+    </PageSkeleton>
+  );
+
+  if (loading && !data) return <main className="pa-page">{pageHeader}<FilterToolbar className="pa-navigation" label="Historical comparison filters">
+        <AnalyticsTermTabs
+          options={principalAnalyticsTerms}
+          value={term}
+          onChange={changeFilter(setTerm)}
+          disabled={false}
+        />
+        <div className="pa-filter-controls pa-filter-controls--comparison">
+          <label>
+            <DropdownSelect
+              label="Primary school year"
+              placeholder="School year"
+              value={primarySchoolYear}
+              options={schoolYears}
+              onChange={changeFilter(setPrimarySchoolYear)}
+              disabled={false}
+            />
+          </label>
+          <span className="pa-versus" aria-hidden="true">
+            vs
+          </span>
+          <label>
+            <DropdownSelect
+              label="Comparison school year"
+              placeholder="School year"
+              value={comparisonSchoolYear}
+              options={schoolYears}
+              onChange={changeFilter(setComparisonSchoolYear)}
+              disabled={false}
+            />
+          </label>
+        </div>
+      </FilterToolbar>{loadingSkeleton}</main>;
 
   if (!data) {
     return (
-      <main className="pa-page">
+      <main className="pa-page">{pageHeader}
         <section className="pa-state-panel">
           <EmptyState
             className="pa-empty-state"
@@ -141,14 +191,7 @@ export default function HistoricalComparison() {
 
   return (
     <main className="pa-page">
-      <header className="pa-page-header">
-        <div>
-          <div className="pa-title-row">
-            <h1>Historical Comparison</h1>
-          </div>
-          <p>Compare average grades and pass rates across two school years.</p>
-        </div>
-      </header>
+      {pageHeader}
 
       <FilterToolbar className="pa-navigation" label="Historical comparison filters">
         <AnalyticsTermTabs
@@ -161,6 +204,7 @@ export default function HistoricalComparison() {
           <label>
             <DropdownSelect
               label="Primary school year"
+              placeholder="School year"
               value={primarySchoolYear}
               options={primaryOptions}
               onChange={changeFilter(setPrimarySchoolYear)}
@@ -173,6 +217,7 @@ export default function HistoricalComparison() {
           <label>
             <DropdownSelect
               label="Comparison school year"
+              placeholder="School year"
               value={comparisonSchoolYear}
               options={comparisonOptions}
               onChange={changeFilter(setComparisonSchoolYear)}
@@ -191,19 +236,8 @@ export default function HistoricalComparison() {
         </div>
       )}
 
-      <div
-        className={`pa-content${isFiltering ? " is-busy" : ""}`}
-        aria-busy={isFiltering}
-      >
-        {isFiltering && (
-          <div
-            className="pa-busy-overlay"
-            role="status"
-            aria-label="Updating comparison"
-          >
-            <span className="pa-spinner pa-spinner--large" />
-          </div>
-        )}
+      <SkeletonContent className="pa-content" loading={isFiltering} skeleton={loadingSkeleton}>
+
         {!rows.length ? (
           <section className="pa-state-panel">
             <EmptyState
@@ -330,7 +364,7 @@ export default function HistoricalComparison() {
             </section>
           </>
         )}
-      </div>
+      </SkeletonContent>
     </main>
   );
 }

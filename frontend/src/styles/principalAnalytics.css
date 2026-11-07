@@ -632,15 +632,11 @@
   display: block;
   background: linear-gradient(90deg, #e8edf4 25%, #f5f7fa 50%, #e8edf4 75%);
   background-size: 200% 100%;
-  animation: pa-shimmer 1.35s ease-in-out infinite;
+
   border-radius: 8px;
 }
 
-@keyframes pa-shimmer {
-  to {
-    background-position: -200% 0;
-  }
-}
+
 
 .pa-skeleton__heading {
   width: 300px;
@@ -841,3 +837,5 @@
     animation: none;
   }
 }
+
+.pa-skeleton.pa-skeleton--content { width: 100%; }

@@ -1,3 +1,4 @@
+import PageSkeleton, { SkeletonBlock, SkeletonTable } from '../../components/common/PageSkeleton.jsx';
 import { cachedApiFetch as fetch } from "../../services/navigationCache";
 import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
@@ -1932,36 +1933,26 @@ const formatToISODate = (val) => {
       {/* ============================================================
           UNAVAILABLE STATE OR MAIN CLASS RECORD SPREADSHEET
       ============================================================ */}
-      {!isAvailable ? (
+      {!isAvailable && !isRecordLoading && !recordError ? (
         <div className="unavailable-state">
           <img src={unavailableIconUrl} alt="Unavailable" className="unavailable-icon" />
           <h3>This grading term is currently unavailable.</h3>
           <p>Access will be enabled once the official grading period begins.</p>
         </div>
       ) : isRecordLoading ? (
-        <div className="cr-record-loading" role="status" aria-live="polite" aria-busy="true">
-          <p className="cr-record-loading-label">Loading Term {activeTerm.replace("T", "")} record…</p>
-          <div className="cr-record-skeleton" aria-hidden="true">
-            <div className="cr-record-skeleton-header">
-              <span className="cr-record-skeleton-seal" />
-              <div className="cr-record-skeleton-heading">
-                <h2>CLASS RECORD - TERM {activeTerm.replace("T", "")}</h2>
-                <div className="cr-record-skeleton-meta"><span /><span /><span /></div>
-                <div className="cr-record-skeleton-meta"><span /><span /></div>
-              </div>
-              <span className="cr-record-skeleton-seal" />
+        <PageSkeleton label={`Loading Term ${activeTerm.replace("T", "")} record`} className="cr-record-loading">
+          <div className="cr-record-skeleton-header">
+            <SkeletonBlock className="cr-record-skeleton-seal" round />
+            <div className="cr-record-skeleton-heading">
+              <SkeletonBlock className="cr-record-skeleton-title" />
+              <div className="cr-record-skeleton-meta"><SkeletonBlock /><SkeletonBlock /><SkeletonBlock /></div>
+              <div className="cr-record-skeleton-meta"><SkeletonBlock /><SkeletonBlock /></div>
             </div>
-            <div className="cr-record-skeleton-count" />
-            <div className="cr-record-skeleton-table">
-              <div className="cr-record-skeleton-table-head"><span /><span /><span /><span /><span /></div>
-              {Array.from({ length: 5 }, (_, row) => (
-                <div className="cr-record-skeleton-row" key={row}>
-                  {Array.from({ length: 5 }, (_, column) => <span key={column}><i /></span>)}
-                </div>
-              ))}
-            </div>
+            <SkeletonBlock className="cr-record-skeleton-seal" round />
           </div>
-        </div>
+          <SkeletonBlock className="cr-record-skeleton-count" />
+          <SkeletonTable columns={8} rows={7} />
+        </PageSkeleton>
       ) : recordError ? (
         <div className="cr-record-load-error" role="alert">
           <h3>Unable to load Term {activeTerm.replace("T", "")} record</h3>

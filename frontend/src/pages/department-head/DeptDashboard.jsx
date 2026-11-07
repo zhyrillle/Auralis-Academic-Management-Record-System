@@ -1,3 +1,4 @@
+import PageSkeleton, { SkeletonBlock, SkeletonCards, SkeletonChart, SkeletonTable } from '../../components/common/PageSkeleton';
 import { useState, useEffect, useMemo } from "react";
 import FilterBar from "../../components/dashboard/FilterBar";
 import ComparativeAnalysisCard from "../../components/dashboard/ComparativeAnalysisCard";
@@ -45,6 +46,8 @@ export default function DeptDashboard() {
   const [stats, setStats] = useState(EMPTY_STATS);
   const [submissions, setSubmissions] = useState(EMPTY_SUBMISSIONS);
   const [distribution, setDistribution] = useState(EMPTY_DISTRIBUTION);
+  const [loadedContext, setLoadedContext] = useState(null);
+  const contextKey = JSON.stringify(activeFilters);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [submissionError, setSubmissionError] = useState(null);
@@ -78,6 +81,7 @@ export default function DeptDashboard() {
         setSubmissions(submissionsData.data || EMPTY_SUBMISSIONS);
         setSubmissionError(submissionsData.error);
         setDistribution(distributionData);
+        setLoadedContext(JSON.stringify(activeFilters));
       } catch (err) {
         if (!cancelled) {
           setError(err.message || "Failed to load dashboard data");
@@ -100,6 +104,31 @@ export default function DeptDashboard() {
     setFilters((prev) => ({ ...prev, [key]: value }));
   };
 
+  const contentLoading = !error && !context.error && (context.loading || (loadedContext !== contextKey && (loading || Boolean(activeFilters.schoolYear))));
+  const bodySkeleton = <PageSkeleton label="Loading department dashboard">
+    <div className="app-skeleton-charts"><SkeletonChart /><SkeletonChart round /></div>
+    <SkeletonCards count={4} />
+    <div className="dept-loading-details">
+      <div className="dept-card dept-loading-submissions">
+        <div className="dept-loading-header">
+          <SkeletonBlock width={180} height={18} />
+          <div className="dept-loading-controls"><SkeletonBlock /><SkeletonBlock /></div>
+        </div>
+        <SkeletonTable rows={6} columns={5} />
+        <div className="dept-loading-pagination"><SkeletonBlock width={150} /><SkeletonBlock width={120} height={32} /></div>
+      </div>
+      <div className="dept-loading-report">
+        <div className="dept-loading-report-header">
+          <SkeletonBlock width={340} height={24} />
+          <div className="dept-loading-report-filters"><SkeletonBlock width={65} /><SkeletonBlock width={150} height={38} /><SkeletonBlock width={115} height={38} /></div>
+        </div>
+        <SkeletonBlock width={190} height={16} />
+        <div className="dept-loading-report-card"><SkeletonBlock width={170} height={18} /><SkeletonTable rows={5} columns={5} /></div>
+        <div className="dept-loading-report-card"><SkeletonBlock width={140} height={18} /><SkeletonTable rows={5} columns={7} /></div>
+      </div>
+    </div>
+  </PageSkeleton>;
+
   return (
     <div className="dept-dashboard-page dept-monitor-page">
       <div className="dept-dashboard-header">
@@ -113,23 +142,27 @@ export default function DeptDashboard() {
       <FilterBar
         filters={activeFilters}
         onChange={handleFilterChange}
-        disabled={loading}
+        disabled={loading || context.loading}
+        loadingOptions={context.loading}
         schoolYears={context.data?.schoolYears}
       />
 
       {(error || context.error) && <div className="dept-error-banner">{error || context.error}</div>}
 
-      <div className="dept-dashboard-body">
+      <div aria-busy={contentLoading}>
+        {contentLoading && bodySkeleton}
+        {/* Preserve report selections while a different dashboard context loads. */}
+        {loadedContext !== null && <div className="dept-dashboard-body" hidden={contentLoading} style={contentLoading ? { display: 'none' } : undefined}>
         <div className="dept-main-cards">
           <ComparativeAnalysisCard
             departmentName={departmentName}
             data={comparative}
-            loading={loading}
+            loading={loading || context.loading}
             error={!loading && comparative.length === 0 ? null : undefined}
           />
           <OverallPassRateCard
             data={passRate}
-            loading={loading}
+            loading={loading || context.loading}
           />
         </div>
 
@@ -137,16 +170,16 @@ export default function DeptDashboard() {
           Couldn’t load dashboard counts. <button type="button" onClick={() => setRetryVersion(value => value + 1)}>Retry counts</button>
         </div>}
         <div className="dept-stats-row">
-          <StatCard title="Total Teachers" value={statsError || loading ? '—' : stats.totalTeachers} description="Department wide" icon={Users} variant="info" />
-          <StatCard title="Submitted Grades" value={statsError || loading ? '—' : stats.submittedGradesPercent + '%'} description={statsError || loading ? 'Submission count unavailable' : stats.submittedGrades + ' submitted'} icon={ClipboardCheck} variant="success" />
-          <StatCard title="Delayed Submissions" value={statsError || loading ? '—' : stats.delayedSubmissions} description="Past deadline, not submitted" icon={Clock3} variant="warning" />
-          <StatCard title="At-Risk Students" value={statsError || loading ? '—' : stats.atRiskStudents} description="Need intervention" icon={AlertTriangle} variant="warning" />
+          <StatCard loading={loading || context.loading} title="Total Teachers" value={statsError || loading ? '—' : stats.totalTeachers} description="Department wide" icon={Users} variant="info" />
+          <StatCard loading={loading || context.loading} title="Submitted Grades" value={statsError || loading ? '—' : stats.submittedGradesPercent + '%'} description={statsError || loading ? 'Submission count unavailable' : stats.submittedGrades + ' submitted'} icon={ClipboardCheck} variant="success" />
+          <StatCard loading={loading || context.loading} title="Delayed Submissions" value={statsError || loading ? '—' : stats.delayedSubmissions} description="Past deadline, not submitted" icon={Clock3} variant="warning" />
+          <StatCard loading={loading || context.loading} title="At-Risk Students" value={statsError || loading ? '—' : stats.atRiskStudents} description="Need intervention" icon={AlertTriangle} variant="warning" />
         </div>
 
         <div className="dept-monitor-details">
         <SubmissionMonitorTable
           data={submissions}
-          loading={loading}
+          loading={loading || context.loading}
           error={submissionError}
           onRetry={() => setRetryVersion(value => value + 1)}
           term={activeFilters.quarter}
@@ -156,9 +189,10 @@ export default function DeptDashboard() {
         <GradeDistributionTable
           data={distribution}
           schoolYear={activeFilters.schoolYear}
-          loading={loading}
+          loading={loading || context.loading}
         />
         </div>
+        </div>}
       </div>
     </div>
   );
