@@ -1869,10 +1869,28 @@ const formatToISODate = (val) => {
               onClick={
                 isLocked
                   ? undefined
-                  : onAttendance
-                  ? () => onAttendance(effectiveClass)
                   : () => {
-                      navigate("/adviser/attendance", { state: { activeClass: effectiveClass } });
+                      const prefix = location.pathname.startsWith("/teacher") ? "/teacher" : "/adviser";
+                      const attendanceClassContext = {
+                        ...effectiveClass,
+                        ...(classContextData || {}),
+                        section_id: sectionId,
+                        sectionId: sectionId,
+                        section_name: sectionName,
+                        sectionName: sectionName,
+                        assignmentType: effectiveClass?.assignmentType || (effectiveSubjectId || subjectOfferingId ? "teaching" : "advisory"),
+                        teacher_assignment_id: effectiveClass?.teacher_assignment_id || (effectiveClass?.assignmentType === "teaching" ? effectiveClass?.assignmentId : undefined),
+                        adviser_assignment_id: effectiveClass?.adviser_assignment_id || (effectiveClass?.assignmentType === "advisory" ? effectiveClass?.assignmentId : undefined),
+                        subject_offering_id: subjectOfferingId || effectiveClass?.subject_offering_id,
+                        subject_id: effectiveSubjectId,
+                        subject: effectiveClass?.subject || classContextData?.subject_name,
+                        subject_name: classContextData?.subject_name || effectiveClass?.subject_name || effectiveClass?.subject,
+                      };
+                      if (onAttendance) {
+                        onAttendance(attendanceClassContext);
+                      } else {
+                        navigate(`${prefix}/attendance`, { state: { activeClass: attendanceClassContext } });
+                      }
                     }
               }
               disabled={isLocked}

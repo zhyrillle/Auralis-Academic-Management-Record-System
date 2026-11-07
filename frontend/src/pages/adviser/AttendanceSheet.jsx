@@ -5,7 +5,7 @@ import { Calendar, CalendarOff, CheckCircle, AlertTriangle, Info, Save, ChevronL
 import { useLocation, useNavigate } from "react-router-dom";
 import "../../styles/attendanceSheet.css";
 import backIconUrl from "../../assets/backButton.svg";
-import { getStoredUser } from "../../utils/auth";
+import { getStoredUser, normalizeRole } from "../../utils/auth";
 import { cachedApiFetch as apiFetch } from "../../services/navigationCache.js";
 import Toast from "../../components/common/Toast.jsx";
 import EmptyState from "../../components/common/EmptyState.jsx";
@@ -97,18 +97,34 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
     (typeof activeClass?.id === "string" && activeClass.id.startsWith("sec-") ? Number(activeClass.id.replace("sec-", "")) : null) ||
     (typeof activeClass?.id === "string" && activeClass.id.startsWith("class-") ? Number(activeClass.id.replace("class-", "")) : null);
 
-  const handleBack = onBack || (() => navigate("/adviser/sections", {
-    state: {
-      currentView: "class-record",
-      activeSelectedClass: activeClass,
-    },
-  }));
+  const isSubjectAttendance = useMemo(() => {
+    if (activeClass?.assignmentType === "teaching") return true;
+    if (activeClass?.teacher_assignment_id) return true;
+    const sub = activeClass?.subject || activeClass?.subject_name || activeClass?.subjectName;
+    if (sub && sub !== "All subjects") return true;
+    if (activeClass?.subject_offering_id || activeClass?.offering_id) return true;
+    if (location.pathname.startsWith("/teacher") && activeClass?.assignmentType !== "advisory") return true;
+    const norm = normalizeRole(currentUser);
+    if (norm === "teacher" && activeClass?.assignmentType !== "advisory" && !activeClass?.adviser_assignment_id) return true;
+    return false;
+  }, [activeClass, location.pathname, currentUser]);
+
+  const handleBack = onBack || (() => {
+    const prefix = isSubjectAttendance || location.pathname.startsWith("/teacher") ? "/teacher" : "/adviser";
+    navigate(`${prefix}/sections`, {
+      state: {
+        currentView: "class-record",
+        activeSelectedClass: activeClass,
+      },
+    });
+  });
 
   const TODAY = getTodayISO();
   const [selectedDate, setSelectedDate] = useState(TODAY);
 
   // Data states
   const [adviserAssignment, setAdviserAssignment] = useState(null);
+  const [teacherAssignment, setTeacherAssignment] = useState(null);
   const [students, setStudents] = useState([]); // { student_id, student_section_id, first_name, last_name, middle_name, sex }
   const [sheetsByDate, setSheetsByDate] = useState({}); // { "YYYY-MM-DD": attendance_sheet_id }
   const [noClassDays, setNoClassDays] = useState({});
@@ -122,6 +138,19 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
     typeof navigator !== "undefined" && !navigator.onLine ? "offline" : "saved"
   );
 
+  const getSavePayloadContext = useCallback(() => {
+    return {
+      section_id: targetSectionId,
+      attendance_scope: isSubjectAttendance ? "SUBJECT" : "SECTION",
+      teacher_assignment_id: isSubjectAttendance
+        ? (teacherAssignment?.teacher_assignment_id || activeClass?.teacher_assignment_id || (activeClass?.assignmentType === "teaching" ? activeClass?.assignmentId : null) || null)
+        : null,
+      adviser_assignment_id: !isSubjectAttendance
+        ? (adviserAssignment?.adviser_assignment_id || activeClass?.adviser_assignment_id || (activeClass?.assignmentType === "advisory" ? activeClass?.assignmentId : null) || null)
+        : null,
+    };
+  }, [targetSectionId, isSubjectAttendance, teacherAssignment, adviserAssignment, activeClass]);
+
   useEffect(() => {
     const updateSyncState = async () => {
       if (typeof navigator !== "undefined" && !navigator.onLine) {
@@ -130,7 +159,11 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
       }
       try {
         const snapshot = await getSyncSnapshot();
-        const pending = targetSectionId ? await getPendingOfflineAttendance(targetSectionId).catch(() => []) : [];
+        const pending = targetSectionId ? await getPendingOfflineAttendance(targetSectionId, null, undefined, {
+          attendance_scope: isSubjectAttendance ? "SUBJECT" : "SECTION",
+          teacher_assignment_id: isSubjectAttendance ? (teacherAssignment?.teacher_assignment_id || activeClass?.teacher_assignment_id) : null,
+          adviser_assignment_id: !isSubjectAttendance ? (adviserAssignment?.adviser_assignment_id || activeClass?.adviser_assignment_id) : null,
+        }).catch(() => []) : [];
         if (pending.length > 0) {
           setSyncStatus("offline");
         } else if (snapshot.isSyncing) {
@@ -164,7 +197,7 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
     };
-  }, [targetSectionId]);
+  }, [targetSectionId, isSubjectAttendance, teacherAssignment, adviserAssignment]);
 
   const triggerToast = useCallback((message, type = "error") => {
     const id = Date.now();
@@ -180,8 +213,9 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
     setAttendanceMap({});
     setRemarksMap({});
     setAdviserAssignment(null);
+    setTeacherAssignment(null);
     loadAll();
-  }, [targetSectionId, currentUser?.user_id, currentUser?.id]);
+  }, [targetSectionId, currentUser?.user_id, currentUser?.id, isSubjectAttendance]);
 
 
   const loadAll = async (force = false) => {
@@ -197,41 +231,87 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
         return;
       }
 
-      // 1. Get section details & adviser assignment if any
+      // 1. Get section details & assignments
       let sectionName = `Section ${sectionId}`;
       let gradeLevelName = "";
       let assignment = null;
+      let teachAssignment = null;
+      let targetTeacherAssignmentId = activeClass?.teacher_assignment_id ||
+        (activeClass?.assignmentType === "teaching" ? activeClass?.assignmentId : null);
 
-      try {
-        const assignRes = await fetch(`${BASE_URL}/section-adviser-assignments/section/${sectionId}`, { force: Boolean(force) });
-        const assignments = assignRes.ok ? await assignRes.json() : [];
-        if (Array.isArray(assignments) && assignments.length > 0) {
-          const requestedId = activeClass?.adviser_assignment_id || activeClass?.assignmentId;
-          const requestedYear = activeClass?.school_year_id || activeClass?.schoolYearId;
-          assignment = assignments.find(item => requestedId && Number(item.adviser_assignment_id) === Number(requestedId))
-            || assignments.filter(item => Number(item.user_id) === Number(userId)
-              && (!requestedYear || Number(item.school_year_id) === Number(requestedYear)))
-              .sort((left, right) => Number(right.adviser_assignment_id) - Number(left.adviser_assignment_id))[0]
-            || assignments[0];
-        } else if (assignments && assignments.adviser_assignment_id) {
-          assignment = assignments;
+      if (isSubjectAttendance) {
+        let targetOfferingId = activeClass?.subject_offering_id || activeClass?.offering_id || null;
+        let targetSubjectId = activeClass?.subject_id || null;
+        let targetSubjectName = activeClass?.subject_name || activeClass?.subjectName || activeClass?.subject || "";
+        let targetSchoolYearId = activeClass?.school_year_id || activeClass?.schoolYearId || null;
+
+        try {
+          const teachRes = await fetch(`${BASE_URL}/teacher-assignments/user/${userId}`, { force: Boolean(force) });
+          const teachAssignments = teachRes.ok ? await teachRes.json() : [];
+          if (Array.isArray(teachAssignments) && teachAssignments.length > 0) {
+            teachAssignment = teachAssignments.find(item =>
+              (targetTeacherAssignmentId && Number(item.teacher_assignment_id) === Number(targetTeacherAssignmentId)) ||
+              (targetOfferingId && Number(item.subject_offering_id) === Number(targetOfferingId)) ||
+              (Number(item.section_id) === Number(sectionId) && targetSubjectId && Number(item.subject_id) === Number(targetSubjectId)) ||
+              (Number(item.section_id) === Number(sectionId) && (!targetSchoolYearId || Number(item.school_year_id) === Number(targetSchoolYearId)))
+            ) || teachAssignments.find(item => Number(item.section_id) === Number(sectionId));
+          }
+        } catch (e) {
+          console.warn("Could not fetch teacher assignments:", e);
         }
-      } catch (e) {
-        console.warn("Could not fetch adviser assignment:", e);
+
+        if (teachAssignment) {
+          targetTeacherAssignmentId = teachAssignment.teacher_assignment_id || targetTeacherAssignmentId;
+          targetOfferingId = teachAssignment.subject_offering_id || targetOfferingId;
+          targetSubjectId = teachAssignment.subject_id || targetSubjectId;
+          targetSubjectName = teachAssignment.subject_name || targetSubjectName;
+          targetSchoolYearId = teachAssignment.school_year_id || targetSchoolYearId;
+          sectionName = teachAssignment.section_name || sectionName;
+          gradeLevelName = teachAssignment.grade_level_name || gradeLevelName;
+        }
+
+        setTeacherAssignment({
+          teacher_assignment_id: targetTeacherAssignmentId ? Number(targetTeacherAssignmentId) : null,
+          subject_offering_id: targetOfferingId ? Number(targetOfferingId) : null,
+          subject_id: targetSubjectId ? Number(targetSubjectId) : null,
+          subject_name: targetSubjectName,
+          school_year_id: targetSchoolYearId ? Number(targetSchoolYearId) : null,
+          section_id: Number(sectionId),
+          section_name: sectionName,
+          grade_level_name: gradeLevelName,
+        });
+      } else {
+        try {
+          const assignRes = await fetch(`${BASE_URL}/section-adviser-assignments/section/${sectionId}`, { force: Boolean(force) });
+          const assignments = assignRes.ok ? await assignRes.json() : [];
+          if (Array.isArray(assignments) && assignments.length > 0) {
+            const requestedId = activeClass?.adviser_assignment_id || activeClass?.assignmentId;
+            const requestedYear = activeClass?.school_year_id || activeClass?.schoolYearId;
+            assignment = assignments.find(item => requestedId && Number(item.adviser_assignment_id) === Number(requestedId))
+              || assignments.filter(item => Number(item.user_id) === Number(userId)
+                && (!requestedYear || Number(item.school_year_id) === Number(requestedYear)))
+                .sort((left, right) => Number(right.adviser_assignment_id) - Number(left.adviser_assignment_id))[0]
+              || assignments[0];
+          } else if (assignments && assignments.adviser_assignment_id) {
+            assignment = assignments;
+          }
+        } catch (e) {
+          console.warn("Could not fetch adviser assignment:", e);
+        }
+
+        setAdviserAssignment({
+          section_id: Number(sectionId),
+          adviser_assignment_id: assignment?.adviser_assignment_id || null,
+          school_year_id: assignment?.school_year_id || null,
+          section_name: sectionName,
+          grade_level_name: gradeLevelName,
+        });
       }
 
       const secRes = await fetch(`${BASE_URL}/sections/${sectionId}`, { force: Boolean(force) });
       const secData = secRes.ok ? await secRes.json() : null;
-      sectionName = secData?.section_name || assignment?.section_name || activeClass?.sectionName || activeClass?.section_name || `Section ${sectionId}`;
-      gradeLevelName = secData?.grade_level_name || assignment?.grade_level_name || activeClass?.gradeLevel || activeClass?.grade_level_name || "";
-
-      setAdviserAssignment({
-        section_id: Number(sectionId),
-        adviser_assignment_id: assignment?.adviser_assignment_id || null,
-        school_year_id: assignment?.school_year_id || null,
-        section_name: sectionName,
-        grade_level_name: gradeLevelName,
-      });
+      sectionName = secData?.section_name || assignment?.section_name || teachAssignment?.section_name || activeClass?.sectionName || activeClass?.section_name || `Section ${sectionId}`;
+      gradeLevelName = secData?.grade_level_name || assignment?.grade_level_name || teachAssignment?.grade_level_name || activeClass?.gradeLevel || activeClass?.grade_level_name || "";
 
       // 2. Get enrolled students for section
       let enrichedStudents = [];
@@ -278,11 +358,20 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
       enrichedStudents.sort((a, b) => a.last_name.localeCompare(b.last_name) || a.first_name.localeCompare(b.first_name));
       setStudents(enrichedStudents);
 
-      // 3. Load all sheets for this section
-      const yearQuery = assignment?.school_year_id ? `?schoolYearId=${assignment.school_year_id}` : '';
+      // 3. Load all sheets scoped to adviser or subject teacher
+      const activeYearId = isSubjectAttendance
+        ? (teachAssignment?.school_year_id || activeClass?.school_year_id || activeClass?.schoolYearId)
+        : (assignment?.school_year_id || activeClass?.school_year_id || activeClass?.schoolYearId);
+      const yearQuery = activeYearId ? `&schoolYearId=${activeYearId}` : '';
+      const scopeQuery = isSubjectAttendance ? `scope=SUBJECT` : `scope=SECTION`;
+      const assignmentQuery = isSubjectAttendance
+        ? (targetTeacherAssignmentId ? `&teacherAssignmentId=${targetTeacherAssignmentId}` : '')
+        : (assignment?.adviser_assignment_id ? `&adviserAssignmentId=${assignment.adviser_assignment_id}` : '');
+      const filterParams = `?${scopeQuery}${assignmentQuery}${yearQuery}&userId=${userId}`;
+
       let sheets = [];
       try {
-        const sheetsRes = await fetch(`${BASE_URL}/attendance-sheets/section/${sectionId}${yearQuery}`, { force: Boolean(force) });
+        const sheetsRes = await fetch(`${BASE_URL}/attendance-sheets/section/${sectionId}${filterParams}`, { force: Boolean(force) });
         if (sheetsRes.ok) sheets = await sheetsRes.json();
       } catch (sheetsErr) {
         console.warn("[AttendanceSheet] Could not load sheets from network:", sheetsErr);
@@ -297,10 +386,10 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
       }
       setSheetsByDate(byDate);
 
-      // 4. Load attendance records for this section
+      // 4. Load attendance records scoped to adviser or subject teacher
       let attRows = [];
       try {
-        const attRes = await fetch(`${BASE_URL}/attendance/section/${sectionId}${yearQuery}`, { force: Boolean(force) });
+        const attRes = await fetch(`${BASE_URL}/attendance/section/${sectionId}${filterParams}`, { force: Boolean(force) });
         if (attRes.ok) attRows = await attRes.json();
       } catch (attErr) {
         console.warn("[AttendanceSheet] Could not load attendance records from network:", attErr);
@@ -322,9 +411,13 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
         });
       }
 
-      // 5. Merge any pending offline attendance records
+      // 5. Merge any pending offline attendance records scoped to adviser or subject teacher
       try {
-        const pendingOffline = await getPendingOfflineAttendance(sectionId);
+        const pendingOffline = await getPendingOfflineAttendance(sectionId, null, undefined, {
+          attendance_scope: isSubjectAttendance ? 'SUBJECT' : 'SECTION',
+          teacher_assignment_id: isSubjectAttendance ? targetTeacherAssignmentId : null,
+          adviser_assignment_id: !isSubjectAttendance ? assignment?.adviser_assignment_id : null,
+        });
         if (Array.isArray(pendingOffline) && pendingOffline.length > 0) {
           console.log(`[AttendanceSheet] Restoring ${pendingOffline.length} pending offline attendance records`);
           pendingOffline.forEach(p => {
@@ -416,14 +509,13 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
       return null;
     }
     try {
+      const payloadCtx = getSavePayloadContext();
       const sheetRes = await apiFetch(`${BASE_URL}/attendance-sheets/find-or-create`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Auralis-User-Id": String(currentUser?.user_id || currentUser?.id) },
         body: JSON.stringify({
-          section_id: targetSectionId,
-          adviser_assignment_id: adviserAssignment?.adviser_assignment_id || undefined,
+          ...payloadCtx,
           user_id: currentUser?.user_id || currentUser?.id,
-          attendance_scope: "SECTION",
           attendance_date: dateStr,
         }),
       });
@@ -492,12 +584,13 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
       remarks: remarksMap[studentSectionId] || (studentId ? remarksMap[studentId] : null) || null,
     };
 
+    const payloadCtx = getSavePayloadContext();
+
     if (typeof navigator !== "undefined" && !navigator.onLine) {
       await saveOfflineAttendance({
-        section_id: targetSectionId,
+        ...payloadCtx,
         attendance_date: dateStr,
         attendance_sheet_id: sheetsByDate[dateStr] || null,
-        adviser_assignment_id: adviserAssignment?.adviser_assignment_id || null,
         records: [recordPayload],
       });
       setSyncStatus("offline");
@@ -512,11 +605,10 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
 
       const saveRes = await apiFetch(`${BASE_URL}/attendance/bulk-save`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Auralis-User-Id": String(currentUser?.user_id || currentUser?.id) },
         body: JSON.stringify({
-          section_id: targetSectionId,
+          ...payloadCtx,
           attendance_date: dateStr,
-          adviser_assignment_id: adviserAssignment?.adviser_assignment_id || null,
           records: [recordPayload],
         }),
       });
@@ -530,10 +622,9 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
       if (isNetworkError(err) || (typeof navigator !== "undefined" && !navigator.onLine)) {
         console.warn("[AttendanceSheet] Network error while saving, stored offline:", err.message);
         await saveOfflineAttendance({
-          section_id: targetSectionId,
+          ...payloadCtx,
           attendance_date: dateStr,
           attendance_sheet_id: sheetsByDate[dateStr] || null,
-          adviser_assignment_id: adviserAssignment?.adviser_assignment_id || null,
           records: [recordPayload],
         });
         setSyncStatus("offline");
@@ -586,12 +677,13 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
 
       setAttendanceMap(prev => ({ ...prev, ...newMapUpdates }));
 
+      const payloadCtx = getSavePayloadContext();
+
       if (typeof navigator !== "undefined" && !navigator.onLine) {
         await saveOfflineAttendance({
-          section_id: targetSectionId,
+          ...payloadCtx,
           attendance_date: TODAY,
           attendance_sheet_id: sheetId,
-          adviser_assignment_id: adviserAssignment?.adviser_assignment_id || null,
           records,
         });
         setSyncStatus("offline");
@@ -601,11 +693,10 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
 
       const saveRes = await apiFetch(`${BASE_URL}/attendance/bulk-save`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Auralis-User-Id": String(currentUser?.user_id || currentUser?.id) },
         body: JSON.stringify({
-          section_id: targetSectionId,
+          ...payloadCtx,
           attendance_date: TODAY,
-          adviser_assignment_id: adviserAssignment?.adviser_assignment_id || null,
           records,
         }),
       });
@@ -618,12 +709,12 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
       setSyncStatus("saved");
       triggerToast("Marked all learners as Present for today!", "success");
     } catch (err) {
+      const payloadCtx = getSavePayloadContext();
       if (isNetworkError(err) || (typeof navigator !== "undefined" && !navigator.onLine)) {
         await saveOfflineAttendance({
-          section_id: targetSectionId,
+          ...payloadCtx,
           attendance_date: TODAY,
           attendance_sheet_id: sheetsByDate[TODAY] || null,
-          adviser_assignment_id: adviserAssignment?.adviser_assignment_id || null,
           records: students.map(stu => {
             const sSecId = stu.student_section_id || stu.student_id || stu.id;
             return {
@@ -669,12 +760,13 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
         };
       });
 
+      const payloadCtx = getSavePayloadContext();
+
       if (typeof navigator !== "undefined" && !navigator.onLine) {
         await saveOfflineAttendance({
-          section_id: targetSectionId,
+          ...payloadCtx,
           attendance_date: TODAY,
           attendance_sheet_id: sheetId,
-          adviser_assignment_id: adviserAssignment?.adviser_assignment_id || null,
           records,
         });
         setSyncStatus("offline");
@@ -684,11 +776,10 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
 
       const saveRes = await apiFetch(`${BASE_URL}/attendance/bulk-save`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Auralis-User-Id": String(currentUser?.user_id || currentUser?.id) },
         body: JSON.stringify({
-          section_id: targetSectionId,
+          ...payloadCtx,
           attendance_date: TODAY,
-          adviser_assignment_id: adviserAssignment?.adviser_assignment_id || null,
           records,
         }),
       });
@@ -701,12 +792,12 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
       setSyncStatus("saved");
       triggerToast("Attendance saved successfully!", "success");
     } catch (err) {
+      const payloadCtx = getSavePayloadContext();
       if (isNetworkError(err) || (typeof navigator !== "undefined" && !navigator.onLine)) {
         await saveOfflineAttendance({
-          section_id: targetSectionId,
+          ...payloadCtx,
           attendance_date: TODAY,
           attendance_sheet_id: sheetsByDate[TODAY] || null,
-          adviser_assignment_id: adviserAssignment?.adviser_assignment_id || null,
           records: students.map(stu => {
             const sSecId = stu.student_section_id || stu.student_id || stu.id;
             const currentStatus = attendanceMap[`${sSecId}-${TODAY}`] || attendanceMap[`${stu.student_section_id}-${TODAY}`] || attendanceMap[`${stu.student_id}-${TODAY}`] || null;
@@ -756,12 +847,13 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
       remarks: cleanVal,
     };
 
+    const payloadCtx = getSavePayloadContext();
+
     if (typeof navigator !== "undefined" && !navigator.onLine) {
       await saveOfflineAttendance({
-        section_id: targetSectionId,
+        ...payloadCtx,
         attendance_date: targetDate,
         attendance_sheet_id: sheetsByDate[targetDate] || null,
-        adviser_assignment_id: adviserAssignment?.adviser_assignment_id || null,
         records: [recordPayload],
       });
       setSyncStatus("offline");
@@ -774,11 +866,10 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
 
       const saveRes = await apiFetch(`${BASE_URL}/attendance/bulk-save`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Auralis-User-Id": String(currentUser?.user_id || currentUser?.id) },
         body: JSON.stringify({
-          section_id: targetSectionId,
+          ...payloadCtx,
           attendance_date: targetDate,
-          adviser_assignment_id: adviserAssignment?.adviser_assignment_id || null,
           records: [recordPayload],
         }),
       });
@@ -791,10 +882,9 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
     } catch (err) {
       if (isNetworkError(err) || (typeof navigator !== "undefined" && !navigator.onLine)) {
         await saveOfflineAttendance({
-          section_id: targetSectionId,
+          ...payloadCtx,
           attendance_date: targetDate,
           attendance_sheet_id: sheetsByDate[targetDate] || null,
-          adviser_assignment_id: adviserAssignment?.adviser_assignment_id || null,
           records: [recordPayload],
         });
         setSyncStatus("offline");
@@ -1008,13 +1098,18 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
                 )}
               </div>
             </div>
-            <span className="att-subtitle">School Form 2 (SF2) Daily Attendance & Monthly Record</span>
+            <span className="att-subtitle">
+              {isSubjectAttendance
+                ? `Subject Attendance — ${teacherAssignment?.subject_name || activeClass?.subject || activeClass?.subject_name || "Subject"} | ${teacherAssignment?.section_name || adviserAssignment?.section_name || activeClass?.section_name || activeClass?.sectionName || "Section"}`
+                : `School Form 2 (SF2) Daily Attendance & Monthly Record — ${adviserAssignment?.section_name || activeClass?.section_name || activeClass?.sectionName || "Section"}`}
+            </span>
           </div>
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
           <AttendanceDayControl date={selectedDate} reason={selectedNoClassReason}
-            disabled={!isEditableDate || activeColIndex < 0 || !adviserAssignment?.adviser_assignment_id}
+            disabled={!isEditableDate || activeColIndex < 0 || isSubjectAttendance || !adviserAssignment?.adviser_assignment_id}
+            title={isSubjectAttendance ? "No-class day markers (holidays/suspensions) can only be set by the class adviser." : undefined}
             saving={saving} onSave={handleDayMarkerSave} />
           {/* Quick Mark All Present button */}
           {isEditableDate && students.length > 0 && (

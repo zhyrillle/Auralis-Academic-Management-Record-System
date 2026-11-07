@@ -12,100 +12,116 @@ class AttendanceSheet {
     return rows[0];
   }
 
-  // Find or create an ATTENDANCE_SHEET for a given date + adviser assignment or section
-  static async findOrCreate({ section_id, adviser_assignment_id, teacher_assignment_id, attendance_scope = 'SECTION', attendance_date, user_id }) {
+  // Find or create an ATTENDANCE_SHEET for a given date + adviser assignment or teacher assignment
+  static async findOrCreate({ section_id, adviser_assignment_id, teacher_assignment_id, attendance_scope, attendance_date, user_id }) {
     const cleanDate = String(attendance_date).split('T')[0];
+    const isSubject = attendance_scope === 'SUBJECT' || Boolean(teacher_assignment_id);
 
-    // 1. If adviser_assignment_id is explicitly provided, check if sheet exists
-    if (adviser_assignment_id) {
-      const [existing] = await db.execute(
-        `SELECT attendance_sheet_id FROM ATTENDANCE_SHEET
-         WHERE adviser_assignment_id = ? AND attendance_date = ? AND attendance_scope = ?`,
-        [adviser_assignment_id, cleanDate, attendance_scope]
-      );
-      if (existing.length > 0) {
-        return { attendance_sheet_id: existing[0].attendance_sheet_id, created: false };
-      }
-      const [result] = await db.execute(
-        `INSERT INTO ATTENDANCE_SHEET (adviser_assignment_id, attendance_scope, attendance_date)
-         VALUES (?, ?, ?)`,
-        [adviser_assignment_id, attendance_scope, cleanDate]
-      );
-      return { attendance_sheet_id: result.insertId, created: true };
-    }
+    // 1. Subject Teacher Attendance (attendance_scope = 'SUBJECT')
+    if (isSubject) {
+      let targetTeacherAssignmentId = teacher_assignment_id ? Number(teacher_assignment_id) : null;
 
-    // 2. If teacher_assignment_id is provided, check if sheet exists
-    if (teacher_assignment_id) {
-      const [existing] = await db.execute(
-        `SELECT attendance_sheet_id FROM ATTENDANCE_SHEET
-         WHERE teacher_assignment_id = ? AND attendance_date = ? AND attendance_scope = ?`,
-        [teacher_assignment_id, cleanDate, attendance_scope]
-      );
-      if (existing.length > 0) {
-        return { attendance_sheet_id: existing[0].attendance_sheet_id, created: false };
-      }
-      const [result] = await db.execute(
-        `INSERT INTO ATTENDANCE_SHEET (teacher_assignment_id, attendance_scope, attendance_date)
-         VALUES (?, ?, ?)`,
-        [teacher_assignment_id, attendance_scope, cleanDate]
-      );
-      return { attendance_sheet_id: result.insertId, created: true };
-    }
-
-    // 3. If section_id is provided (or if adviser_assignment_id was null):
-    if (section_id) {
-      // First check if an attendance sheet already exists for this section on this date
-      const [existingBySec] = await db.execute(
-        `SELECT ash.attendance_sheet_id
-         FROM ATTENDANCE_SHEET ash
-         LEFT JOIN SECTION_ADVISER_ASSIGNMENT saa ON saa.adviser_assignment_id = ash.adviser_assignment_id
-         LEFT JOIN TEACHER_ASSIGNMENT ta ON ta.teacher_assignment_id = ash.teacher_assignment_id
-         LEFT JOIN SUBJECT_OFFERING so ON so.subject_offering_id = ta.subject_offering_id
-         WHERE (saa.section_id = ? OR so.section_id = ?) AND ash.attendance_date = ? AND ash.attendance_scope = ?
-         LIMIT 1`,
-        [section_id, section_id, cleanDate, attendance_scope]
-      );
-      if (existingBySec.length > 0) {
-        return { attendance_sheet_id: existingBySec[0].attendance_sheet_id, created: false };
-      }
-
-      // Find or create adviser_assignment for this section
-      let targetAdviserAssignmentId = null;
-      const [saaRows] = await db.execute(
-        `SELECT adviser_assignment_id FROM SECTION_ADVISER_ASSIGNMENT WHERE section_id = ? ORDER BY adviser_assignment_id DESC LIMIT 1`,
-        [section_id]
-      );
-      if (saaRows.length > 0) {
-        targetAdviserAssignmentId = saaRows[0].adviser_assignment_id;
-      } else {
-        // Find latest school year
-        const [syRows] = await db.execute(`SELECT school_year_id FROM SCHOOL_YEAR ORDER BY school_year_id DESC LIMIT 1`);
-        const schoolYearId = syRows[0]?.school_year_id || 1;
-
-        // Find assigned user or section owner or passed user_id or admin
-        let assignUserId = user_id;
-        if (!assignUserId) {
-          const [secRows] = await db.execute(`SELECT user_id FROM SECTION WHERE section_id = ?`, [section_id]);
-          assignUserId = secRows[0]?.user_id;
-        }
-        if (!assignUserId) {
-          const [uRows] = await db.execute(`SELECT user_id FROM USER WHERE role IN ('3', '2', 'adviser', 'subject teacher') LIMIT 1`);
-          assignUserId = uRows[0]?.user_id || 1;
-        }
-
-        const [insSaa] = await db.execute(
-          `INSERT INTO SECTION_ADVISER_ASSIGNMENT (section_id, school_year_id, user_id, assigned_from, assigned_until)
-           VALUES (?, ?, ?, CURDATE(), DATE_ADD(CURDATE(), INTERVAL 1 YEAR))`,
-          [section_id, schoolYearId, assignUserId]
+      if (!targetTeacherAssignmentId && section_id && user_id) {
+        const [taRows] = await db.execute(
+          `SELECT ta.teacher_assignment_id
+           FROM TEACHER_ASSIGNMENT ta
+           JOIN SUBJECT_OFFERING so ON so.subject_offering_id = ta.subject_offering_id
+           WHERE so.section_id = ? AND ta.user_id = ?
+           ORDER BY ta.teacher_assignment_id DESC LIMIT 1`,
+          [section_id, user_id]
         );
-        targetAdviserAssignmentId = insSaa.insertId;
+        if (taRows.length > 0) {
+          targetTeacherAssignmentId = taRows[0].teacher_assignment_id;
+        }
       }
 
-      // Create attendance sheet
+      if (targetTeacherAssignmentId) {
+        const [existing] = await db.execute(
+          `SELECT attendance_sheet_id FROM ATTENDANCE_SHEET
+           WHERE teacher_assignment_id = ? AND attendance_date = ? AND attendance_scope = 'SUBJECT'`,
+          [targetTeacherAssignmentId, cleanDate]
+        );
+        if (existing.length > 0) {
+          return { attendance_sheet_id: existing[0].attendance_sheet_id, created: false };
+        }
+        const [result] = await db.execute(
+          `INSERT INTO ATTENDANCE_SHEET (teacher_assignment_id, attendance_scope, attendance_date)
+           VALUES (?, 'SUBJECT', ?)`,
+          [targetTeacherAssignmentId, cleanDate]
+        );
+        return { attendance_sheet_id: result.insertId, created: true };
+      }
+
+      throw new Error('A valid teacher_assignment_id is required to record subject attendance.');
+    }
+
+    // 2. Adviser Section Attendance (attendance_scope = 'SECTION')
+    let targetAdviserAssignmentId = adviser_assignment_id ? Number(adviser_assignment_id) : null;
+
+    if (!targetAdviserAssignmentId && section_id) {
+      if (user_id) {
+        const [userSaa] = await db.execute(
+          `SELECT adviser_assignment_id FROM SECTION_ADVISER_ASSIGNMENT WHERE section_id = ? AND user_id = ? ORDER BY adviser_assignment_id DESC LIMIT 1`,
+          [section_id, user_id]
+        );
+        if (userSaa.length > 0) {
+          targetAdviserAssignmentId = userSaa[0].adviser_assignment_id;
+        }
+      }
+      if (!targetAdviserAssignmentId) {
+        const [saaRows] = await db.execute(
+          `SELECT adviser_assignment_id FROM SECTION_ADVISER_ASSIGNMENT WHERE section_id = ? ORDER BY adviser_assignment_id DESC LIMIT 1`,
+          [section_id]
+        );
+        if (saaRows.length > 0) {
+          targetAdviserAssignmentId = saaRows[0].adviser_assignment_id;
+        }
+      }
+    }
+
+    if (targetAdviserAssignmentId) {
+      const [existing] = await db.execute(
+        `SELECT attendance_sheet_id FROM ATTENDANCE_SHEET
+         WHERE adviser_assignment_id = ? AND attendance_date = ? AND attendance_scope = 'SECTION'`,
+        [targetAdviserAssignmentId, cleanDate]
+      );
+      if (existing.length > 0) {
+        return { attendance_sheet_id: existing[0].attendance_sheet_id, created: false };
+      }
       const [result] = await db.execute(
         `INSERT INTO ATTENDANCE_SHEET (adviser_assignment_id, attendance_scope, attendance_date)
-         VALUES (?, ?, ?)`,
-        [targetAdviserAssignmentId, attendance_scope, cleanDate]
+         VALUES (?, 'SECTION', ?)`,
+        [targetAdviserAssignmentId, cleanDate]
+      );
+      return { attendance_sheet_id: result.insertId, created: true };
+    }
+
+    // 3. Fallback: create adviser assignment if section exists but no assignment
+    if (section_id) {
+      const [syRows] = await db.execute(`SELECT school_year_id FROM SCHOOL_YEAR ORDER BY school_year_id DESC LIMIT 1`);
+      const schoolYearId = syRows[0]?.school_year_id || 1;
+
+      let assignUserId = user_id;
+      if (!assignUserId) {
+        const [secRows] = await db.execute(`SELECT user_id FROM SECTION WHERE section_id = ?`, [section_id]);
+        assignUserId = secRows[0]?.user_id;
+      }
+      if (!assignUserId) {
+        const [uRows] = await db.execute(`SELECT user_id FROM USER WHERE role IN ('3', '2', 'adviser', 'subject teacher') LIMIT 1`);
+        assignUserId = uRows[0]?.user_id || 1;
+      }
+
+      const [insSaa] = await db.execute(
+        `INSERT INTO SECTION_ADVISER_ASSIGNMENT (section_id, school_year_id, user_id, assigned_from, assigned_until)
+         VALUES (?, ?, ?, CURDATE(), DATE_ADD(CURDATE(), INTERVAL 1 YEAR))`,
+        [section_id, schoolYearId, assignUserId]
+      );
+      targetAdviserAssignmentId = insSaa.insertId;
+
+      const [result] = await db.execute(
+        `INSERT INTO ATTENDANCE_SHEET (adviser_assignment_id, attendance_scope, attendance_date)
+         VALUES (?, 'SECTION', ?)`,
+        [targetAdviserAssignmentId, cleanDate]
       );
       return { attendance_sheet_id: result.insertId, created: true };
     }
@@ -124,19 +140,67 @@ class AttendanceSheet {
     return rows;
   }
 
-  // Get all attendance sheets for a section
-  static async findBySectionId(sectionId, schoolYearId = null) {
+  // Get all attendance sheet dates for a given teacher assignment
+  static async findByTeacherAssignmentId(teacherAssignmentId) {
     const [rows] = await db.execute(
-      `SELECT DISTINCT ash.*
-       FROM ATTENDANCE_SHEET ash
-       LEFT JOIN SECTION_ADVISER_ASSIGNMENT saa ON saa.adviser_assignment_id = ash.adviser_assignment_id
-       LEFT JOIN TEACHER_ASSIGNMENT ta ON ta.teacher_assignment_id = ash.teacher_assignment_id
-       LEFT JOIN SUBJECT_OFFERING so ON so.subject_offering_id = ta.subject_offering_id
-       WHERE (saa.section_id = ? OR so.section_id = ?) AND ash.attendance_scope = 'SECTION'
-         ${schoolYearId ? 'AND COALESCE(saa.school_year_id, so.school_year_id) = ?' : ''}
-       ORDER BY ash.attendance_date ASC`,
-      schoolYearId ? [sectionId, sectionId, schoolYearId] : [sectionId, sectionId]
+      `SELECT * FROM ATTENDANCE_SHEET
+       WHERE teacher_assignment_id = ? AND attendance_scope = 'SUBJECT'
+       ORDER BY attendance_date ASC`,
+      [teacherAssignmentId]
     );
+    return rows;
+  }
+
+  // Get all attendance sheets for a section, scoped to adviser or subject teacher
+  static async findBySectionId(sectionId, schoolYearId = null, options = {}) {
+    const { attendance_scope, adviser_assignment_id, teacher_assignment_id, user_id } = options;
+    const isSubject = attendance_scope === 'SUBJECT' || Boolean(teacher_assignment_id);
+
+    if (isSubject) {
+      const params = [sectionId];
+      let query = `
+        SELECT DISTINCT ash.*
+        FROM ATTENDANCE_SHEET ash
+        JOIN TEACHER_ASSIGNMENT ta ON ta.teacher_assignment_id = ash.teacher_assignment_id
+        JOIN SUBJECT_OFFERING so ON so.subject_offering_id = ta.subject_offering_id
+        WHERE so.section_id = ? AND ash.attendance_scope = 'SUBJECT'
+      `;
+      if (teacher_assignment_id) {
+        query += ` AND ash.teacher_assignment_id = ?`;
+        params.push(teacher_assignment_id);
+      } else if (user_id) {
+        query += ` AND ta.user_id = ?`;
+        params.push(user_id);
+      }
+      if (schoolYearId) {
+        query += ` AND so.school_year_id = ?`;
+        params.push(schoolYearId);
+      }
+      query += ` ORDER BY ash.attendance_date ASC`;
+      const [rows] = await db.execute(query, params);
+      return rows;
+    }
+
+    const params = [sectionId];
+    let query = `
+      SELECT DISTINCT ash.*
+      FROM ATTENDANCE_SHEET ash
+      JOIN SECTION_ADVISER_ASSIGNMENT saa ON saa.adviser_assignment_id = ash.adviser_assignment_id
+      WHERE saa.section_id = ? AND ash.attendance_scope = 'SECTION'
+    `;
+    if (adviser_assignment_id) {
+      query += ` AND ash.adviser_assignment_id = ?`;
+      params.push(adviser_assignment_id);
+    } else if (user_id) {
+      query += ` AND saa.user_id = ?`;
+      params.push(user_id);
+    }
+    if (schoolYearId) {
+      query += ` AND saa.school_year_id = ?`;
+      params.push(schoolYearId);
+    }
+    query += ` ORDER BY ash.attendance_date ASC`;
+    const [rows] = await db.execute(query, params);
     return rows;
   }
 

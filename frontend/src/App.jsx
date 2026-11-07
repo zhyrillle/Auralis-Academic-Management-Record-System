@@ -232,6 +232,7 @@ export default function App() {
             path="/teacher/sections/details"
             element={<SectionDetails userRole="teacher" />}
           />
+          <Route path="/teacher/attendance" element={<AttendanceSheet />} />
           <Route path="/teacher/phil-iri" element={<PhilIri />} />
           <Route
             path="/teacher/class-record/:sectionId/:subjectId"

@@ -27,13 +27,21 @@ router.get('/sheet/:sheetId', async (req, res) => {
   }
 });
 
-// GET all attendance records for a section (all sheets + all students)
+// GET all attendance records for a section, scoped to adviser or subject teacher
 router.get('/section/:sectionId', async (req, res) => {
   try {
     await cloudSync.syncAttendanceFromCloud();
     const schoolYearId = req.query.schoolYearId;
     if (schoolYearId !== undefined && !/^[1-9]\d*$/.test(String(schoolYearId))) return res.status(400).json({ error: 'Invalid school year.' });
-    const records = await Attendance.findBySectionId(req.params.sectionId, schoolYearId);
+
+    const options = {
+      attendance_scope: req.query.attendance_scope || req.query.scope,
+      adviser_assignment_id: req.query.adviser_assignment_id || req.query.adviserAssignmentId,
+      teacher_assignment_id: req.query.teacher_assignment_id || req.query.teacherAssignmentId,
+      user_id: req.query.user_id || req.query.userId || req.headers['x-auralis-user-id'] || null,
+    };
+
+    const records = await Attendance.findBySectionId(req.params.sectionId, schoolYearId, options);
     res.json(records);
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: err.message });
@@ -59,17 +67,21 @@ router.post('/save-remarks', async (req, res) => {
 // POST bulk-save multiple attendance records at once
 router.post('/bulk-save', async (req, res) => {
   try {
-    const { records, section_id, adviser_assignment_id, attendance_date } = req.body;
+    const { records, section_id, adviser_assignment_id, teacher_assignment_id, attendance_scope, attendance_date } = req.body;
     if (!Array.isArray(records) || records.length === 0) {
       return res.status(400).json({ error: 'records array is required' });
     }
 
+    const resolvedScope = attendance_scope || (teacher_assignment_id ? 'SUBJECT' : 'SECTION');
+
     // Auto-resolve attendance_sheet_id if records were saved offline before sheet creation
     let targetSheetId = records[0]?.attendance_sheet_id;
-    if ((!targetSheetId || isNaN(Number(targetSheetId))) && (section_id || adviser_assignment_id) && attendance_date) {
+    if ((!targetSheetId || isNaN(Number(targetSheetId))) && (section_id || adviser_assignment_id || teacher_assignment_id) && attendance_date) {
       const sheetRes = await AttendanceSheet.findOrCreate({
         section_id: section_id ? Number(section_id) : undefined,
         adviser_assignment_id: adviser_assignment_id ? Number(adviser_assignment_id) : undefined,
+        teacher_assignment_id: teacher_assignment_id ? Number(teacher_assignment_id) : undefined,
+        attendance_scope: resolvedScope,
         attendance_date,
         user_id: req.headers['x-auralis-user-id'] || null,
       });
@@ -92,21 +104,34 @@ router.post('/bulk-save', async (req, res) => {
       const sheetId = records[0]?.attendance_sheet_id || targetSheetId;
       if (sheetId) {
         const [sheetRows] = await db.execute(
-          `SELECT ash.attendance_date, sec.section_name, saa.user_id, sy.starts_on, sy.ends_on
+          `SELECT ash.attendance_date, ash.attendance_scope, sec.section_name, saa.user_id AS adviser_user_id,
+                  ta.user_id AS teacher_user_id, sub.subject_name,
+                  COALESCE(sy.starts_on, sy2.starts_on) AS starts_on,
+                  COALESCE(sy.ends_on, sy2.ends_on) AS ends_on
            FROM ATTENDANCE_SHEET ash
            LEFT JOIN SECTION_ADVISER_ASSIGNMENT saa ON ash.adviser_assignment_id = saa.adviser_assignment_id
-           LEFT JOIN SECTION sec ON saa.section_id = sec.section_id
+           LEFT JOIN TEACHER_ASSIGNMENT ta ON ash.teacher_assignment_id = ta.teacher_assignment_id
+           LEFT JOIN SUBJECT_OFFERING so ON ta.subject_offering_id = so.subject_offering_id
+           LEFT JOIN SUBJECT sub ON so.subject_id = sub.subject_id
+           LEFT JOIN SECTION sec ON (sec.section_id = saa.section_id OR sec.section_id = so.section_id)
            LEFT JOIN SCHOOL_YEAR sy ON saa.school_year_id = sy.school_year_id
+           LEFT JOIN SCHOOL_YEAR sy2 ON so.school_year_id = sy2.school_year_id
            WHERE ash.attendance_sheet_id = ?`,
           [sheetId]
         );
+        const isSubject = sheetRows[0]?.attendance_scope === 'SUBJECT';
         const secName = sheetRows[0]?.section_name || 'Section';
+        const subName = sheetRows[0]?.subject_name || 'Subject';
         const syLabel = sheetRows[0]?.starts_on && sheetRows[0]?.ends_on ? `${sheetRows[0].starts_on}–${sheetRows[0].ends_on}` : null;
-        const actorUserId = req.headers['x-auralis-user-id'] || sheetRows[0]?.user_id || null;
+        const actorUserId = req.headers['x-auralis-user-id'] || (isSubject ? sheetRows[0]?.teacher_user_id : sheetRows[0]?.adviser_user_id) || null;
+        const actingAs = isSubject ? `Teacher — ${secName} (${subName})` : `Adviser — ${secName}`;
+        const summary = isSubject
+          ? `Recorded daily attendance for ${subName} in Section ${secName}.`
+          : `Recorded daily attendance for Section ${secName}.`;
 
         await AuditEvent.create({
           user_id: actorUserId ? Number(actorUserId) : null,
-          actor_context: { source: 'user', acting_as: `Adviser — ${secName}`, role: 'adviser' },
+          actor_context: { source: 'user', acting_as: actingAs, role: isSubject ? 'subject teacher' : 'adviser' },
           event_type: 'ATTENDANCE_RECORDED',
           module_name: 'ATTENDANCE',
           entity_type: 'ATTENDANCE_SHEET',
@@ -114,8 +139,9 @@ router.post('/bulk-save', async (req, res) => {
           metadata: {
             target: secName,
             section: secName,
+            subject: isSubject ? subName : null,
             school_year: syLabel,
-            summary: `Recorded daily attendance for Section ${secName}.`,
+            summary,
             impact: 'Low',
           },
         });

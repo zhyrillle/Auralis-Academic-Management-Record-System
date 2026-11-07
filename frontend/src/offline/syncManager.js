@@ -288,10 +288,11 @@ export async function clearOfflineScores(subject_offering_id, term, { scope = ge
     (term == null || record.term === term)).delete();
 }
 
-export async function saveOfflineAttendance({ section_id, attendance_date, attendance_sheet_id = null, adviser_assignment_id = null, records = [], apiUrl = null }, scope = getSessionScope()) {
+export async function saveOfflineAttendance({ section_id, attendance_date, attendance_sheet_id = null, adviser_assignment_id = null, teacher_assignment_id = null, attendance_scope = 'SECTION', records = [], apiUrl = null }, scope = getSessionScope()) {
   assertCurrentSession(scope);
   const secId = Number(section_id);
   const cleanDate = String(attendance_date).split('T')[0];
+  const resolvedScope = attendance_scope || (teacher_assignment_id ? 'SUBJECT' : 'SECTION');
   await db.transaction('rw', db.offlineAttendance, db.outbox, async () => {
     assertCurrentSession(scope);
     const targetUrl = apiUrl || `${API_BASE_URL}/attendance/bulk-save`;
@@ -302,21 +303,27 @@ export async function saveOfflineAttendance({ section_id, attendance_date, atten
         section_id: secId,
         attendance_date: cleanDate,
         adviser_assignment_id: adviser_assignment_id ? Number(adviser_assignment_id) : undefined,
+        teacher_assignment_id: teacher_assignment_id ? Number(teacher_assignment_id) : undefined,
+        attendance_scope: resolvedScope,
         records,
       },
-      label: `Batch Attendance (Section ${secId}, ${cleanDate}, ${records.length} records)`,
+      label: `Batch Attendance (Section ${secId}, ${cleanDate}, ${resolvedScope}, ${records.length} records)`,
     }, scope));
 
     for (const rec of records) {
       const studentSecId = rec.student_section_id || rec.student_id;
       const existing = await db.offlineAttendance.where('[section_id+attendance_date]').equals([secId, cleanDate])
         .filter(item => item.ownerId === scope.ownerId && item.ownerIdentity === scope.identity &&
-          String(item.student_section_id) === String(studentSecId)).first();
+          String(item.student_section_id) === String(studentSecId) &&
+          (item.attendance_scope === resolvedScope || (!item.attendance_scope && resolvedScope === 'SECTION'))).first();
 
       const record = {
         section_id: secId,
         attendance_date: cleanDate,
         attendance_sheet_id: rec.attendance_sheet_id || attendance_sheet_id || null,
+        attendance_scope: resolvedScope,
+        adviser_assignment_id: adviser_assignment_id ? Number(adviser_assignment_id) : null,
+        teacher_assignment_id: teacher_assignment_id ? Number(teacher_assignment_id) : null,
         student_section_id: studentSecId,
         student_id: rec.student_id || null,
         status: rec.status || 'BLANK',
@@ -335,7 +342,7 @@ export async function saveOfflineAttendance({ section_id, attendance_date, atten
   return true;
 }
 
-export async function getPendingOfflineAttendance(section_id, attendance_date = null, scope = getSessionScope(), { strict = false } = {}) {
+export async function getPendingOfflineAttendance(section_id, attendance_date = null, scope = getSessionScope(), { strict = false, teacher_assignment_id = null, adviser_assignment_id = null, attendance_scope = null } = {}) {
   if (!isCurrentSession(scope)) return [];
   try {
     const secId = Number(section_id);
@@ -347,7 +354,13 @@ export async function getPendingOfflineAttendance(section_id, attendance_date = 
       collection = db.offlineAttendance.where('section_id').equals(secId);
     }
     const records = await collection
-      .filter(record => record.ownerId === scope.ownerId && record.ownerIdentity === scope.identity)
+      .filter(record => {
+        if (record.ownerId !== scope.ownerId || record.ownerIdentity !== scope.identity) return false;
+        if (attendance_scope && record.attendance_scope && record.attendance_scope !== attendance_scope) return false;
+        if (teacher_assignment_id && record.teacher_assignment_id && Number(record.teacher_assignment_id) !== Number(teacher_assignment_id)) return false;
+        if (adviser_assignment_id && record.adviser_assignment_id && Number(record.adviser_assignment_id) !== Number(adviser_assignment_id)) return false;
+        return true;
+      })
       .toArray();
     return isCurrentSession(scope) ? records : [];
   } catch (error) {

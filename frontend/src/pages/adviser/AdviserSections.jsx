@@ -433,7 +433,7 @@ export default function AdviserSections({ userRole: propUserRole }) {
         />
       ) : currentView === "attendance-sheet" ? (
         <AttendanceSheet
-          key={`att-${activeSelectedClass?.section_id || activeSelectedClass?.id || "default"}`}
+          key={`att-${activeSelectedClass?.teacher_assignment_id || activeSelectedClass?.adviser_assignment_id || activeSelectedClass?.assignmentId || activeSelectedClass?.section_id || activeSelectedClass?.id || "default"}`}
           activeClass={activeSelectedClass}
           onBack={() => setCurrentView("class-record")}
         />
