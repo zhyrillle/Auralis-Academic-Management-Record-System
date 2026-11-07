@@ -1,3 +1,4 @@
+import PageSkeleton, { SkeletonCards, SkeletonContent, SkeletonValue } from '../../components/common/PageSkeleton.jsx';
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { AlertCircle, ArrowDownNarrowWide, Eye, RefreshCw, Users } from "lucide-react";
@@ -81,6 +82,7 @@ export default function SectionDetails({
 
   const [data, setData] = useState(null);
   const [updating, setUpdating] = useState(false);
+  const [pendingTerm, setPendingTerm] = useState(null);
   const [error, setError] = useState("");
   const [selectedTerm, setSelectedTerm] = useState("T1");
   const [searchQuery, setSearchQuery] = useState("");
@@ -112,8 +114,8 @@ export default function SectionDetails({
     || activeSection?.id;
 
   const isEnglishTeachingClass = !isSectionAdviser && data?.capabilities?.atRiskApplicable === true;
-  const showEnglishRisk = isEnglishTeachingClass && selectedTerm !== "T3";
-  const termLabel = data?.context?.selectedTerm?.label || `Term ${selectedTerm.slice(1)}`;
+  const showEnglishRisk = isEnglishTeachingClass && (pendingTerm || selectedTerm) !== "T3";
+  const termLabel = pendingTerm ? `Term ${pendingTerm.slice(1)}` : data?.context?.selectedTerm?.label || `Term ${selectedTerm.slice(1)}`;
   const sortOptions = [
     { label: "Student Name", value: "name" },
     { label: `${termLabel} Grade`, value: "termGrade" },
@@ -137,6 +139,7 @@ export default function SectionDetails({
     setError("");
     setInitialLoading(!hasRetainedContent);
     setUpdating(hasRetainedContent);
+    setPendingTerm(hasRetainedContent && term !== dataRef.current?.context?.selectedTerm?.code ? term : null);
 
     try {
       const nextData = await getSectionDetails({
@@ -160,6 +163,7 @@ export default function SectionDetails({
       if (requestSequence === requestSequenceRef.current) {
         setInitialLoading(false);
         setUpdating(false);
+        setPendingTerm(null);
       }
     }
   }, [assignmentId, assignmentType, userId]);
@@ -302,7 +306,48 @@ export default function SectionDetails({
     );
   }
 
-  if (initialLoading && !data) return <SectionDetailsSkeleton onBack={backAction} isAdvisory={isSectionAdviser} />;
+  const pageControls = (<div className="toolbar-row">
+        <div className="section-details-search">
+          <SearchBar query={searchQuery} setQuery={setSearchQuery} placeholder="Search student..." />
+        </div>
+
+        <div className="toolbar-right">
+          {showEnglishRisk && <div className="section-filter-block">
+            <span className="section-filter-label">English risk{data?.riskContext?.targetTerm ? ` · Term ${data.riskContext.targetTerm.slice(1)}` : ""}</span>
+            <div className="filter-segmented-group" aria-label="English risk filter">
+              {RISK_BANDS.map(({ level, label }) => (
+                <button key={level} type="button" className={`filter-rect-btn ${selectedRisk === level ? "active" : ""}`}
+                  disabled={Boolean(pendingTerm) || !data?.capabilities?.atRiskAvailable} aria-pressed={selectedRisk === level}
+                  onClick={() => setSelectedRisk(current => current === level ? null : level)}>
+                  {label.replace(" Risk", "")}
+                </button>
+              ))}
+            </div>
+          </div>}
+
+          {isSectionAdviser && (
+            <div className="section-filter-block">
+              <span className="section-filter-label">Honor standing · {termLabel}</span>
+              <div className="filter-segmented-group" aria-label="Honor standing filter">
+                {HONOR_FILTERS.map(({ key, label }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    disabled={Boolean(pendingTerm)}
+                    onClick={() => handleHonorToggle(key)}
+                    className={`filter-rect-btn ${selectedHonor === key ? "active" : ""}`}
+                    aria-pressed={selectedHonor === key}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>);
+
+  if (initialLoading && !data) return <SectionDetailsSkeleton onBack={backAction} controls={pageControls} recordControls={<><SelectFilter value={sortBy} onChange={setSortBy} options={sortOptions} minWidth="150px" /><TermToggleGroup selectedTerm={selectedTerm} onSelectTerm={loadDetails} /></>} />;
 
   if (error && !data) {
     return (
@@ -325,7 +370,7 @@ export default function SectionDetails({
   }
 
   return (
-    <div className={`section-details-page ${updating ? "is-updating" : ""}`}>
+    <div className="section-details-page">
       <SectionDetailsHeader onBack={backAction} />
 
       <div className="section-details-context" aria-label="Selected class context">
@@ -339,11 +384,12 @@ export default function SectionDetails({
 
       {(isSectionAdviser || isEnglishTeachingClass) && <div className="section-details-status-note" role="status">
         {isSectionAdviser
-          ? <div><p>Honor standing uses complete, submitted or locked {data?.context?.selectedTerm?.label} grades with every learning area passed. It is a term standing, not a year-end award.</p></div>
+          ? <div><p>Honor standing uses complete, submitted or locked {termLabel} grades with every learning area passed. It is a term standing, not a year-end award.</p></div>
           : <div aria-hidden="true" />}
         {isEnglishTeachingClass && <PredictionInfoButton />}
       </div>}
 
+      <SkeletonContent loading={Boolean(pendingTerm)} skeleton={<SkeletonCards count={5} />}>
       <div className="kpi-summary-grid kpi-summary-grid--grades-only">
         {kpiCards.map((kpi) => (
           <div key={kpi.label} className="kpi-card">
@@ -354,45 +400,8 @@ export default function SectionDetails({
         ))}
       </div>
 
-      <div className="toolbar-row">
-        <div className="section-details-search">
-          <SearchBar query={searchQuery} setQuery={setSearchQuery} placeholder="Search student..." />
-        </div>
-
-        <div className="toolbar-right">
-          {showEnglishRisk && <div className="section-filter-block">
-            <span className="section-filter-label">English risk{data?.riskContext?.targetTerm ? ` · Term ${data.riskContext.targetTerm.slice(1)}` : ""}</span>
-            <div className="filter-segmented-group" aria-label="English risk filter">
-              {RISK_BANDS.map(({ level, label }) => (
-                <button key={level} type="button" className={`filter-rect-btn ${selectedRisk === level ? "active" : ""}`}
-                  disabled={!data?.capabilities?.atRiskAvailable} aria-pressed={selectedRisk === level}
-                  onClick={() => setSelectedRisk(current => current === level ? null : level)}>
-                  {label.replace(" Risk", "")}
-                </button>
-              ))}
-            </div>
-          </div>}
-
-          {isSectionAdviser && (
-            <div className="section-filter-block">
-              <span className="section-filter-label">Honor standing · {data?.context?.selectedTerm?.label}</span>
-              <div className="filter-segmented-group" aria-label="Honor standing filter">
-                {HONOR_FILTERS.map(({ key, label }) => (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => handleHonorToggle(key)}
-                    className={`filter-rect-btn ${selectedHonor === key ? "active" : ""}`}
-                    aria-pressed={selectedHonor === key}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
+      </SkeletonContent>
+      {pageControls}
 
       {error && (
         <div className="section-details-error-banner" role="alert">
@@ -402,7 +411,7 @@ export default function SectionDetails({
         </div>
       )}
 
-      {data?.warnings?.length > 0 && (
+      {!pendingTerm && data?.warnings?.length > 0 && (
         <details className="section-details-warning">
           <summary>{data.warnings.length} grade-data warning{data.warnings.length === 1 ? "" : "s"}</summary>
           <ul>{data.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>
@@ -412,10 +421,10 @@ export default function SectionDetails({
       <div className="table-container-card">
         <div className="table-sub-header">
           <div className="total-students-label">
-            Showing {filteredLearners.length} of {data?.summary?.learnerCount || 0} learners
+            {pendingTerm ? <SkeletonValue label="Loading learner summary" /> : <>Showing {filteredLearners.length} of {data?.summary?.learnerCount || 0} learners
             {data?.summary?.incompleteGradeCount > 0 && (
               <span className="incomplete-count"> · {data.summary.incompleteGradeCount} incomplete</span>
-            )}
+            )}</>}
           </div>
 
           <div className="sub-header-controls">
@@ -436,10 +445,11 @@ export default function SectionDetails({
               </button>
             </div>
 
-            <TermToggleGroup selectedTerm={selectedTerm} onSelectTerm={loadDetails} />
+            <TermToggleGroup selectedTerm={pendingTerm || selectedTerm} onSelectTerm={loadDetails} />
           </div>
         </div>
 
+        <SkeletonContent loading={Boolean(pendingTerm)} skeleton={<PageSkeleton label="Loading selected term records" columns={5} />} >
         {data?.summary?.learnerCount === 0 ? (
           <EmptyState
             className="section-details-table-empty"
@@ -503,12 +513,7 @@ export default function SectionDetails({
           </div>
         )}
 
-        {updating && (
-          <div className="section-details-busy-overlay" role="status" aria-live="polite">
-            <span className="section-details-spinner" />
-            <span className="sr-only">Updating Section Details</span>
-          </div>
-        )}
+        </SkeletonContent>
       </div>
     </div>
   );

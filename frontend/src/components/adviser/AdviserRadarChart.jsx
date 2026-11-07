@@ -1,3 +1,4 @@
+import { SkeletonBlock } from '../common/PageSkeleton.jsx';
 import React, { useState } from "react";
 import { ChevronDown } from "lucide-react";
 
@@ -68,9 +69,9 @@ export default function AdviserRadarChart({
   return (
     <div className="adviser-dashboard__radar-card">
       <div className="adviser-dashboard__radar-top-row">
-        <h3 className="adviser-dashboard__radar-heading">
+        <h3 className="adviser-dashboard__radar-heading">{loading ? <SkeletonBlock width="55%" height={18} /> : <>
           Grade Range Distribution
-        </h3>
+        </>}</h3>
       </div>
 
       <div className="adviser-dashboard__radar-controls-row">
@@ -120,7 +121,7 @@ export default function AdviserRadarChart({
 
       <div className="adviser-dashboard__radar-body">
         {loading ? (
-          <div className="adviser-dashboard__skeleton-radar" />
+          <SkeletonBlock className="adviser-dashboard__skeleton-radar" />
         ) : (
           <svg
             viewBox="0 0 320 300"

@@ -1,5 +1,6 @@
+import PageSkeleton from '../../components/common/PageSkeleton.jsx';
 import { Fragment, useState } from 'react';
-import { BookOpen, RefreshCw, CheckCircle2, ClipboardList, Users } from 'lucide-react';
+import { BookOpen, CheckCircle2, ClipboardList, Users } from 'lucide-react';
 import BackButton from '../../components/common/BackButton';
 import FilterToolbar from '../../components/common/FilterToolbar';
 import SearchBar from '../../components/common/SearchBar';
@@ -107,7 +108,7 @@ export default function DeptPhilIriDetail({ section, schoolYearId, context, onBa
       <SegmentedControl label="Assessment stage" value={tab} options={[{ value: 'screening', label: 'Screening' }, { value: 'postTest', label: 'Post-Test' }]}
         onChange={setTab} />
     </FilterToolbar>
-    {query.loading ? <div className="dept-monitor-state" role="status"><RefreshCw className="dept-monitor-spin" />Loading assessment records…</div> : query.error ?
+    {query.loading ? <PageSkeleton label="Loading assessment records" cards={3} columns={9} /> : query.error ?
       <div className="dept-monitor-state" role="alert"><strong>Results could not be loaded</strong><p>{query.error}</p><button className="dept-monitor-button" onClick={query.refresh}>Try again</button></div> : !available ?
       <EmptyState className="dept-monitor-state" icon={BookOpen} title="Assessment records are unavailable" description="This assessment stage is not available on the server yet." /> : <>
       <div className="dept-monitor-stats">

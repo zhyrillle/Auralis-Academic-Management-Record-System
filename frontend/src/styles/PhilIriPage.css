@@ -20,7 +20,7 @@
 @media (max-width: 1100px) { .phil-iri-page-container { width: 100%; } }
 
 .phil-iri-document-skeleton { padding: 24px 32px; border: 1px solid #e2e8f0; border-radius: 14px; background: #fff; min-height: 460px; }
-.phil-iri-skeleton-block { display: block; border-radius: 5px; background: linear-gradient(90deg, #edf1f6 25%, #f8fafc 50%, #edf1f6 75%); background-size: 200% 100%; animation: phil-iri-skeleton-shimmer 1.4s ease-in-out infinite; height: 14px; }
+.phil-iri-skeleton-block { display: block; border-radius: 5px;    height: 14px; }
 .phil-iri-skeleton-heading { display: flex; flex-direction: column; align-items: center; gap: 12px; margin-bottom: 24px; }
 .phil-iri-skeleton-seal { width: 56px; height: 56px; border-radius: 50%; }
 .phil-iri-skeleton-title { width: 65%; height: 22px; }
@@ -33,8 +33,8 @@
 .phil-iri-skeleton-row:last-child { border-bottom: 0; }
 .phil-iri-skeleton-footer { display: flex; justify-content: space-around; gap: 24px; margin-top: 32px; }
 .phil-iri-skeleton-footer .phil-iri-skeleton-block { width: 24%; }
-@keyframes phil-iri-skeleton-shimmer { to { background-position: -200% 0; } }
-@media (prefers-reduced-motion: reduce) { .phil-iri-skeleton-block { animation: none; } }
+
+@media (prefers-reduced-motion: reduce) { .phil-iri-skeleton-block {  } }
 
 /* TOP HEADER */
 .phil-iri-page-header {

@@ -1,3 +1,4 @@
+import PageSkeleton, { SkeletonBlock, SkeletonCards, SkeletonContent, SkeletonTable, SkeletonList } from '../../components/common/PageSkeleton.jsx';
 import { useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle2, LayoutGrid, MessageSquareOff, RefreshCw, Target, Users } from "lucide-react";
 import { getPrincipalFeedback } from "../../services/principalFeedbackService";
@@ -7,7 +8,6 @@ import EmptyState from "../../components/common/EmptyState";
 import FilterToolbar from "../../components/common/FilterToolbar";
 import SearchBar from "../../components/common/SearchBar";
 import ProgressBar from "../../components/charts/ProgressBar";
-import AnalyticsSkeleton from "./analytics/AnalyticsSkeleton";
 import AnalyticsStatCard from "./analytics/AnalyticsStatCard";
 import PerformanceProgressTable from "./performance-level/PerformanceProgressTable";
 import "../../styles/principalAnalytics.css";
@@ -37,8 +37,19 @@ export default function TeacherFeedback() {
     return categoryMatches && (!query || comment.text.toLowerCase().includes(query) || comment.category.toLowerCase().includes(query));
   }), [data, selectedCategory, searchQuery]);
 
-  if (loading && !data) return <AnalyticsSkeleton table />;
-  if (!data) return <main className="pa-page tf-page">
+  const pageHeader = (<header className="pa-page-header"><div><h1>Teacher Feedback</h1><p>Anonymous teacher evaluation of principal leadership</p></div></header>);
+
+  const loadingSkeleton = (
+    <PageSkeleton className="pa-skeleton pa-skeleton--content" label="Loading performance analytics">
+      <SkeletonCards count={4} />
+      <div className="app-skeleton-stack">
+        <section className="app-skeleton-panel"><SkeletonBlock width="42%" height={18} /><SkeletonTable columns={3} rows={8} /></section><section className="app-skeleton-panel"><SkeletonBlock width="42%" height={18} /><SkeletonList rows={3} /></section>
+      </div>
+    </PageSkeleton>
+  );
+
+  if (loading && !data) return <main className="pa-page tf-page">{pageHeader}<FilterToolbar className="pa-navigation" label="Feedback filters" end={<DropdownSelect label="School year" value={schoolYear} options={schoolYears} placeholder="School year" onChange={setSchoolYear} disabled={!schoolYears.length} />}><span className="tf-filter-caption">Leadership evaluation</span></FilterToolbar>{loadingSkeleton}</main>;
+  if (!data) return <main className="pa-page tf-page">{pageHeader}
     <section className="pa-state-panel" role="alert">
       <EmptyState icon={AlertTriangle} title="Unable to load feedback" description={error || "Feedback records are unavailable."} />
       <button type="button" className="pa-retry-button" onClick={refresh}><RefreshCw size={16} />Retry</button>
@@ -61,13 +72,13 @@ export default function TeacherFeedback() {
       : <span className="tf-not-rated">Not rated</span> },
   ];
   return <main className="pa-page tf-page">
-    <header className="pa-page-header"><div><h1>Teacher Feedback</h1><p>Anonymous teacher evaluation of principal leadership</p></div></header>
+    {pageHeader}
     <FilterToolbar className="pa-navigation" label="Feedback filters" end={
       <DropdownSelect label="School year" value={schoolYear} options={schoolYears} onChange={setSchoolYear} disabled={isPreviousData} />
     }><span className="tf-filter-caption">Leadership evaluation</span></FilterToolbar>
     {error && <div className="pa-inline-error" role="alert"><span>Unable to load updates. {error}</span><button type="button" onClick={refresh}>Retry</button></div>}
-    <div className={`pa-content${isPreviousData ? " is-busy" : ""}`} aria-busy={isPreviousData}>
-      {isPreviousData && <div className="pa-busy-overlay" role="status" aria-label="Updating feedback"><span className="pa-spinner pa-spinner--large" /></div>}
+    <SkeletonContent className="pa-content" loading={isPreviousData} skeleton={loadingSkeleton}>
+
       <section className="pa-stat-grid" aria-label="Feedback overview">{cards.map(card => <AnalyticsStatCard key={card.label} {...card} />)}</section>
       {Number(summary.totalResponses) === 0 ? <section className="pa-panel tf-empty" aria-label="No feedback"><EmptyState className="tf-empty-state" icon={MessageSquareOff} title="No teacher feedback for this school year" description="Ratings and comments will appear here once teachers submit their evaluations. You can select another school year to view earlier feedback." /></section> : <>
       <PerformanceProgressTable title="Likert Scale Result - Leadership Evaluation" subtitle="Recorded question ratings on a five-point scale." columns={columns} data={likertResults} emptyMessage="No survey questions are configured." />
@@ -87,7 +98,7 @@ export default function TeacherFeedback() {
         </div>
       </section>
       </>}
-    </div>
+    </SkeletonContent>
   </main>;
 }
 

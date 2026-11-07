@@ -10,6 +10,8 @@
   font-family: var(--font-family, "Outfit", "Inter", sans-serif);
 }
 
+.grr-loading-fields { display: grid; gap: 20px; }
+
 @keyframes grrFadeIn {
   from {
     opacity: 0;

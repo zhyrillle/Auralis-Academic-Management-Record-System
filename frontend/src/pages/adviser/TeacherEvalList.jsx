@@ -1,3 +1,4 @@
+import PageSkeleton, { SkeletonValue } from '../../components/common/PageSkeleton.jsx';
 import { cachedApiFetch as fetch } from "../../services/navigationCache.js";
 import { API_BASE_URL } from "../../services/apiConfig.js";
 import React, { useState, useEffect, useMemo } from "react";
@@ -174,16 +175,14 @@ export default function TeacherEvalList({ onBack, onCreateFeedback, windowStatus
         )}
 
         <span className="tel-result-count">
-          {filtered.length} teacher{filtered.length !== 1 ? "s" : ""}
+          {loading ? <SkeletonValue label="Loading teacher count" /> : <>{filtered.length} teacher{filtered.length !== 1 ? "s" : ""}</>}
         </span>
       </div>
 
       {/* ── Teacher List ── */}
       <div className="tel-list-card">
         {loading ? (
-          <div className="tel-empty">
-            <p>Loading teachers...</p>
-          </div>
+          <PageSkeleton label="Loading teachers" layout="cards" rows={3} />
         ) : filtered.length === 0 ? (
           <div className="tel-empty">
             <Search size={32} color="#cbd5e1" />

@@ -1,3 +1,4 @@
+import PageSkeleton from '../components/common/PageSkeleton.jsx';
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Camera,
@@ -11,7 +12,6 @@ import {
   Plus,
   Save,
   ShieldCheck,
-  UserRound,
   X,
 } from "lucide-react";
 import {
@@ -145,6 +145,7 @@ export default function ProfilePage({ user, onUserUpdated }) {
 
   const storedUser = useMemo(() => readStoredUser(), []);
   const userId = user?.user_id || storedUser?.user_id;
+  const [profileReadVersion, setProfileReadVersion] = useState(0);
   const errors = useMemo(() => validateProfile(draftProfile), [draftProfile]);
   const hasProfileChanges = useMemo(
     () =>
@@ -194,7 +195,7 @@ export default function ProfilePage({ user, onUserUpdated }) {
     return () => {
       isCurrent = false;
     };
-  }, [userId]);
+  }, [userId, profileReadVersion]);
 
   useEffect(() => {
     if (!toastMessage) return undefined;
@@ -473,25 +474,20 @@ export default function ProfilePage({ user, onUserUpdated }) {
     };
   }, [pendingAvatar, isAvatarUploading]);
 
-  if (isLoading) {
-    return (
-      <div className="profile-page">
-        <div className="profile-state-card" role="status">
-          <UserRound size={30} aria-hidden="true" />
-          <h1>Loading profile</h1>
-          <p>Retrieving your account information…</p>
-        </div>
-      </div>
-    );
-  }
+  if (isLoading) return <div className="profile-page">
+    <header className="profile-page__heading"><h1>My Profile</h1><p>Manage your personal and account information.</p></header>
+    <PageSkeleton label="Loading profile" layout="profile" />
+  </div>;
 
   if (!savedProfile.userId && pageError) {
     return (
       <div className="profile-page">
+        <header className="profile-page__heading"><h1>My Profile</h1><p>Manage your personal and account information.</p></header>
         <div className="profile-state-card profile-state-card--error" role="alert">
           <ShieldCheck size={30} aria-hidden="true" />
-          <h1>Profile unavailable</h1>
+          <h2>Profile unavailable</h2>
           <p>{pageError}</p>
+          <button type="button" onClick={() => setProfileReadVersion(value => value + 1)}>Retry</button>
         </div>
       </div>
     );

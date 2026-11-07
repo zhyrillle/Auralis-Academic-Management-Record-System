@@ -1,3 +1,4 @@
+import { SkeletonTableRows, SkeletonValue, SkeletonTable } from '../../../components/common/PageSkeleton.jsx';
 import { AlertCircle, FileSearch } from "lucide-react";
 import Badge from "../../../components/common/Badge";
 import HoverScrollText from "../../../components/common/HoverScrollText";
@@ -49,6 +50,8 @@ export default function AuditEventTable({
       );
     }
 
+    if (isLoading) return <SkeletonTable columns={6} />;
+
     return (
       <table className="audit-trail__table" aria-busy={isLoading}>
         <thead>
@@ -63,13 +66,7 @@ export default function AuditEventTable({
         </thead>
         <tbody>
           {isLoading
-            ? Array.from({ length: 6 }, (_, index) => (
-                <tr key={index} className="audit-row--skeleton" aria-hidden="true">
-                  {Array.from({ length: 6 }, (_, cellIndex) => (
-                    <td key={cellIndex}><span /></td>
-                  ))}
-                </tr>
-              ))
+            ? <SkeletonTableRows columns={6} />
             : events.map((event) => {
                 const timestamp = formatDateTime(event.occurredAt);
                 return (
@@ -121,7 +118,7 @@ export default function AuditEventTable({
       </div>
       <div className="audit-results__footer" aria-live="polite">
         {isLoading
-          ? "Loading audit events…"
+          ? <SkeletonValue label="Loading audit event count" width={140} />
           : `${events.length} ${events.length === 1 ? "event" : "events"} shown`}
       </div>
     </div>

@@ -1,3 +1,4 @@
+import { SkeletonValue, SkeletonBlock } from "../common/PageSkeleton";
 import { useState } from 'react';
 import { SearchX } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -18,14 +19,14 @@ export default function PredictionLearnerList({ data, loading, filterQuery }) {
   const listQuery = new URLSearchParams(filterQuery);
   if (search) listQuery.set('search', search);
   return <section className="ar-prediction-list-panel" aria-label="Learner predictions" aria-busy={loading}>
-    <div className="ar-prediction-list-heading"><div><h2>Learner predictions</h2><p>Review records before acting on a risk label.</p></div>
+    <div className="ar-prediction-list-heading"><div>{loading ? <><SkeletonBlock width={190} height={20} /><SkeletonBlock width={260} /></> : <><h2>Learner predictions</h2><p>Review records before acting on a risk label.</p></>}</div>
       {!loading && matching.length > 0 && <Link className="ar-list-see-all" to={learnerListPath('prediction', level, listQuery.toString())}>See all</Link>}
     </div>
     <div className="ar-prediction-list-tools">
       <AnalyticsTermTabs options={RISK_FILTERS} value={level} onChange={value => update('risk', value)} disabled={loading} ariaLabel="Filter by risk level" />
       <SearchBar query={search} setQuery={value => update('search', value)} placeholder="Search name, section or adviser…" />
     </div>
-    <p className="ar-list-result-count" aria-live="polite">{loading ? 'Loading learner predictions…' : `Showing ${Math.min(matching.length, 3)} of ${matching.length} learners`}</p>
+    <p className="ar-list-result-count" aria-live="polite">{loading ? <SkeletonValue label="Loading learner count" width={180} /> : `Showing ${Math.min(matching.length, 3)} of ${matching.length} learners`}</p>
     <div className="ar-full-learner-list">
       {loading ? [1, 2, 3].map(index => <StudentRiskCard key={index} loading />)
         : !matching.length ? <EmptyState className="ar-preview-empty pa-empty-state" icon={SearchX}

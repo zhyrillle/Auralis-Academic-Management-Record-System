@@ -1,50 +1,37 @@
+import { Fragment } from 'react';
+import PageSkeleton, { SkeletonBlock } from '../../components/common/PageSkeleton.jsx';
+
+const subjects = [0, 1, 2, 3, 4];
+
 export default function MasterSheetSkeleton() {
-  return (
-    <div className="ms-skeleton" role="status" aria-live="polite">
-      <span className="ms-sr-only">Loading Master Sheet data.</span>
-      <div aria-hidden="true">
-        <div className="ms-page-header ms-skeleton-page-header">
-          <div className="ms-skeleton-heading">
-            <span className="ms-skeleton-block ms-skeleton-block--eyebrow" />
-            <span className="ms-skeleton-block ms-skeleton-block--title" />
-            <span className="ms-skeleton-block ms-skeleton-block--subtitle" />
-          </div>
-          <div className="ms-selectors ms-skeleton-selectors">
-            {[0, 1].map((index) => (
-              <div className="ms-selector-field" key={index}>
-                <span className="ms-skeleton-block ms-skeleton-block--selector-label" />
-                <span className="ms-skeleton-block ms-skeleton-block--selector" />
-              </div>
-            ))}
-          </div>
-        </div>
-        <div className="ms-controls-row ms-skeleton-controls">
-          <div className="ms-summary">
-            <span className="ms-skeleton-block ms-skeleton-block--metric-placeholder" />
-            <span className="ms-skeleton-block ms-skeleton-block--metric-placeholder" />
-          </div>
-          <div className="ms-control-actions ms-skeleton-control-actions">
-            <span className="ms-skeleton-block ms-skeleton-block--search" />
-            <span className="ms-skeleton-block ms-skeleton-block--button" />
-          </div>
-        </div>
-        <div className="ms-skeleton-table-wrapper">
-          <table className="ms-skeleton-grade-table">
-            <thead>
-              <tr>{[0, 1, 2, 3, 4].map((column) => <th key={column} />)}</tr>
-            </thead>
-            <tbody>
-              {Array.from({ length: 6 }, (_, row) => (
-                <tr key={row}>
-                  {[0, 1, 2, 3, 4].map((column) => (
-                    <td key={column}><span className="ms-skeleton-block" /></td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+  return <PageSkeleton label="Loading Master Sheet data">
+    <div className="ms-table-wrapper ms-loading-table">
+      <table className="ms-loading-grid" aria-hidden="true">
+        <thead>
+          <tr>
+            <th className="ms-loading-name" rowSpan={3}><SkeletonBlock width="72%" /></th>
+            {subjects.map(subject => <th className="ms-loading-subject" colSpan={4} key={subject}><SkeletonBlock width="52%" /></th>)}
+          </tr>
+          <tr>
+            {subjects.map(subject => <Fragment key={subject}>
+              <th colSpan={3}><SkeletonBlock width="35%" /></th>
+              <th className="ms-loading-final" rowSpan={2}><SkeletonBlock width="65%" height={20} /></th>
+            </Fragment>)}
+          </tr>
+          <tr>
+            {subjects.flatMap(subject => [0, 1, 2].map(term => <th className="ms-loading-grade" key={`${subject}-${term}`}><SkeletonBlock width={12} height={10} /></th>))}
+          </tr>
+        </thead>
+        <tbody>
+          {[0, 1].map(group => <Fragment key={group}>
+            <tr className="ms-loading-group"><td colSpan={21}><SkeletonBlock width={66} height={10} /></td></tr>
+            {Array.from({ length: group === 0 ? 4 : 3 }, (_, row) => <tr className="ms-loading-row" key={row}>
+              <td className="ms-loading-learner"><SkeletonBlock width="72%" height={12} /><SkeletonBlock width="46%" height={8} /></td>
+              {subjects.flatMap(subject => [0, 1, 2, 3].map(term => <td key={`${subject}-${term}`} className={term === 3 ? 'ms-loading-final' : 'ms-loading-grade'}><SkeletonBlock width={18} height={10} /></td>))}
+            </tr>)}
+          </Fragment>)}
+        </tbody>
+      </table>
     </div>
-  );
+  </PageSkeleton>;
 }

@@ -1,3 +1,4 @@
+import { SkeletonBlock } from '../../components/common/PageSkeleton';
 import useCachedQuery from "../../services/useCachedQuery";
 import { cacheKey } from "../../services/navigationCache";
 import { useEffect, useMemo, useState } from "react";
@@ -291,14 +292,13 @@ export default function AdminDashboard() {
       {/* ========================================
           AUDIT EVENT MONITOR
       ======================================== */}
-      <section className="audit-trail" aria-labelledby="audit-trail-title">
+      <section className="audit-trail" aria-labelledby={isAuditLoading ? undefined : "audit-trail-title"} aria-label={isAuditLoading ? "Loading audit events" : undefined}>
         <div className="admin-section-heading audit-trail__heading">
           <div>
-            <h2 id="audit-trail-title">Audit Events</h2>
-            <p>Review recent account and grading activity across the system.</p>
+            {isAuditLoading ? <><SkeletonBlock width={160} height={20} /><SkeletonBlock width={320} /></> : <><h2 id="audit-trail-title">Audit Events</h2><p>Review recent account and grading activity across the system.</p></>}
           </div>
           <span className="audit-trail__count">
-            {filteredEvents.length} {filteredEvents.length === 1 ? "event" : "events"}
+            {isAuditLoading ? <SkeletonBlock width={70} /> : <>{filteredEvents.length} {filteredEvents.length === 1 ? "event" : "events"}</>}
           </span>
         </div>
 

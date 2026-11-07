@@ -64,7 +64,7 @@ try {
   await page.evaluate(() => {
     window.__busyDuringRefresh = false;
     new MutationObserver(() => {
-      if (document.querySelector('.pa-content.is-busy, .pa-busy-overlay')) window.__busyDuringRefresh = true;
+      if (document.querySelector('.pa-content.is-busy, .pa-busy-overlay, .pa-content .app-skeleton-region')) window.__busyDuringRefresh = true;
     }).observe(document.querySelector('main'), { childList: true, attributes: true, subtree: true });
     document.querySelector('.stacked-bar-chart')?.scrollIntoView();
   });
@@ -154,11 +154,11 @@ try {
   // A deliberate filter change still indicates that the visible values belong to old filters.
   const filteredRead = holdSectionReads();
   await page.getByRole('tab', { name: 'Term 1', exact: true }).click();
-  await page.locator('.pa-busy-overlay').waitFor();
+  await page.locator('.pa-content .app-skeleton-region').waitFor();
   await filteredRead.started.promise;
   const filteredResponse = page.waitForResponse(response => response.url().includes('/principal/performance/sections') && response.url().includes('term=term-1'));
   hold = null; filteredRead.resume.resolve(); await filteredResponse;
-  await page.locator('.pa-busy-overlay').waitFor({ state: 'detached' });
+  await page.locator('.pa-content .app-skeleton-region').waitFor({ state: 'detached' });
   assert.equal(await page.getByRole('tab', { name: 'Term 1', exact: true }).getAttribute('aria-selected'), 'true');
 
   // Hidden tabs skip timer work; returning checks again without a blocking state.

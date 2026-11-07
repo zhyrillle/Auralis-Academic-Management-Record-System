@@ -1,3 +1,4 @@
+import { SkeletonBlock } from '../../../components/common/PageSkeleton.jsx';
 import {
   GraduationCap,
   School,
@@ -53,11 +54,11 @@ const createStatistics = (summary) => [
 const AccountSummarySkeleton = () => (
   <article className="summary-stat-card summary-stat-card--skeleton" aria-hidden="true">
     <div className="summary-stat-card__content">
-      <span className="summary-skeleton summary-skeleton--label" />
-      <span className="summary-skeleton summary-skeleton--value" />
-      <span className="summary-skeleton summary-skeleton--description" />
+      <SkeletonBlock className="summary-skeleton summary-skeleton--label" />
+      <SkeletonBlock className="summary-skeleton summary-skeleton--value" />
+      <SkeletonBlock className="summary-skeleton summary-skeleton--description" />
     </div>
-    <span className="summary-skeleton summary-skeleton--icon" />
+    <SkeletonBlock className="summary-skeleton summary-skeleton--icon" />
   </article>
 );
 

@@ -1,5 +1,8 @@
+import useCachedQuery from '../../services/useCachedQuery';
+import { cacheKey } from '../../services/navigationCache';
+import { SkeletonTableRows, SkeletonPanel, SkeletonTable } from '../../components/common/PageSkeleton.jsx';
 import { cachedApiFetch as fetch } from "../../services/navigationCache.js";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import "../../styles/performanceReport.css";
 import { getStoredUser } from "../../utils/auth";
 
@@ -10,122 +13,42 @@ export default function PerformanceReport() {
   const user = getStoredUser();
   const effectiveUserId = user?.user_id || user?.id || user?.user?.user_id || user?.user?.id || 3;
 
-  const [selectedSchoolYear, setSelectedSchoolYear] = useState("");
-  const [selectedTerm, setSelectedTerm] = useState("");
-  const [selectedSubject, setSelectedSubject] = useState("all");
-
-  const [schoolYearOptions, setSchoolYearOptions] = useState([]);
-  const [termOptions, setTermOptions] = useState([
-    { id: "1", label: "Term 1" },
-    { id: "2", label: "Term 2" },
-    { id: "3", label: "Term 3" },
-  ]);
-  const [subjectOptions, setSubjectOptions] = useState([]);
-
-  const [sectionsData, setSectionsData] = useState([]);
-  const [loading, setLoading] = useState(false);
-
-  // Load school year, term, and subject filters dynamically from MySQL database
-  useEffect(() => {
-    async function loadFilters() {
-      try {
-        const queryParams = new URLSearchParams();
-        if (effectiveUserId) queryParams.set("userId", String(effectiveUserId));
-        if (selectedSchoolYear) queryParams.set("schoolYearId", String(selectedSchoolYear));
-
-        const res = await fetch(`${API_BASE_URL}/adviser/dashboard/performance-filters?${queryParams.toString()}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data.schoolYears && data.schoolYears.length > 0) {
-            const mappedSY = data.schoolYears.map((sy) => ({
-              id: String(sy.school_year_id),
-              label: sy.label || `S.Y. ${sy.starts_on}-${sy.ends_on}`,
-              is_active: Boolean(sy.is_active),
-            }));
-            setSchoolYearOptions(mappedSY);
-            setSelectedSchoolYear((prev) => {
-              if (prev && mappedSY.some((sy) => sy.id === prev)) return prev;
-              const active = mappedSY.find((sy) => sy.is_active);
-              const defaultSy = data.currentSchoolYearId ? String(data.currentSchoolYearId) : (active ? active.id : mappedSY[0].id);
-              return defaultSy;
-            });
-          }
-          if (data.terms && data.terms.length > 0) {
-            const formattedTerms = data.terms.map((t) => {
-              if (typeof t === "object") {
-                return {
-                  id: String(t.value || t.id),
-                  label: t.label || `Term ${t.value || t.id}`,
-                  is_active: Boolean(t.is_active || t.is_current),
-                };
-              }
-              return { id: String(t), label: `Term ${t}`, is_active: false };
-            });
-            setTermOptions(formattedTerms);
-            const activeTermObj = formattedTerms.find((t) => t.is_active);
-            const targetDefaultTerm = data.currentTerm ? String(data.currentTerm) : (activeTermObj ? activeTermObj.id : formattedTerms[0].id);
-            setSelectedTerm((prev) => {
-              if (prev && formattedTerms.some((t) => t.id === prev)) return prev;
-              return targetDefaultTerm;
-            });
-          }
-          if (data.subjects && data.subjects.length > 0) {
-            const mappedSubjects = data.subjects.map((s) => ({
-              id: String(s.subject_id),
-              label: s.label || s.subject_name,
-            }));
-            setSubjectOptions(mappedSubjects);
-            setSelectedSubject((prev) => {
-              if (prev && (prev === "all" || mappedSubjects.some((sub) => sub.id === prev))) return prev;
-              return "all";
-            });
-          } else {
-            setSubjectOptions([]);
-            setSelectedSubject("all");
-          }
-        }
-      } catch (err) {
-        console.warn("Failed to load performance filters:", err);
-      }
-    }
-    loadFilters();
-  }, [effectiveUserId, selectedSchoolYear]);
-
-  // Fetch dynamic Performance report data from database based on quarterly_grade
-  useEffect(() => {
-    async function fetchGradeRangeData() {
-      setLoading(true);
-      try {
-        const params = new URLSearchParams({
-          term: selectedTerm || "1",
-          subjectId: selectedSubject || "all",
-        });
-
-        if (selectedSchoolYear) {
-          params.append("schoolYearId", String(selectedSchoolYear));
-        }
-
-        if (effectiveUserId) {
-          params.append("userId", String(effectiveUserId));
-        }
-
-        const res = await fetch(`${API_BASE_URL}/adviser/dashboard/grade-range-report?${params.toString()}`, { force: true });
-        if (res.ok) {
-          const data = await res.json();
-          setSectionsData(data.sections || []);
-        } else {
-          setSectionsData([]);
-        }
-      } catch (err) {
-        console.error("Error fetching performance report:", err);
-        setSectionsData([]);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchGradeRangeData();
-  }, [selectedSchoolYear, selectedTerm, selectedSubject, effectiveUserId]);
+  const [yearChoice, setSelectedSchoolYear] = useState("");
+  const [termChoice, setSelectedTerm] = useState("");
+  const [subjectChoice, setSelectedSubject] = useState("all");
+  const cacheOptions = { refreshInterval: 0, revalidateOnFocus: false };
+  const filters = useCachedQuery(cacheKey('adviser:performance-filters', { userId: effectiveUserId, yearChoice }), async () => {
+    const params = new URLSearchParams({ userId: String(effectiveUserId) });
+    if (yearChoice) params.set('schoolYearId', yearChoice);
+    const response = await fetch(`${API_BASE_URL}/adviser/dashboard/performance-filters?${params}`, { cacheRead: false });
+    if (!response.ok) throw new Error('Performance options could not be loaded.');
+    return response.json();
+  }, { ...cacheOptions, keepPreviousData: true });
+  const options = filters.data;
+  const schoolYearOptions = (options?.schoolYears || []).map(sy => ({
+    id: String(sy.school_year_id), label: sy.label || `S.Y. ${sy.starts_on}-${sy.ends_on}`, is_active: Boolean(sy.is_active),
+  }));
+  const termOptions = options?.terms?.length ? options.terms.map(t => typeof t === 'object'
+    ? { id: String(t.value || t.id), label: t.label || `Term ${t.value || t.id}`, is_active: Boolean(t.is_active || t.is_current) }
+    : { id: String(t), label: `Term ${t}` }) : [1, 2, 3].map(id => ({ id: String(id), label: `Term ${id}` }));
+  const subjectOptions = (options?.subjects || []).map(s => ({ id: String(s.subject_id), label: s.label || s.subject_name }));
+  const selectedSchoolYear = schoolYearOptions.some(sy => sy.id === yearChoice) ? yearChoice
+    : String(options?.currentSchoolYearId || schoolYearOptions.find(sy => sy.is_active)?.id || schoolYearOptions[0]?.id || '');
+  const selectedTerm = termOptions.some(t => t.id === termChoice) ? termChoice
+    : String(options?.currentTerm || termOptions.find(t => t.is_active)?.id || termOptions[0]?.id || '1');
+  const selectedSubject = subjectChoice === 'all' || subjectOptions.some(s => s.id === subjectChoice) ? subjectChoice : 'all';
+  const filtersLoading = filters.loading || filters.isPreviousData;
+  const report = useCachedQuery(cacheKey('adviser:performance-report', { userId: effectiveUserId, selectedSchoolYear, selectedTerm, selectedSubject }), async () => {
+    const params = new URLSearchParams({ userId: String(effectiveUserId), term: selectedTerm, subjectId: selectedSubject });
+    if (selectedSchoolYear) params.set('schoolYearId', selectedSchoolYear);
+    const response = await fetch(`${API_BASE_URL}/adviser/dashboard/grade-range-report?${params}`, { cacheRead: false });
+    if (!response.ok) throw new Error('Performance records could not be loaded.');
+    return response.json();
+  }, { ...cacheOptions, enabled: Boolean(options && !filtersLoading && !filters.error) });
+  const sectionsData = useMemo(() => report.data?.sections || [], [report.data]);
+  const loading = !filters.error && (filtersLoading || report.loading);
+  const loadError = filters.error || report.error;
+  const retry = () => filters.error ? filters.refresh() : report.refresh();
 
   // Calculate totals and averages across all handled sections dynamically
   const summaryRow = useMemo(() => {
@@ -173,17 +96,19 @@ export default function PerformanceReport() {
       <main className="performance-main">
         <div className="performance-content">
           <h1 className="page-title">Performance Report</h1>
+          {loadError && <div role="alert">{loadError}<button type="button" onClick={retry}>Retry</button></div>}
 
           <div className="filters-row">
             <div className="filters-label">FILTERS:</div>
             <div className="filters">
-              {schoolYearOptions.length > 0 && (
+              {(
                 <label className="filter-control">
                   <select
                     value={selectedSchoolYear}
                     onChange={(e) => setSelectedSchoolYear(e.target.value)}
                     aria-label="School Year"
                   >
+                    {!schoolYearOptions.length && <option value="">School year</option>}
                     {schoolYearOptions.map((sy) => (
                       <option key={sy.id} value={sy.id}>
                         {sy.label}
@@ -229,6 +154,10 @@ export default function PerformanceReport() {
           </div>
         </div>
 
+        {loading ? <div className="app-skeleton-stack">
+          <SkeletonPanel label="Loading mean and MPS"><SkeletonTable columns={5} /></SkeletonPanel>
+          <SkeletonPanel label="Loading grade distribution"><SkeletonTable columns={7} /></SkeletonPanel>
+        </div> : <>
         {/* 1. Mean and MPS Table */}
         <div className="report-card">
           <h2>Mean and MPS</h2>
@@ -244,12 +173,8 @@ export default function PerformanceReport() {
                 </tr>
               </thead>
               <tbody>
-                {loading ? (
-                  <tr>
-                    <td colSpan={5} className="no-data-row">
-                      Loading report data...
-                    </td>
-                  </tr>
+                {loading || filtersLoading ? (
+                  <SkeletonTableRows columns={5} />
                 ) : sectionsData.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="no-data-row">
@@ -310,12 +235,8 @@ export default function PerformanceReport() {
                 </tr>
               </thead>
               <tbody>
-                {loading ? (
-                  <tr>
-                    <td colSpan={7} className="no-data-row">
-                      Loading grade range data...
-                    </td>
-                  </tr>
+                {loading || filtersLoading ? (
+                  <SkeletonTableRows columns={7} />
                 ) : sectionsData.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="no-data-row">
@@ -404,6 +325,7 @@ export default function PerformanceReport() {
             </table>
           </div>
         </div>
+        </>}
       </main>
     </div>
   );

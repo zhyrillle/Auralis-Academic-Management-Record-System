@@ -1,4 +1,7 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import useCachedQuery from '../../services/useCachedQuery';
+import { cacheKey } from '../../services/navigationCache';
+import PageSkeleton, { SkeletonBlock } from '../../components/common/PageSkeleton';
+import React, { useState, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   FileText,
@@ -57,53 +60,43 @@ import "../../styles/AdviserDashboard.css";
 
 export default function AdviserDashboard() {
   const navigate = useNavigate();
-  const [currentUser, setCurrentUser] = useState(() => getStoredUser());
+  const currentUser = useMemo(() => getStoredUser(), []);
 
-  // Role flag: strictly determined by presence in SECTION_ADVISER_ASSIGNMENT
-  const [isAdviser, setIsAdviser] = useState(() => {
-    const user = getStoredUser();
-    return Boolean(user?.is_adviser || user?.isAdviser);
-  });
-
-  // Loading states
-  const [loading, setLoading] = useState(true);
-
-  // Term & Filter State per widget
-  const [subjectTerm, setSubjectTerm] = useState("T1");
-  const [radarTerm, setRadarTerm] = useState("T1");
-  const [radarSection, setRadarSection] = useState("All");
-  const [testTerm, setTestTerm] = useState("T1");
-  const [testSection, setTestSection] = useState("All");
-  const [subjectAreaTerm, setSubjectAreaTerm] = useState("T1");
-  const [coreValuesTerm, setCoreValuesTerm] = useState("T1");
-
-  // Data States (Defaults to 0 / empty)
-  const [summary, setSummary] = useState({
-    sectionAverage: "0%",
-    sectionAverageDiff: "0% from T1",
-    lowestPerformingSection: "—",
-    lowestPerformingSectionNote: "No data",
-    atRiskStudentsCount: 0,
-    atRiskStudentsNote: "Across all sections",
-    entryProgress: 0,
-    totalClasses: 0,
-    totalStudents: 0,
-    pendingSubmissions: 0,
-    submittedGrades: 0,
-  });
-  const [subjectPerformance, setSubjectPerformance] = useState([]);
-  const [assignedClasses, setAssignedClasses] = useState([]);
-  const [gradeDistribution, setGradeDistribution] = useState([0, 0, 0, 0, 0]);
-  const [attendanceTrend, setAttendanceTrend] = useState([
-    { week: "Week 1", count: 0 },
-    { week: "Week 2", count: 0 },
-    { week: "Week 3", count: 0 },
-    { week: "Week 4", count: 0 },
-    { week: "Week 5", count: 0 },
-  ]);
-  const [testExamData, setTestExamData] = useState(null);
-  const [subjectAreaData, setSubjectAreaData] = useState([]);
-  const [coreValuesData, setCoreValuesData] = useState([]);
+  const userId = currentUser?.user_id || currentUser?.id;
+  const cacheOptions = { enabled: Boolean(userId), refreshInterval: 0, revalidateOnFocus: false };
+  const overview = useCachedQuery(cacheKey('adviser:dashboard-overview', { userId }), async () => {
+    const [role, summary, classes, attendance] = await Promise.all([
+      checkAdviserRole(userId), getAdviserSummary(userId), getAssignedClasses(userId), getAttendanceTrend(userId),
+    ]);
+    return { role, summary, classes, attendance };
+  }, cacheOptions);
+  const loading = overview.loading;
+  const summary = overview.data?.summary || {};
+  const assignedClasses = useMemo(() => overview.data?.classes || [], [overview.data]);
+  const attendanceTrend = overview.data?.attendance || [];
+  const isAdviser = overview.data
+    ? (summary.isAdviser ?? overview.data.role?.isAdviser ?? false)
+    : Boolean(currentUser?.is_adviser || currentUser?.isAdviser);
+  const [subjectChoice, setSubjectTerm] = useState(null);
+  const [radarChoice, setRadarTerm] = useState(null);
+  const [radarSection, setRadarSection] = useState('All');
+  const [testChoice, setTestTerm] = useState(null);
+  const [testSection, setTestSection] = useState('All');
+  const [areaChoice, setSubjectAreaTerm] = useState(null);
+  const [coreChoice] = useState(null);
+  const defaultTerm = summary.activeTerm || 'T1';
+  const subjectTerm = subjectChoice || defaultTerm, radarTerm = radarChoice || defaultTerm;
+  const testTerm = testChoice || defaultTerm, subjectAreaTerm = areaChoice || defaultTerm, coreValuesTerm = coreChoice || defaultTerm;
+  const regionOptions = { ...cacheOptions, enabled: Boolean(userId && overview.data) };
+  const subjectQuery = useCachedQuery(cacheKey('adviser:subject-performance', { userId, subjectTerm }), () => getSubjectPerformance(subjectTerm, userId), regionOptions);
+  const radarQuery = useCachedQuery(cacheKey('adviser:grade-distribution', { userId, radarSection, radarTerm }), () => getGradeRangeDistribution(radarSection, radarTerm, userId), regionOptions);
+  const testQuery = useCachedQuery(cacheKey('adviser:test-exam', { userId, testSection, testTerm }), () => getTestExamAnalysis(testTerm, testSection, userId), regionOptions);
+  const areaQuery = useCachedQuery(cacheKey('adviser:subject-area', { userId, subjectAreaTerm }), () => getSubjectAreaPerformance(subjectAreaTerm, userId), { ...regionOptions, enabled: regionOptions.enabled && isAdviser });
+  const coreQuery = useCachedQuery(cacheKey('adviser:core-values', { userId, coreValuesTerm }), () => getCoreValuesComparison(coreValuesTerm, userId), { ...regionOptions, enabled: regionOptions.enabled && isAdviser });
+  const subjectPerformance = subjectQuery.data || [];
+  const gradeDistribution = radarQuery.data || [0, 0, 0, 0, 0];
+  const testExamData = testQuery.data;
+  const subjectAreaData = areaQuery.data || [], coreValuesData = coreQuery.data || [];
 
   // Compute available sections list from teacher's assigned classes
   const availableSections = useMemo(() => {
@@ -122,123 +115,6 @@ export default function AdviserDashboard() {
       (currentUser.name ? currentUser.name.trim().split(" ")[0] : "");
     return firstName ? `Hello, ${firstName}!` : "Hello!";
   };
-
-  // Initial Load & Role Determination
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadDashboardData() {
-      setLoading(true);
-      const userId = currentUser?.user_id || currentUser?.id;
-
-      try {
-        const [roleRes, sumRes] = await Promise.all([
-          checkAdviserRole(userId),
-          getAdviserSummary(userId),
-        ]);
-
-        const resolvedActiveTerm = sumRes?.activeTerm || "T1";
-
-        // Parallel fetch remaining dashboard metrics using the active term
-        const [
-          classesRes,
-          attendRes,
-          subjPerfRes,
-          gradeDistRes,
-          testRes,
-          subjAreaRes,
-          coreRes,
-        ] = await Promise.all([
-          getAssignedClasses(userId),
-          getAttendanceTrend(userId),
-          getSubjectPerformance(resolvedActiveTerm, userId),
-          getGradeRangeDistribution(radarSection, resolvedActiveTerm, userId),
-          getTestExamAnalysis(resolvedActiveTerm, testSection, userId),
-          getSubjectAreaPerformance(resolvedActiveTerm, userId),
-          getCoreValuesComparison(resolvedActiveTerm, userId),
-        ]);
-
-        if (isMounted) {
-          // Strictly apply SECTION_ADVISER_ASSIGNMENT determination
-          const resolvedIsAdviser =
-            typeof sumRes?.isAdviser === "boolean"
-              ? sumRes.isAdviser
-              : typeof roleRes?.isAdviser === "boolean"
-              ? roleRes.isAdviser
-              : false;
-
-          setIsAdviser(resolvedIsAdviser);
-          setSummary(sumRes || {});
-          if (resolvedActiveTerm) {
-            setSubjectTerm(resolvedActiveTerm);
-            setRadarTerm(resolvedActiveTerm);
-            setTestTerm(resolvedActiveTerm);
-            setSubjectAreaTerm(resolvedActiveTerm);
-            setCoreValuesTerm(resolvedActiveTerm);
-          }
-          setAssignedClasses(classesRes || []);
-          setAttendanceTrend(attendRes || []);
-          setSubjectPerformance(subjPerfRes || []);
-          setGradeDistribution(gradeDistRes || [0, 0, 0, 0, 0]);
-          setTestExamData(testRes);
-          setSubjectAreaData(subjAreaRes || []);
-          setCoreValuesData(coreRes || []);
-        }
-      } catch (err) {
-        console.error("Error loading adviser dashboard data:", err);
-      } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
-      }
-    }
-
-    loadDashboardData();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [currentUser]);
-
-  // Update Subject Performance on term switch
-  useEffect(() => {
-    const userId = currentUser?.user_id || currentUser?.id;
-    getSubjectPerformance(subjectTerm, userId).then((res) =>
-      setSubjectPerformance(res || []),
-    );
-  }, [subjectTerm, currentUser]);
-
-  // Update Radar on term / section switch
-  useEffect(() => {
-    const userId = currentUser?.user_id || currentUser?.id;
-    getGradeRangeDistribution(radarSection, radarTerm, userId).then((res) =>
-      setGradeDistribution(res || [0, 0, 0, 0, 0]),
-    );
-  }, [radarSection, radarTerm, currentUser]);
-
-  // Update Test/Exam on term / section switch
-  useEffect(() => {
-    const userId = currentUser?.user_id || currentUser?.id;
-    getTestExamAnalysis(testTerm, testSection, userId).then(setTestExamData);
-  }, [testTerm, testSection, currentUser]);
-
-  // Update Subject Area on term switch (Advisers only)
-  useEffect(() => {
-    if (!isAdviser) return;
-    const userId = currentUser?.user_id || currentUser?.id;
-    getSubjectAreaPerformance(subjectAreaTerm, userId).then((res) =>
-      setSubjectAreaData(res || []),
-    );
-  }, [subjectAreaTerm, currentUser, isAdviser]);
-
-  // Update Core Values on term switch (Advisers only)
-  useEffect(() => {
-    if (!isAdviser) return;
-    const userId = currentUser?.user_id || currentUser?.id;
-    getCoreValuesComparison(coreValuesTerm, userId).then((res) =>
-      setCoreValuesData(res || []),
-    );
-  }, [coreValuesTerm, currentUser, isAdviser]);
 
   const handleContinueEntry = (selected) => {
     const cls =
@@ -652,6 +528,63 @@ export default function AdviserDashboard() {
     }
   };
 
+  if (overview.error && !overview.data) return <div className="adviser-dashboard__container">
+    <header className="adviser-dashboard__header"><h1 className="adviser-dashboard__title">Dashboard</h1></header>
+    <div role="alert">{overview.error}<button type="button" onClick={overview.refresh}>Retry</button></div>
+  </div>;
+
+  if (loading) return <div className={`adviser-dashboard__container adviser-dashboard__container--initial-loading${!isAdviser ? ' adviser-dashboard__container--teacher-view' : ''}`} aria-busy="true">
+    <header className="adviser-dashboard__header"><h1 className="adviser-dashboard__title">Dashboard</h1></header>
+    <span className="app-skeleton-sr-only" role="status">Loading dashboard</span>
+    <section className="adviser-dashboard__top-grid">
+      <div className="adviser-dashboard__top-left-col">
+        <div className="adviser-dashboard__welcome-banner adviser-dashboard__placeholder-banner" aria-hidden="true">
+          <div><SkeletonBlock width={190} height={26} /><SkeletonBlock width={290} /></div>
+          <SkeletonBlock className="adviser-dashboard__placeholder-art" />
+        </div>
+        <div className="adviser-dashboard__stat-row">
+          {[0, 1, 2].map(index => <AdviserStatCard key={index} title="summary" loading />)}
+        </div>
+      </div>
+    </section>
+    <section className="adviser-dashboard__performance-row">
+      <AdviserEntryProgressGauge loading />
+      <AdviserSubjectBarChart loading term={subjectTerm} onTermChange={setSubjectTerm} />
+      {isAdviser && <div className="adviser-dashboard__quick-actions-card adviser-dashboard__placeholder-actions" aria-hidden="true">
+        <SkeletonBlock width="45%" height={18} /><SkeletonBlock width="75%" />
+        <SkeletonBlock height={38} /><SkeletonBlock height={38} /><SkeletonBlock height={40} />
+      </div>}
+    </section>
+    <section className="adviser-dashboard__assigned-section">
+      <SkeletonBlock className="adviser-dashboard__placeholder-section-heading" width={165} height={20} />
+      <div className="adviser-dashboard__assigned-classes-grid">
+        <div className="adviser-dashboard__class-cards-track" aria-hidden="true">
+          {[0, 1, 2].map(index => <div className="adviser-dashboard__class-card adviser-dashboard__placeholder-class" key={index}>
+            <SkeletonBlock width="65%" height={18} /><SkeletonBlock width="45%" /><SkeletonBlock width="75%" />
+            <SkeletonBlock height={7} /><SkeletonBlock height={38} />
+          </div>)}
+        </div>
+        <div className="adviser-dashboard__assigned-stats-col">
+          <AdviserStatCard title="submission summary" loading /><AdviserStatCard title="submission summary" loading />
+        </div>
+      </div>
+    </section>
+    <section className="adviser-dashboard__mid-grid">
+      <AdviserRadarChart loading term={radarTerm} onTermChange={setRadarTerm} section={radarSection} onSectionChange={setRadarSection} sections={['All']} />
+      <div className="adviser-dashboard__mid-right-col">
+        <AdviserAttendanceWaveChart loading />
+        <div className="adviser-dashboard__totals-row"><AdviserStatCard title="class count" loading /><AdviserStatCard title="student count" loading /></div>
+      </div>
+    </section>
+    <section className="adviser-dashboard__test-section">
+      <SkeletonBlock className="adviser-dashboard__placeholder-section-heading" width={240} height={20} />
+      <AdviserTestExamAnalysis loading term={testTerm} onTermChange={setTestTerm} section={testSection} onSectionChange={setTestSection} sections={['All']} />
+    </section>
+    {isAdviser && <section className="adviser-dashboard__bottom-grid">
+      <AdviserSubjectAreaHBarChart loading term={subjectAreaTerm} onTermChange={setSubjectAreaTerm} />
+    </section>}
+  </div>;
+
   return (
     <div className={`adviser-dashboard__container ${!isAdviser ? "adviser-dashboard__container--teacher-view" : ""}`}>
       {/* 1. Header with Title */}
@@ -811,7 +744,7 @@ export default function AdviserDashboard() {
           term={subjectTerm}
           onTermChange={setSubjectTerm}
           onSelectSection={handleSelectSection}
-          loading={loading}
+          loading={loading || subjectQuery.loading}
         />
 
         {/* Quick Actions Card (Advisers only) */}
@@ -896,7 +829,7 @@ export default function AdviserDashboard() {
           {/* Class Cards List */}
           {assignedClasses && assignedClasses.length > 0 ? (
             <div className="adviser-dashboard__class-cards-track">
-              {assignedClasses.map((cls) => (
+              {loading ? <PageSkeleton label="Loading assigned classes" layout="cards" rows={3} /> : assignedClasses.map((cls) => (
                 <AdviserClassCard
                   key={cls.id || cls.section_id || cls.section}
                   cls={cls}
@@ -946,7 +879,7 @@ export default function AdviserDashboard() {
           section={radarSection}
           onSectionChange={setRadarSection}
           sections={availableSections}
-          loading={loading}
+          loading={loading || radarQuery.loading}
         />
 
         {/* Right: Attendance Trend Wave & Totals */}
@@ -983,7 +916,7 @@ export default function AdviserDashboard() {
           section={testSection}
           onSectionChange={setTestSection}
           sections={availableSections}
-          loading={loading}
+          loading={loading || testQuery.loading}
         />
       </section>
 
@@ -994,7 +927,7 @@ export default function AdviserDashboard() {
             data={subjectAreaData}
             term={subjectAreaTerm}
             onTermChange={setSubjectAreaTerm}
-            loading={loading}
+            loading={loading || areaQuery.loading}
           />
 
         </section>

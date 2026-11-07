@@ -1,3 +1,4 @@
+import { SkeletonBlock } from '../common/PageSkeleton.jsx';
 import { useEffect, useRef, useState } from "react";
 
 const COLORS = { low: "#168449", medium: "#C27C20", high: "#C62828" };
@@ -109,7 +110,7 @@ function usePillDrift() {
 export default function OverallDistributionChart({ data, loading }) {
   const [active, setActive] = useState(null);
   const { offsets, onPointerEnter, onPointerMove, onPointerLeave } = usePillDrift();
-  if (loading) return <div className="ar-chart-card"><div className="ar-chart-header"><h2 className="ar-chart-title">OVERALL DISTRIBUTION</h2></div><div className="ar-skeleton-ring" /></div>;
+  if (loading) return <div className="ar-chart-card"><div className="ar-chart-header"><h2 className="ar-chart-title">{loading ? <SkeletonBlock width="45%" height={18} /> : <>OVERALL DISTRIBUTION</>}</h2></div><SkeletonBlock className="ar-skeleton-ring"  /></div>;
   const counts = { high: data?.high?.count || 0, medium: data?.medium?.count || 0, low: data?.low?.count || 0 };
   const total = data?.totalFlagged || counts.high + counts.medium + counts.low;
   const high = total ? Math.round(counts.high / total * 100) : 0;
@@ -133,7 +134,7 @@ export default function OverallDistributionChart({ data, loading }) {
     onKeyDown: event => { if (event.key === "Escape") setActive(null); },
   });
   return <div className="ar-chart-card ar-risk-distribution" onPointerEnter={onPointerEnter} onPointerMove={onPointerMove} onPointerLeave={onPointerLeave} onPointerCancel={onPointerLeave}>
-    <div className="ar-chart-header"><h2 className="ar-chart-title">OVERALL DISTRIBUTION</h2>
+    <div className="ar-chart-header"><h2 className="ar-chart-title">{loading ? <SkeletonBlock width="45%" height={18} /> : <>OVERALL DISTRIBUTION</>}</h2>
       <div className="ar-chart-legend-top">{segments.map(segment => <button type="button" key={segment.key} className={`ar-legend-dot-item${active === segment.key ? " active-legend" : ""}`} {...interaction(segment.key)}>
         <span className="ar-legend-dot-circle" style={{ background: segment.color }} />{segment.key[0].toUpperCase() + segment.key.slice(1)}
       </button>)}</div>

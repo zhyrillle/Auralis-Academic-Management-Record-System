@@ -34,24 +34,24 @@ export function AtRiskFilters({ preview, children }) {
             {children ?? (
               <div className="ar-review-nav-field">
                 <DropdownSelect
-                  label="Grade Level"
-                  value={preview.gradeLevel}
-                  options={preview.options?.gradeLevels || []}
-                  placeholder="All Grade Levels"
-                  onChange={preview.setGradeLevel}
-                  disabled={disabled}
-                />
+                    label="Grade Level"
+                    value={preview.gradeLevel}
+                    options={preview.options?.gradeLevels || []}
+                    placeholder="All Grade Levels"
+                    onChange={preview.setGradeLevel}
+                    disabled={disabled}
+                  />
               </div>
             )}
             <div className="ar-review-nav-field">
               <DropdownSelect
-                label="School Year"
-                value={preview.schoolYear}
-                options={preview.options?.schoolYears || []}
-                placeholder="School Year"
-                onChange={preview.setSchoolYear}
-                disabled={disabled}
-              />
+                  label="School Year"
+                  value={preview.schoolYear}
+                  options={preview.options?.schoolYears || []}
+                  placeholder="School Year"
+                  onChange={preview.setSchoolYear}
+                  disabled={disabled}
+                />
             </div>
           </div>
         }
@@ -90,6 +90,7 @@ export function AtRiskStats({ data, loading }) {
     <div className="ar-stats-row" aria-busy={loading}>
       {RISK_BANDS.map((band) => (
         <AnalyticsStatCard
+          loading={loading}
           key={band.level}
           label={band.label}
           value={loading ? "—" : (data?.summary[band.key] ?? "—")}
@@ -99,6 +100,7 @@ export function AtRiskStats({ data, loading }) {
         />
       ))}
       <AnalyticsStatCard
+        loading={loading}
         label="Learners with predictions"
         value={loading ? "—" : (data?.summary.total ?? "—")}
         description={

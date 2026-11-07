@@ -1,3 +1,4 @@
+import PageSkeleton from '../../components/common/PageSkeleton.jsx';
 import { cachedApiFetch as fetch } from "../../services/navigationCache.js";
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { Calendar, CalendarOff, CheckCircle, AlertTriangle, Info, Save, ChevronLeft, ChevronRight, Cloud, CloudOff, RefreshCw } from "lucide-react";
@@ -921,13 +922,13 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
     );
   };
 
-  if (loading) {
-    return (
-      <div className="attendance-sheet-container" style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "60vh" }}>
-        <p style={{ color: "#64748b", fontSize: "15px", fontWeight: 600 }}>Loading attendance spreadsheet…</p>
-      </div>
-    );
-  }
+  if (loading) return <div className="attendance-sheet-container">
+    <div className="att-header-bar"><div className="att-title-area">
+      <button className="back-btn" onClick={handleBack} title="Back to Class Record"><img src={backIconUrl} alt="Back" width={17} height={17} /></button>
+      <h1 className="att-title">Learner Attendance Conversion Tool</h1>
+    </div></div>
+    <PageSkeleton label="Loading attendance spreadsheet" columns={8} rows={8} />
+  </div>;
 
   if (loadError) return <div className="attendance-sheet-container">
     <EmptyState icon={AlertTriangle} title="Attendance could not be loaded" description={loadError} />

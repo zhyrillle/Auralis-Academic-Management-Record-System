@@ -1,3 +1,4 @@
+import { SkeletonTableRows, SkeletonValue, SkeletonTable } from '../../components/common/PageSkeleton.jsx';
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { Download, Printer, Check, Calendar, CheckCircle2 } from "lucide-react";
 import backIconUrl from "../../assets/backButton.svg";
@@ -37,6 +38,7 @@ export default function GradingSheet({
     onSubmit,
     userRole = "teacher",
     recordError,
+    loading = false,
     onRetry,
 }) {
     const [searchStudentQuery, setSearchStudentQuery] = useState("");
@@ -423,12 +425,12 @@ export default function GradingSheet({
                 </div>
 
                 <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-                    <button className="download-btn" onClick={handleDownloadPDF} title="Download PDF Sheet">
+                    <button className="download-btn" onClick={handleDownloadPDF} title="Download PDF Sheet" disabled={loading}>
                         <Download size={18} />
                         <span>Download PDF</span>
                     </button>
 
-                    <button className="print-btn" onClick={handlePrintSheet} title="Print Grading Sheet">
+                    <button className="print-btn" onClick={handlePrintSheet} title="Print Grading Sheet" disabled={loading}>
                         <Printer size={18} />
                         <span>Print</span>
                     </button>
@@ -464,7 +466,7 @@ export default function GradingSheet({
 
             <div className="grading-sheet-subheader-container">
                 <div className="total-students-desc">
-                    Total students: {activeClassStudentsList.totalCount}
+                    Total students: {loading ? <SkeletonValue label="Loading student count" /> : activeClassStudentsList.totalCount}
                 </div>
                 {currentTermLabel ? (
                     <div className="current-term-badge" title="Currently Active Grading Term">
@@ -530,7 +532,7 @@ export default function GradingSheet({
             </div>
 
             <div className="table-wrapper">
-                <table className="grading-table">
+                {loading ? <SkeletonTable columns={7} /> : (<table className="grading-table">
                     <thead>
                         <tr className="grading-header-row-1">
                             <th style={{ borderRight: "1px solid #e2e8f0", borderBottom: "none", backgroundColor: "#f8fafc" }}></th>
@@ -607,6 +609,7 @@ export default function GradingSheet({
                         )}
                     </thead>
                     <tbody>
+                      {loading ? <SkeletonTableRows columns={isMapeh ? 13 : 7} /> : <>
                         {/* ----------------- MALE GROUP ----------------- */}
                         <tr className="sex-header-row">
                             <td colSpan={isMapeh && activeMapehTab === "COMBINED" && combinedTermFilter === "All" ? "13" : isMapeh && activeMapehTab === "COMBINED" ? "6" : "7"} className="sex-header-cell">
@@ -816,8 +819,9 @@ export default function GradingSheet({
                                 );
                             })
                         )}
+                    </>}
                     </tbody>
-                </table>
+                </table>)}
             </div>
 
             {/* Sticky Bottom Submission Action Bar */}
@@ -826,7 +830,7 @@ export default function GradingSheet({
                 isSubmitted={currentSubmission?.state === "SUBMITTED"}
                 onSubmit={handleFooterSubmitTrigger}
                 userRole={userRole}
-                disabled={isSubmitDisabled}
+                disabled={loading || isSubmitDisabled}
                 disabledReason={submitDisabledReason}
                 modalTitle={`Submit ${currentTermLabel || "term"} grades to adviser?`}
                 statusContent={<>

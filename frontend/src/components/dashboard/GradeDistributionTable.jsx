@@ -1,3 +1,4 @@
+import { SkeletonTableRows, SkeletonTable, SkeletonBlock } from '../common/PageSkeleton';
 import { useState, useEffect, useMemo } from 'react';
 import { Eye, ArrowLeft } from 'lucide-react';
 import { getDeptGradeDistributionReport } from '../../services/dashboardApi';
@@ -19,7 +20,7 @@ export default function GradeDistributionTable({ schoolYear }) {
   ];
 
   const [reportData, setReportData] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   // Drill-down navigation state:
@@ -235,7 +236,7 @@ export default function GradeDistributionTable({ schoolYear }) {
       {/* 1. Header & Filters Row */}
       <div className="performance-content" style={{ marginBottom: '20px' }}>
         <h1 className="page-title" style={{ fontSize: '24px', marginBottom: '16px' }}>
-          Grade Distribution CMSS — {departmentSubject}
+          {loading ? <SkeletonBlock width="45%" height={22} /> : <>Grade Distribution CMSS — {departmentSubject}</>}
         </h1>
 
         <div className="filters-row" style={{ marginBottom: '0' }}>
@@ -326,9 +327,9 @@ export default function GradeDistributionTable({ schoolYear }) {
 
       {/* 3. Mean and MPS Table */}
       <div className="report-card">
-        <h2>Mean and MPS {parentName ? `— ${parentName}` : ''}</h2>
+        <h2>{loading ? <SkeletonBlock width="45%" height={18} /> : <>Mean and MPS {parentName ? `— ${parentName}` : ''}</>}</h2>
         <div className="table-wrap">
-          <table className="performance-table">
+          {loading ? <SkeletonTable columns={5} /> : (<table className="performance-table">
             <thead>
               <tr>
                 <th style={{ minWidth: '220px' }}>
@@ -342,11 +343,7 @@ export default function GradeDistributionTable({ schoolYear }) {
             </thead>
             <tbody>
               {loading ? (
-                <tr>
-                  <td colSpan={5} className="no-data-row">
-                    Loading report data...
-                  </td>
-                </tr>
+                <SkeletonTableRows columns={5} />
               ) : currentRows.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="no-data-row">
@@ -413,15 +410,15 @@ export default function GradeDistributionTable({ schoolYear }) {
                 </>
               )}
             </tbody>
-          </table>
+          </table>)}
         </div>
       </div>
 
       {/* 4. Grade Range Table */}
       <div className="report-card">
-        <h2>Grade Range {parentName ? `— ${parentName}` : ''}</h2>
+        <h2>{loading ? <SkeletonBlock width="45%" height={18} /> : <>Grade Range {parentName ? `— ${parentName}` : ''}</>}</h2>
         <div className="table-wrap">
-          <table className="performance-table grade-table">
+          {loading ? <SkeletonTable columns={7} /> : (<table className="performance-table grade-table">
             <thead>
               <tr>
                 <th style={{ minWidth: '220px', textAlign: 'left' }}>
@@ -437,11 +434,7 @@ export default function GradeDistributionTable({ schoolYear }) {
             </thead>
             <tbody>
               {loading ? (
-                <tr>
-                  <td colSpan={7} className="no-data-row">
-                    Loading grade range data...
-                  </td>
-                </tr>
+                <SkeletonTableRows columns={7} />
               ) : currentRows.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="no-data-row">
@@ -516,7 +509,7 @@ export default function GradeDistributionTable({ schoolYear }) {
                 </>
               )}
             </tbody>
-          </table>
+          </table>)}
         </div>
       </div>
     </div>

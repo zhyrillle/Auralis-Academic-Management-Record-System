@@ -202,10 +202,10 @@
 .ms-skeleton-block {
   display: block;
   overflow: hidden;
-  background: linear-gradient(90deg, #f1f2f4 20%, #f8f9fa 42%, #f1f2f4 66%);
-  background-size: 240% 100%;
+
+
   border-radius: 7px;
-  animation: ms-shimmer 1.35s ease-in-out infinite;
+
 }
 
 .ms-skeleton-block--eyebrow {
@@ -362,14 +362,7 @@
   margin: auto;
 }
 
-@keyframes ms-shimmer {
-  0% {
-    background-position: 100% 0;
-  }
-  100% {
-    background-position: -100% 0;
-  }
-}
+
 
 .ms-empty-state {
   display: grid;
@@ -426,6 +419,19 @@
   border: 1px solid #dce5f0;
   border-radius: 14px;
 }
+
+.ms-controls-row--loading .ms-control-actions {
+  flex: 1;
+  min-width: 0;
+  justify-content: flex-end;
+}
+
+.ms-controls-row--loading .ms-search-fieldset { flex: 1; max-width: 420px; }
+.ms-controls-row--loading .ms-control-actions .search-bar-container { width: 100% !important; }
+.ms-controls-row--loading .grade-submission-open,
+.ms-controls-row--loading .ms-download-btn { flex-shrink: 0; white-space: nowrap; }
+.ms-controls-row--loading { border-color: #edf1f6; }
+.ms-controls-row--loading .ms-summary__metric { border-color: #f0f3f7; }
 
 .ms-sheet-content {
   position: relative;
@@ -648,6 +654,21 @@
   border-bottom: 1px solid #dce5f0;
   vertical-align: middle;
 }
+
+.ms-loading-table { border-color: #edf1f6; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.035); }
+.ms-loading-grid { width: max-content; min-width: 100%; border-collapse: collapse; }
+.ms-loading-grid th,
+.ms-loading-grid td { padding: 10px 12px; border-right: 1px solid #edf1f6; border-bottom: 1px solid #edf1f6; }
+.ms-loading-grid th { background: #f9fafc; }
+.ms-loading-grid .ms-loading-name { min-width: 195px; }
+.ms-loading-grid .ms-loading-subject { min-width: 205px; }
+.ms-loading-grid .ms-loading-grade { min-width: 38px; }
+.ms-loading-grid .ms-loading-final { min-width: 65px; background: #fafbfc; }
+.ms-loading-grid .app-skeleton-block { margin: 0 auto; }
+.ms-loading-grid .ms-loading-learner .app-skeleton-block,
+.ms-loading-grid .ms-loading-group .app-skeleton-block { margin-left: 0; }
+.ms-loading-grid .ms-loading-learner .app-skeleton-block + .app-skeleton-block { margin-top: 7px; }
+.ms-loading-grid .ms-loading-group td { background: #f9fafc; }
 
 .ms-table tr > :last-child {
   border-right: 0;
@@ -1241,7 +1262,7 @@
 @media (prefers-reduced-motion: reduce) {
   .ms-spin,
   .ms-skeleton-block {
-    animation: none;
+
   }
 
   .ms-download-btn {

@@ -1,3 +1,4 @@
+import { SkeletonBlock } from './common/PageSkeleton.jsx';
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { X, Printer, FileSpreadsheet, Loader2, AlertCircle, ChevronLeft, ChevronRight } from "lucide-react";
@@ -466,8 +467,8 @@ function SF10PreviewModalContent({ isOpen, onClose, student, requireOfficialData
         {loading && (
           <div className="sf10-loading-skeleton" role="status" aria-label="Loading permanent record" aria-busy="true">
             <div aria-hidden="true">
-              <span className="sf10-skeleton-title" />
-              {Array.from({ length: 8 }, (_, index) => <span key={index} />)}
+              <SkeletonBlock className="sf10-skeleton-title" />
+              {Array.from({ length: 8 }, (_, index) => <SkeletonBlock key={index} />)}
             </div>
           </div>
         )}
