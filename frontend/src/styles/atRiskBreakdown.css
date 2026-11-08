@@ -219,6 +219,24 @@
   min-height: 320px;
 }
 
+/* Shared fitted charts for predictions and current-term monitoring. */
+.ar-charts-row--responsive .ar-chart-card { min-width: 0; }
+.ar-charts-row--responsive .ar-grade-chart .chart-scroll-shell--fill { min-height: 260px; }
+.ar-charts-row--responsive .ar-grade-chart .chart-svg--wide { min-width: 0; }
+.ar-charts-row--responsive .ar-grade-chart .chart-scroll-hint { display: none; }
+.ar-charts-row--responsive .ar-grade-chart .chart-scroll-shell--fill .chart-svg text { font-size: 12px; }
+.ar-charts-row--responsive .ar-grade-chart .chart-scroll-shell--fill .chart-axis-label { font-size: 13px !important; }
+.ar-charts-row--responsive .ar-grade-chart .chart-scroll-shell--fill .grouped-bar-chart__value { font-size: 12px !important; }
+@media (min-width: 1101px) {
+  .ar-charts-row.ar-charts-row--responsive { grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr); }
+}
+@media (max-width: 1600px) {
+  .ar-charts-row--responsive .ar-chart-card { min-height: 340px; padding: 14px 16px; }
+  .ar-charts-row--responsive .ar-connected-donut .ar-overall-donut-svg { width: min(100%, 350px); }
+  .ar-charts-row--responsive .ar-grade-chart .chart-scroll-shell--fill,
+  .ar-charts-row--responsive .ar-grade-chart .grouped-bar-chart { min-height: 220px; }
+}
+
 .ar-chart-header {
   display: flex;
   align-items: center;

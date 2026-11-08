@@ -109,6 +109,11 @@ export const sidebarConfig = {
       icon: AlertTriangle,
     },
     {
+      title: "Student Monitoring",
+      path: "/principal/student-monitoring",
+      icon: ClipboardList,
+    },
+    {
       title: "Performance Level",
       path: "/principal/performance-level",
       icon: BarChart3,

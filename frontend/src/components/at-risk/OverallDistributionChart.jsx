@@ -107,7 +107,7 @@ function usePillDrift() {
   };
 }
 
-export default function OverallDistributionChart({ data, loading }) {
+export default function OverallDistributionChart({ data, loading, labels = LABELS }) {
   const [active, setActive] = useState(null);
   const { offsets, onPointerEnter, onPointerMove, onPointerLeave } = usePillDrift();
   if (loading) return <div className="ar-chart-card"><div className="ar-chart-header"><h2 className="ar-chart-title">{loading ? <SkeletonBlock width="45%" height={18} /> : <>OVERALL DISTRIBUTION</>}</h2></div><SkeletonBlock className="ar-skeleton-ring"  /></div>;
@@ -136,13 +136,13 @@ export default function OverallDistributionChart({ data, loading }) {
   return <div className="ar-chart-card ar-risk-distribution" onPointerEnter={onPointerEnter} onPointerMove={onPointerMove} onPointerLeave={onPointerLeave} onPointerCancel={onPointerLeave}>
     <div className="ar-chart-header"><h2 className="ar-chart-title">{loading ? <SkeletonBlock width="45%" height={18} /> : <>OVERALL DISTRIBUTION</>}</h2>
       <div className="ar-chart-legend-top">{segments.map(segment => <button type="button" key={segment.key} className={`ar-legend-dot-item${active === segment.key ? " active-legend" : ""}`} {...interaction(segment.key)}>
-        <span className="ar-legend-dot-circle" style={{ background: segment.color }} />{segment.key[0].toUpperCase() + segment.key.slice(1)}
+        <span className="ar-legend-dot-circle" style={{ background: segment.color }} />{labels[segment.key].replace(/ Risk$/, '')}
       </button>)}</div>
     </div>
     <div className="ar-donut-chart-container ar-connected-donut">
       <svg viewBox="0 0 420 360" className="ar-overall-donut-svg" role="group" aria-label="Overall risk distribution">
         {!total && <circle cx={CENTER.x} cy={CENTER.y} r={(OUTER + INNER) / 2} fill="none" stroke="#e9eef5" strokeWidth={OUTER - INNER} />}
-        {segments.map(segment => segment.d && <path key={segment.key} d={segment.d} fill={segment.color} className="ar-risk-segment" tabIndex="0" role="button" aria-label={`${LABELS[segment.key]}: ${segment.count} learners, ${segment.percent}%`} {...interaction(segment.key)} style={{ opacity: active && active !== segment.key ? 0.6 : 1 }} />)}
+        {segments.map(segment => segment.d && <path key={segment.key} d={segment.d} fill={segment.color} className="ar-risk-segment" tabIndex="0" role="button" aria-label={`${labels[segment.key]}: ${segment.count} learners, ${segment.percent}%`} {...interaction(segment.key)} style={{ opacity: active && active !== segment.key ? 0.6 : 1 }} />)}
         {segments.map((segment, index) => {
           const badge = segment.count > 0 ? polar(160, segment.mid) : BADGES[segment.key];
           const bx = Math.min(390, Math.max(30, Math.min(388, Math.max(32, badge[0])) + offsets[index].x));
@@ -150,7 +150,7 @@ export default function OverallDistributionChart({ data, loading }) {
           const start = polar(OUTER + 5, segment.mid), elbow = polar(OUTER + 19, segment.mid);
           return <g key={segment.key}>
             {segment.count > 0 && <polyline className={`ar-donut-connector${active === segment.key ? " is-active" : ""}`} data-risk={segment.key} points={`${start.join(",")} ${elbow.join(",")} ${bx},${by}`} pathLength="1" fill="none" stroke={segment.color} strokeWidth="2" pointerEvents="none" aria-hidden="true" />}
-            <g className={`ar-svg-badge${active === segment.key ? " is-active" : ""}`} tabIndex="0" role="button" aria-label={`${LABELS[segment.key]} percentage: ${segment.percent}%`} {...interaction(segment.key)}>
+            <g className={`ar-svg-badge${active === segment.key ? " is-active" : ""}`} tabIndex="0" role="button" aria-label={`${labels[segment.key]} percentage: ${segment.percent}%`} {...interaction(segment.key)}>
               <rect x={bx - 23} y={by - 12} width="46" height="24" rx="12" fill={segment.color} />
               <text x={bx} y={by + 4} textAnchor="middle">{segment.percent}%</text>
             </g>
@@ -159,7 +159,7 @@ export default function OverallDistributionChart({ data, loading }) {
       </svg>
       <div className="ar-donut-center-content">
         <span className="ar-donut-center-num" style={activeSegment ? { color: activeSegment.color } : undefined}>{activeSegment ? activeSegment.count : total}</span>
-        <span className="ar-donut-center-sub">{activeSegment ? LABELS[activeSegment.key] : "learners"}</span>
+        <span className="ar-donut-center-sub">{activeSegment ? labels[activeSegment.key] : "learners"}</span>
         {activeSegment && <span className="ar-donut-center-percent">{activeSegment.percent}% of total</span>}
       </div>
     </div>

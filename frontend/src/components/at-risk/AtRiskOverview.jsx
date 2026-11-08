@@ -11,7 +11,7 @@ import {
 } from "../../utils/riskPresentation";
 import "../../styles/principalAnalytics.css";
 
-export function AtRiskFilters({ preview, children }) {
+export function AtRiskFilters({ preview, children, showInfo = true }) {
   const disabled = preview.loading || !preview.options;
   const predictionTerms = TERM_OPTIONS.map((option) => ({
     value: option.id,
@@ -23,9 +23,11 @@ export function AtRiskFilters({ preview, children }) {
       className="ar-filter-toolbar ar-review-navigation"
       aria-label="Prediction navigation"
     >
-      <div className="ar-filter-info">
-        <PredictionInfoButton />
-      </div>
+      {showInfo && (
+        <div className="ar-filter-info">
+          <PredictionInfoButton />
+        </div>
+      )}
       <FilterToolbar
         className="pa-navigation"
         label="Prediction filters"

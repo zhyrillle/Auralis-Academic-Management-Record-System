@@ -2,6 +2,7 @@ import { ChartColumn } from 'lucide-react';
 import PredictionLearnerList from '../../components/at-risk/PredictionLearnerList';
 import OverallDistributionChart from '../../components/at-risk/OverallDistributionChart';
 import GradeLevelBreakdownChart from '../../components/at-risk/GradeLevelBreakdownChart';
+import PredictionInfoButton from '../../components/at-risk/PredictionInfoButton';
 import EmptyState from '../../components/common/EmptyState';
 import { AtRiskFilters, AtRiskStats, AtRiskAvailability } from '../../components/at-risk/AtRiskOverview';
 import useAtRiskPreview from '../../services/useAtRiskPreview';
@@ -16,8 +17,8 @@ export default function AtRiskPrediction() {
     <div className="ar-header"><div>
       <h1 className="ar-title">Student Risk Review</h1>
       <p className="ar-subtitle">Preliminary next-term predictions · English only</p>
-    </div></div>
-    <AtRiskFilters preview={preview} />
+    </div><PredictionInfoButton /></div>
+    <AtRiskFilters preview={preview} showInfo={false} />
     {error ? <div className="ar-preview-error" role="alert">
       <strong>Prediction unavailable</strong><p>{error}</p><button type="button" onClick={preview.retry}>Retry</button>
     </div> : <>
@@ -27,9 +28,9 @@ export default function AtRiskPrediction() {
         ? <EmptyState className="ar-preview-empty pa-empty-state" icon={ChartColumn}
           title="No predictions for this period"
           description="Predictions require complete English grades, source-term attendance and valid PHIL-IRI screening. View records needed for details." />
-        : <section className="ar-charts-row" aria-label="Risk distribution breakdown">
+        : <section className="ar-charts-row ar-charts-row--responsive" aria-label="Risk distribution breakdown">
           <OverallDistributionChart data={data?.distribution} loading={loading} />
-          <GradeLevelBreakdownChart data={data?.gradeBreakdown} gradeLevels={preview.options?.gradeLevels} loading={loading} />
+          <GradeLevelBreakdownChart data={data?.gradeBreakdown} gradeLevels={preview.options?.gradeLevels} loading={loading} fillContainer />
         </section>}
       <PredictionLearnerList data={data} loading={loading} filterQuery={filterQuery} />
     </>}
