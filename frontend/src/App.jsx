@@ -24,6 +24,7 @@ import AdviserFeedback from "./pages/adviser/AdviserFeedback";
 import ProfilePage from "./pages/ProfilePage";
 import AtRiskBreakdown from "./pages/principal/AtRiskBreakdown";
 import AtRiskPrediction from "./pages/principal/AtRiskPrediction";
+import StudentMonitoring from "./pages/principal/StudentMonitoring";
 import AtRiskLearners from "./pages/principal/AtRiskLearners";
 import PerformanceGradeLevels from "./pages/principal/PerformanceGradeLevels";
 import PerformanceSections from "./pages/principal/PerformanceSections";
@@ -115,6 +116,7 @@ export default function App() {
           />
 
           {/* 2. Principal (Landing page is At-Risk Students) */}
+          <Route path="/principal/student-monitoring" element={<StudentMonitoring />} />
           <Route
             path="/principal"
             element={

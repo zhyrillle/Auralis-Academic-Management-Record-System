@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import "../../styles/charts.css";
 
 const WIDTH = 960;
@@ -14,13 +14,27 @@ export default function GroupedBarChart({
   suffix = "",
   showZeroValues = true,
   minimumGroupWidth = 0,
+  fillContainer = false,
 }) {
   const [activeBar, setActiveBar] = useState(null);
+  const viewport = useRef(null);
+  const [size, setSize] = useState(null);
+  useEffect(() => {
+    if (!fillContainer || !viewport.current || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      const next = { width: Math.max(320, Math.round(width)), height: Math.max(220, Math.round(height)) };
+      setSize(previous => previous?.width === next.width && previous?.height === next.height ? previous : next);
+    });
+    observer.observe(viewport.current);
+    return () => observer.disconnect();
+  }, [fillContainer]);
   const recordedValues = groups.flatMap(group => group.values).filter(bar => bar.value != null && bar.value !== "" && Number.isFinite(Number(bar.value))).map(bar => Number(bar.value));
   minimum = Math.min(minimum, ...recordedValues);
   maximum = Math.max(maximum, ...recordedValues);
   ticks = [...new Set([minimum, ...ticks, maximum, benchmark])].filter(value => value != null && value >= minimum && value <= maximum).sort((a, b) => a - b);
-  const width = Math.max(WIDTH, groups.length * minimumGroupWidth + PADDING.left + PADDING.right);
+  const width = Math.max(fillContainer && size ? size.width : WIDTH, groups.length * minimumGroupWidth + PADDING.left + PADDING.right);
+  const height = fillContainer && size ? size.height : HEIGHT;
   const chartWidth = width - PADDING.left - PADDING.right;
   const groupWidth = chartWidth / Math.max(groups.length, 1);
   const seriesCount = Math.max(groups[0]?.values.length || 1, 1);
@@ -28,12 +42,12 @@ export default function GroupedBarChart({
   const yFor = (value) =>
     PADDING.top +
     ((maximum - value) / Math.max(maximum - minimum, 1)) *
-      (HEIGHT - PADDING.top - PADDING.bottom);
+      (height - PADDING.top - PADDING.bottom);
 
   const plot = <>
       <svg
         className="chart-svg chart-svg--wide"
-        viewBox={`0 0 ${width} ${HEIGHT}`}
+        viewBox={`0 0 ${width} ${height}`}
         role="img"
         aria-label={ariaLabel}
       >
@@ -115,7 +129,7 @@ export default function GroupedBarChart({
               <text
                 className="chart-axis-label"
                 x={centerX}
-                y={HEIGHT - 18}
+                y={height - 18}
                 textAnchor="middle"
               >
                 {group.shortLabel || group.label}
@@ -130,7 +144,7 @@ export default function GroupedBarChart({
             className="chart-tooltip chart-tooltip--wide"
             style={{
               left: `clamp(76px, ${(activeBar.x / width) * 100}%, calc(100% - 76px))`,
-              top: `clamp(56px, ${(activeBar.y / HEIGHT) * 100}%, calc(100% - 18px))`,
+              top: `clamp(56px, ${(activeBar.y / height) * 100}%, calc(100% - 18px))`,
             }}
             role="status"
           >
@@ -145,15 +159,16 @@ export default function GroupedBarChart({
   </>;
 
   return (
-    <div className="chart-scroll-shell">
+    <div className={`chart-scroll-shell${fillContainer ? " chart-scroll-shell--fill" : ""}`}>
       <div
+        ref={viewport}
         className="chart-viewport chart-viewport--wide grouped-bar-chart"
         onMouseLeave={() => setActiveBar(null)}
         tabIndex="0"
         role="region"
-        aria-label={`${ariaLabel}. Horizontally scrollable chart.`}
+        aria-label={fillContainer && minimumGroupWidth === 0 ? ariaLabel : `${ariaLabel}. Horizontally scrollable chart.`}
       >
-        {minimumGroupWidth > 0 ? <div style={{ position: "relative", minWidth: width }}>{plot}</div> : plot}
+        {minimumGroupWidth > 0 ? <div style={{ position: "relative", minWidth: width, ...(fillContainer ? { height: "100%" } : {}) }}>{plot}</div> : plot}
       </div>
       <span className="chart-scroll-hint" aria-hidden="true">
         Swipe or scroll to view all categories
