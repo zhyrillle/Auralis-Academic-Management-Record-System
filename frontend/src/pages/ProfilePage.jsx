@@ -4,6 +4,7 @@ import {
   Camera,
   CheckCircle2,
   Eye,
+  EyeOff,
   LoaderCircle,
   LockKeyhole,
   Mail,
@@ -15,6 +16,7 @@ import {
   X,
 } from "lucide-react";
 import {
+  changeUserPassword,
   getUserProfile,
   resolveProfilePictureUrl,
   updateUserProfile,
@@ -138,6 +140,15 @@ export default function ProfilePage({ user, onUserUpdated }) {
   const [cropImageSize, setCropImageSize] = useState({ width: 1, height: 1 });
   const [cropViewportSize, setCropViewportSize] = useState(280);
   const [toastMessage, setToastMessage] = useState("");
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState("");
+  const [isSavingPassword, setIsSavingPassword] = useState(false);
   const fileInputRef = useRef(null);
   const pendingAvatarUrlRef = useRef(null);
   const cropStageRef = useRef(null);
@@ -290,6 +301,56 @@ export default function ProfilePage({ user, onUserUpdated }) {
       setPageError(error.message);
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleCancelPasswordChange = () => {
+    setCurrentPassword("");
+    setNewPassword("");
+    setConfirmPassword("");
+    setShowCurrentPassword(false);
+    setShowNewPassword(false);
+    setShowConfirmPassword(false);
+    setPasswordError("");
+    setIsChangingPassword(false);
+  };
+
+  const handlePasswordSave = async () => {
+    if (!currentPassword) {
+      setPasswordError("Please enter your current password.");
+      return;
+    }
+    if (!newPassword) {
+      setPasswordError("Please enter your new password.");
+      return;
+    }
+    if (newPassword.length < 6) {
+      setPasswordError("New password must be at least 6 characters long.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError("New passwords do not match.");
+      return;
+    }
+    if (currentPassword === newPassword) {
+      setPasswordError("New password must be different from your current password.");
+      return;
+    }
+
+    try {
+      setIsSavingPassword(true);
+      setPasswordError("");
+      await changeUserPassword(userId, {
+        currentPassword,
+        newPassword,
+        confirmPassword,
+      });
+      handleCancelPasswordChange();
+      showToast("Password updated successfully.");
+    } catch (err) {
+      setPasswordError(err.message || "Failed to update password.");
+    } finally {
+      setIsSavingPassword(false);
     }
   };
 
@@ -713,6 +774,158 @@ export default function ProfilePage({ user, onUserUpdated }) {
                 </dd>
               </div>
             ))}
+          </dl>
+        )}
+      </section>
+
+      <section className="profile-information-card profile-security-card" aria-labelledby="security-info-title">
+        <div className="profile-information-card__header">
+          <div>
+            <h2 id="security-info-title">Security &amp; Password</h2>
+            <p>Ensure your account is protected with a secure password.</p>
+          </div>
+
+          <div className="profile-form-actions">
+            {!isChangingPassword ? (
+              <button
+                type="button"
+                className="profile-button profile-button--primary"
+                onClick={() => { setIsChangingPassword(true); setPasswordError(""); }}
+              >
+                <LockKeyhole size={17} aria-hidden="true" />Change Password
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className="profile-button profile-button--secondary"
+                  onClick={handleCancelPasswordChange}
+                  disabled={isSavingPassword}
+                >
+                  <X size={17} aria-hidden="true" />Cancel
+                </button>
+                <button
+                  type="button"
+                  className="profile-button profile-button--primary"
+                  onClick={handlePasswordSave}
+                  disabled={isSavingPassword || !newPassword}
+                >
+                  {isSavingPassword ? (
+                    <LoaderCircle className="profile-spinner" size={17} aria-hidden="true" />
+                  ) : (
+                    <Save size={17} aria-hidden="true" />
+                  )}
+                  {isSavingPassword ? "Saving…" : "Save Password"}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+
+        {isChangingPassword ? (
+          <form
+            className="profile-form profile-form--password"
+            onSubmit={(event) => { event.preventDefault(); handlePasswordSave(); }}
+            noValidate
+          >
+            {passwordError && (
+              <div className="profile-password-error-banner" role="alert">
+                {passwordError}
+              </div>
+            )}
+
+            <label className="profile-field profile-field--password">
+              <span>Current Password</span>
+              <div className="profile-password-input-wrapper">
+                <input
+                  type={showCurrentPassword ? "text" : "password"}
+                  value={currentPassword}
+                  onChange={(e) => { setCurrentPassword(e.target.value); setPasswordError(""); }}
+                  placeholder="Enter current password"
+                  disabled={isSavingPassword}
+                  autoComplete="current-password"
+                />
+                <button
+                  type="button"
+                  className="profile-password-toggle"
+                  onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                  aria-label={showCurrentPassword ? "Hide current password" : "Show current password"}
+                  tabIndex={-1}
+                >
+                  {showCurrentPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+            </label>
+
+            <div />
+
+            <label className="profile-field profile-field--password">
+              <span>New Password</span>
+              <div className="profile-password-input-wrapper">
+                <input
+                  type={showNewPassword ? "text" : "password"}
+                  value={newPassword}
+                  onChange={(e) => { setNewPassword(e.target.value); setPasswordError(""); }}
+                  placeholder="At least 6 characters"
+                  disabled={isSavingPassword}
+                  autoComplete="new-password"
+                />
+                <button
+                  type="button"
+                  className="profile-password-toggle"
+                  onClick={() => setShowNewPassword(!showNewPassword)}
+                  aria-label={showNewPassword ? "Hide new password" : "Show new password"}
+                  tabIndex={-1}
+                >
+                  {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+            </label>
+
+            <label className="profile-field profile-field--password">
+              <span>Confirm New Password</span>
+              <div className="profile-password-input-wrapper">
+                <input
+                  type={showConfirmPassword ? "text" : "password"}
+                  value={confirmPassword}
+                  onChange={(e) => { setConfirmPassword(e.target.value); setPasswordError(""); }}
+                  placeholder="Re-enter new password"
+                  disabled={isSavingPassword}
+                  autoComplete="new-password"
+                />
+                <button
+                  type="button"
+                  className="profile-password-toggle"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  aria-label={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}
+                  tabIndex={-1}
+                >
+                  {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+            </label>
+
+            <button className="profile-form-submit" type="submit" style={{ display: 'none' }}>
+              Save password
+            </button>
+          </form>
+        ) : (
+          <dl className="profile-details-grid profile-details-grid--security">
+            <div className="profile-detail">
+              <dt>Password</dt>
+              <dd style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span>••••••••••••</span>
+                <span style={{ fontSize: "11px", color: "#16a34a", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                  <CheckCircle2 size={13} /> Protected
+                </span>
+              </dd>
+            </div>
+            <div className="profile-detail">
+              <dt>Requirements</dt>
+              <dd style={{ fontSize: "13px", color: "#64748b", fontWeight: 500 }}>
+                Minimum 6 characters. Must match confirmation.
+              </dd>
+            </div>
           </dl>
         )}
       </section>

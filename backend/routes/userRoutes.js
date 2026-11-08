@@ -1011,10 +1011,46 @@ router.put("/:id/profile", async (req, res) => {
   }
   try {
     const userId = Number(req.params.id);
-    const { first_name, middle_name, last_name, extension_name, email } = req.body;
+    const {
+      first_name,
+      middle_name,
+      last_name,
+      extension_name,
+      email,
+      password,
+      newPassword,
+      new_password,
+      currentPassword,
+      current_password,
+    } = req.body;
+
     if (!first_name?.trim() || !last_name?.trim() || !email?.trim()) {
       return res.status(400).json({ error: "Required fields missing." });
     }
+
+    const nxtPwd = newPassword || new_password || password;
+    if (nxtPwd && String(nxtPwd).trim()) {
+      const cleanNewPwd = String(nxtPwd).trim();
+      if (cleanNewPwd.length < 6) {
+        return res.status(400).json({ error: "Password must be at least 6 characters long." });
+      }
+      const curPwd = currentPassword || current_password;
+      if (curPwd) {
+        const [existing] = await db.execute("SELECT password FROM `USER` WHERE user_id = ?", [userId]);
+        if (existing.length > 0) {
+          const isValid = await verifyPassword(String(curPwd), existing[0].password);
+          if (!isValid) {
+            return res.status(401).json({ error: "Current password is incorrect." });
+          }
+        }
+      }
+      const hashed = await hashPassword(cleanNewPwd);
+      await db.execute("UPDATE `USER` SET password = ? WHERE user_id = ?", [hashed, userId]);
+      if (db.cloudPool) {
+        db.cloudPool.query("UPDATE `USER` SET password = ? WHERE user_id = ?", [hashed, userId]).catch(() => {});
+      }
+    }
+
     const profileData = {
       first_name: first_name.trim(),
       middle_name: toNullable(middle_name),
@@ -1055,6 +1091,93 @@ router.put("/:id/profile", async (req, res) => {
     sendDatabaseError(res, err);
   }
 });
+
+// POST or PUT /api/users/:id/change-password
+const handlePasswordChangeRoute = async (req, res) => {
+  if (!isValidUserId(req.params.id)) {
+    return res.status(400).json({ error: "Invalid user ID." });
+  }
+  try {
+    const userId = Number(req.params.id);
+    const {
+      currentPassword,
+      current_password,
+      newPassword,
+      new_password,
+      confirmPassword,
+      confirm_password,
+    } = req.body || {};
+
+    const curPwd = currentPassword || current_password;
+    const nxtPwd = newPassword || new_password;
+    const cnfPwd = confirmPassword || confirm_password;
+
+    if (!curPwd || !String(curPwd).trim()) {
+      return res.status(400).json({ error: "Current password is required." });
+    }
+    if (!nxtPwd || !String(nxtPwd).trim()) {
+      return res.status(400).json({ error: "New password is required." });
+    }
+
+    const cleanNewPwd = String(nxtPwd).trim();
+    if (cleanNewPwd.length < 6) {
+      return res.status(400).json({ error: "Password must be at least 6 characters long." });
+    }
+
+    if (cnfPwd !== undefined && cleanNewPwd !== String(cnfPwd).trim()) {
+      return res.status(400).json({ error: "New passwords do not match." });
+    }
+
+    const [userRows] = await db.execute(
+      "SELECT user_id, email, password, first_name, last_name FROM `USER` WHERE user_id = ?",
+      [userId]
+    );
+    if (!userRows || userRows.length === 0) {
+      return res.status(404).json({ error: "User not found." });
+    }
+    const user = userRows[0];
+
+    const isCurrentValid = await verifyPassword(String(curPwd), user.password);
+    if (!isCurrentValid) {
+      return res.status(401).json({ error: "Current password is incorrect." });
+    }
+
+    if (String(curPwd) === cleanNewPwd) {
+      return res.status(400).json({ error: "New password must be different from current password." });
+    }
+
+    const hashedPassword = await hashPassword(cleanNewPwd);
+    await db.execute("UPDATE `USER` SET password = ? WHERE user_id = ?", [hashedPassword, userId]);
+
+    if (db.cloudPool) {
+      db.cloudPool.query("UPDATE `USER` SET password = ? WHERE user_id = ?", [hashedPassword, userId])
+        .catch((err) => console.warn('[CloudUser] Failed to dual-write password change to cloud:', err.message));
+    }
+
+    await AuditEvent.create({
+      user_id: userId,
+      actor_context: { source: 'user', acting_as: 'User' },
+      event_type: 'USER_PASSWORD_CHANGED',
+      module_name: 'ACCOUNT_MANAGEMENT',
+      entity_type: 'USER',
+      entity_id: userId,
+      after_data: { user_id: userId, email: user.email },
+      metadata: {
+        target: `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email,
+        summary: `Changed password for ${user.email}.`,
+        impact: 'High',
+      },
+    }).catch((err) => console.error('Failed to log password change audit:', err.message));
+
+    res.json({ message: "Password updated successfully." });
+  } catch (err) {
+    console.error("Change password error:", err);
+    sendDatabaseError(res, err);
+  }
+};
+
+router.post("/:id/change-password", handlePasswordChangeRoute);
+router.put("/:id/change-password", handlePasswordChangeRoute);
 
 // PUT /api/users/:id/profile-picture
 router.put("/:id/profile-picture", async (req, res) => {
