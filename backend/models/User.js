@@ -229,6 +229,7 @@ class User {
       middle_name,
       last_name,
       extension_name,
+      credentials,
       email,
       password,
       pfp_url,
@@ -251,12 +252,13 @@ class User {
         middle_name,
         last_name,
         extension_name,
+        credentials,
         email,
         password,
         pfp_url,
         account_status
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       [
         role,
@@ -265,6 +267,7 @@ class User {
         middle_name || null,
         last_name,
         extension_name || null,
+        credentials || null,
         email,
         hashedPassword,
         pfp_url || null,
@@ -289,6 +292,7 @@ class User {
       "middle_name",
       "last_name",
       "extension_name",
+      "credentials",
       "email",
       "password",
       "pfp_url",
@@ -345,6 +349,7 @@ class User {
       middle_name,
       last_name,
       extension_name,
+      credentials,
       email,
     } = data;
 
@@ -356,6 +361,7 @@ class User {
         middle_name = ?,
         last_name = ?,
         extension_name = ?,
+        credentials = ?,
         email = ?
       WHERE user_id = ?
       `,
@@ -364,6 +370,7 @@ class User {
         middle_name || null,
         last_name,
         extension_name || null,
+        credentials || null,
         email,
         id,
       ]
@@ -371,8 +378,8 @@ class User {
 
     if (db.cloudPool) {
       db.cloudPool.query(
-        `UPDATE USER SET first_name = ?, middle_name = ?, last_name = ?, extension_name = ?, email = ? WHERE user_id = ?`,
-        [first_name, middle_name || null, last_name, extension_name || null, email, id]
+        `UPDATE USER SET first_name = ?, middle_name = ?, last_name = ?, extension_name = ?, credentials = ?, email = ? WHERE user_id = ?`,
+        [first_name, middle_name || null, last_name, extension_name || null, credentials || null, email, id]
       ).catch((err) => console.warn('[CloudUser] Failed to dual-write profile update to cloud:', err.message));
     }
 
