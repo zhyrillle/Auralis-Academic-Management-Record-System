@@ -835,6 +835,91 @@
   }
 }
 
+/* ========================================
+   SECURITY & PASSWORD CARD
+======================================== */
+.profile-security-card {
+  margin-top: 18px;
+  margin-bottom: 24px;
+}
+
+.profile-details-grid--security {
+  align-items: center;
+}
+
+.profile-form--password {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 20px;
+  padding-top: 14px;
+}
+
+.profile-field--password {
+  position: relative;
+}
+
+.profile-password-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.profile-password-input-wrapper input {
+  padding-right: 42px !important;
+}
+
+.profile-password-toggle {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  color: #64748b;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.profile-password-toggle:hover {
+  color: #112d61;
+  background-color: #f1f5f9;
+}
+
+.profile-password-toggle:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 1px;
+}
+
+.profile-password-error-banner {
+  grid-column: 1 / -1;
+  padding: 10px 14px;
+  color: #991b1b;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.profile-password-actions-row {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px solid #edf1f5;
+}
+
 @media (max-width: 768px) {
   .profile-page { width: 100%; }
   .profile-page__heading,

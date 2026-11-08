@@ -27,6 +27,15 @@ export const updateUserProfile = async (userId, profile) => {
   return data.user || data;
 };
 
+export const changeUserPassword = async (userId, passwordData) => {
+  const response = await fetch(`${API_BASE_URL}/users/${userId}/change-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(passwordData),
+  });
+  return parseResponse(response);
+};
+
 export const updateUserProfilePicture = async (userId, imageData) => {
   const response = await fetch(`${API_BASE_URL}/users/${userId}/profile-picture`, {
     method: "PUT",
