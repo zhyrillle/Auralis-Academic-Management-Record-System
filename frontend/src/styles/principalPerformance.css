@@ -567,7 +567,7 @@
 .pp-page--subjects .pp-table th:nth-child(5) { width: 17%; }
 .pp-page--subjects .pp-table th:nth-child(6) { width: 12%; }
 
-.pp-page--subjects .pp-table :is(th, td):is(:nth-child(2), :nth-child(6)) {
+.pp-page--subjects .pp-table :is(th, td):is(:nth-child(2), :nth-child(4), :nth-child(5), :nth-child(6)) {
   text-align: center;
 }
 
@@ -575,6 +575,7 @@
   display: grid;
   grid-template-columns: minmax(0, 3fr) minmax(max-content, 1fr);
   min-width: 0;
+  padding-inline-end: 8px;
 }
 
 .pp-page--subjects .pp-inline-progress .progress-bar {
