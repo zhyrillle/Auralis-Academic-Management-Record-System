@@ -381,7 +381,11 @@ export default function HonorStudentsModal({
     }
   };
 
-  const isActionDisabled = isPrinting || isExporting || honorStudents.length === 0;
+  const isIncomplete = !completionStats.isFinalized;
+  const isActionDisabled = isPrinting || isExporting || isIncomplete || honorStudents.length === 0;
+  const incompleteWarningMessage = isIncomplete
+    ? `Cannot be printed or downloaded until all grades are completed.`
+    : "";
 
   const title = "Honor Students";
   const eyebrow = section?.name
@@ -518,32 +522,48 @@ export default function HonorStudentsModal({
               )}
             </div>
 
-            {/* Print button */}
-            <div className="ms-honors-action-wrapper">
+            {/* Print button with warning tooltip ONLY when incomplete */}
+            <div
+              className={`ms-honors-action-wrapper ${isIncomplete ? "ms-honors-action-wrapper--disabled" : ""}`}
+            >
               <button
                 type="button"
                 className="ms-honors-btn-print"
                 onClick={handlePrintPdf}
                 disabled={isActionDisabled}
-                aria-label="Print official list of honor students"
+                aria-label={isIncomplete ? incompleteWarningMessage : "Print official list of honor students"}
               >
                 {isPrinting ? <Loader2 size={14} className="ms-spin" /> : <Printer size={14} />}
                 <span>{isPrinting ? "Printing…" : "Print"}</span>
               </button>
+              {isIncomplete && (
+                <div className="ms-honors-action-tooltip" role="tooltip">
+                  <AlertTriangle size={13} className="ms-honors-tooltip-warn-icon" aria-hidden="true" />
+                  <span>{incompleteWarningMessage}</span>
+                </div>
+              )}
             </div>
 
-            {/* Download button */}
-            <div className="ms-honors-action-wrapper">
+            {/* Download button with warning tooltip ONLY when incomplete */}
+            <div
+              className={`ms-honors-action-wrapper ${isIncomplete ? "ms-honors-action-wrapper--disabled" : ""}`}
+            >
               <button
                 type="button"
                 className="ms-honors-btn-download"
                 onClick={handleDownloadPdf}
                 disabled={isActionDisabled}
-                aria-label="Download PDF of honor students"
+                aria-label={isIncomplete ? incompleteWarningMessage : "Download PDF of honor students"}
               >
                 {isExporting ? <Loader2 size={14} className="ms-spin" /> : <Download size={14} />}
                 <span>{isExporting ? "Downloading…" : "Download PDF"}</span>
               </button>
+              {isIncomplete && (
+                <div className="ms-honors-action-tooltip" role="tooltip">
+                  <AlertTriangle size={13} className="ms-honors-tooltip-warn-icon" aria-hidden="true" />
+                  <span>{incompleteWarningMessage}</span>
+                </div>
+              )}
             </div>
           </div>
         </div>
