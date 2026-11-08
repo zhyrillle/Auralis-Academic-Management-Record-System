@@ -12,8 +12,6 @@ export default function ClassCard({ cls, onView, onGradingSheet, onEdit, childre
   );
   const isAdviser = Boolean(cls?.isAdviser === true || (cls?.classType && String(cls.classType).startsWith("Advisory Class")));
   const isAdvisory = isAdviser;
-  const isAdvisoryCard = cls?.assignmentType === "advisory";
-  const advisoryColor = isAdvisoryCard ? "#112d61" : "#16a34a";
 
   const programCode = cls?.program_code || cls?.programCode || cls?.program_name || null;
   const validProgCode = programCode && String(programCode).toUpperCase() !== "EBEC" ? String(programCode).toUpperCase() : null;
@@ -29,15 +27,24 @@ export default function ClassCard({ cls, onView, onGradingSheet, onEdit, childre
     displayClassType = "Regular Class";
   }
 
-
+  let classTypeColor;
+  if (isAdviser) {
+    classTypeColor = "#16a34a"; // Green for advisory (regardless if its specialized or not)
+  } else if (isSpecialized) {
+    classTypeColor = "#c9a227"; // Yellow for specialized
+  } else {
+    classTypeColor = "#64748b"; // Gray for regular
+  }
 
   return (
     <div className={className} role={className ? 'article' : undefined} aria-label={className ? `${cls.sectionName}, ${cls.gradeLevel}` : undefined}
       style={{
-        background: isAdvisoryCard ? "#fff8e1" : "#ffffff",
+        boxSizing: "border-box",
+        minWidth: 0,
+        background: "#ffffff",
         borderRadius: "15px",
         border: "1px solid #eef2f6",
-        padding: "24px",
+        padding: "20px 16px",
         boxShadow: "0 8px 24px rgba(15, 23, 42, 0.06)",
         display: "flex",
         flexDirection: "column",
@@ -89,20 +96,16 @@ export default function ClassCard({ cls, onView, onGradingSheet, onEdit, childre
             className={gradeId == null ? undefined : 'section-card__grade'}
             data-grade-level={gradeId}
             style={{
-              backgroundColor: gradeId != null ? undefined : isAdvisoryCard
-                ? "rgba(17,45,97,0.06)"
-                : isSpecialized
-                ? "rgba(201, 162, 39, 0.1)"
-                : isAdviser && !isAdvisoryCard
+              backgroundColor: gradeId != null ? undefined : isAdviser
                 ? "rgba(22,163,74,0.1)"
-                : "rgba(17,45,97,0.06)",
-              color: gradeId != null ? undefined : isAdvisoryCard
-                ? "#112d61"
                 : isSpecialized
-                ? "#c9a227"
-                : isAdviser
-                ? advisoryColor
-                : "#112d61",
+                  ? "rgba(201, 162, 39, 0.1)"
+                  : "rgba(17,45,97,0.06)",
+              color: gradeId != null ? undefined : isAdviser
+                ? "#16a34a"
+                : isSpecialized
+                  ? "#c9a227"
+                  : "#112d61",
               padding: "4px 10px",
               borderRadius: "20px",
               fontSize: "12px",
@@ -138,11 +141,11 @@ export default function ClassCard({ cls, onView, onGradingSheet, onEdit, childre
             fontSize: "var(--fs-subtext)",
             fontWeight: "var(--fw-medium)",
             fontFamily: "var(--font-dm-sans)",
-            color: isAdvisoryCard ? "#112d61" : isSpecialized ? "#c9a227" : isAdvisory ? advisoryColor : "#64748b",
+            color: classTypeColor,
           }}
         >
 
-          {(isAdvisory || isSpecialized) && (
+          {(isAdviser || isSpecialized) && (
             <Star
               size={14}
               fill="currentColor"
@@ -165,85 +168,143 @@ export default function ClassCard({ cls, onView, onGradingSheet, onEdit, childre
         style={{
           display: "flex",
           alignItems: "center",
-          gap: "10px",
-          marginTop: children ? "18px" : "40px",
-          paddingTop: "0px",
-          //borderTop: "1px solid #f1f5f9",
+          gap: "6px",
+          marginTop: children ? "18px" : "auto",
+          paddingTop: children ? "0px" : "12px",
+          width: "100%",
+          boxSizing: "border-box",
+          minWidth: 0,
         }}
       >
 
         {/* View Button */}
         <button
-          title={viewAriaLabel || "Section Details"}
-          aria-label={viewAriaLabel}
-          style={{
+          type="button"
+          title={viewAriaLabel || (showSecondaryActions ? "View Section Details" : "Section Details")}
+          aria-label={viewAriaLabel || "VIEW"}
+          style={showSecondaryActions ? {
+            width: "36px",
+            height: "36px",
+            minWidth: "36px",
+            borderRadius: "13px",
+            border: "none",
+            backgroundColor: "#f1f5f9",
+            color: "#886C14",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: "pointer",
+            flexShrink: 0,
+            transition: "all 0.2s ease",
+            padding: 0,
+          } : {
             flex: 1,
+            height: "36px",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             gap: "6px",
             border: "none",
-            borderRadius: "20px",
+            borderRadius: "13px",
             cursor: "pointer",
-            fontSize: "14px",
+            fontSize: "13px",
             fontWeight: "600",
-            backgroundColor: "#C9A227",
-            color: "#ffffff",
-            padding: "10px 16px",
+            backgroundColor: "#f1f5f9",
+            color: "#886C14",
+            padding: "0 14px",
+            transition: "all 0.2s ease",
           }}
           onClick={() => onView(cls)}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = "#e2e8f0";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = "#f1f5f9";
+          }}
         >
-          <Eye size={18} />
-          <span>VIEW</span>
+          <Eye size={17} />
+          {!showSecondaryActions && <span>VIEW</span>}
         </button>
 
 
         {showSecondaryActions && <>{/* Grading Sheet */}
-        <button
-          type="button"
-          title={secondaryActionsDisabled ? `Grading Sheet: ${secondaryActionsDisabledReason}` : "Grading Sheet"}
-          aria-label={secondaryActionsDisabled ? `Grading Sheet: ${secondaryActionsDisabledReason}` : "Grading Sheet"}
-          aria-disabled={secondaryActionsDisabled || undefined}
-          style={{
-            width: "40px",
-            height: "40px",
-            borderRadius: "13px",
-            border: "none",
-            backgroundColor: "#f1f5f9",
-            color: secondaryActionsDisabled ? "#94a3b8" : "#886C14",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            cursor: secondaryActionsDisabled ? "not-allowed" : "pointer",
-          }}
-          onClick={() => { if (!secondaryActionsDisabled) onGradingSheet(cls); }}
-        >
-          <FileSpreadsheet size={18} />
-        </button>
+          <button
+            type="button"
+            title={secondaryActionsDisabled ? `Grading Sheet: ${secondaryActionsDisabledReason}` : "Grading Sheet"}
+            aria-label={secondaryActionsDisabled ? `Grading Sheet: ${secondaryActionsDisabledReason}` : "Grading Sheet"}
+            aria-disabled={secondaryActionsDisabled || undefined}
+            style={{
+              flex: 1,
+              minWidth: 0,
+              height: "36px",
+              borderRadius: "13px",
+              border: "none",
+              backgroundColor: secondaryActionsDisabled ? "#f1f5f9" : "#C9A227",
+              color: secondaryActionsDisabled ? "#94a3b8" : "#ffffff",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "5px",
+              fontSize: "12px",
+              fontWeight: "600",
+              fontFamily: "var(--font-dm-sans, inherit)",
+              padding: "0 6px",
+              cursor: secondaryActionsDisabled ? "not-allowed" : "pointer",
+              transition: "all 0.2s ease",
+            }}
+            onClick={() => { if (!secondaryActionsDisabled) onGradingSheet(cls); }}
+            onMouseEnter={(e) => {
+              if (!secondaryActionsDisabled) e.currentTarget.style.backgroundColor = "#886C14";
+            }}
+            onMouseLeave={(e) => {
+              if (!secondaryActionsDisabled) e.currentTarget.style.backgroundColor = "#C9A227";
+            }}
+          >
+            <FileSpreadsheet size={15} style={{ flexShrink: 0 }} />
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              Grading Sheet
+            </span>
+          </button>
 
 
-        {/* Edit */}
-        <button
-          type="button"
-          title={secondaryActionsDisabled ? `Class Record: ${secondaryActionsDisabledReason}` : "Class Record"}
-          aria-label={secondaryActionsDisabled ? `Class Record: ${secondaryActionsDisabledReason}` : "Class Record"}
-          aria-disabled={secondaryActionsDisabled || undefined}
-          style={{
-            width: "40px",
-            height: "40px",
-            borderRadius: "13px",
-            border: "none",
-            backgroundColor: "#f1f5f9",
-            color: secondaryActionsDisabled ? "#94a3b8" : "#886C14",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            cursor: secondaryActionsDisabled ? "not-allowed" : "pointer",
-          }}
-          onClick={() => { if (!secondaryActionsDisabled) onEdit(cls); }}
-        >
-          <Edit2 size={16} />
-        </button>
+          {/* Class Record */}
+          <button
+            type="button"
+            title={secondaryActionsDisabled ? `Class Record: ${secondaryActionsDisabledReason}` : "Class Record"}
+            aria-label={secondaryActionsDisabled ? `Class Record: ${secondaryActionsDisabledReason}` : "Class Record"}
+            aria-disabled={secondaryActionsDisabled || undefined}
+            style={{
+              flex: 1,
+              minWidth: 0,
+              height: "36px",
+              borderRadius: "13px",
+              border: "none",
+              backgroundColor: secondaryActionsDisabled ? "#f1f5f9" : "#112d61",
+              color: secondaryActionsDisabled ? "#94a3b8" : "#ffffff",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "5px",
+              fontSize: "12px",
+              fontWeight: "600",
+              fontFamily: "var(--font-dm-sans, inherit)",
+              padding: "0 6px",
+              cursor: secondaryActionsDisabled ? "not-allowed" : "pointer",
+              transition: "all 0.2s ease",
+            }}
+            onClick={() => { if (!secondaryActionsDisabled) onEdit(cls); }}
+            onMouseEnter={(e) => {
+              if (!secondaryActionsDisabled) e.currentTarget.style.backgroundColor = "#1e3e78";
+            }}
+            onMouseLeave={(e) => {
+              if (!secondaryActionsDisabled) e.currentTarget.style.backgroundColor = "#112d61";
+            }}
+          >
+            <Edit2 size={14} style={{ flexShrink: 0 }} />
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              Class Record
+            </span>
+          </button>
         </>}
 
       </div>

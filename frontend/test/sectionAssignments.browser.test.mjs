@@ -81,7 +81,7 @@ try {
   await page.locator('button[title="Toggle sorting order"]').click();
   const advisory = grid.locator(':scope > div').filter({ hasText: 'All subjects' }).filter({ hasText: 'Carrots' });
   const english = grid.locator(':scope > div').filter({ hasText: 'English' });
-  assert.equal(await advisory.evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(255, 248, 225)');
+  assert.equal(await advisory.evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(255, 255, 255)');
   assert.equal(await advisory.evaluate(el => getComputedStyle(el).borderColor), 'rgb(238, 242, 246)');
   assert.equal(await english.evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(255, 255, 255)');
   assert.equal(await advisory.getByRole('button').count(), 1);

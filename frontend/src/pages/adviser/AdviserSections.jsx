@@ -1,6 +1,6 @@
 import PageSkeleton from '../../components/common/PageSkeleton.jsx';
 import { useState, useMemo, useEffect } from "react";
-import { ArrowDownNarrowWide } from "lucide-react";
+import { ArrowDownNarrowWide, X } from "lucide-react";
 import { useLocation } from "react-router-dom";
 
 // Components
@@ -154,6 +154,14 @@ export default function AdviserSections({ userRole: propUserRole }) {
   const [filterClassType, setFilterClassType] = useState("All");
   const [sortBy, setSortBy] = useState("sectionName");
   const [sortAscending, setSortAscending] = useState(true);
+
+  const hasActiveFilters = filterSubject !== "All" || filterGrade !== "All" || filterClassType !== "All";
+
+  const clearFilters = () => {
+    setFilterSubject("All");
+    setFilterGrade("All");
+    setFilterClassType("All");
+  };
 
   const [toasts, setToasts] = useState([]);
 
@@ -361,6 +369,17 @@ export default function AdviserSections({ userRole: propUserRole }) {
                 ]}
                 minWidth="150px"
               />
+
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  className="sections-clear-filters"
+                  onClick={clearFilters}
+                  title="Clear all filters"
+                >
+                  <X size={13} /> Clear
+                </button>
+              )}
             </div>
             <div className="control-right">
               <div className="control-text">
