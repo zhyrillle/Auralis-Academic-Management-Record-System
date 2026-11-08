@@ -600,6 +600,7 @@
 .profile-field { display: block; min-width: 0; }
 
 .profile-field input,
+.profile-field select,
 .profile-locked-value {
   box-sizing: border-box;
   width: 100%;
@@ -615,7 +616,8 @@
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-.profile-field input:focus {
+.profile-field input:focus,
+.profile-field select:focus {
   border-color: #2563eb;
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
   outline: 0;
@@ -822,6 +824,7 @@
   }
 
   .profile-field input,
+  .profile-field select,
   .profile-locked-value {
     min-height: 36px;
     font-size: 0.875rem;
