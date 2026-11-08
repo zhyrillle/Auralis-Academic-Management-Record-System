@@ -69,29 +69,23 @@ try {
   await page.goto(server.resolvedUrls.local[0] + 'adviser/sections');
   const grid = page.locator('.classes-grid');
   await grid.getByRole('button', { name: 'VIEW', exact: true }).first().waitFor();
-  assert.equal(await grid.locator(':scope > div').count(), 4);
-  const assertAdvisoryFirst = async () => {
-    const subjects = await grid.locator(':scope > div').evaluateAll(cards => cards.map(card => card.textContent));
-    assert(subjects.slice(0, 2).every(text => text.includes('All subjects')));
-    assert(subjects.slice(2).every(text => !text.includes('All subjects')));
-  };
-  await assertAdvisoryFirst();
+  assert.equal(await grid.locator(':scope > div').count(), 3);
+  assert((await grid.locator(':scope > div').first().textContent()).includes('Carrots'));
   await page.locator('button[title="Toggle sorting order"]').click();
-  await assertAdvisoryFirst();
+  assert((await grid.locator(':scope > div').first().textContent()).includes('Mahogany'));
   await page.locator('button[title="Toggle sorting order"]').click();
-  const advisory = grid.locator(':scope > div').filter({ hasText: 'All subjects' }).filter({ hasText: 'Carrots' });
+  const advisory = grid.locator(':scope > div').filter({ hasText: 'All subjects' }).filter({ hasText: 'Mahogany' });
   const english = grid.locator(':scope > div').filter({ hasText: 'English' });
   assert.equal(await advisory.evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(255, 255, 255)');
   assert.equal(await advisory.evaluate(el => getComputedStyle(el).borderColor), 'rgb(238, 242, 246)');
   assert.equal(await english.evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(255, 255, 255)');
-  assert.equal(await advisory.getByRole('button').count(), 1);
+  assert.equal(await advisory.getByRole('button').count(), 3);
   assert.equal(await english.getByText('Advisory Class', { exact: true }).count(), 1);
   await page.screenshot({ path: join(artifacts, 'cards-desktop.png'), fullPage: true, animations: 'disabled' });
   await english.getByRole('button', { name: 'VIEW', exact: true }).click();
-  await page.getByRole('columnheader', { name: /At-risk Status/ }).waitFor();
-  assert.equal(await page.getByText('Medium Risk', { exact: true }).count(), 1);
-  assert.equal(await page.getByRole('columnheader', { name: 'Honor Status' }).count(), 0);
-  assert.equal(reads.filter(path => path === '/api/section-details/teaching/41').length, 1);
+  await page.getByRole('columnheader', { name: 'Honor Status' }).waitFor();
+  assert.equal(await page.getByRole('columnheader', { name: /At-risk Status/ }).count(), 0);
+  assert.equal(reads.filter(path => path === '/api/section-details/advisory/9').length, 1);
   assert.equal(reads.some(path => /grading-summary|students$/.test(path)), false, 'details must not start a separate grading-sheet read');
   const hold = term => {
     let started, resume;
@@ -110,7 +104,7 @@ try {
   heldTerm = null;
   await page.getByRole('button', { name: 'T3', exact: true }).click();
   await page.getByRole('columnheader', { name: 'Term 3 Grade' }).waitFor();
-  const oldTermFinished = page.waitForResponse(response => response.url().includes('/section-details/teaching/41') && response.url().includes('term=T2'));
+  const oldTermFinished = page.waitForResponse(response => response.url().includes('/section-details/advisory/9') && response.url().includes('term=T2'));
   term2.resume(); await oldTermFinished;
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   await page.getByRole('columnheader', { name: 'Term 3 Grade' }).waitFor();
@@ -121,7 +115,7 @@ try {
   assert(await page.getByRole('columnheader', { name: 'Term 3 Grade' }).isVisible());
   heldTerm = null; refresh3.resume();
   await page.getByRole('button', { name: 'T1', exact: true }).click();
-  await page.getByRole('columnheader', { name: /At-risk Status/ }).waitFor();
+  await page.getByRole('columnheader', { name: 'Honor Status' }).waitFor();
   let finishReport;
   heldReport = new Promise(resolve => { finishReport = resolve; });
   await page.getByRole('button', { name: 'View Fixture Learner', exact: true }).click();
@@ -130,13 +124,13 @@ try {
   assert(await page.locator('.student-sf9-container .app-skeleton-block').first().isVisible());
   await page.getByRole('button', { name: 'Back', exact: true }).click();
   heldReport = null; finishReport();
-  await page.getByRole('columnheader', { name: /At-risk Status/ }).waitFor();
-  await page.screenshot({ path: join(artifacts, 'english-details.png'), fullPage: true, animations: 'disabled' });
+  await page.getByRole('columnheader', { name: 'Honor Status' }).waitFor();
+  await page.screenshot({ path: join(artifacts, 'advisory-details.png'), fullPage: true, animations: 'disabled' });
   await page.getByRole('button', { name: 'Back to Classes', exact: true }).click();
   await advisory.getByRole('button', { name: 'VIEW', exact: true }).click();
   await page.getByRole('columnheader', { name: 'Honor Status' }).waitFor();
   assert.equal(await page.getByRole('columnheader', { name: /At-risk Status/ }).count(), 0);
-  assert.equal(reads.filter(path => path === '/api/section-details/advisory/9').length, 1);
+  assert.equal(reads.filter(path => path === '/api/section-details/advisory/10').length, 1);
   await page.getByRole('button', { name: 'Back to Classes', exact: true }).click();
   await grid.locator(':scope > div').filter({ hasText: 'Science' }).getByRole('button', { name: 'VIEW', exact: true }).click();
   await page.getByRole('columnheader', { name: 'Term 1 Grade' }).waitFor();
@@ -153,6 +147,6 @@ try {
   await page.screenshot({ path: join(artifacts, 'cards-mobile.png'), fullPage: true, animations: 'disabled' });
   assert.equal(await grid.evaluate(el => el.scrollWidth > el.clientWidth), false, 'cards fit on a narrow screen');
   assert.deepEqual(writes, []); assert.deepEqual(errors, []);
-  console.log('PASS separate advisory/English/Science views, card colors, retained advisory badge, and no redundant grading reads');
+  console.log('PASS combined advisory/subject card, advisory-only section, regular subject view, and no redundant grading reads');
   console.log('Screenshots: ' + artifacts);
 } finally { await browser?.close(); await server.close(); }
