@@ -149,7 +149,9 @@ function getUsername(user) {
   const firstName = formatName(user?.first_name || "");
   const lastName = formatName(user?.last_name || "");
   const fullName = `${firstName} ${lastName}`.replace(/\s+/g, " ").trim();
-  return fullName || formatName(user?.name || user?.username || "") || "";
+  const baseName = fullName || formatName(user?.name || user?.username || "") || "";
+  const creds = user?.credentials ? String(user.credentials).trim() : "";
+  return creds ? `${baseName}, ${creds}` : baseName;
 }
 
 function resolveProfilePictureUrl(url) {
@@ -229,6 +231,7 @@ export default function UserManagement() {
     user_id: null,
     first_name: "",
     last_name: "",
+    credentials: "",
     email: "",
     password: "",
     role: "",
@@ -393,6 +396,7 @@ export default function UserManagement() {
         user_id: fullUser.user_id,
         first_name: fullUser.first_name || "",
         last_name: fullUser.last_name || "",
+        credentials: fullUser.credentials || "",
         email: fullUser.email || "",
         password: "",
         role: currentDisplayRole,
@@ -621,6 +625,7 @@ export default function UserManagement() {
     const payload = {
       first_name: formatName(formData.first_name) || formData.first_name.trim(),
       last_name: formatName(formData.last_name) || formData.last_name.trim(),
+      credentials: formData.credentials?.trim() || null,
       email: formData.email.trim().toLowerCase(),
       role: dbRole,
       account_status: formData.status,
@@ -854,6 +859,13 @@ export default function UserManagement() {
               <div className="profile-divider"></div>
 
               <div className="profile-details">
+                {selectedUser.credentials && (
+                  <div className="profile-detail">
+                    <span>Credentials / Title</span>
+                    <strong>{selectedUser.credentials}</strong>
+                  </div>
+                )}
+
                 <div className="profile-detail">
                   <span>Email</span>
                   <strong>{selectedUser.email}</strong>

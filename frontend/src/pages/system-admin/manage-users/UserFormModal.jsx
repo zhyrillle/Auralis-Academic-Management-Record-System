@@ -3,7 +3,8 @@ import { Plus, Trash2 } from "lucide-react";
 import OverlayPanel from "../../../components/common/OverlayPanel";
 import DropdownSelect from "../../../components/common/DropdownSelect";
 import { adviserIsInYear, schoolYearLabel } from "../../../utils/userAssignments";
-const roles = ["Subject Teacher", "Principal", "Adviser", "Department Head"];
+const ROLES_DEFAULT = ["Subject Teacher", "Adviser", "Department Head"];
+const ROLES_WITH_PRINCIPAL = ["Principal", "Subject Teacher", "Adviser", "Department Head"];
 const optionsFor = (items, key, label) => items.map(item => ({
   value: String(item[key]),
   label: item[label]
@@ -65,6 +66,7 @@ export default function UserFormModal({
 }) {
   const formId = useId();
   const isEdit = mode === "edit";
+  const roleOptions = isEdit && data.role === "Principal" ? ROLES_WITH_PRINCIPAL : ROLES_DEFAULT;
   const isDepartmentHead = data.role === "Department Head";
   const hasDepartment = ["Department Head", "Subject Teacher", "Adviser"].includes(data.role);
   const hasTeaching = ["Subject Teacher", "Adviser"].includes(data.role);
@@ -135,13 +137,30 @@ export default function UserFormModal({
                     <p>Required fields are marked with an asterisk (*).</p>
                   </div>
                   <div className="user-form-grid">
-                    {[["first_name", "First Name", "text", "Enter first name", "given-name"], ["last_name", "Last Name", "text", "Enter last name", "family-name"], ["email", "Email", "email", "Enter email address", "email"], ["password", "Password", "password", isEdit ? "Leave blank to keep current password" : "Enter password", "new-password"]].map(([name, label, type, placeholder, autoComplete]) => <div className="user-form-field" key={name}>
+                    {[
+                      ["first_name", "First Name", "text", "Enter first name", "given-name", true],
+                      ["last_name", "Last Name", "text", "Enter last name", "family-name", true],
+                      ["credentials", "Credentials / Title", "text", "e.g., Ph.D., LPT, MAEd", "honorific-suffix", false],
+                      ["email", "Email", "email", "Enter email address", "email", true],
+                      ["password", "Password", "password", isEdit ? "Leave blank to keep current password" : "Enter password", "new-password", !isEdit],
+                    ].map(([name, label, type, placeholder, autoComplete, isRequired]) => (
+                      <div className="user-form-field" key={name}>
                         <label className="user-form-label" htmlFor={`user-form-${name}`}>
-                          {label}{(name !== "password" || !isEdit) && <span aria-hidden="true"> *</span>}
+                          {label}{isRequired && <span aria-hidden="true"> *</span>}
                         </label>
-                        <input id={`user-form-${name}`} name={name} type={type} value={data[name]} onChange={onChange} placeholder={placeholder} autoComplete={autoComplete} required={name !== "password" || !isEdit} />
+                        <input
+                          id={`user-form-${name}`}
+                          name={name}
+                          type={type}
+                          value={data[name] || ""}
+                          onChange={onChange}
+                          placeholder={placeholder}
+                          autoComplete={autoComplete}
+                          required={isRequired}
+                        />
                         {name === "password" && isEdit && <small>Leave blank to keep the current password.</small>}
-                      </div>)}
+                      </div>
+                    ))}
                   </div>
                 </section>
                 <section className="user-form-section" aria-labelledby="user-role-heading">
@@ -150,10 +169,17 @@ export default function UserFormModal({
                     <p>Select the account's role and assigned area.</p>
                   </div>
                   <div className="user-form-grid">
-                    <FormSelect label="Role" value={data.role} options={roles.map(role => ({
-                value: role,
-                label: role
-              }))} placeholder="Select role" disabled={saving} onChange={value => change("role", value)} />
+                    <FormSelect
+                      label="Role"
+                      value={data.role}
+                      options={roleOptions.map((role) => ({
+                        value: role,
+                        label: role,
+                      }))}
+                      placeholder="Select role"
+                      disabled={saving}
+                      onChange={(value) => change("role", value)}
+                    />
                     {hasDepartment && <FormSelect label="Department / Assigned Area" value={data.department_id} options={optionsFor(availableDepartments, "department_id", "department_name")} placeholder="Select department" disabled={saving || !availableDepartments.length} onChange={value => change("department_id", value)} />}
                   </div>
                   {hasDepartment && !availableDepartments.length && <p className="user-form-help">

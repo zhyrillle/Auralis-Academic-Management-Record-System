@@ -106,15 +106,15 @@ async function syncUsersFromCloud() {
   const syncWork = (async () => {
     // 1. Fetch users from Aiven Cloud
     const [cloudUsers] = await db.cloudPool.query(
-      `SELECT user_id, role, department_id, first_name, middle_name, last_name, extension_name, email, password, account_status, pfp_url, last_login_at
+      `SELECT user_id, role, department_id, first_name, middle_name, last_name, extension_name, credentials, email, password, account_status, pfp_url, last_login_at
        FROM USER`
     );
 
     if (cloudUsers) {
       for (const u of cloudUsers) {
         await db.execute(
-          `INSERT INTO USER (user_id, role, department_id, first_name, middle_name, last_name, extension_name, email, password, account_status, pfp_url, last_login_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `INSERT INTO USER (user_id, role, department_id, first_name, middle_name, last_name, extension_name, credentials, email, password, account_status, pfp_url, last_login_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON DUPLICATE KEY UPDATE
              role = VALUES(role),
              department_id = VALUES(department_id),
@@ -122,6 +122,7 @@ async function syncUsersFromCloud() {
              middle_name = VALUES(middle_name),
              last_name = VALUES(last_name),
              extension_name = VALUES(extension_name),
+             credentials = VALUES(credentials),
              password = VALUES(password),
              account_status = VALUES(account_status),
              pfp_url = VALUES(pfp_url),
@@ -134,6 +135,7 @@ async function syncUsersFromCloud() {
             u.middle_name,
             u.last_name,
             u.extension_name,
+            u.credentials || null,
             u.email,
             u.password,
             u.account_status,
@@ -1008,6 +1010,7 @@ router.put("/:id/profile", async (req, res) => {
       middle_name,
       last_name,
       extension_name,
+      credentials,
       email,
       password,
       newPassword,
@@ -1048,14 +1051,15 @@ router.put("/:id/profile", async (req, res) => {
       middle_name: toNullable(middle_name),
       last_name: last_name.trim(),
       extension_name: toNullable(extension_name),
+      credentials: toNullable(credentials),
       email: email.trim().toLowerCase(),
     };
     const updated = await User.updateProfile(userId, profileData);
 
     if (db.cloudPool) {
       db.cloudPool.query(
-        `UPDATE USER SET first_name = ?, middle_name = ?, last_name = ?, extension_name = ?, email = ? WHERE user_id = ?`,
-        [profileData.first_name, profileData.middle_name, profileData.last_name, profileData.extension_name, profileData.email, userId]
+        `UPDATE USER SET first_name = ?, middle_name = ?, last_name = ?, extension_name = ?, credentials = ?, email = ? WHERE user_id = ?`,
+        [profileData.first_name, profileData.middle_name, profileData.last_name, profileData.extension_name, profileData.credentials, profileData.email, userId]
       ).catch((err) => console.warn('[CloudUser] Failed to dual-write profile update to cloud:', err.message));
     }
 
@@ -1283,7 +1287,7 @@ const saveRoleAssignments = async (connection, userId, body, schoolYear) => {
 router.post("/", async (req, res) => {
   let connection;
   try {
-    const { first_name, middle_name, last_name, extension_name, email, password, role: requestedRole, department_id, account_status, status } = req.body;
+    const { first_name, middle_name, last_name, extension_name, credentials, email, password, role: requestedRole, department_id, account_status, status } = req.body;
 
     if (!first_name?.trim() || !last_name?.trim() || !email?.trim() || !password) {
       return res.status(400).json({ error: "Required fields missing." });
@@ -1296,6 +1300,15 @@ router.post("/", async (req, res) => {
 
     connection = await db.getConnection();
     await connection.beginTransaction();
+
+    if (role === "principal") {
+      const [existingPrincipal] = await connection.execute(
+        "SELECT user_id, first_name, last_name FROM `USER` WHERE role = 'principal' AND account_status = 'active' LIMIT 1"
+      );
+      if (existingPrincipal.length > 0) {
+        return res.status(400).json({ error: "A Principal account already exists. Only 1 Principal is permitted." });
+      }
+    }
 
     const schoolYear = await getCurrentSchoolYear(connection, req.body.school_year_id);
     if (!schoolYear) throw new Error("No active school year found.");
@@ -1315,9 +1328,9 @@ router.post("/", async (req, res) => {
     if (db.cloudPool) {
       try {
         const [cloudResult] = await db.cloudPool.query(
-          `INSERT INTO USER (role, department_id, first_name, middle_name, last_name, extension_name, email, password, account_status)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [role, effectiveDepartmentId, first_name.trim(), toNullable(middle_name), last_name.trim(), toNullable(extension_name), email.trim().toLowerCase(), hashedPassword, account_status || status || "active"]
+          `INSERT INTO USER (role, department_id, first_name, middle_name, last_name, extension_name, credentials, email, password, account_status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [role, effectiveDepartmentId, first_name.trim(), toNullable(middle_name), last_name.trim(), toNullable(extension_name), toNullable(credentials), email.trim().toLowerCase(), hashedPassword, account_status || status || "active"]
         );
         userId = cloudResult.insertId;
       } catch (cloudInsertErr) {
@@ -1327,23 +1340,23 @@ router.post("/", async (req, res) => {
 
     if (userId) {
       await connection.execute(
-        `INSERT INTO USER (user_id, role, department_id, first_name, middle_name, last_name, extension_name, email, password, account_status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON DUPLICATE KEY UPDATE role = VALUES(role), department_id = VALUES(department_id), first_name = VALUES(first_name), last_name = VALUES(last_name), password = VALUES(password), account_status = VALUES(account_status)`,
-        [userId, role, effectiveDepartmentId, first_name.trim(), toNullable(middle_name), last_name.trim(), toNullable(extension_name), email.trim().toLowerCase(), hashedPassword, account_status || status || "active"]
+        `INSERT INTO USER (user_id, role, department_id, first_name, middle_name, last_name, extension_name, credentials, email, password, account_status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE role = VALUES(role), department_id = VALUES(department_id), first_name = VALUES(first_name), last_name = VALUES(last_name), extension_name = VALUES(extension_name), credentials = VALUES(credentials), password = VALUES(password), account_status = VALUES(account_status)`,
+        [userId, role, effectiveDepartmentId, first_name.trim(), toNullable(middle_name), last_name.trim(), toNullable(extension_name), toNullable(credentials), email.trim().toLowerCase(), hashedPassword, account_status || status || "active"]
       );
     } else {
       const [result] = await connection.execute(
-        `INSERT INTO USER (role, department_id, first_name, middle_name, last_name, extension_name, email, password, account_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [role, effectiveDepartmentId, first_name.trim(), toNullable(middle_name), last_name.trim(), toNullable(extension_name), email.trim().toLowerCase(), hashedPassword, account_status || status || "active"]
+        `INSERT INTO USER (role, department_id, first_name, middle_name, last_name, extension_name, credentials, email, password, account_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [role, effectiveDepartmentId, first_name.trim(), toNullable(middle_name), last_name.trim(), toNullable(extension_name), toNullable(credentials), email.trim().toLowerCase(), hashedPassword, account_status || status || "active"]
       );
       userId = result.insertId;
       if (db.cloudPool) {
         db.cloudPool.query(
-          `INSERT INTO USER (user_id, role, department_id, first_name, middle_name, last_name, extension_name, email, password, account_status)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-           ON DUPLICATE KEY UPDATE role = VALUES(role), department_id = VALUES(department_id), first_name = VALUES(first_name), last_name = VALUES(last_name), password = VALUES(password), account_status = VALUES(account_status)`,
-          [userId, role, effectiveDepartmentId, first_name.trim(), toNullable(middle_name), last_name.trim(), toNullable(extension_name), email.trim().toLowerCase(), hashedPassword, account_status || status || "active"]
+          `INSERT INTO USER (user_id, role, department_id, first_name, middle_name, last_name, extension_name, credentials, email, password, account_status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE role = VALUES(role), department_id = VALUES(department_id), first_name = VALUES(first_name), last_name = VALUES(last_name), extension_name = VALUES(extension_name), credentials = VALUES(credentials), password = VALUES(password), account_status = VALUES(account_status)`,
+          [userId, role, effectiveDepartmentId, first_name.trim(), toNullable(middle_name), last_name.trim(), toNullable(extension_name), toNullable(credentials), email.trim().toLowerCase(), hashedPassword, account_status || status || "active"]
         ).catch(() => {});
       }
     }
@@ -1399,7 +1412,7 @@ router.put("/:id", async (req, res) => {
   let connection;
   try {
     const userId = Number(req.params.id);
-    const { first_name, middle_name, last_name, extension_name, email, password, role: requestedRole, department_id, account_status, status } = req.body;
+    const { first_name, middle_name, last_name, extension_name, credentials, email, password, role: requestedRole, department_id, account_status, status } = req.body;
 
     const existingUser = await User.findById(userId);
     if (!existingUser) return res.status(404).json({ error: "User not found." });
@@ -1409,6 +1422,16 @@ router.put("/:id", async (req, res) => {
 
     connection = await db.getConnection();
     await connection.beginTransaction();
+
+    if (role === "principal" && existingUser.role !== "principal") {
+      const [existingPrincipal] = await connection.execute(
+        "SELECT user_id, first_name, last_name FROM `USER` WHERE role = 'principal' AND account_status = 'active' AND user_id != ? LIMIT 1",
+        [userId]
+      );
+      if (existingPrincipal.length > 0) {
+        return res.status(400).json({ error: "A Principal account already exists. Only 1 Principal is permitted." });
+      }
+    }
 
     const schoolYear = await getCurrentSchoolYear(connection, req.body.school_year_id);
     if (!schoolYear) throw new Error("No active school year found.");
@@ -1426,13 +1449,13 @@ router.put("/:id", async (req, res) => {
     if (password && password.trim()) {
       hashedPassword = await hashPassword(password);
       await connection.execute(
-        `UPDATE USER SET role = ?, department_id = ?, first_name = ?, middle_name = ?, last_name = ?, extension_name = ?, email = ?, password = ?, account_status = ? WHERE user_id = ?`,
-        [role, effectiveDepartmentId, first_name.trim(), toNullable(middle_name), last_name.trim(), toNullable(extension_name), email.trim().toLowerCase(), hashedPassword, account_status || status || "active", userId]
+        `UPDATE USER SET role = ?, department_id = ?, first_name = ?, middle_name = ?, last_name = ?, extension_name = ?, credentials = ?, email = ?, password = ?, account_status = ? WHERE user_id = ?`,
+        [role, effectiveDepartmentId, first_name.trim(), toNullable(middle_name), last_name.trim(), toNullable(extension_name), toNullable(credentials), email.trim().toLowerCase(), hashedPassword, account_status || status || "active", userId]
       );
     } else {
       await connection.execute(
-        `UPDATE USER SET role = ?, department_id = ?, first_name = ?, middle_name = ?, last_name = ?, extension_name = ?, email = ?, account_status = ? WHERE user_id = ?`,
-        [role, effectiveDepartmentId, first_name.trim(), toNullable(middle_name), last_name.trim(), toNullable(extension_name), email.trim().toLowerCase(), account_status || status || "active", userId]
+        `UPDATE USER SET role = ?, department_id = ?, first_name = ?, middle_name = ?, last_name = ?, extension_name = ?, credentials = ?, email = ?, account_status = ? WHERE user_id = ?`,
+        [role, effectiveDepartmentId, first_name.trim(), toNullable(middle_name), last_name.trim(), toNullable(extension_name), toNullable(credentials), email.trim().toLowerCase(), account_status || status || "active", userId]
       );
     }
 
@@ -1473,8 +1496,8 @@ router.put("/:id", async (req, res) => {
 
     if (db.cloudPool) {
       try {
-        const updateCloudFields = ["role = ?", "department_id = ?", "first_name = ?", "middle_name = ?", "last_name = ?", "extension_name = ?", "email = ?", "account_status = ?"];
-        const updateCloudParams = [role, effectiveDepartmentId, first_name.trim(), toNullable(middle_name), last_name.trim(), toNullable(extension_name), email.trim().toLowerCase(), account_status || status || "active"];
+        const updateCloudFields = ["role = ?", "department_id = ?", "first_name = ?", "middle_name = ?", "last_name = ?", "extension_name = ?", "credentials = ?", "email = ?", "account_status = ?"];
+        const updateCloudParams = [role, effectiveDepartmentId, first_name.trim(), toNullable(middle_name), last_name.trim(), toNullable(extension_name), toNullable(credentials), email.trim().toLowerCase(), account_status || status || "active"];
         if (hashedPassword) {
           updateCloudFields.push("password = ?");
           updateCloudParams.push(hashedPassword);
