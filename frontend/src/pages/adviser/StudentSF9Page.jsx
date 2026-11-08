@@ -160,7 +160,7 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
       principalName: (() => {
         const raw = fetched.principalName || student?.principalName || "";
         if (!raw) return "";
-        return raw;
+        return raw.toUpperCase();
       })(),
       admittedToGrade: "", // Leave blank as requested
       eligibleForAdmission: "" // Leave blank as requested
@@ -1091,7 +1091,7 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
                 </div>
                 <div className="sf9-schoolhead-sig-wrap">
                   <div className="sf9-sig-signatory-col school-head-sig">
-                    <div className="sf9-signatory-line font-bold">{studentProfile.principalName ? `${studentProfile.principalName}, Ph.D.` : ""}</div>
+                    <div className="sf9-signatory-line font-bold">{(studentProfile.principalName || "").toUpperCase()}</div>
                     <div className="sf9-signatory-role">School Head</div>
                   </div>
                 </div>
@@ -1114,7 +1114,7 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
 
               <div className="sf9-cancel-signatory-row">
                 <div className="sf9-sig-signatory-col school-head-sig">
-                  <div className="sf9-signatory-line font-bold">{studentProfile.principalName ? `${studentProfile.principalName}, Ph.D.` : ""}</div>
+                  <div className="sf9-signatory-line font-bold">{(studentProfile.principalName || "").toUpperCase()}</div>
                   <div className="sf9-signatory-role">School Head</div>
                 </div>
               </div>

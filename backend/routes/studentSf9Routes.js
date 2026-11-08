@@ -216,7 +216,7 @@ async function fetchStudentSf9Data(cleanId, schoolYearId) {
     let adviserUserId = null;
     if (sectionInfo) {
       const [saaRows] = await db.execute(
-        `SELECT saa.adviser_assignment_id, saa.user_id, u.first_name, u.last_name, u.middle_name
+        `SELECT saa.adviser_assignment_id, saa.user_id, u.first_name, u.middle_name, u.last_name, u.extension_name, u.credentials
          FROM SECTION_ADVISER_ASSIGNMENT saa
          JOIN USER u ON saa.user_id = u.user_id
          WHERE saa.section_id = ? AND saa.school_year_id = ?
@@ -227,19 +227,27 @@ async function fetchStudentSf9Data(cleanId, schoolYearId) {
         const u = saaRows[0];
         adviserAssignmentId = u.adviser_assignment_id;
         adviserUserId = u.user_id;
-        adviserName = `${u.first_name || ''} ${u.last_name || ''}`.trim().toUpperCase();
+        const baseName = `${u.first_name || ''} ${u.last_name || ''}`.trim().toUpperCase();
+        const ext = (u.extension_name || '').trim().toUpperCase();
+        const cred = (u.credentials || '').trim().toUpperCase();
+        let formatted = ext ? `${baseName}, ${ext}` : baseName;
+        if (cred) formatted = `${formatted}, ${cred}`;
+        adviserName = formatted;
       }
     }
 
     let principalName = "";
     const [pRows] = await db.execute(
-      `SELECT first_name, last_name, extension_name FROM USER WHERE role IN ('1', 'principal', '5') LIMIT 1`
+      `SELECT first_name, last_name, extension_name, credentials FROM USER WHERE role IN ('1', 'principal', '5') LIMIT 1`
     );
     if (pRows.length > 0) {
       const p = pRows[0];
       const baseName = `${p.first_name || ''} ${p.last_name || ''}`.trim().toUpperCase();
-      const ext = (p.extension_name || '').trim();
-      principalName = ext ? `${baseName}, ${ext}` : baseName;
+      const ext = (p.extension_name || '').trim().toUpperCase();
+      const cred = (p.credentials || '').trim().toUpperCase();
+      let formatted = ext ? `${baseName}, ${ext}` : baseName;
+      if (cred) formatted = `${formatted}, ${cred}`;
+      principalName = formatted.toUpperCase();
     }
 
     // 4. Student Profile Demographics & Program formatting

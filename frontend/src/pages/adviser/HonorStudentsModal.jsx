@@ -36,6 +36,7 @@ export default function HonorStudentsModal({
   const [isExporting, setIsExporting] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
   const [resolvedPrincipalName, setResolvedPrincipalName] = useState(principalName || "");
+  const [resolvedAdviserName, setResolvedAdviserName] = useState(adviserName || "");
   const [toast, setToast] = useState({ message: "", variant: "success", icon: null });
 
   const showToast = (message, variant = "success", icon = CheckCircle2) => {
@@ -57,14 +58,9 @@ export default function HonorStudentsModal({
     if (!principal) return "";
     const baseName = `${principal.first_name || ""} ${principal.last_name || ""}`.trim();
     const ext = (principal.extension_name || "").trim();
+    const cred = (principal.credentials || "").trim();
     let formatted = ext ? `${baseName}, ${ext}` : baseName;
-    if (
-      formatted &&
-      !formatted.toUpperCase().includes("PH.D") &&
-      !formatted.toUpperCase().includes("PHD")
-    ) {
-      formatted = `${formatted}, Ph.D.`;
-    }
+    if (cred) formatted = `${formatted}, ${cred}`;
     return formatted;
   };
 
@@ -87,29 +83,48 @@ export default function HonorStudentsModal({
     return resolvedPrincipalName || "";
   };
 
-  // Fetch dynamically the principal's name if not provided via props
+  // Fetch dynamically the principal and adviser credentials from the USER table
   useEffect(() => {
     if (principalName) {
       setResolvedPrincipalName(principalName);
-      return;
+    }
+    if (adviserName) {
+      setResolvedAdviserName(adviserName);
     }
     let isMounted = true;
     fetch("/api/users")
       .then((res) => (res.ok ? res.json() : []))
       .then((users) => {
-        if (!isMounted) return;
-        const formatted = formatPrincipalFromUsers(users);
-        if (formatted) {
-          setResolvedPrincipalName(formatted);
+        if (!isMounted || !Array.isArray(users)) return;
+        if (!principalName) {
+          const formatted = formatPrincipalFromUsers(users);
+          if (formatted) {
+            setResolvedPrincipalName(formatted);
+          }
+        }
+        if (adviserName) {
+          const adv = users.find(
+            (u) =>
+              `${u.first_name || ""} ${u.last_name || ""}`.trim().toLowerCase() ===
+              adviserName.trim().toLowerCase()
+          );
+          if (adv && adv.credentials) {
+            const baseName = `${adv.first_name || ""} ${adv.last_name || ""}`.trim();
+            const ext = (adv.extension_name || "").trim();
+            const cred = (adv.credentials || "").trim();
+            let formatted = ext ? `${baseName}, ${ext}` : baseName;
+            if (cred) formatted = `${formatted}, ${cred}`;
+            setResolvedAdviserName(formatted);
+          }
         }
       })
       .catch((err) => {
-        console.warn("Could not fetch principal from user table:", err);
+        console.warn("Could not fetch users to resolve credentials:", err);
       });
     return () => {
       isMounted = false;
     };
-  }, [principalName]);
+  }, [principalName, adviserName]);
 
   // Compute overall grade completion statistics across the entire section roster
   const completionStats = useMemo(() => {
@@ -274,7 +289,7 @@ export default function HonorStudentsModal({
         honorStudents,
         section,
         schoolYear,
-        adviserName,
+        adviserName: resolvedAdviserName || adviserName,
         principalName: activePrincipal,
       });
 
@@ -309,7 +324,7 @@ export default function HonorStudentsModal({
         honorStudents,
         section,
         schoolYear,
-        adviserName,
+        adviserName: resolvedAdviserName || adviserName,
         principalName: activePrincipal,
       });
 

@@ -3,19 +3,25 @@ import depedGifLogoUrl from "../assets/deped-logo.gif";
 import { API_BASE_URL } from "../services/apiConfig";
 
 /**
- * Helper to format student name as: First Name Middle Initial Last Name
+ * Helper to format student name as: First Name Middle Initial Last Name Extension
  */
 function formatExcelStudentName(student) {
   const first = (student.firstName || student.first_name || "").trim();
-  const middleInitial = student.middleName || student.middle_name ? (student.middleName || student.middle_name).trim().charAt(0) + "." : "";
+  const middle = (student.middleName || student.middle_name || "").trim();
+  let middleInitial = "";
+  if (middle) {
+    const cleanMid = middle.replace(/\./g, "").trim();
+    if (cleanMid) middleInitial = `${cleanMid.charAt(0).toUpperCase()}.`;
+  }
   const last = (student.lastName || student.last_name || "").trim();
-  return [first, middleInitial, last].filter(Boolean).join(" ");
+  const ext = (student.extensionName || student.extension_name || "").trim();
+  return [first, middleInitial, last, ext].filter(Boolean).join(" ");
 }
 
 /**
- * Landscape PDF Generator & Printer for Grading Sheet.
- * Correctly calculates totalCols (8 for Standard/Single Term, 14 for MAPEH Combined All Terms)
- * to ensure 100% full-width coverage on Navy Blue Banner and Group Headers without any cutoffs.
+ * Portrait PDF Generator & Printer for Grading Sheet.
+ * Formats table cleanly in portrait mode with dynamic teacher and principal credentials,
+ * and standard DepEd "Prepared by" / "Noted by" signature blocks.
  */
 export async function exportGradingSheetPdf({
   activeSelectedClass,
@@ -24,12 +30,64 @@ export async function exportGradingSheetPdf({
   getDescriptor,
   getRemark,
   teacherName = "Teacher",
+  principalName = "",
   isMapeh = false,
   activeMapehTab = "MA",
   combinedTermFilter = "T1",
   isPrintMode = false,
 }) {
   if (!activeSelectedClass || !students) return;
+
+  // Resolve dynamic credentials for principal and teacher if available
+  let resolvedPrincipal = (principalName || "").trim();
+  let resolvedTeacher = (teacherName || "Teacher").trim();
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/users`);
+    if (res.ok) {
+      const users = await res.json();
+      if (Array.isArray(users)) {
+        // Resolve Principal if not passed or generic
+        if (!resolvedPrincipal || resolvedPrincipal.toUpperCase() === "SCHOOL PRINCIPAL") {
+          const p = users.find(
+            (u) =>
+              String(u.role || "").toLowerCase() === "principal" ||
+              String(u.display_role || "").toLowerCase() === "principal" ||
+              String(u.role) === "1"
+          );
+          if (p) {
+            const baseName = `${p.first_name || ""} ${p.last_name || ""}`.trim();
+            const ext = (p.extension_name || "").trim();
+            const cred = (p.credentials || "").trim();
+            let formatted = ext ? `${baseName}, ${ext}` : baseName;
+            if (cred) formatted = `${formatted}, ${cred}`;
+            resolvedPrincipal = formatted;
+          }
+        }
+
+        // Enrich teacher credentials if matched in user list
+        const currentUser =
+          typeof window !== "undefined" && window.localStorage
+            ? JSON.parse(localStorage.getItem("user") || "{}")
+            : {};
+        const teacherUser = users.find(
+          (u) =>
+            Number(u.user_id) === Number(currentUser.user_id || currentUser.id) ||
+            `${u.first_name || ""} ${u.last_name || ""}`.trim().toLowerCase() === resolvedTeacher.toLowerCase()
+        );
+        if (teacherUser) {
+          const baseName = `${teacherUser.first_name || ""} ${teacherUser.last_name || ""}`.trim();
+          const ext = (teacherUser.extension_name || "").trim();
+          const cred = (teacherUser.credentials || "").trim();
+          let formatted = ext ? `${baseName}, ${ext}` : baseName;
+          if (cred) formatted = `${formatted}, ${cred}`;
+          if (formatted) resolvedTeacher = formatted;
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("Could not fetch users to resolve credentials:", err);
+  }
 
   const sectionName = activeSelectedClass.sectionName || activeSelectedClass.name || activeSelectedClass.section_name || "Mahogany";
   const rawGradeLevel = activeSelectedClass.gradeLevel || activeSelectedClass.grade_level_name || "G7";
@@ -169,7 +227,7 @@ export async function exportGradingSheetPdf({
         <td colspan="2" class="meta-lbl-left meta-lbl-bold">SECTION</td>
         <td colspan="7" class="meta-val-box">${sectionName}</td>
         <td colspan="2" class="meta-val-box meta-lbl-bold">TEACHER</td>
-        <td colspan="4" class="meta-val-box">${teacherName}</td>
+        <td colspan="4" class="meta-val-box">${resolvedTeacher}</td>
       </tr>
     `;
   } else {
@@ -201,7 +259,7 @@ export async function exportGradingSheetPdf({
         <td colspan="2" class="meta-lbl-left meta-lbl-bold">SECTION</td>
         <td colspan="3" class="meta-val-box">${sectionName}</td>
         <td class="meta-val-box meta-lbl-bold">TEACHER</td>
-        <td colspan="3" class="meta-val-box">${teacherName}</td>
+        <td colspan="3" class="meta-val-box">${resolvedTeacher}</td>
       </tr>
     `;
   }
@@ -354,8 +412,8 @@ export async function exportGradingSheetPdf({
   <title>${fileName}</title>
   <style>
     @page {
-      size: A4 landscape;
-      margin: 0.5in;
+      size: A4 portrait;
+      margin: 0.35in 0.3in;
     }
     * {
       box-sizing: border-box;
@@ -368,7 +426,7 @@ export async function exportGradingSheetPdf({
       padding: 0;
       color: #000000;
       background: #ffffff;
-      font-size: 10pt;
+      font-size: 8.5pt;
     }
     .sheet-container {
       width: 100%;
@@ -382,25 +440,25 @@ export async function exportGradingSheetPdf({
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 10px;
+      margin-bottom: 8px;
       position: relative;
     }
     .logo-left {
-      height: 56px;
-      width: 56px;
+      height: 48px;
+      width: 48px;
       object-fit: contain;
     }
     .title-main {
       flex: 1;
       text-align: center;
-      font-size: 20pt;
+      font-size: 16pt;
       font-weight: bold;
       color: #000000;
       margin: 0;
     }
     .logo-right {
-      height: 44px;
-      width: 90px;
+      height: 38px;
+      width: 78px;
       object-fit: contain;
     }
 
@@ -408,13 +466,13 @@ export async function exportGradingSheetPdf({
     table.grading-grid {
       width: 100%;
       border-collapse: collapse;
-      font-size: 10pt;
+      font-size: 8pt;
       table-layout: fixed;
     }
     table.grading-grid th,
     table.grading-grid td {
       border: 1px solid #000000;
-      padding: 5px 6px;
+      padding: 3px 4px;
       vertical-align: middle;
       color: #000000;
     }
@@ -499,10 +557,10 @@ export async function exportGradingSheetPdf({
       background-color: #595959 !important;
       color: #ffffff !important;
       font-weight: bold;
-      font-size: 10.5pt;
+      font-size: 8.5pt;
       text-align: left;
-      padding-left: 8px;
-      height: 22px;
+      padding-left: 6px;
+      height: 18px;
       border: 1px solid #000000 !important;
     }
 
@@ -511,14 +569,13 @@ export async function exportGradingSheetPdf({
       text-align: center;
       font-weight: bold;
       background-color: #d9e1f2 !important; /* Soft light blue fill */
-      width: 38px;
       border: 1px solid #000000 !important;
     }
     .col-learner-name {
       text-align: left;
-      padding-left: 8px;
+      padding-left: 6px;
       font-weight: normal;
-      font-size: 9.5pt;
+      font-size: 8pt;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -555,6 +612,37 @@ export async function exportGradingSheetPdf({
       font-style: italic;
       padding: 10px;
     }
+
+    /* Signatures: Prepared by and Noted by */
+    .signature-block {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 24px;
+      padding: 0 35px;
+      page-break-inside: avoid;
+    }
+    .sig-col {
+      width: 200px;
+      text-align: center;
+    }
+    .sig-label {
+      font-size: 8.5pt;
+      color: #475569;
+      margin-bottom: 24px;
+    }
+    .sig-name {
+      font-size: 9.5pt;
+      font-weight: bold;
+      color: #0f172a;
+      border-bottom: 1px solid #334155;
+      padding-bottom: 2px;
+      min-height: 16px;
+    }
+    .sig-role {
+      font-size: 8pt;
+      color: #64748b;
+      margin-top: 4px;
+    }
   </style>
 </head>
 <body>
@@ -569,33 +657,33 @@ export async function exportGradingSheetPdf({
     <table class="grading-grid">
       ${totalCols === 15 ? `
         <colgroup>
-          <col style="width: 35px;" />
-          <col style="width: 85px;" />
-          <col style="width: 125px;" />
-          <col style="width: 50px;" />
-          <col style="width: 50px;" />
-          <col style="width: 55px;" />
-          <col style="width: 50px;" />
-          <col style="width: 50px;" />
-          <col style="width: 55px;" />
-          <col style="width: 50px;" />
-          <col style="width: 50px;" />
-          <col style="width: 55px;" />
-          <col style="width: 75px;" />
-          <col style="width: 105px;" />
-          <col style="width: 70px;" />
+          <col style="width: 4%;" />
+          <col style="width: 10%;" />
+          <col style="width: 16%;" />
+          <col style="width: 5.5%;" />
+          <col style="width: 5.5%;" />
+          <col style="width: 5.5%;" />
+          <col style="width: 5.5%;" />
+          <col style="width: 5.5%;" />
+          <col style="width: 5.5%;" />
+          <col style="width: 5.5%;" />
+          <col style="width: 5.5%;" />
+          <col style="width: 5.5%;" />
+          <col style="width: 7%;" />
+          <col style="width: 8.5%;" />
+          <col style="width: 5.5%;" />
         </colgroup>
       ` : `
         <colgroup>
-          <col style="width: 38px;" />
-          <col style="width: 82px;" />
-          <col style="width: 178px;" />
-          <col style="width: 75px;" />
-          <col style="width: 75px;" />
-          <col style="width: 75px;" />
-          <col style="width: 95px;" />
-          <col style="width: 125px;" />
-          <col style="width: 90px;" />
+          <col style="width: 4%;" />
+          <col style="width: 14%;" />
+          <col style="width: 25%;" />
+          <col style="width: 9%;" />
+          <col style="width: 9%;" />
+          <col style="width: 9%;" />
+          <col style="width: 10%;" />
+          <col style="width: 11%;" />
+          <col style="width: 9%;" />
         </colgroup>
       `}
 
@@ -617,6 +705,20 @@ export async function exportGradingSheetPdf({
       </tr>
       ${renderStudentRows(females)}
     </table>
+
+    <!-- Signatures: Prepared by (Subject Teacher) and Noted by (School Principal) -->
+    <div class="signature-block">
+      <div class="sig-col">
+        <div class="sig-label">Prepared by:</div>
+        <div class="sig-name">${(resolvedTeacher || "SUBJECT TEACHER").toUpperCase()}</div>
+        <div class="sig-role">Subject Teacher</div>
+      </div>
+      <div class="sig-col">
+        <div class="sig-label">Noted by:</div>
+        <div class="sig-name">${(resolvedPrincipal || "SCHOOL PRINCIPAL").toUpperCase()}</div>
+        <div class="sig-role">School Principal</div>
+      </div>
+    </div>
   </div>
 </body>
 </html>

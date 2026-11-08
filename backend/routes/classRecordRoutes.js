@@ -2736,11 +2736,11 @@ router.post('/class-record/export-grading-sheet-pdf', async (req, res) => {
 
     try {
       const page = await browser.newPage();
-      await page.setViewport({ width: 1122, height: 793, deviceScaleFactor: 2 });
+      await page.setViewport({ width: 793, height: 1122, deviceScaleFactor: 2 });
       await page.setContent(finalHtml, { waitUntil: 'load' });
       const pdfBuffer = await page.pdf({
         format: 'A4',
-        landscape: true,
+        landscape: false,
         printBackground: true,
         preferCSSPageSize: true,
       });
