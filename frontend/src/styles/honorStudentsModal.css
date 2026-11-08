@@ -1,0 +1,562 @@
+/* Honor Students Modal (Master Sheet) */
+.ms-honors-modal .app-overlay__panel {
+  width: min(940px, 95vw);
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.ms-honors-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+  padding: 4px 0 16px;
+}
+
+/* Status Notice Banner (Finalized vs Incomplete) */
+.ms-honors-status-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  transition: all 0.2s ease;
+}
+
+.ms-honors-status-banner--pending {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-left: 4px solid #ea580c;
+  color: #9a3412;
+}
+
+.ms-honors-status-banner--finalized {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-left: 4px solid #16a34a;
+  color: #166534;
+}
+
+.ms-honors-banner-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.ms-honors-banner-icon--pending {
+  color: #ea580c;
+}
+
+.ms-honors-banner-icon--finalized {
+  color: #16a34a;
+}
+
+.ms-honors-banner-text {
+  flex: 1;
+}
+
+.ms-honors-banner-text strong {
+  font-weight: 700;
+  margin-right: 4px;
+}
+
+/* Summary metrics cards (4 tiers: Highest, High, With Honors, Grade Completion) */
+.ms-honors-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+@media (max-width: 820px) {
+  .ms-honors-summary-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .ms-honors-summary-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.ms-honors-summary-card {
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: #f8fafc;
+  position: relative;
+}
+
+.ms-honors-summary-card--highest {
+  background: #fefce8;
+  border-color: #fef08a;
+}
+.ms-honors-summary-card--high {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+.ms-honors-summary-card--with {
+  background: #fdfaf6;
+  border-color: #f1dbcc;
+}
+.ms-honors-summary-card--finalized {
+  background: #f0fdf4;
+  border: 1px solid #4ade80;
+  box-shadow: 0 1px 3px rgba(22, 163, 74, 0.08);
+}
+.ms-honors-summary-card--pending-card {
+  background: #fff7ed;
+  border: 1px solid #fb923c;
+  box-shadow: 0 1px 3px rgba(234, 88, 12, 0.08);
+}
+
+.ms-honors-metric-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #64748b;
+}
+
+.ms-honors-summary-card--highest .ms-honors-metric-label { color: #854d0e; }
+.ms-honors-summary-card--high .ms-honors-metric-label { color: #1e40af; }
+.ms-honors-summary-card--with .ms-honors-metric-label { color: #8c532b; }
+.ms-honors-summary-card--finalized .ms-honors-metric-label { color: #15803d; }
+.ms-honors-summary-card--pending-card .ms-honors-metric-label { color: #c2410c; }
+
+.ms-honors-metric-value {
+  font-size: 22px;
+  font-weight: 800;
+  color: #112d61;
+  line-height: 1.1;
+}
+
+.ms-honors-summary-card--finalized .ms-honors-metric-value { color: #166534; }
+.ms-honors-summary-card--pending-card .ms-honors-metric-value { color: #ea580c; }
+
+.ms-honors-metric-sub {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.ms-honors-summary-card--finalized .ms-honors-metric-sub {
+  color: #15803d;
+  font-weight: 600;
+}
+.ms-honors-summary-card--pending-card .ms-honors-metric-sub {
+  color: #c2410c;
+  font-weight: 600;
+}
+
+/* Mini Progress Bar inside Grade Completion Card */
+.ms-honors-mini-progress {
+  width: 100%;
+  height: 4px;
+  background: rgba(0, 0, 0, 0.08);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.ms-honors-mini-progress-fill {
+  height: 100%;
+  transition: width 0.3s ease;
+  border-radius: 2px;
+}
+
+.ms-honors-mini-progress-fill--pending {
+  background: #f97316;
+}
+
+.ms-honors-mini-progress-fill--finalized {
+  background: #16a34a;
+}
+
+/* Toolbar: Filters and Actions */
+.ms-honors-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.ms-honors-filters {
+  display: inline-flex;
+  align-items: center;
+  background: #f1f5f9;
+  border-radius: 9px;
+  padding: 3px;
+  gap: 2px;
+  flex-wrap: wrap;
+}
+
+.ms-honors-filter-btn {
+  border: none;
+  background: transparent;
+  padding: 6px 12px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.ms-honors-filter-btn:hover {
+  color: #1e293b;
+}
+
+.ms-honors-filter-btn.active {
+  background: #ffffff;
+  color: #112d61;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+.ms-honors-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Compact, Purpose-Built Search Bar */
+.ms-honors-search-box {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: 34px;
+  width: 220px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.ms-honors-search-box:focus-within {
+  border-color: #112d61;
+  box-shadow: 0 0 0 3px rgba(17, 45, 97, 0.1);
+}
+
+.ms-honors-search-icon {
+  position: absolute;
+  left: 10px;
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+.ms-honors-search-input {
+  width: 100%;
+  height: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  padding: 0 28px 0 32px;
+  font-size: 12.5px;
+  color: #1e293b;
+  font-family: inherit;
+}
+
+.ms-honors-search-input::placeholder {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.ms-honors-search-clear {
+  position: absolute;
+  right: 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: transparent;
+  color: #94a3b8;
+  border-radius: 50%;
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.15s ease;
+}
+
+.ms-honors-search-clear:hover {
+  background: #e2e8f0;
+  color: #334155;
+}
+
+/* Action Button Wrapper & Warning Hover Tooltip */
+.ms-honors-action-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.ms-honors-action-wrapper--disabled {
+  cursor: not-allowed !important;
+}
+
+.ms-honors-action-wrapper--disabled button {
+  pointer-events: none;
+  cursor: not-allowed !important;
+}
+
+.ms-honors-action-tooltip {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 0;
+  background: #0f172a;
+  color: #f8fafc;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1.4;
+  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.35), 0 4px 10px -2px rgba(15, 23, 42, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: max-content;
+  max-width: 320px;
+  white-space: normal;
+  z-index: 1000;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(4px);
+  transition: opacity 0.18s ease, transform 0.18s ease, visibility 0.18s;
+  pointer-events: none;
+}
+
+.ms-honors-action-tooltip::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  right: 20px;
+  border-width: 5px;
+  border-style: solid;
+  border-color: #0f172a transparent transparent transparent;
+}
+
+.ms-honors-action-wrapper:hover .ms-honors-action-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.ms-honors-tooltip-warn-icon {
+  color: #fbbf24;
+  flex-shrink: 0;
+}
+
+/* Print and Download Buttons */
+.ms-honors-btn-print {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.ms-honors-btn-print:hover:not(:disabled) {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.ms-honors-btn-print:disabled {
+  opacity: 0.55;
+  cursor: not-allowed !important;
+}
+
+.ms-honors-btn-download {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 8px;
+  border: 1px solid #123062;
+  background: #123062;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 2px 6px rgba(18, 48, 98, 0.18);
+  white-space: nowrap;
+}
+
+.ms-honors-btn-download:hover:not(:disabled) {
+  background: #0b244e;
+  border-color: #0b244e;
+  transform: translateY(-1px);
+}
+
+.ms-honors-btn-download:disabled {
+  opacity: 0.55;
+  cursor: not-allowed !important;
+  transform: none;
+}
+
+/* Table */
+.ms-honors-table-wrap {
+  overflow-x: auto;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  max-height: 420px;
+}
+
+.ms-honors-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.ms-honors-table th,
+.ms-honors-table td {
+  padding: 12px 14px;
+  text-align: left;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.ms-honors-table th {
+  background: #f8fafc;
+  color: #475569;
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.ms-honors-table tbody tr:hover {
+  background: #f8fafc;
+}
+
+.ms-honors-num-col { width: 50px; text-align: center !important; }
+.ms-honors-avg-col { width: 140px; text-align: center !important; }
+.ms-honors-status-col { width: 200px; text-align: center !important; }
+
+.ms-honors-student-name {
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.ms-honors-gen-avg {
+  font-weight: 700;
+  color: #112d61;
+  font-size: 14px;
+}
+
+/* Badges */
+.ms-honors-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.ms-honors-badge--highest {
+  background-color: var(--badge-honor-highest-bg, #fef9c3);
+  color: var(--badge-honor-highest-text, #D4AF37);
+  border: 1px solid #fef08a;
+}
+
+.ms-honors-badge--high {
+  background-color: var(--badge-honor-high-bg, #e5f0ff);
+  color: var(--badge-honor-high-text, #95B0D6);
+  border: 1px solid #bfdbfe;
+}
+
+.ms-honors-badge--with {
+  background-color: var(--badge-honor-with-bg, #ffe4c8);
+  color: var(--badge-honor-with-text, #CD7F32);
+  border: 1px solid #fed7aa;
+}
+
+/* Empty State */
+.ms-honors-empty-row {
+  text-align: center !important;
+  padding: 36px 16px !important;
+}
+
+.ms-honors-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  max-width: 440px;
+  margin: 0 auto;
+}
+
+.ms-honors-empty-icon {
+  margin-bottom: 4px;
+}
+
+.ms-honors-empty-icon--warn {
+  color: #f59e0b;
+}
+
+.ms-honors-empty-icon--neutral {
+  color: #94a3b8;
+}
+
+.ms-honors-empty-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #334155;
+  margin: 0;
+}
+
+.ms-honors-empty-desc {
+  font-size: 12.5px;
+  color: #64748b;
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* Done Button */
+.ms-honors-close-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 9px 20px;
+  border-radius: 9px;
+  border: 1px solid #ccd8e7;
+  background: #ffffff;
+  color: #112d61;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.ms-honors-close-btn:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+}
