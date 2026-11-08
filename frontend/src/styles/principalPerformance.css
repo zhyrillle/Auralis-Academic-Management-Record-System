@@ -572,6 +572,8 @@
 }
 
 .pp-page--subjects .pp-inline-progress {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(max-content, 1fr);
   min-width: 0;
 }
 
@@ -586,7 +588,7 @@
 }
 
 .pp-page--subjects .pp-inline-progress > span:last-child {
-  flex: 0 0 6ch;
+  justify-self: end;
   font-variant-numeric: tabular-nums;
   text-align: right;
   white-space: nowrap;
