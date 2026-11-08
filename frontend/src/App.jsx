@@ -195,7 +195,8 @@ export default function App() {
 
           {/* 4. Adviser */}
           <Route path="/adviser/dashboard" element={<AdviserDashboard />} />
-          <Route path="/adviser/sections" element={<AdviserSections />} />
+          <Route path="/adviser/sections" element={<AdviserSections key="adviser-active" />} />
+          <Route path="/adviser/archived-classes" element={<AdviserSections key="adviser-archived" isArchivedView={true} />} />
           <Route
             path="/adviser/sections/details"
             element={<SectionDetails />}
@@ -228,7 +229,11 @@ export default function App() {
           <Route path="/teacher/dashboard" element={<TeacherDashboard />} />
           <Route
             path="/teacher/sections"
-            element={<AdviserSections userRole="teacher" />}
+            element={<AdviserSections key="teacher-active" userRole="teacher" />}
+          />
+          <Route
+            path="/teacher/archived-classes"
+            element={<AdviserSections key="teacher-archived" userRole="teacher" isArchivedView={true} />}
           />
           <Route
             path="/teacher/sections/details"

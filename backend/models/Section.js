@@ -1,5 +1,6 @@
 const db = require('../config/db');
 const { decryptLrn } = require('../utils/encryption');
+const ClassArchiveService = require('../services/ClassArchiveService');
 
 class Section {
   static async resolveGradeLevelId(gradeLevelId, level) {
@@ -650,11 +651,21 @@ class Section {
     return this.deleteCascade(db, id);
   }
 
-  static async findAdviserSections(userId) {
+  static async archiveClass(userId, input) {
+    return ClassArchiveService.change(userId, input, false, db.cloudPool || db);
+  }
+
+  static async restoreClass(userId, input) {
+    return ClassArchiveService.change(userId, input, true, db.cloudPool || db);
+  }
+
+  static async findAdviserSections(userId, options = {}) {
+    const database = db.cloudPool || db;
+    await ClassArchiveService.ensureSchema(database);
     let advisoryRows = [];
     try {
       // 1. Advisory Sections for user (via SECTION_ADVISER_ASSIGNMENT)
-      const [rows] = await db.execute(
+      const [rows] = await database.execute(
          `SELECT DISTINCT
            saa.adviser_assignment_id,
            sec.section_id,
@@ -667,7 +678,10 @@ class Section {
            gl.grade_level_id,
            gl.grade_level_name,
            'Advisory Class' AS class_type,
-           sy.ends_on AS school_year_end
+           sy.ends_on AS school_year_end,
+           sy.status AS school_year_status,
+           COALESCE(saa.is_archived, 0) AS is_archived_col,
+           saa.archived_at AS archived_at_col
          FROM SECTION_ADVISER_ASSIGNMENT saa
          INNER JOIN SECTION sec ON sec.section_id = saa.section_id
          LEFT JOIN PROGRAM p ON p.program_id = sec.program_id
@@ -685,7 +699,7 @@ class Section {
     let teacherRows = [];
     try {
       // 2. Regular / Teaching Classes for user (via TEACHER_ASSIGNMENT)
-      const [rows] = await db.execute(
+      const [rows] = await database.execute(
         `SELECT DISTINCT
            ta.teacher_assignment_id,
            so.subject_offering_id,
@@ -701,7 +715,10 @@ class Section {
            gl.grade_level_name,
            s.subject_name,
            'Regular Class' AS class_type,
-           sy.ends_on AS school_year_end
+           sy.ends_on AS school_year_end,
+           sy.status AS school_year_status,
+           COALESCE(ta.is_archived, 0) AS is_archived_col,
+           ta.archived_at AS archived_at_col
          FROM TEACHER_ASSIGNMENT ta
          INNER JOIN SUBJECT_OFFERING so ON so.subject_offering_id = ta.subject_offering_id
          INNER JOIN SECTION sec ON sec.section_id = so.section_id
@@ -716,6 +733,17 @@ class Section {
       teacherRows = rows;
     } catch (err) {
       console.warn('Teacher sections query error:', err.message);
+    }
+
+    let archiveEntries = [];
+    try {
+      const [ar] = await database.execute(
+        `SELECT assignment_type, assignment_id, section_id, archived_at, reason FROM CLASS_ARCHIVE WHERE user_id = ?`,
+        [userId]
+      );
+      archiveEntries = ar || [];
+    } catch (archiveErr) {
+      console.warn('Class archive read warning:', archiveErr.message);
     }
 
     const advisorySections = new Set(advisoryRows.map(row => `${row.section_id}:${row.school_year_id}`));
@@ -740,7 +768,7 @@ class Section {
     if (schoolYearIds.length > 0) {
       try {
         const placeholders = schoolYearIds.map(() => '?').join(', ');
-        const [termRows] = await db.execute(
+        const [termRows] = await database.execute(
           `SELECT term_id, school_year_id, term_name, starts_at, ends_at, grade_submission_deadline_at, status
            FROM ACADEMIC_TERM
            WHERE school_year_id IN (${placeholders})
@@ -790,6 +818,36 @@ class Section {
       }
     }
 
+    const currentYear = new Date().getFullYear();
+    const computeArchiveStatus = (assignmentType, assignmentId, sectionId, isArchivedCol, archivedAtCol, syStatus, syEnd) => {
+      const normalizedSyStatus = String(syStatus || '').toLowerCase();
+      const isSchoolYearEnded = normalizedSyStatus === 'completed' ||
+                                normalizedSyStatus === 'archived' ||
+                                (normalizedSyStatus !== 'ongoing' && syEnd && Number(syEnd) < currentYear);
+
+      const manualArchive = archiveEntries.find(a =>
+        (a.assignment_type === assignmentType && Number(a.assignment_id) === Number(assignmentId)) ||
+        (a.assignment_type === 'section' && Number(a.section_id) === Number(sectionId))
+      );
+
+      const isManuallyArchived = Boolean(isArchivedCol == 1 || manualArchive);
+      const isArchived = Boolean(isManuallyArchived || isSchoolYearEnded);
+
+      let archivedReason = null;
+      let archivedAt = null;
+
+      if (isSchoolYearEnded) {
+        archivedReason = 'School Year Ended';
+        archivedAt = syEnd ? `${syEnd}-07-31T00:00:00.000Z` : new Date().toISOString();
+      }
+      if (isManuallyArchived) {
+        archivedReason = manualArchive?.reason || 'Manually archived';
+        archivedAt = manualArchive?.archived_at || archivedAtCol || new Date().toISOString();
+      }
+
+      return { isArchived, archivedAt, archivedReason };
+    };
+
     // Advisory standing and each teaching assignment have separate cards and views.
     for (const row of advisoryRows) {
       const sectionAssignmentKey = `${row.section_id}:${row.school_year_id}`;
@@ -806,6 +864,16 @@ class Section {
         const activeDeadline = termInfo?.deadline || (row.school_year_end ? `${row.school_year_end}-07-31` : "2026-07-31");
         const activeTerm = termInfo?.activeTermCode || "T1";
         const termDeadlines = termInfo?.termDeadlines || {};
+
+        const archiveInfo = computeArchiveStatus(
+          'advisory',
+          row.adviser_assignment_id,
+          row.section_id,
+          row.is_archived_col,
+          row.archived_at_col,
+          row.school_year_status,
+          row.school_year_end
+        );
 
         result.push({
           id: `advisory-${row.adviser_assignment_id}`,
@@ -831,6 +899,9 @@ class Section {
           deadline: activeDeadline,
           termDeadlines: termDeadlines,
           submitted: false,
+          is_archived: archiveInfo.isArchived,
+          archived_at: archiveInfo.archivedAt,
+          archived_reason: archiveInfo.archivedReason,
         });
       }
     }
@@ -858,6 +929,16 @@ class Section {
         const activeTerm = termInfo?.activeTermCode || "T1";
         const termDeadlines = termInfo?.termDeadlines || {};
 
+        const archiveInfo = computeArchiveStatus(
+          'teaching',
+          row.teacher_assignment_id,
+          row.section_id,
+          row.is_archived_col,
+          row.archived_at_col,
+          row.school_year_status,
+          row.school_year_end
+        );
+
         result.push({
           id: `teaching-${row.teacher_assignment_id}`,
           assignmentType: "teaching",
@@ -882,11 +963,20 @@ class Section {
           deadline: activeDeadline,
           termDeadlines: termDeadlines,
           submitted: false,
+          is_archived: archiveInfo.isArchived,
+          archived_at: archiveInfo.archivedAt,
+          archived_reason: archiveInfo.archivedReason,
         });
       }
     }
 
-    return result;
+    if (options && options.archived === true) {
+      return result.filter(r => r.is_archived === true);
+    }
+    if (options && options.archived === 'all') {
+      return result;
+    }
+    return result.filter(r => !r.is_archived);
   }
 
   static async findStudentsBySection(sectionId, subjectOfferingId = null, subjectId = null, subjectName = null) {

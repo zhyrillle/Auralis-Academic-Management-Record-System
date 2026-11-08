@@ -15,11 +15,13 @@ test('advisory and subject cards keep distinct identities, subjects and school-y
     if (sql.includes('FROM SECTION_ADVISER_ASSIGNMENT')) return [[{ ...base, adviser_assignment_id: 9 }]];
     if (sql.includes('FROM TEACHER_ASSIGNMENT')) return [teaching];
     if (sql.includes('FROM ACADEMIC_TERM')) return [[]];
+    if (sql.includes('FROM CLASS_ARCHIVE')) return [[]];
     throw new Error('Unexpected query');
   } };
   const module = { exports: {} };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../models/Section.js'), 'utf8'), {
-    module, console, require: name => name === '../config/db' ? database : {},
+    module, console, require: name => name === '../config/db' ? database
+      : name === '../services/ClassArchiveService' ? { ensureSchema: async () => {} } : {},
   });
   const cards = await module.exports.findAdviserSections(3);
   assert.equal(cards.length, 4);

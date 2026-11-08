@@ -1,7 +1,7 @@
 import PageSkeleton from '../../components/common/PageSkeleton.jsx';
-import { useState, useMemo, useEffect } from "react";
-import { ArrowDownNarrowWide, X } from "lucide-react";
-import { useLocation } from "react-router-dom";
+import { useState, useMemo, useEffect, useRef } from "react";
+import { ArrowDownNarrowWide, X, Archive, RotateCcw, Menu } from "lucide-react";
+import { useLocation, useNavigate } from "react-router-dom";
 
 // Components
 import SelectFilter from "../../components/common/SelectFilter.jsx";
@@ -15,7 +15,7 @@ import Toast from "../../components/common/Toast.jsx";
 
 // Auth & Services
 import { getStoredUser } from "../../utils/auth";
-import { getAdviserSections, getStudentsBySection } from "../../services/sectionService";
+import { getAdviserSections, getArchivedSections, archiveClass, restoreClass, getStudentsBySection } from "../../services/sectionService";
 import { getTeacherGradingSummary, submitTeacherGrades } from "../../services/classRecordApi.js";
 
 // Style
@@ -24,8 +24,10 @@ import "../../styles/attendanceSheet.css";
 
 import { normalizeRole } from "../../utils/auth";
 
-export default function AdviserSections({ userRole: propUserRole }) {
+export default function AdviserSections({ userRole: propUserRole, isArchivedView: propIsArchivedView }) {
   const location = useLocation();
+  const navigate = useNavigate();
+  const isArchived = Boolean(propIsArchivedView || location.pathname.includes('/archived-classes'));
   const storedUser = useMemo(() => getStoredUser(), []);
   const normRole = useMemo(() => normalizeRole(storedUser?.role, storedUser), [storedUser]);
   const userRole = propUserRole || (normRole === "adviser" ? "adviser" : "teacher");
@@ -39,6 +41,26 @@ export default function AdviserSections({ userRole: propUserRole }) {
   const [recordReadError, setRecordReadError] = useState("");
   const [gradingLoading, setGradingLoading] = useState(false);
 
+  // Hamburger Menu
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    if (!isMenuOpen) return;
+    const handleClickOutside = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setIsMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isMenuOpen]);
+
+  // In-Card Selection Mode
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedClassIds, setSelectedClassIds] = useState([]);
+  const [actionLoading, setActionLoading] = useState(false);
+
   // Fetch sections from backend
   useEffect(() => {
     let cancelled = false;
@@ -47,8 +69,11 @@ export default function AdviserSections({ userRole: propUserRole }) {
       setClassesError('');
       try {
         const user = getStoredUser();
-        const userId = user?.user_id || user?.id || 1;
-        const fetched = await getAdviserSections(userId);
+        const userId = user?.user_id || user?.id;
+        if (!userId) throw new Error('Please sign in to view your classes.');
+        const fetched = isArchived
+          ? await getArchivedSections(userId)
+          : await getAdviserSections(userId);
         if (cancelled) return;
 
         if (fetched && Array.isArray(fetched) && fetched.length > 0) {
@@ -59,7 +84,7 @@ export default function AdviserSections({ userRole: propUserRole }) {
       } catch (err) {
         if (cancelled) return;
         console.error("Error fetching adviser sections:", err);
-        setClassesError(err.message || 'Assigned classes could not be loaded.');
+        setClassesError(err.message || (isArchived ? 'Archived classes could not be loaded.' : 'Assigned classes could not be loaded.'));
         setClasses([]);
       } finally {
         if (!cancelled) setLoading(false);
@@ -68,7 +93,7 @@ export default function AdviserSections({ userRole: propUserRole }) {
 
     fetchAdviserClasses();
     return () => { cancelled = true; };
-  }, [classesReadVersion]);
+  }, [classesReadVersion, isArchived, location.pathname]);
 
   // Navigation View State
   const [currentView, setCurrentView] = useState(
@@ -312,6 +337,92 @@ export default function AdviserSections({ userRole: propUserRole }) {
     return result;
   };
 
+  const toggleSelectClass = (id) => {
+    setSelectedClassIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedClassIds.length === filteredAndSortedClasses.length) {
+      setSelectedClassIds([]);
+    } else {
+      setSelectedClassIds(filteredAndSortedClasses.map((c) => c.id));
+    }
+  };
+
+  const handleConfirmBatchArchive = async () => {
+    if (selectedClassIds.length === 0) return;
+    try {
+      setActionLoading(true);
+      const user = getStoredUser();
+      const userId = user?.user_id || user?.id;
+      if (!userId) throw new Error('Please sign in before archiving a class.');
+
+      const classesToArchive = classCards.filter((c) => selectedClassIds.includes(c.id));
+
+      for (const target of classesToArchive) {
+        await archiveClass({
+          userId,
+          assignmentType: target.assignmentType,
+          assignmentId: target.assignmentId,
+          sectionId: target.section_id,
+          schoolYearId: target.school_year_id || target.schoolYearId,
+          advisoryAssignmentId: target.adviser_assignment_id || target.advisoryView?.adviser_assignment_id,
+          teacherAssignmentId: target.teacher_assignment_id,
+        });
+      }
+
+      triggerToast(`Successfully archived ${classesToArchive.length} class(es).`, "success");
+      setIsSelectionMode(false);
+      setSelectedClassIds([]);
+      const targetPath = userRole === "teacher" ? "/teacher/archived-classes" : "/adviser/archived-classes";
+      navigate(targetPath);
+      setClassesReadVersion((v) => v + 1);
+    } catch (err) {
+      console.error("Batch archive error:", err);
+      triggerToast(err.message || "Failed to archive classes.", "error");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleConfirmBatchRestore = async () => {
+    if (selectedClassIds.length === 0) return;
+    try {
+      setActionLoading(true);
+      const user = getStoredUser();
+      const userId = user?.user_id || user?.id;
+      if (!userId) throw new Error('Please sign in before restoring a class.');
+
+      const classesToRestore = classCards.filter((c) => selectedClassIds.includes(c.id));
+
+      for (const target of classesToRestore) {
+        await restoreClass({
+          userId,
+          assignmentType: target.assignmentType,
+          assignmentId: target.assignmentId,
+          sectionId: target.section_id,
+          schoolYearId: target.school_year_id || target.schoolYearId,
+          advisoryAssignmentId: target.adviser_assignment_id || target.advisoryView?.adviser_assignment_id,
+          teacherAssignmentId: target.teacher_assignment_id,
+        });
+      }
+
+      triggerToast(`Successfully restored ${classesToRestore.length} class(es).`, "success");
+      setIsSelectionMode(false);
+      setSelectedClassIds([]);
+      const targetPath = userRole === "teacher" ? "/teacher/sections" : "/adviser/sections";
+      navigate(targetPath);
+      setClassesReadVersion((v) => v + 1);
+    } catch (err) {
+      console.error("Batch restore error:", err);
+      triggerToast(err.message || "Failed to restore classes.", "error");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const activeSelectedClassData = useMemo(() => {
     if (!activeSelectedClass) return null;
 
@@ -334,10 +445,369 @@ export default function AdviserSections({ userRole: propUserRole }) {
 
       {currentView === "dashboard" ? (
         <>
-          <div className="sections-header">
-            <h1 className="sections-title">Assigned Classes</h1>
-            <p className="sections-subtext">View all your assigned classes and their corresponding details.</p>
+          <div className="sections-header" style={{ marginBottom: "16px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "12px" }}>
+              <div>
+                <h1 className="sections-title">{isArchived ? "Archived Classes" : "Assigned Classes"}</h1>
+                <p className="sections-subtext">
+                  {isArchived
+                    ? "View and restore classes from previous school years or manually archived classes."
+                    : "View all your assigned classes and their corresponding details."}
+                </p>
+              </div>
+
+              {/* Header Right Actions: Hamburger Menu (+ Back button when on archived view) */}
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", position: "relative" }} ref={menuRef}>
+                {isArchived && (
+                  <button
+                    type="button"
+                    onClick={() => navigate(userRole === "teacher" ? "/teacher/sections" : "/adviser/sections")}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      fontSize: "13px",
+                      fontWeight: 600,
+                      color: "#112D61",
+                      backgroundColor: "#f1f5f9",
+                      border: "1px solid #cbd5e1",
+                      padding: "7px 14px",
+                      borderRadius: "10px",
+                      cursor: "pointer",
+                      transition: "all 0.15s ease",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = "#e2e8f0";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = "#f1f5f9";
+                    }}
+                    title="Back to Assigned Classes"
+                  >
+                    <span>← Back to Assigned Classes</span>
+                  </button>
+                )}
+
+                {/* Hamburger menu button */}
+                <div style={{ position: "relative" }}>
+                  <button
+                    type="button"
+                    aria-label="Class options menu"
+                    title="Options"
+                    onClick={() => setIsMenuOpen((prev) => !prev)}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      width: "36px",
+                      height: "36px",
+                      borderRadius: "10px",
+                      border: "1px solid #e2e8f0",
+                      backgroundColor: isMenuOpen ? "#e2e8f0" : "#ffffff",
+                      color: "#1e293b",
+                      cursor: "pointer",
+                      boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
+                      transition: "all 0.15s ease",
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isMenuOpen) e.currentTarget.style.backgroundColor = "#f8fafc";
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isMenuOpen) e.currentTarget.style.backgroundColor = "#ffffff";
+                    }}
+                  >
+                    <Menu size={18} />
+                  </button>
+
+                  {/* Dropdown Menu */}
+                  {isMenuOpen && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        right: 0,
+                        top: "42px",
+                        backgroundColor: "#ffffff",
+                        borderRadius: "12px",
+                        boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.12), 0 8px 10px -6px rgba(0, 0, 0, 0.08)",
+                        border: "1px solid #e2e8f0",
+                        padding: "6px",
+                        minWidth: "190px",
+                        zIndex: 1000,
+                      }}
+                    >
+                      {!isArchived ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsMenuOpen(false);
+                              setSelectedClassIds([]);
+                              setIsSelectionMode(true);
+                            }}
+                            style={{
+                              width: "100%",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "10px",
+                              padding: "10px 14px",
+                              fontSize: "13px",
+                              fontWeight: 600,
+                              color: "#334155",
+                              border: "none",
+                              background: "transparent",
+                              borderRadius: "8px",
+                              cursor: "pointer",
+                              textAlign: "left",
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = "#f8fafc";
+                              e.currentTarget.style.color = "#0f172a";
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = "transparent";
+                              e.currentTarget.style.color = "#334155";
+                            }}
+                          >
+                            <Archive size={16} style={{ color: "#64748b" }} />
+                            <span>Archive Classes</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsMenuOpen(false);
+                              navigate(userRole === "teacher" ? "/teacher/archived-classes" : "/adviser/archived-classes");
+                            }}
+                            style={{
+                              width: "100%",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "10px",
+                              padding: "10px 14px",
+                              fontSize: "13px",
+                              fontWeight: 500,
+                              color: "#334155",
+                              border: "none",
+                              background: "transparent",
+                              borderRadius: "8px",
+                              cursor: "pointer",
+                              textAlign: "left",
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = "#f8fafc";
+                              e.currentTarget.style.color = "#0f172a";
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = "transparent";
+                              e.currentTarget.style.color = "#334155";
+                            }}
+                          >
+                            <RotateCcw size={16} style={{ color: "#64748b" }} />
+                            <span>Archived Classes</span>
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsMenuOpen(false);
+                              setSelectedClassIds([]);
+                              setIsSelectionMode(true);
+                            }}
+                            style={{
+                              width: "100%",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "10px",
+                              padding: "10px 14px",
+                              fontSize: "13px",
+                              fontWeight: 600,
+                              color: "#16a34a",
+                              border: "none",
+                              background: "transparent",
+                              borderRadius: "8px",
+                              cursor: "pointer",
+                              textAlign: "left",
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = "#f0fdf4";
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = "transparent";
+                            }}
+                          >
+                            <RotateCcw size={16} style={{ color: "#16a34a" }} />
+                            <span>Restore Classes</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsMenuOpen(false);
+                              navigate(userRole === "teacher" ? "/teacher/sections" : "/adviser/sections");
+                            }}
+                            style={{
+                              width: "100%",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "10px",
+                              padding: "10px 14px",
+                              fontSize: "13px",
+                              fontWeight: 500,
+                              color: "#334155",
+                              border: "none",
+                              background: "transparent",
+                              borderRadius: "8px",
+                              cursor: "pointer",
+                              textAlign: "left",
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = "#f8fafc";
+                              e.currentTarget.style.color = "#0f172a";
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = "transparent";
+                              e.currentTarget.style.color = "#334155";
+                            }}
+                          >
+                            <Archive size={16} style={{ color: "#64748b" }} />
+                            <span>Assigned Classes</span>
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
+
+          {/* In-Card Selection Action Bar */}
+          {isSelectionMode && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                flexWrap: "wrap",
+                gap: "12px",
+                backgroundColor: isArchived ? "#f0fdf4" : "#eff6ff",
+                border: isArchived ? "1.5px solid #86efac" : "1.5px solid #bfdbfe",
+                borderRadius: "14px",
+                padding: "12px 18px",
+                marginBottom: "18px",
+                boxShadow: "0 4px 14px rgba(17, 45, 97, 0.06)",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "16px", flexWrap: "wrap" }}>
+                <label
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    fontSize: "14px",
+                    fontWeight: 600,
+                    color: "#1e293b",
+                    cursor: "pointer",
+                    userSelect: "none",
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={filteredAndSortedClasses.length > 0 && selectedClassIds.length === filteredAndSortedClasses.length}
+                    onChange={toggleSelectAll}
+                    style={{
+                      width: "18px",
+                      height: "18px",
+                      cursor: "pointer",
+                      accentColor: isArchived ? "#16a34a" : "#112D61",
+                    }}
+                  />
+                  <span>Select All ({filteredAndSortedClasses.length})</span>
+                </label>
+
+                <span style={{ fontSize: "13px", fontWeight: 600, color: isArchived ? "#15803d" : "#1d4ed8" }}>
+                  {selectedClassIds.length} of {filteredAndSortedClasses.length} class(es) selected
+                </span>
+
+                <span style={{ fontSize: "13px", color: "#64748b" }}>
+                  (Click any card to select or deselect)
+                </span>
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <button
+                  type="button"
+                  disabled={actionLoading}
+                  onClick={() => {
+                    setIsSelectionMode(false);
+                    setSelectedClassIds([]);
+                  }}
+                  style={{
+                    padding: "8px 16px",
+                    borderRadius: "10px",
+                    border: "1px solid #cbd5e1",
+                    backgroundColor: "#ffffff",
+                    color: "#475569",
+                    fontSize: "13px",
+                    fontWeight: 600,
+                    cursor: actionLoading ? "not-allowed" : "pointer",
+                  }}
+                >
+                  Cancel
+                </button>
+
+                {!isArchived ? (
+                  <button
+                    type="button"
+                    disabled={actionLoading || selectedClassIds.length === 0}
+                    onClick={handleConfirmBatchArchive}
+                    style={{
+                      padding: "8px 22px",
+                      borderRadius: "10px",
+                      border: "none",
+                      backgroundColor: selectedClassIds.length === 0 ? "#94a3b8" : "#112D61",
+                      color: "#ffffff",
+                      fontSize: "13px",
+                      fontWeight: 600,
+                      cursor: actionLoading || selectedClassIds.length === 0 ? "not-allowed" : "pointer",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      boxShadow: selectedClassIds.length === 0 ? "none" : "0 2px 4px rgba(17, 45, 97, 0.2)",
+                    }}
+                  >
+                    <Archive size={15} />
+                    <span>{actionLoading ? "Archiving..." : `Archive Selected (${selectedClassIds.length})`}</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={actionLoading || selectedClassIds.length === 0}
+                    onClick={handleConfirmBatchRestore}
+                    style={{
+                      padding: "8px 22px",
+                      borderRadius: "10px",
+                      border: "none",
+                      backgroundColor: selectedClassIds.length === 0 ? "#94a3b8" : "#16a34a",
+                      color: "#ffffff",
+                      fontSize: "13px",
+                      fontWeight: 600,
+                      cursor: actionLoading || selectedClassIds.length === 0 ? "not-allowed" : "pointer",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      boxShadow: selectedClassIds.length === 0 ? "none" : "0 2px 4px rgba(22, 163, 74, 0.2)",
+                    }}
+                  >
+                    <RotateCcw size={15} />
+                    <span>{actionLoading ? "Restoring..." : `Restore Selected (${selectedClassIds.length})`}</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
 
           <div className="controls-row">
             <div className="control-left">
@@ -429,17 +899,24 @@ export default function AdviserSections({ userRole: propUserRole }) {
 
           {classesError && <div role="alert">{classesError}<button type="button" onClick={() => setClassesReadVersion(value => value + 1)}>Retry</button></div>}
           {loading ? (
-            <PageSkeleton label="Loading assigned classes" layout="cards" rows={6} />
+            <PageSkeleton label={isArchived ? "Loading archived classes" : "Loading assigned classes"} layout="cards" rows={6} />
           ) : classesError ? null : filteredAndSortedClasses.length === 0 ? (
             <div style={{ textAlign: "center", padding: "40px", backgroundColor: "#ffffff", borderRadius: "16px", color: "#64748b", border: "1px solid #eef2f6" }}>
-              <p style={{ fontWeight: 600, fontSize: "16px", marginBottom: "4px" }}>No assigned classes found</p>
-              <p style={{ fontSize: "14px" }}>Try adjusting your search filters above.</p>
+              <p style={{ fontWeight: 600, fontSize: "16px", marginBottom: "4px" }}>
+                {isArchived ? "No archived classes found" : "No assigned classes found"}
+              </p>
+              <p style={{ fontSize: "14px" }}>
+                {isArchived ? "Archived classes from ended school years or manually archived classes will appear here." : "Try adjusting your search filters above."}
+              </p>
             </div>
           ) : (
             <div className="classes-grid">
               {filteredAndSortedClasses.map((cls) => (
                 <ClassCard
                   key={cls.id} cls={cls}
+                  selectable={isSelectionMode}
+                  selected={selectedClassIds.includes(cls.id)}
+                  onToggleSelect={() => toggleSelectClass(cls.id)}
                   secondaryActionsDisabled={!(Number.isInteger(Number(cls.subject_offering_id || cls.offering_id))
                     && Number(cls.subject_offering_id || cls.offering_id) > 0)}
                   secondaryActionsDisabledReason="No teaching subject is assigned to you for this class. Use View to see the advisory section."
@@ -502,6 +979,7 @@ export default function AdviserSections({ userRole: propUserRole }) {
           />
         )
       )}
+
 
     </div>
   );

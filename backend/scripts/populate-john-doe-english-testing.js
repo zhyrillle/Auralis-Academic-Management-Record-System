@@ -38,7 +38,7 @@ async function bulk(connection, table, columns, rows) {
 async function populate(pool, { apply, today, backupDir, sectionNames = names,
   termNames = ['1st', '2nd'], requireAdviser = true }) {
   assert(sectionNames.length && new Set(sectionNames).size === sectionNames.length);
-  assert(termNames.length && termNames.every(term => ['1st', '2nd'].includes(term)));
+  assert(termNames.length && termNames.every(term => ['1st', '2nd', '3rd'].includes(term)));
   assert.equal(new Set(termNames).size, termNames.length);
   assert.match(today, /^\d{4}-\d{2}-\d{2}$/);
   const c = await pool.getConnection();

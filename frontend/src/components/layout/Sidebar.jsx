@@ -8,7 +8,7 @@ import logoIcon from "../../assets/auralis-logo.png";
 import { useDepartmentContext } from "../../services/deptHeadMonitoringApi";
 
 const isRouteActive = (pathname, path) => Boolean(path)
-  && (pathname === path || pathname.startsWith(`${path}/`));
+  && (pathname === path || pathname.startsWith(`${path}/`) || (path.endsWith('/sections') && pathname.endsWith('/archived-classes')));
 
 function positionSidebarFlyout(trigger, panel) {
   if (!trigger || !panel) return;

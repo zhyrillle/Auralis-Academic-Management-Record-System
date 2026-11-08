@@ -2,7 +2,23 @@ import { Eye, FileSpreadsheet, Edit2, Star } from "lucide-react";
 import "../../styles/themes.css";
 import "../../styles/sectionCard.css";
 
-export default function ClassCard({ cls, onView, onGradingSheet, onEdit, children, hideClassType = false, showSecondaryActions = true, secondaryActionsDisabled = false, secondaryActionsDisabledReason = '', className = '', viewAriaLabel, gradeId }) {
+export default function ClassCard({
+  cls,
+  onView,
+  onGradingSheet,
+  onEdit,
+  children,
+  hideClassType = false,
+  showSecondaryActions = true,
+  secondaryActionsDisabled = false,
+  secondaryActionsDisabledReason = '',
+  className = '',
+  viewAriaLabel,
+  gradeId,
+  selectable = false,
+  selected = false,
+  onToggleSelect,
+}) {
   const isSpecialized = Boolean(
     cls?.is_specialized == 1 ||
     cls?.is_specialized === true ||
@@ -11,7 +27,6 @@ export default function ClassCard({ cls, onView, onGradingSheet, onEdit, childre
     (cls?.classType && (String(cls.classType).startsWith("Special Program") || String(cls.classType).startsWith("Advisory Class -")))
   );
   const isAdviser = Boolean(cls?.isAdviser === true || (cls?.classType && String(cls.classType).startsWith("Advisory Class")));
-  const isAdvisory = isAdviser;
 
   const programCode = cls?.program_code || cls?.programCode || cls?.program_name || null;
   const validProgCode = programCode && String(programCode).toUpperCase() !== "EBEC" ? String(programCode).toUpperCase() : null;
@@ -38,31 +53,49 @@ export default function ClassCard({ cls, onView, onGradingSheet, onEdit, childre
 
   return (
     <div className={className} role={className ? 'article' : undefined} aria-label={className ? `${cls.sectionName}, ${cls.gradeLevel}` : undefined}
+      onClick={() => {
+        if (selectable && onToggleSelect) {
+          onToggleSelect(cls);
+        }
+      }}
       style={{
         boxSizing: "border-box",
         minWidth: 0,
-        background: "#ffffff",
+        background: selectable && selected
+          ? (cls.is_archived ? "rgba(22, 163, 74, 0.04)" : "rgba(17, 45, 97, 0.04)")
+          : "#ffffff",
         borderRadius: "15px",
-        border: "1px solid #eef2f6",
+        border: selectable && selected
+          ? (cls.is_archived ? "2px solid #16a34a" : "2px solid #112D61")
+          : selectable
+            ? "1.5px dashed #cbd5e1"
+            : "1px solid #eef2f6",
         padding: "20px 16px",
-        boxShadow: "0 8px 24px rgba(15, 23, 42, 0.06)",
+        boxShadow: selectable && selected
+          ? "0 10px 25px rgba(17, 45, 97, 0.12)"
+          : "0 8px 24px rgba(15, 23, 42, 0.06)",
         display: "flex",
         flexDirection: "column",
         justifyContent: "flex-start",
-        transition: "all 0.3s ease",
+        transition: "all 0.2s ease",
         height: children ? "auto" : "205px",
+        cursor: selectable ? "pointer" : "default",
       }}
 
       onMouseEnter={(e) => {
-        e.currentTarget.style.transform = "translateY(-5px)";
-        e.currentTarget.style.boxShadow =
-          "0 16px 35px rgba(15, 23, 42, 0.12)";
+        if (!selectable) {
+          e.currentTarget.style.transform = "translateY(-5px)";
+          e.currentTarget.style.boxShadow =
+            "0 16px 35px rgba(15, 23, 42, 0.12)";
+        }
       }}
 
       onMouseLeave={(e) => {
-        e.currentTarget.style.transform = "translateY(0)";
-        e.currentTarget.style.boxShadow =
-          "0 8px 24px rgba(15, 23, 42, 0.06)";
+        if (!selectable) {
+          e.currentTarget.style.transform = "translateY(0)";
+          e.currentTarget.style.boxShadow =
+            "0 8px 24px rgba(15, 23, 42, 0.06)";
+        }
       }}
     >
 
@@ -79,41 +112,80 @@ export default function ClassCard({ cls, onView, onGradingSheet, onEdit, childre
           }}
         >
 
-          <h3
-            style={{
-              fontSize: "var(--fs-h3)",
-              fontWeight: "var(--fw-semibold)",
-              fontFamily: "var(--font-dm-sans)",
-              color: "#1e293b",
-              margin: 0,
-            }}
-          >
-            {cls.sectionName}
-          </h3>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0, flex: 1 }}>
+            {selectable && (
+              <input
+                type="checkbox"
+                checked={selected}
+                onChange={() => onToggleSelect && onToggleSelect(cls)}
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  width: "18px",
+                  height: "18px",
+                  cursor: "pointer",
+                  accentColor: cls.is_archived ? "#16a34a" : "#112D61",
+                  flexShrink: 0,
+                  margin: 0,
+                }}
+              />
+            )}
 
+            <h3
+              style={{
+                fontSize: "var(--fs-h3)",
+                fontWeight: "var(--fw-semibold)",
+                fontFamily: "var(--font-dm-sans)",
+                color: "#1e293b",
+                margin: 0,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {cls.sectionName}
+            </h3>
+          </div>
 
-          <span
-            className={gradeId == null ? undefined : 'section-card__grade'}
-            data-grade-level={gradeId}
-            style={{
-              backgroundColor: gradeId != null ? undefined : isAdviser
-                ? "rgba(22,163,74,0.1)"
-                : isSpecialized
-                  ? "rgba(201, 162, 39, 0.1)"
-                  : "rgba(17,45,97,0.06)",
-              color: gradeId != null ? undefined : isAdviser
-                ? "#16a34a"
-                : isSpecialized
-                  ? "#c9a227"
-                  : "#112d61",
-              padding: "4px 10px",
-              borderRadius: "20px",
-              fontSize: "12px",
-              fontWeight: "600",
-            }}
-          >
-            {cls.gradeLevel}
-          </span>
+          <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 }}>
+            {cls.is_archived && (
+              <span
+                style={{
+                  backgroundColor: "rgba(245, 158, 11, 0.12)",
+                  color: "#b45309",
+                  padding: "4px 8px",
+                  borderRadius: "20px",
+                  fontSize: "11px",
+                  fontWeight: "700",
+                  letterSpacing: "0.2px",
+                }}
+              >
+                Archived
+              </span>
+            )}
+
+            <span
+              className={gradeId == null ? undefined : 'section-card__grade'}
+              data-grade-level={gradeId}
+              style={{
+                backgroundColor: gradeId != null ? undefined : isAdviser
+                  ? "rgba(22,163,74,0.1)"
+                  : isSpecialized
+                    ? "rgba(201, 162, 39, 0.1)"
+                    : "rgba(17,45,97,0.06)",
+                color: gradeId != null ? undefined : isAdviser
+                  ? "#16a34a"
+                  : isSpecialized
+                    ? "#c9a227"
+                    : "#112d61",
+                padding: "4px 10px",
+                borderRadius: "20px",
+                fontSize: "12px",
+                fontWeight: "600",
+              }}
+            >
+              {cls.gradeLevel}
+            </span>
+          </div>
 
         </div>
 
@@ -174,6 +246,9 @@ export default function ClassCard({ cls, onView, onGradingSheet, onEdit, childre
           width: "100%",
           boxSizing: "border-box",
           minWidth: 0,
+          pointerEvents: selectable ? "none" : "auto",
+          opacity: selectable ? 0.6 : 1,
+          transition: "opacity 0.2s ease",
         }}
       >
 
