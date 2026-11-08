@@ -234,3 +234,27 @@ export async function getCoreValuesComparison(term = "T1", userId) {
     return placeholderCoreValues[term] || [];
   }
 }
+/**
+ * REST Route: GET /api/adviser/dashboard/at-risk-students?userId=:userId
+ * Retrieves High-Risk only students predicted by machine learning model
+ * for the sections and subjects handled by this teacher.
+ */
+export async function getAtRiskStudents(userId) {
+  const effectiveId = getEffectiveUserId(userId);
+  try {
+    const url = effectiveId
+      ? `${API_BASE_URL}/adviser/dashboard/at-risk-students?userId=${encodeURIComponent(effectiveId)}`
+      : `${API_BASE_URL}/adviser/dashboard/at-risk-students`;
+    const response = await fetch(url);
+    return await parseResponse(response);
+  } catch (error) {
+    console.warn("getAtRiskStudents fallback:", error.message);
+    return {
+      highRiskCount: 0,
+      students: [],
+      totalScored: 0,
+      unavailableCount: 0,
+      targetTerm: "T2",
+    };
+  }
+}

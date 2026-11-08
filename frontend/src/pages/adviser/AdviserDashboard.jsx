@@ -52,6 +52,7 @@ import AdviserAttendanceWaveChart from "../../components/adviser/AdviserAttendan
 import AdviserTestExamAnalysis from "../../components/adviser/AdviserTestExamAnalysis";
 import AdviserSubjectAreaHBarChart from "../../components/adviser/AdviserSubjectAreaHBarChart";
 import AdviserCoreValuesDonut from "../../components/adviser/AdviserCoreValuesDonut";
+import AtRiskStudentsModal from "../../components/adviser/AtRiskStudentsModal";
 
 // Banner Asset
 import bannerArt from "../../assets/adviser-banner-illustration.png";
@@ -86,6 +87,7 @@ export default function AdviserDashboard() {
   const [testChoice, setTestTerm] = useState(null);
   const [testSection, setTestSection] = useState('All');
   const [areaChoice, setSubjectAreaTerm] = useState(null);
+  const [isAtRiskModalOpen, setIsAtRiskModalOpen] = useState(false);
   const [coreChoice] = useState(null);
   const defaultTerm = summary.activeTerm || 'T1';
   const subjectTerm = subjectChoice || defaultTerm, radarTerm = radarChoice || defaultTerm;
@@ -722,12 +724,14 @@ export default function AdviserDashboard() {
               loading={loading}
             />
             <AdviserStatCard
-              title="At-Risk Students"
+              title="High-Risk Students"
               value={summary?.atRiskStudentsCount ?? 0}
-              subtitle={summary?.atRiskStudentsNote ?? "Across assigned classes"}
-              subtitleType="default"
+              subtitle={Number(summary?.atRiskStudentsCount || 0) > 0 ? "Requires intervention" : "No intervention needed"}
+              subtitleType={Number(summary?.atRiskStudentsCount || 0) > 0 ? "danger" : "default"}
               accentColor="#EF4444"
               loading={loading}
+              clickable
+              onClick={() => setIsAtRiskModalOpen(true)}
             />
           </div>
 
@@ -935,6 +939,13 @@ export default function AdviserDashboard() {
 
         </section>
       )}
+
+      {/* At-Risk Students ML Modal */}
+      <AtRiskStudentsModal
+        isOpen={isAtRiskModalOpen}
+        onClose={() => setIsAtRiskModalOpen(false)}
+        userId={userId}
+      />
 
       {/* Toast Notification */}
       {toast.message && (
