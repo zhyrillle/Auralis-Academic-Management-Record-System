@@ -234,12 +234,31 @@ class MasterSheetService {
        WHERE so.section_id = ? AND so.school_year_id = ?`,
       [assignment.section_id, assignment.school_year_id],
     );
+
+    let principalName = "";
+    try {
+      const [pRows] = await db.execute(
+        `SELECT first_name, last_name, extension_name FROM USER WHERE role IN ('1', 'principal', '5') LIMIT 1`
+      );
+      if (pRows && pRows.length > 0) {
+        const p = pRows[0];
+        const baseName = `${p.first_name || ''} ${p.last_name || ''}`.trim();
+        const ext = (p.extension_name || '').trim();
+        principalName = ext ? `${baseName}, ${ext}` : baseName;
+        if (principalName && !principalName.toUpperCase().includes("PH.D") && !principalName.toUpperCase().includes("PHD")) {
+          principalName = `${principalName}, Ph.D.`;
+        }
+      }
+    } catch {
+      // Non-blocking if principal lookup fails
+    }
+
     return this.buildResponse({
-      assignment, termRows, offeringRows, studentRows, gradeSheetRows, savedGradeRows,
+      assignment, termRows, offeringRows, studentRows, gradeSheetRows, savedGradeRows, principalName,
     });
   }
 
-  static buildResponse({ assignment, termRows, offeringRows, studentRows, gradeSheetRows = [], savedGradeRows = [] }) {
+  static buildResponse({ assignment, termRows, offeringRows, studentRows, gradeSheetRows = [], savedGradeRows = [], principalName = "" }) {
     const warnings = new Set();
     const specializationKey = SPECIALIZATION_SUBJECTS[cleanToken(assignment.program_code)];
     const subjectDefinitions = SUBJECT_DEFINITIONS.filter((subject) =>
@@ -383,6 +402,9 @@ class MasterSheetService {
       adviser: {
         userId: Number(assignment.user_id),
         name: formatPersonName(assignment),
+      },
+      principal: {
+        name: principalName || "",
       },
       terms,
       subjects,
