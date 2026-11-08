@@ -15,7 +15,7 @@ export function PerformanceStatusBadge({ value }) {
 export function PerformanceInlineProgress({ value, label, tone = "blue" }) {
   return (
     <div className="pp-inline-progress">
-      <ProgressBar value={value} tone={tone} ariaLabel={`${label ?? value}%`} />
+      <ProgressBar value={value} tone={tone} ariaLabel={`${value}%`} />
       <span>{label ?? `${value}%`}</span>
     </div>
   );

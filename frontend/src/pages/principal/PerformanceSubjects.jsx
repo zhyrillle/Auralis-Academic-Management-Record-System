@@ -136,7 +136,9 @@ export default function PerformanceSubjects() {
     {
       key: "passRate",
       label: "Pass Rate",
-      render: (row) => hasRecordedGrades(row) ? <PerformanceInlineProgress value={row.passRate} /> : "—",
+      render: (row) => hasRecordedGrades(row) ? (
+        <PerformanceInlineProgress value={row.passRate} label={`${Math.round(row.passRate)}%`} />
+      ) : "—",
     },
     {
       key: "highestSection",
