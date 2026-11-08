@@ -10,6 +10,8 @@ export default function AdviserStatCard({
   topBorderColor,
   loading = false,
   className = "",
+  onClick,
+  clickable = false,
 }) {
   if (loading) {
     return (
@@ -20,14 +22,29 @@ export default function AdviserStatCard({
     );
   }
 
-  const cardStyle = topBorderColor
-    ? { borderTop: `4px solid ${topBorderColor}` }
-    : {};
+  const isClickable = Boolean(onClick || clickable);
+
+  const cardStyle = {
+    ...(topBorderColor ? { borderTop: `4px solid ${topBorderColor}` } : {}),
+    ...(isClickable ? { cursor: "pointer" } : {}),
+  };
+
+  const handleKeyDown = (e) => {
+    if (isClickable && (e.key === "Enter" || e.key === " ")) {
+      e.preventDefault();
+      onClick?.(e);
+    }
+  };
 
   return (
     <div
-      className={`adviser-dashboard__stat-card ${className}`}
+      className={`adviser-dashboard__stat-card ${isClickable ? "adviser-dashboard__stat-card--clickable" : ""} ${className}`}
       style={cardStyle}
+      onClick={isClickable ? onClick : undefined}
+      role={isClickable ? "button" : undefined}
+      tabIndex={isClickable ? 0 : undefined}
+      onKeyDown={isClickable ? handleKeyDown : undefined}
+      aria-label={isClickable ? `${title}: ${value ?? "—"}. Click to view details.` : undefined}
     >
       <div className="adviser-dashboard__stat-label">{title}</div>
       <div
@@ -46,4 +63,3 @@ export default function AdviserStatCard({
     </div>
   );
 }
-

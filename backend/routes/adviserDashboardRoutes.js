@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
 const { calculateStudentGrades, TRANSMUTATION_TABLE, weightsFromRows } = require('../utils/depedTransmutation');
+const AtRiskPrediction = require('../models/AtRiskPrediction');
+const { decryptLrn } = require('../utils/encryption');
 
 /**
  * Normalizes term string ('T1', 'term-1', 'Quarter 1', 1) to standard term code ('T1', 'T2', 'T3')
@@ -42,9 +44,9 @@ async function resolveCurrentActiveTerm() {
     if (rows.length > 0) {
       const t = rows[0];
       const code = normalizeTerm(t.term_name);
-      return { termId: t.term_id, termCode: code, termName: t.term_name };
+      return { termId: t.term_id, termCode: code, termName: t.term_name, schoolYearId: t.school_year_id };
     }
-    return { termId: 1, termCode: 'T1', termName: '1st' };
+    return { termId: 1, termCode: 'T1', termName: '1st', schoolYearId: 1 };
   } catch (err) {
     console.warn('Error resolving current active term:', err.message);
     return { termId: 1, termCode: 'T1', termName: '1st' };
@@ -119,7 +121,7 @@ async function getTeacherClasses(userId) {
 /**
  * Shared helper to get fully populated assigned classes array for a teacher
  */
-async function getTeacherAssignedClasses(userId) {
+async function getTeacherAssignedClasses(userId, targetTermId = null) {
   const { teachingRows, advisoryRows } = await getTeacherClasses(userId);
   const classMap = new Map();
 
@@ -314,6 +316,137 @@ router.get('/check-role/:userId', async (req, res) => {
  * GET /api/adviser/dashboard/summary
  * Retrieves overall KPI counters, section averages, and student counts for the logged-in teacher.
  */
+
+/**
+ * Retrieves High-Risk only students predicted by the machine learning model
+ * across all subject sections handled by the given teacher.
+ */
+async function getTeacherHighRiskStudents(userId, activeTermInfo) {
+  try {
+    const { teachingRows, advisoryRows } = await getTeacherClasses(userId);
+    const sectionMap = new Map();
+
+    (teachingRows || []).forEach((row) => {
+      if (!sectionMap.has(row.section_id)) {
+        sectionMap.set(row.section_id, {
+          sectionId: row.section_id,
+          sectionName: row.section_name,
+          gradeLevel: row.grade_level_name,
+          subjects: new Set(),
+          isAdviser: false,
+        });
+      }
+      if (row.subject_name) {
+        sectionMap.get(row.section_id).subjects.add(row.subject_name);
+      }
+    });
+
+    (advisoryRows || []).forEach((row) => {
+      if (!sectionMap.has(row.section_id)) {
+        sectionMap.set(row.section_id, {
+          sectionId: row.section_id,
+          sectionName: row.section_name,
+          gradeLevel: row.grade_level_name,
+          subjects: new Set(),
+          isAdviser: true,
+        });
+      } else {
+        sectionMap.get(row.section_id).isAdviser = true;
+      }
+    });
+
+    const [activeSyRows] = await db.execute(
+      `SELECT school_year_id, starts_on, ends_on FROM SCHOOL_YEAR 
+       WHERE LOWER(status) IN ('ongoing', 'active') 
+       ORDER BY starts_on DESC LIMIT 1`
+    ).catch(() => [[]]);
+
+    const syRow = activeSyRows[0] || { starts_on: 2026, ends_on: 2027, school_year_id: 1 };
+    const syStart = syRow.starts_on instanceof Date ? syRow.starts_on.getFullYear() : parseInt(syRow.starts_on, 10);
+    const syEnd = syRow.ends_on instanceof Date ? syRow.ends_on.getFullYear() : parseInt(syRow.ends_on, 10);
+    const schoolYearStr = `${syStart}-${syEnd}`;
+
+    const termCode = activeTermInfo?.termCode || 'T2';
+    const targetTerm = termCode === 'T1' ? 'T2' : termCode;
+
+    const sectionIds = Array.from(sectionMap.keys());
+    let highRiskStudents = [];
+    let unavailableStudents = [];
+    let totalScored = 0;
+
+    for (const secId of sectionIds) {
+      try {
+        const preview = await AtRiskPrediction.getPreview(
+          { schoolYear: schoolYearStr, term: targetTerm, gradeLevel: 'all' },
+          { database: db, scope: { sectionId: secId } }
+        );
+
+        const secInfo = sectionMap.get(secId);
+        const subList = Array.from(secInfo.subjects);
+        const subDisplay = subList.length > 0
+          ? (secInfo.isAdviser ? `${subList.join(', ')} / Advisory` : subList.join(', '))
+          : (secInfo.isAdviser ? 'Advisory Class' : 'General Class');
+
+        if (preview?.students && preview.students.length > 0) {
+          totalScored += preview.students.length;
+          // Filter High-Risk ONLY: riskLevel === 'high' (model probability >= 0.70)
+          const high = preview.students.filter((s) => s.riskLevel === 'high');
+          for (const s of high) {
+            highRiskStudents.push({
+              student_id: s.studentId,
+              student_section_id: s.studentSectionId,
+              name: s.name,
+              lrn: decryptLrn(s.lrn) || s.lrn,
+              section_id: secId,
+              section_name: s.section || secInfo.sectionName,
+              grade_level: secInfo.gradeLevel || `Grade ${s.grade}`,
+              handled_subject: subDisplay,
+              risk_level: 'high',
+              risk_score: s.riskScore,
+              score: s.score,
+              flags: s.flags || [],
+              adviser: s.adviser,
+              source_term: preview.sourceTerm,
+              target_term: preview.targetTerm,
+            });
+          }
+        }
+
+        if (preview?.unavailable && preview.unavailable.length > 0) {
+          unavailableStudents.push(...preview.unavailable.map((u) => ({
+            ...u,
+            lrn: decryptLrn(u.lrn) || u.lrn,
+            handled_subject: subDisplay,
+          })));
+        }
+      } catch (err) {
+        console.warn(`[ML Risk] Section ${secId} preview error:`, err.message);
+      }
+    }
+
+    return {
+      highRiskCount: highRiskStudents.length,
+      students: highRiskStudents,
+      totalScored,
+      unavailableCount: unavailableStudents.length,
+      unavailableStudents,
+      targetTerm,
+      schoolYear: schoolYearStr,
+    };
+  } catch (error) {
+    console.error('Error in getTeacherHighRiskStudents:', error);
+    return {
+      highRiskCount: 0,
+      students: [],
+      totalScored: 0,
+      unavailableCount: 0,
+      unavailableStudents: [],
+      targetTerm: 'T2',
+      schoolYear: '2026-2027',
+    };
+  }
+}
+
 router.get('/summary', async (req, res) => {
   try {
     const userId = req.query.userId || req.headers['x-user-id'];
@@ -322,7 +455,8 @@ router.get('/summary', async (req, res) => {
     }
 
     const isAdviser = await checkIsAdviser(userId);
-    const assignedClasses = await getTeacherAssignedClasses(userId);
+    const activeTermInfo = await resolveCurrentActiveTerm();
+    const assignedClasses = await getTeacherAssignedClasses(userId, activeTermInfo.termId);
     const totalClasses = assignedClasses.length;
 
     // Total Students Counter: Replace mock count with dynamic sum of enrollees across assigned sections
@@ -332,12 +466,34 @@ router.get('/summary', async (req, res) => {
     );
 
     // Pending Submissions vs. Submitted Grades:
-    // Calculate counts dynamically from the teacher's active assigned classes.
-    // Logic: If teacher has 4 assigned classes (2 marked as "Submitted" and 2 as "In Progress"), set Submitted Grades = 2 and Pending Submissions = 2.
-    const submittedGrades = assignedClasses.filter(
-      (cls) => cls.status === 'Submitted' || cls.entryProgress >= 100
+    // Strictly based on the actual grading sheets (subject offerings) the teacher handles for the active term.
+    const [assignedOfferings] = await db.execute(
+      `SELECT DISTINCT
+         ta.teacher_assignment_id,
+         so.subject_offering_id,
+         so.section_id,
+         sec.section_name,
+         s.subject_name,
+         gs.grade_sheet_id,
+         COALESCE(gs.workflow_status, 'DRAFT') AS workflow_status,
+         gs.lock_status,
+         gs.submitted_at
+       FROM TEACHER_ASSIGNMENT ta
+       JOIN SUBJECT_OFFERING so ON so.subject_offering_id = ta.subject_offering_id
+       JOIN SECTION sec ON sec.section_id = so.section_id
+       JOIN SUBJECT s ON s.subject_id = so.subject_id
+       LEFT JOIN GRADE_SHEET gs ON gs.subject_offering_id = so.subject_offering_id
+                               AND gs.term_id = ?
+       WHERE ta.user_id = ?
+         AND (so.school_year_id = ? OR ? IS NULL)`,
+      [activeTermInfo.termId, userId, activeTermInfo.schoolYearId || null, activeTermInfo.schoolYearId || null]
+    ).catch(() => [[]]);
+
+    const totalGradingSheets = assignedOfferings.length;
+    const submittedGrades = assignedOfferings.filter(
+      (sheet) => sheet.workflow_status === 'SUBMITTED' || sheet.lock_status === 'TERM_LOCKED'
     ).length;
-    const pendingSubmissions = Math.max(0, totalClasses - submittedGrades);
+    const pendingSubmissions = Math.max(0, totalGradingSheets - submittedGrades);
 
     // Calculate grades and section averages from STUDENT_GRADE
     const { teachingRows } = await getTeacherClasses(userId);
@@ -345,13 +501,10 @@ router.get('/summary', async (req, res) => {
       new Set(teachingRows.map((r) => r.subject_offering_id).filter(Boolean))
     );
 
-    const activeTermInfo = await resolveCurrentActiveTerm();
     let sectionAverage = 0;
     let sectionAverageDiff = `0% from ${activeTermInfo.termCode}`;
     let lowestPerformingSection = '—';
     let lowestPerformingSectionNote = 'No data';
-    let atRiskStudentsCount = 0;
-    let atRiskStudentsNote = 'Across assigned classes';
     let entryProgress = 0;
 
     if (offeringIds.length > 0) {
@@ -462,37 +615,7 @@ router.get('/summary', async (req, res) => {
         }
       }
 
-      // 4. At-risk students count (students with average grade < 75)
-      const [atRiskRows] = await db.execute(
-        `SELECT COUNT(DISTINCT sg.student_id) AS at_risk_count
-         FROM STUDENT_GRADE sg
-         WHERE sg.subject_offering_id IN (${placeholders})
-           AND COALESCE(sg.quarterly_grade, sg.initial_grade) < 75`,
-        offeringIds
-      ).catch(() => [[{ at_risk_count: 0 }]]);
-
-      atRiskStudentsCount = Number(atRiskRows[0]?.at_risk_count || 0);
-
-      if (atRiskStudentsCount === 0) {
-        // Check draft scores for any students averaging below 60%
-        const [draftAtRiskRows] = await db.execute(
-          `SELECT sc.student_section_id
-           FROM SCORE sc
-           JOIN GRADE_ACTIVITY ga ON ga.activity_id = sc.activity_id
-           JOIN GRADE_SHEET gs ON gs.grade_sheet_id = ga.grade_sheet_id
-           WHERE gs.subject_offering_id IN (${placeholders})
-             AND sc.raw_score IS NOT NULL
-             AND ga.highest_possible_score > 0
-           GROUP BY sc.student_section_id
-           HAVING AVG((sc.raw_score / ga.highest_possible_score) * 100) < 60`,
-          offeringIds
-        ).catch(() => [[]]);
-
-        atRiskStudentsCount = (draftAtRiskRows || []).length;
-      }
-      atRiskStudentsNote = atRiskStudentsCount > 0 ? 'Requires academic support' : 'No students at risk';
-
-      // 5. Entry progress calculation based on active teaching classes
+      // 4. Entry progress calculation based on active teaching classes
       if (assignedClasses.length > 0) {
         const teachingClasses = assignedClasses.filter(c => c.subject_offering_ids && c.subject_offering_ids.length > 0);
         const targetClasses = teachingClasses.length > 0 ? teachingClasses : assignedClasses;
@@ -509,6 +632,13 @@ router.get('/summary', async (req, res) => {
         entryProgress = Math.round(avgProgress);
       }
     }
+
+    // 5. At-risk students count (High-Risk ONLY from the team's Machine Learning model)
+    const highRiskData = await getTeacherHighRiskStudents(userId, activeTermInfo);
+    const atRiskStudentsCount = highRiskData.highRiskCount;
+    const atRiskStudentsNote = atRiskStudentsCount > 0
+      ? `${atRiskStudentsCount} high-risk student${atRiskStudentsCount === 1 ? '' : 's'}`
+      : (highRiskData.unavailableCount > 0 ? 'No high-risk students flagged' : 'No students at risk');
 
     res.json({
       isAdviser,
@@ -534,10 +664,23 @@ router.get('/summary', async (req, res) => {
   }
 });
 
-/**
- * GET /api/adviser/dashboard/assigned-classes
- * Retrieves the teacher's assigned classes with progress, student counts, and status.
- */
+router.get('/at-risk-students', async (req, res) => {
+  try {
+    const userId = req.query.userId || req.headers['x-user-id'] || req.headers['x-auralis-user-id'];
+    if (!userId) {
+      return res.status(400).json({ error: 'userId is required' });
+    }
+
+    const activeTermInfo = await resolveCurrentActiveTerm();
+    const data = await getTeacherHighRiskStudents(userId, activeTermInfo);
+
+    res.json(data);
+  } catch (err) {
+    console.error('Error in /at-risk-students endpoint:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/assigned-classes', async (req, res) => {
   try {
     const userId = req.query.userId || req.headers['x-user-id'];
