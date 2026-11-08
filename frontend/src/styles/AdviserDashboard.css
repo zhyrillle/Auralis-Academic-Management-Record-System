@@ -835,9 +835,39 @@
 .adviser-dashboard__vbar-container {
   flex: 1;
   min-width: 0;
-  display: flex;
-  align-items: center;
+  display: block;
   position: relative;
+}
+
+.adviser-dashboard__vbar-scroll {
+  width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: #aab7c8 #eef2f7;
+  overscroll-behavior-x: contain;
+}
+
+.adviser-dashboard__vbar-scroll:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.2);
+  outline-offset: -3px;
+  border-radius: 8px;
+}
+
+.adviser-dashboard__vbar-svg {
+  display: block;
+  height: 220px;
+  max-height: none;
+}
+
+.adviser-dashboard__vbar-scroll-hint {
+  display: block;
+  padding: 4px 8px 0;
+  color: #718198;
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-align: center;
 }
 
 .adviser-dashboard__term-pills-vertical {

@@ -14,6 +14,12 @@ export default function AdviserSubjectBarChart({
   const yTicks = [100, 80, 60, 40, 20, 0];
 
   const hasData = data && data.length > 0;
+  const sectionSlotWidth = Math.max(
+    92,
+    ...data.map((item) => String(item.section || "").length * 7 + 24),
+  );
+  const chartWidth = Math.max(460, 60 + data.length * sectionSlotWidth);
+  const chartRight = chartWidth - 15;
 
   return (
     <div className="adviser-dashboard__chart-card">
@@ -28,9 +34,16 @@ export default function AdviserSubjectBarChart({
           <SkeletonBlock className="adviser-dashboard__skeleton-chart" />
         ) : (
             <div className="adviser-dashboard__vbar-container">
+              <div
+                className="adviser-dashboard__vbar-scroll"
+                tabIndex={hasData ? 0 : undefined}
+                role={hasData ? "region" : undefined}
+                aria-label={hasData ? "Section performance chart. Horizontally scrollable." : undefined}
+              >
               <svg
-                viewBox="0 0 460 220"
+                viewBox={`0 0 ${chartWidth} 220`}
                 className="adviser-dashboard__vbar-svg"
+                style={{ width: `max(100%, ${chartWidth}px)` }}
                 preserveAspectRatio="xMidYMid meet"
               >
                 {/* Grid Lines and Y-Axis Labels */}
@@ -49,7 +62,7 @@ export default function AdviserSubjectBarChart({
                       <line
                         x1="35"
                         y1={y}
-                        x2="445"
+                        x2={chartRight}
                         y2={y}
                         stroke={tick === 0 ? "#CBD5E1" : "#F1F5F9"}
                         strokeWidth="1"
@@ -73,7 +86,7 @@ export default function AdviserSubjectBarChart({
                 ) : (
                   data.map((item, idx) => {
                     const barCount = data.length || 4;
-                    const availableWidth = 400;
+                    const availableWidth = chartWidth - 60;
                     const slotWidth = availableWidth / barCount;
                     const barWidth = 26;
                     const x = 35 + slotWidth * idx + (slotWidth - barWidth) / 2;
@@ -155,6 +168,12 @@ export default function AdviserSubjectBarChart({
                   })
                 )}
               </svg>
+              </div>
+              {hasData && data.length > 4 && (
+                <span className="adviser-dashboard__vbar-scroll-hint" aria-hidden="true">
+                  Scroll horizontally to view all sections
+                </span>
+              )}
             </div>
         )}
         <div className="adviser-dashboard__term-pills-vertical">
