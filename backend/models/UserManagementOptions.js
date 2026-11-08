@@ -82,12 +82,18 @@ class UserManagementOptions {
         curriculum,
         status
       FROM SCHOOL_YEAR
-      WHERE status = 'ACTIVE'
+      WHERE LOWER(status) IN ('active', 'ongoing')
       ORDER BY school_year_id DESC
       LIMIT 1
     `);
 
     return rows[0] || null;
+  }
+
+  static async getSchoolYears() {
+    const [rows] = await db.execute(`SELECT school_year_id, starts_on, ends_on, curriculum, status
+      FROM SCHOOL_YEAR ORDER BY starts_on DESC, school_year_id DESC`);
+    return rows;
   }
 
   static async getSubjectOfferings(sectionId) {

@@ -6,6 +6,7 @@ const db = require("../config/db");
 
 const User = require("../models/User");
 const UserManagementOptions = require("../models/UserManagementOptions");
+const UserClassAssignments = require("../services/UserClassAssignments");
 const AuditEvent = require("../models/AuditEvent");
 const OtpStore = require("../services/otpStore");
 const { sendPasswordResetOtpEmail } = require("../services/emailService");
@@ -41,7 +42,7 @@ const sendDatabaseError = (res, err) => {
   if (err.code === "ER_DUP_ENTRY") {
     return res.status(409).json({ error: "That email address is already in use." });
   }
-  return res.status(500).json({ error: err.message });
+  return res.status(err.statusCode || 500).json({ error: err.message });
 };
 
 const toNullable = (value) => {
@@ -51,11 +52,19 @@ const toNullable = (value) => {
   return value;
 };
 
-const getCurrentSchoolYear = async (connection) => {
+const getCurrentSchoolYear = async (connection, schoolYearId = null) => {
+  if (schoolYearId != null && schoolYearId !== '') {
+    if (!/^[1-9]\d*$/.test(String(schoolYearId)) || !Number.isSafeInteger(Number(schoolYearId))) {
+      throw Object.assign(new Error('Choose a valid school year.'), { statusCode: 400 });
+    }
+    const [selected] = await connection.execute('SELECT school_year_id,school_id,starts_on,ends_on,curriculum,status FROM SCHOOL_YEAR WHERE school_year_id = ?', [Number(schoolYearId)]);
+    if (selected.length !== 1) throw Object.assign(new Error('The selected school year does not exist.'), { statusCode: 400 });
+    return selected[0];
+  }
   const [rows] = await connection.execute(`
     SELECT school_year_id, school_id, starts_on, ends_on, curriculum, status
     FROM SCHOOL_YEAR
-    WHERE status IN ('ACTIVE', 'ONGOING')
+    WHERE LOWER(status) IN ('active', 'ongoing')
     ORDER BY school_year_id DESC
     LIMIT 1
   `);
@@ -70,7 +79,8 @@ const formatDate = (val) => {
 };
 
 const getAssignmentDates = (body, schoolYear) => {
-  const assignedFrom = formatDate(body.assigned_from) || new Date().toISOString().slice(0, 10);
+  const start = String(schoolYear?.starts_on || '');
+  const assignedFrom = formatDate(body.assigned_from) || (/^\d{4}$/.test(start) ? start + '-01-01' : formatDate(start)) || new Date().toISOString().slice(0, 10);
   
   let assignedUntil = formatDate(body.assigned_until);
 
@@ -264,46 +274,16 @@ async function syncUsersFromCloud() {
 
 async function forwardRoleAssignmentsToCloud(userId, body, schoolYear) {
   if (!db.cloudPool) return;
-  const { assignedFrom, assignedUntil } = getAssignmentDates(body, schoolYear);
-  const role = normalizeRole(body.role);
-
-  await db.cloudPool.query('SET FOREIGN_KEY_CHECKS = 0;').catch(() => {});
+  const connection = await db.cloudPool.getConnection();
   try {
-    // Clean up existing on cloud
-    await db.cloudPool.query(`UPDATE ATTENDANCE_SHEET SET adviser_assignment_id = NULL WHERE adviser_assignment_id IN (SELECT adviser_assignment_id FROM SECTION_ADVISER_ASSIGNMENT WHERE user_id = ?)`, [userId]).catch(() => {});
-    await db.cloudPool.query(`UPDATE ATTENDANCE_SHEET SET teacher_assignment_id = NULL WHERE teacher_assignment_id IN (SELECT teacher_assignment_id FROM TEACHER_ASSIGNMENT WHERE user_id = ?)`, [userId]).catch(() => {});
-    await db.cloudPool.query(`UPDATE SCORE SET teacher_assignment_id = NULL WHERE teacher_assignment_id IN (SELECT teacher_assignment_id FROM TEACHER_ASSIGNMENT WHERE user_id = ?)`, [userId]).catch(() => {});
-    await db.cloudPool.query(`DELETE FROM SECTION_ADVISER_ASSIGNMENT WHERE user_id = ?`, [userId]).catch(() => {});
-    await db.cloudPool.query(`DELETE FROM TEACHER_ASSIGNMENT WHERE user_id = ?`, [userId]).catch(() => {});
-    await db.cloudPool.query(`DELETE FROM DEPARTMENT_HEAD WHERE user_id = ?`, [userId]).catch(() => {});
-
-    if (role === "department head" && body.department_id) {
-      await db.cloudPool.query(
-        `INSERT INTO DEPARTMENT_HEAD (department_id, user_id, school_year_id, appointed_from, appointed_until) VALUES (?, ?, ?, ?, ?)`,
-        [body.department_id, userId, schoolYear.school_year_id, assignedFrom, assignedUntil]
-      ).catch((e) => console.warn('[CloudUser] DH assign cloud error:', e.message));
-    }
-
-    if ((role === "subject teacher" || body.is_adviser) && body.adviser_section_id) {
-      await db.cloudPool.query(
-        `INSERT INTO SECTION_ADVISER_ASSIGNMENT (section_id, school_year_id, user_id, assigned_from, assigned_until) VALUES (?, ?, ?, ?, ?)`,
-        [body.adviser_section_id, schoolYear.school_year_id, userId, assignedFrom, assignedUntil]
-      ).catch((e) => console.warn('[CloudUser] SAA assign cloud error:', e.message));
-    }
-
-    if (Array.isArray(body.teaching_assignments)) {
-      for (const assign of body.teaching_assignments) {
-        if (assign.subject_offering_id) {
-          await db.cloudPool.query(
-            `INSERT INTO TEACHER_ASSIGNMENT (user_id, subject_offering_id, assigned_from, assigned_until) VALUES (?, ?, ?, ?)`,
-            [userId, assign.subject_offering_id, assignedFrom, assignedUntil]
-          ).catch((e) => console.warn('[CloudUser] TA assign cloud error:', e.message));
-        }
-      }
-    }
-  } finally {
-    await db.cloudPool.query('SET FOREIGN_KEY_CHECKS = 1;').catch(() => {});
-  }
+    await connection.beginTransaction();
+    const selected = await getCurrentSchoolYear(connection, schoolYear.school_year_id);
+    if (normalizeRole(body.role) === 'subject teacher') await UserClassAssignments.validate(connection,userId,body,selected.school_year_id);
+    if (normalizeRole(body.role) === 'department head' && body.department_id) await validateSingleDepartmentHead(connection,body.department_id,userId,selected);
+    await saveRoleAssignments(connection,userId,body,selected);
+    await connection.commit();
+  } catch (error) { await connection.rollback(); throw error; }
+  finally { connection.release(); }
 }
 
 async function deleteUserCascade(target, userId) {
@@ -391,7 +371,10 @@ async function deleteUserOnCloud(userId) {
   }
 }
 
-const getManagementUsers = async () => {
+const getManagementUsers = async (schoolYearId = null) => {
+  if (schoolYearId !== null && (!Number.isSafeInteger(Number(schoolYearId)) || Number(schoolYearId) <= 0)) throw new Error('Invalid assignment school year.');
+  // The only interpolated value is the validated numeric school-year ID.
+  const schoolYearFilter = schoolYearId === null ? "(sy.status IS NULL OR LOWER(sy.status) IN ('active', 'ongoing'))" : 'sy.school_year_id = ' + Number(schoolYearId);
   const [rows] = await db.execute(`
     SELECT
       u.user_id,
@@ -402,7 +385,7 @@ const getManagementUsers = async () => {
           SELECT dh.department_id
           FROM DEPARTMENT_HEAD dh
           LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = dh.school_year_id
-          WHERE dh.user_id = u.user_id AND (sy.status IS NULL OR LOWER(sy.status) IN ('active', 'ongoing'))
+          WHERE dh.user_id = u.user_id AND ${schoolYearFilter}
           ORDER BY dh.department_head_id DESC LIMIT 1
         )
       ) AS department_id,
@@ -420,7 +403,7 @@ const getManagementUsers = async () => {
           SELECT 1
           FROM SECTION_ADVISER_ASSIGNMENT saa
           LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = saa.school_year_id
-          WHERE saa.user_id = u.user_id AND (sy.status IS NULL OR LOWER(sy.status) IN ('active', 'ongoing'))
+          WHERE saa.user_id = u.user_id AND ${schoolYearFilter}
         ) AND u.role IN ('subject_teacher', 'subject teacher') THEN 'adviser'
         WHEN u.role IN ('subject_teacher', 'subject teacher') THEN 'subject teacher'
         WHEN u.role IN ('department_head', 'department head') THEN 'department head'
@@ -440,7 +423,7 @@ const getManagementUsers = async () => {
           FROM DEPARTMENT_HEAD dh
           INNER JOIN DEPARTMENT d ON d.department_id = dh.department_id
           LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = dh.school_year_id
-          WHERE dh.user_id = u.user_id AND (sy.status IS NULL OR LOWER(sy.status) IN ('active', 'ongoing'))
+          WHERE dh.user_id = u.user_id AND ${schoolYearFilter}
           ORDER BY dh.department_head_id DESC LIMIT 1
         )
         ELSE 'General Education'
@@ -451,7 +434,7 @@ const getManagementUsers = async () => {
         INNER JOIN SECTION sec ON sec.section_id = saa.section_id
         INNER JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
         LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = saa.school_year_id
-        WHERE saa.user_id = u.user_id AND (sy.status IS NULL OR LOWER(sy.status) IN ('active', 'ongoing'))
+        WHERE saa.user_id = u.user_id AND ${schoolYearFilter}
         ORDER BY saa.adviser_assignment_id DESC LIMIT 1
       ) AS gradeLevel,
       (
@@ -459,7 +442,7 @@ const getManagementUsers = async () => {
         FROM SECTION_ADVISER_ASSIGNMENT saa
         INNER JOIN SECTION sec ON sec.section_id = saa.section_id
         LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = saa.school_year_id
-        WHERE saa.user_id = u.user_id AND (sy.status IS NULL OR LOWER(sy.status) IN ('active', 'ongoing'))
+        WHERE saa.user_id = u.user_id AND ${schoolYearFilter}
         ORDER BY saa.adviser_assignment_id DESC LIMIT 1
       ) AS section,
       (
@@ -467,7 +450,7 @@ const getManagementUsers = async () => {
         FROM SECTION_ADVISER_ASSIGNMENT saa
         INNER JOIN SECTION sec ON sec.section_id = saa.section_id
         LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = saa.school_year_id
-        WHERE saa.user_id = u.user_id AND (sy.status IS NULL OR LOWER(sy.status) IN ('active', 'ongoing'))
+        WHERE saa.user_id = u.user_id AND ${schoolYearFilter}
         ORDER BY saa.adviser_assignment_id DESC LIMIT 1
       ) AS adviser_section_name,
       (
@@ -476,22 +459,26 @@ const getManagementUsers = async () => {
         INNER JOIN SECTION sec ON sec.section_id = saa.section_id
         INNER JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
         LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = saa.school_year_id
-        WHERE saa.user_id = u.user_id AND (sy.status IS NULL OR LOWER(sy.status) IN ('active', 'ongoing'))
+        WHERE saa.user_id = u.user_id AND ${schoolYearFilter}
         ORDER BY saa.adviser_assignment_id DESC LIMIT 1
       ) AS adviser_grade_level_name,
       (
         SELECT saa.section_id
         FROM SECTION_ADVISER_ASSIGNMENT saa
         LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = saa.school_year_id
-        WHERE saa.user_id = u.user_id AND (sy.status IS NULL OR LOWER(sy.status) IN ('active', 'ongoing'))
+        WHERE saa.user_id = u.user_id AND ${schoolYearFilter}
         ORDER BY saa.adviser_assignment_id DESC LIMIT 1
       ) AS adviser_section_id,
+      (SELECT saa.school_year_id FROM SECTION_ADVISER_ASSIGNMENT saa
+        LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id=saa.school_year_id
+        WHERE saa.user_id=u.user_id AND ${schoolYearFilter}
+        ORDER BY saa.adviser_assignment_id DESC LIMIT 1) AS adviser_school_year_id,
       (
         SELECT sec.grade_level_id
         FROM SECTION_ADVISER_ASSIGNMENT saa
         INNER JOIN SECTION sec ON sec.section_id = saa.section_id
         LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = saa.school_year_id
-        WHERE saa.user_id = u.user_id AND (sy.status IS NULL OR LOWER(sy.status) IN ('active', 'ongoing'))
+        WHERE saa.user_id = u.user_id AND ${schoolYearFilter}
         ORDER BY saa.adviser_assignment_id DESC LIMIT 1
       ) AS adviser_grade_level_id,
       (
@@ -500,7 +487,7 @@ const getManagementUsers = async () => {
         INNER JOIN SECTION sec ON sec.section_id = saa.section_id
         LEFT JOIN PROGRAM p ON p.program_id = sec.program_id
         LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = saa.school_year_id
-        WHERE saa.user_id = u.user_id AND (sy.status IS NULL OR LOWER(sy.status) IN ('active', 'ongoing'))
+        WHERE saa.user_id = u.user_id AND ${schoolYearFilter}
         ORDER BY saa.adviser_assignment_id DESC LIMIT 1
       ) AS is_specialized
     FROM USER u
@@ -516,6 +503,7 @@ const getManagementUsers = async () => {
         ta.subject_offering_id,
         so.subject_id,
         so.section_id,
+        so.school_year_id,
         sec.grade_level_id,
         sec.program_id,
         p.program_code,
@@ -532,7 +520,7 @@ const getManagementUsers = async () => {
       INNER JOIN SUBJECT s ON s.subject_id = so.subject_id
       INNER JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
       LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = so.school_year_id
-      WHERE ta.user_id = ? AND (sy.status IS NULL OR LOWER(sy.status) IN ('active', 'ongoing'))
+      WHERE ta.user_id = ? AND ${schoolYearFilter}
       ORDER BY gl.grade_level_id ASC, sec.section_name ASC, s.subject_name ASC
       `,
       [user.user_id]
@@ -886,7 +874,9 @@ router.get("/summary", async (req, res) => {
 
 router.get("/management-options", async (req, res) => {
   try {
-    const schoolYear = await UserManagementOptions.getActiveSchoolYear();
+    const schoolYear = req.query?.school_year_id
+      ? await getCurrentSchoolYear(db, req.query.school_year_id) : await UserManagementOptions.getActiveSchoolYear();
+    const schoolYears = await UserManagementOptions.getSchoolYears();
     const [gradeLevels] = await db.execute("SELECT grade_level_id, grade_level_name FROM GRADE_LEVEL ORDER BY grade_level_id ASC");
     const [departments] = await db.execute(`
       SELECT 
@@ -925,20 +915,21 @@ router.get("/management-options", async (req, res) => {
           FROM SECTION_ADVISER_ASSIGNMENT saa
           LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = saa.school_year_id
           WHERE saa.section_id = sec.section_id
-            AND (sy.status IS NULL OR LOWER(sy.status) IN ('active', 'ongoing'))
+            AND saa.school_year_id = ?
           ORDER BY saa.adviser_assignment_id DESC
           LIMIT 1
         ) AS adviser_user_id
       FROM SECTION sec 
       ORDER BY sec.section_name ASC
-    `);
+    `, [schoolYear?.school_year_id || 0]);
     const [programs] = await db.execute("SELECT program_id, program_code, program_name, is_specialized FROM PROGRAM ORDER BY is_specialized DESC, program_code ASC");
     
     const [subjectOfferings] = await db.execute(`
       SELECT 
         so.subject_offering_id, 
         so.subject_id, 
-        so.section_id, 
+        so.section_id,
+        so.school_year_id,
         sec.grade_level_id, 
         s.subject_name,
         s.subject_code,
@@ -958,14 +949,14 @@ router.get("/management-options", async (req, res) => {
       INNER JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
       INNER JOIN SUBJECT s ON s.subject_id = so.subject_id
       INNER JOIN SCHOOL_YEAR sy ON sy.school_year_id = so.school_year_id
-      WHERE LOWER(sy.status) IN ('active', 'ongoing')
+      WHERE so.school_year_id = ?
       ORDER BY gl.grade_level_id ASC, sec.section_name ASC, s.subject_name ASC
-    `);
+    `, [schoolYear?.school_year_id || 0]);
 
-    res.json({ gradeLevels, sections, departments, programs, subjectOfferings, schoolYear });
+    res.json({ gradeLevels, sections, departments, programs, subjectOfferings, schoolYear, schoolYears });
   } catch (err) {
     console.error("GET MANAGEMENT OPTIONS ERROR:", err);
-    res.status(500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: err.message });
   }
 });
 
@@ -1242,7 +1233,8 @@ router.get("/:id", async (req, res) => {
   try {
     await syncUsersFromCloud();
     const userId = Number(req.params.id);
-    const users = await getManagementUsers();
+    const schoolYear = req.query?.school_year_id ? await getCurrentSchoolYear(db, req.query.school_year_id) : null;
+    const users = await getManagementUsers(schoolYear?.school_year_id || null);
     const user = users.find((item) => Number(item.user_id) === userId);
     if (!user) {
       return res.status(404).json({ error: "User not found" });
@@ -1268,7 +1260,7 @@ const validateSingleDepartmentHead = async (connection, departmentId, userId, sc
     LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = dh.school_year_id
     WHERE dh.department_id = ?
       AND dh.user_id <> ?
-      AND (sy.status IN ('ACTIVE', 'ONGOING') OR sy.school_year_id = ?)
+      AND dh.school_year_id = ?
     LIMIT 1
     `,
     [departmentId, userId || 0, schoolYear?.school_year_id || 0]
@@ -1283,115 +1275,8 @@ const validateSingleDepartmentHead = async (connection, departmentId, userId, sc
   }
 };
 
-const validateSingleSectionAdviser = async (connection, sectionId, userId, schoolYear) => {
-  if (!sectionId) return;
-  const [existing] = await connection.execute(
-    `
-    SELECT 
-      saa.user_id,
-      CONCAT(COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, '')) AS adviser_name,
-      sec.section_name
-    FROM SECTION_ADVISER_ASSIGNMENT saa
-    INNER JOIN USER u ON u.user_id = saa.user_id
-    INNER JOIN SECTION sec ON sec.section_id = saa.section_id
-    LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = saa.school_year_id
-    WHERE saa.section_id = ?
-      AND saa.user_id <> ?
-      AND (sy.status IN ('ACTIVE', 'ONGOING') OR sy.school_year_id = ?)
-    LIMIT 1
-    `,
-    [sectionId, userId || 0, schoolYear?.school_year_id || 0]
-  );
-
-  if (existing.length > 0) {
-    const adv = existing[0];
-    const name = adv.adviser_name.trim() || `User #${adv.user_id}`;
-    throw new Error(
-      `The section ${adv.section_name} already has an assigned Adviser (${name}). Each section can only have 1 Adviser.`
-    );
-  }
-};
-
-const validateSingleTeacherAssignment = async (connection, teachingAssignments, userId, schoolYear) => {
-  if (!Array.isArray(teachingAssignments) || teachingAssignments.length === 0) return;
-  const seenOfferings = new Set();
-  for (const assign of teachingAssignments) {
-    const soId = assign.subject_offering_id;
-    if (!soId) continue;
-    if (seenOfferings.has(String(soId))) {
-      throw new Error("Duplicate subject assignments detected. Please select distinct subjects.");
-    }
-    seenOfferings.add(String(soId));
-
-    const [existing] = await connection.execute(
-      `
-      SELECT 
-        ta.user_id,
-        CONCAT(COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, '')) AS teacher_name,
-        s.subject_name,
-        sec.section_name
-      FROM TEACHER_ASSIGNMENT ta
-      INNER JOIN USER u ON u.user_id = ta.user_id
-      INNER JOIN SUBJECT_OFFERING so ON so.subject_offering_id = ta.subject_offering_id
-      INNER JOIN SUBJECT s ON s.subject_id = so.subject_id
-      INNER JOIN SECTION sec ON sec.section_id = so.section_id
-      LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = so.school_year_id
-      WHERE ta.subject_offering_id = ?
-        AND ta.user_id <> ?
-        AND LOWER(COALESCE(u.account_status, 'active')) = 'active'
-        AND (sy.status IN ('ACTIVE', 'ONGOING') OR sy.school_year_id = ?)
-      LIMIT 1
-      `,
-      [soId, userId || 0, schoolYear?.school_year_id || 0]
-    );
-
-    if (existing.length > 0) {
-      const t = existing[0];
-      const name = t.teacher_name.trim() || `User #${t.user_id}`;
-      throw new Error(
-        `The subject ${t.subject_name} in section ${t.section_name} is already assigned to ${name}.`
-      );
-    }
-  }
-};
-
 const saveRoleAssignments = async (connection, userId, body, schoolYear) => {
-  const { assignedFrom, assignedUntil } = getAssignmentDates(body, schoolYear);
-  const role = normalizeRole(body.role);
-
-  if (role === "department head" && body.department_id) {
-    await connection.execute(
-      `INSERT INTO DEPARTMENT_HEAD (department_id, user_id, school_year_id, appointed_from, appointed_until) VALUES (?, ?, ?, ?, ?)`,
-      [body.department_id, userId, schoolYear.school_year_id, assignedFrom, assignedUntil]
-    );
-  }
-
-  if ((role === "subject teacher" || body.is_adviser) && body.adviser_section_id) {
-    await connection.execute(
-      `INSERT INTO SECTION_ADVISER_ASSIGNMENT (section_id, school_year_id, user_id, assigned_from, assigned_until) VALUES (?, ?, ?, ?, ?)`,
-      [body.adviser_section_id, schoolYear.school_year_id, userId, assignedFrom, assignedUntil]
-    );
-  }
-
-  if (Array.isArray(body.teaching_assignments)) {
-    for (const assign of body.teaching_assignments) {
-      if (assign.subject_offering_id) {
-        await connection.execute(
-          `INSERT INTO TEACHER_ASSIGNMENT (user_id, subject_offering_id, assigned_from, assigned_until) VALUES (?, ?, ?, ?)`,
-          [userId, assign.subject_offering_id, assignedFrom, assignedUntil]
-        );
-      }
-    }
-  }
-};
-
-const deleteRoleAssignments = async (connection, userId) => {
-  await connection.execute(`UPDATE ATTENDANCE_SHEET SET adviser_assignment_id = NULL WHERE adviser_assignment_id IN (SELECT adviser_assignment_id FROM SECTION_ADVISER_ASSIGNMENT WHERE user_id = ?)`, [userId]).catch(() => {});
-  await connection.execute(`UPDATE ATTENDANCE_SHEET SET teacher_assignment_id = NULL WHERE teacher_assignment_id IN (SELECT teacher_assignment_id FROM TEACHER_ASSIGNMENT WHERE user_id = ?)`, [userId]).catch(() => {});
-  await connection.execute(`UPDATE SCORE SET teacher_assignment_id = NULL WHERE teacher_assignment_id IN (SELECT teacher_assignment_id FROM TEACHER_ASSIGNMENT WHERE user_id = ?)`, [userId]).catch(() => {});
-  await connection.execute(`DELETE FROM SECTION_ADVISER_ASSIGNMENT WHERE user_id = ?`, [userId]);
-  await connection.execute(`DELETE FROM TEACHER_ASSIGNMENT WHERE user_id = ?`, [userId]);
-  await connection.execute(`DELETE FROM DEPARTMENT_HEAD WHERE user_id = ?`, [userId]);
+  await UserClassAssignments.synchronize(connection,userId,body,schoolYear,normalizeRole(body.role),getAssignmentDates(body,schoolYear));
 };
 
 router.post("/", async (req, res) => {
@@ -1411,7 +1296,7 @@ router.post("/", async (req, res) => {
     connection = await db.getConnection();
     await connection.beginTransaction();
 
-    const schoolYear = await getCurrentSchoolYear(connection);
+    const schoolYear = await getCurrentSchoolYear(connection, req.body.school_year_id);
     if (!schoolYear) throw new Error("No active school year found.");
 
     const effectiveDepartmentId = role === "principal" ? null : (department_id ? Number(department_id) : null);
@@ -1420,13 +1305,7 @@ router.post("/", async (req, res) => {
       await validateSingleDepartmentHead(connection, effectiveDepartmentId, 0, schoolYear);
     }
 
-    if ((role === "subject teacher" || req.body.is_adviser) && req.body.adviser_section_id) {
-      await validateSingleSectionAdviser(connection, req.body.adviser_section_id, 0, schoolYear);
-    }
-
-    if ((role === "subject teacher" || req.body.is_adviser) && Array.isArray(req.body.teaching_assignments)) {
-      await validateSingleTeacherAssignment(connection, req.body.teaching_assignments, 0, schoolYear);
-    }
+    if (role === "subject teacher") await UserClassAssignments.validate(connection,0,req.body,schoolYear.school_year_id);
 
     const hashedPassword = await hashPassword(password);
 
@@ -1499,7 +1378,7 @@ router.post("/", async (req, res) => {
       );
     }
 
-    const users = await getManagementUsers();
+    const users = await getManagementUsers(schoolYear.school_year_id);
     const createdUser = users.find((u) => Number(u.user_id) === Number(userId));
 
     res.status(201).json({ message: "User created successfully.", user_id: userId, user: createdUser });
@@ -1530,7 +1409,7 @@ router.put("/:id", async (req, res) => {
     connection = await db.getConnection();
     await connection.beginTransaction();
 
-    const schoolYear = await getCurrentSchoolYear(connection);
+    const schoolYear = await getCurrentSchoolYear(connection, req.body.school_year_id);
     if (!schoolYear) throw new Error("No active school year found.");
 
     const effectiveDepartmentId = role === "principal" ? null : (department_id ? Number(department_id) : null);
@@ -1540,13 +1419,7 @@ router.put("/:id", async (req, res) => {
       await validateSingleDepartmentHead(connection, effectiveDepartmentId, userId, schoolYear);
     }
 
-    if ((role === "subject teacher" || req.body.is_adviser) && req.body.adviser_section_id) {
-      await validateSingleSectionAdviser(connection, req.body.adviser_section_id, userId, schoolYear);
-    }
-
-    if ((role === "subject teacher" || req.body.is_adviser) && Array.isArray(req.body.teaching_assignments)) {
-      await validateSingleTeacherAssignment(connection, req.body.teaching_assignments, userId, schoolYear);
-    }
+    if (role === "subject teacher") await UserClassAssignments.validate(connection,userId,req.body,schoolYear.school_year_id);
 
     let hashedPassword = null;
     if (password && password.trim()) {
@@ -1562,7 +1435,6 @@ router.put("/:id", async (req, res) => {
       );
     }
 
-    await deleteRoleAssignments(connection, userId);
     await saveRoleAssignments(connection, userId, req.body, schoolYear);
 
     const isStatusChanged = existingUser.account_status !== (account_status || status || "active");
@@ -1614,7 +1486,7 @@ router.put("/:id", async (req, res) => {
       }
     }
 
-    const users = await getManagementUsers();
+    const users = await getManagementUsers(schoolYear.school_year_id);
     const updatedUser = users.find((u) => Number(u.user_id) === Number(userId));
 
     res.json({ message: "User updated successfully.", user: updatedUser });

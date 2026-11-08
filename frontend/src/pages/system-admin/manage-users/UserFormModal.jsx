@@ -2,6 +2,7 @@ import { useId, useRef } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import OverlayPanel from "../../../components/common/OverlayPanel";
 import DropdownSelect from "../../../components/common/DropdownSelect";
+import { adviserIsInYear, schoolYearLabel } from "../../../utils/userAssignments";
 const roles = ["Subject Teacher", "Principal", "Adviser", "Department Head"];
 const optionsFor = (items, key, label) => items.map(item => ({
   value: String(item[key]),
@@ -48,6 +49,7 @@ export default function UserFormModal({
   sections,
   departments,
   subjectOfferings,
+  schoolYears = [],
   users = [],
   loading,
   loadError,
@@ -101,7 +103,8 @@ export default function UserFormModal({
 
     // Filter out if assigned to another user in users array
     if (Array.isArray(users)) {
-      const hasOtherAdviser = users.some(u => String(u.user_id) !== String(data.user_id || "") && String(u.adviser_section_id || "") === String(section.section_id));
+      const hasOtherAdviser = users.some(u => String(u.user_id) !== String(data.user_id || "")
+        && adviserIsInYear(u, data.school_year_id) && String(u.adviser_section_id || "") === String(section.section_id));
       if (hasOtherAdviser) return false;
     }
     return true;
@@ -162,10 +165,17 @@ export default function UserFormModal({
                       <h3 id="user-assignments-heading">Assignments</h3>
                       <p>Assign the advisory section and subject classes for this account.</p>
                     </div>
+                    <div className="user-form-grid">
+                      <FormSelect label="School Year" value={data.school_year_id || ""}
+                        options={schoolYears.map(year => ({ value: String(year.school_year_id), label: schoolYearLabel(year) }))}
+                        placeholder="Select school year" disabled={saving || !schoolYears.length}
+                        onChange={value => change("school_year_id", value)} />
+                    </div>
+                    <p className="user-form-help">These assignments apply to the selected school year. Save changes before switching years.</p>
                     {data.role === "Adviser" && <div className="user-form-advisory">
                         <h4>Advisory Section</h4>
                         <div className="user-form-grid">
-                          <FormSelect label="Advisory Grade Level" value={data.adviser_grade_level_id} options={gradeOptions} placeholder="Select grade level" disabled={saving || !gradeOptions.length} onChange={value => change("adviser_grade_level_id", value)} />
+                          <FormSelect label="Advisory Grade Level" value={data.adviser_grade_level_id} options={gradeOptions} placeholder="Select grade level" disabled={saving || !data.school_year_id || !gradeOptions.length} onChange={value => change("adviser_grade_level_id", value)} />
                           <FormSelect label="Advisory Section" value={data.adviser_section_id} options={optionsFor(availableAdvisorySections, "section_id", "section_name")} placeholder="Select section" disabled={saving || !data.adviser_grade_level_id} onChange={value => change("adviser_section_id", value)} />
                         </div>
                         {data.adviser_grade_level_id && !availableAdvisorySections.length && <p className="user-form-help" style={{
@@ -177,12 +187,13 @@ export default function UserFormModal({
                     {hasTeaching && <>
                       <div className="user-form-assignment-heading">
                         <h4>Teaching Subject Assignments</h4>
-                        <button type="button" className="user-form-add" onClick={onAddAssignment} disabled={saving}>
+                        <button type="button" className="user-form-add" onClick={onAddAssignment} disabled={saving || !data.school_year_id}>
                           <Plus size={16} aria-hidden="true" /> Add Subject Class
                         </button>
                       </div>
                       {data.teaching_assignments.length === 0 ? <p className="user-form-empty">No subject classes assigned. Use Add Subject Class to create an assignment.</p> : data.teaching_assignments.map((assignment, index) => {
                           const availableOfferings = subjectOfferings.filter(offering => {
+                            if (String(offering.school_year_id) !== String(data.school_year_id)) return false;
                             // Must belong to the chosen section
                             if (String(offering.section_id) !== String(assignment.section_id)) return false;
 
@@ -220,6 +231,8 @@ export default function UserFormModal({
                           });
 
                           const noSubjectsAvailable = Boolean(assignment.section_id) && availableOfferings.length === 0 && !assignment.subject_offering_id;
+                          const hasYearOfferings = subjectOfferings.some(offering => String(offering.section_id) === String(assignment.section_id)
+                            && String(offering.school_year_id) === String(data.school_year_id));
 
                           return (
                             <div className="user-form-assignment" key={index}>
@@ -245,7 +258,8 @@ export default function UserFormModal({
                               </div>
                               {noSubjectsAvailable && (
                                 <p className="user-form-help" style={{ marginTop: "6px" }}>
-                                  All subjects for this section are already handled by other teachers.
+                                  {hasYearOfferings ? "All subjects for this section are already handled by other teachers."
+                                    : "No subjects are set up for this section in the selected school year."}
                                 </p>
                               )}
                             </div>
