@@ -11,3 +11,6 @@ backend/.venv-model/
 backend/.model-tools/
 
 /test/
+
+# Keep backend reference documents local.
+/backend/docs/
