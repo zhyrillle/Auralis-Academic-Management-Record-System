@@ -1,4 +1,4 @@
-// Capstone fixtures for explicitly selected sections, Terms 1 and 2 only.
+// Capstone fixtures for selected sections, subjects, and terms (defaults: Terms 1 and 2).
 // Assignments and grades outside the requested submissions are preserved.
 // --apply --submit-cedar --backup-dir=<outside-repository folder> saves the data.
 const fs = require('node:fs');
@@ -36,10 +36,16 @@ async function insertRows(c, table, columns, rows) {
   }
 }
 async function populateAll(pool, { apply, submitCedar, through, backupDir,
-  sectionNames = ['Cedar','Mahogany'], submitSectionNames = submitCedar ? ['Cedar'] : [] }) {
+  sectionNames = ['Cedar','Mahogany'], submitSectionNames = submitCedar ? ['Cedar'] : [],
+  termNames = ['1st','2nd'], subjectIds = null }) {
   const expectedSubjects = { Cedar: 8, Mahogany: 9, Acacia: 9 };
   assert(sectionNames.length && sectionNames.every(name=>Object.hasOwn(expectedSubjects,name)));
   assert(submitSectionNames.every(name=>sectionNames.includes(name)));
+  assert(termNames.length && new Set(termNames).size===termNames.length
+    && termNames.every(name=>['1st','2nd','3rd'].includes(name)));
+  assert(subjectIds===null || subjectIds.length && new Set(subjectIds).size===subjectIds.length
+    && subjectIds.every(id=>Number.isSafeInteger(id)&&id>0));
+  assert.match(through,/^\d{4}-\d{2}-\d{2}$/);
   const c=await pool.getConnection();
   const report={ applied:apply, submissionSections:submitSectionNames, through, sections:[], archivedEmptyDuplicateExams:0 };
   try {
@@ -51,12 +57,15 @@ async function populateAll(pool, { apply, submitCedar, through, backupDir,
     const [actors]=await c.execute("SELECT user_id FROM USER WHERE first_name='John' AND last_name='Doe' AND account_status='active'"+lock);
     assert.equal(actors.length,1);
     const actor=actors[0].user_id;
-    const [periods]=await c.execute("SELECT * FROM ACADEMIC_TERM WHERE school_year_id=? AND term_name IN ('1st','2nd') ORDER BY starts_at"+lock,[year.school_year_id]);
-    assert.equal(periods.length,2);
-    const [classes]=await c.execute(`SELECT so.*,sec.section_name,sub.subject_code,sub.subject_name
+    const [periods]=await c.execute(`SELECT * FROM ACADEMIC_TERM WHERE school_year_id=? AND term_name IN (${slots(termNames)}) ORDER BY starts_at${lock}`,[year.school_year_id,...termNames]);
+    assert.equal(periods.length,termNames.length);
+    const [allClasses]=await c.execute(`SELECT so.*,sec.section_name,sub.subject_code,sub.subject_name
       FROM SUBJECT_OFFERING so JOIN SECTION sec ON sec.section_id=so.section_id JOIN SUBJECT sub ON sub.subject_id=so.subject_id
       WHERE sec.section_name IN (${slots(sectionNames)}) AND so.school_year_id=? ORDER BY sec.section_name,sub.subject_name${lock}`,[...sectionNames,year.school_year_id]);
-    for(const name of sectionNames)assert.equal(classes.filter(row=>row.section_name===name).length,expectedSubjects[name],`${name} must have its current subjects.`);
+    for(const name of sectionNames)assert.equal(allClasses.filter(row=>row.section_name===name).length,expectedSubjects[name],`${name} must have its current subjects.`);
+    const classes=allClasses.filter(row=>subjectIds===null||subjectIds.includes(Number(row.subject_id)));
+    if(subjectIds)for(const name of sectionNames)for(const id of subjectIds)
+      assert.equal(classes.filter(row=>row.section_name===name&&Number(row.subject_id)===id).length,1,'Each requested subject must have one offering per section.');
     const ids=classes.map(row=>row.subject_offering_id);
     const sectionIds=[...new Set(classes.map(row=>row.section_id))];
     const [teachers]=await c.execute(`SELECT * FROM TEACHER_ASSIGNMENT WHERE subject_offering_id IN (${slots(ids)}) ORDER BY teacher_assignment_id${lock}`,ids);
@@ -186,11 +195,15 @@ async function populateAll(pool, { apply, submitCedar, through, backupDir,
               JSON.stringify({source:'capstone_test_population',acting_as:`${cls.section_name} testing setup`}),sheet.grade_sheet_id,
               JSON.stringify({workflow_status:sheet.workflow_status,submitted_at:sheet.submitted_at}),
               JSON.stringify({workflow_status:'SUBMITTED',term:code}),JSON.stringify({test_data:true,section:cls.section_name,subject:cls.subject_name,
-                school_year_id:year.school_year_id,term:code,learner_count:students.length,closed_term_test_setup:period.status==='completed'})]);
+                school_year_id:year.school_year_id,term:code,learner_count:students.length,closed_term_test_setup:period.status==='completed',
+                future_term_test_setup:period.status==='upcoming'})]);
             sheet={...sheet,workflow_status:'SUBMITTED'};
           }
           const enrollmentIds=new Set(students.map(row=>Number(row.student_section_id)));
-          assert(saved.filter(row=>enrollmentIds.has(Number(row.student_section_id))).every(row=>Number.isInteger(Number(row.raw_score))));
+          const currentScores=saved.filter(row=>enrollmentIds.has(Number(row.student_section_id))
+            &&active.some(activity=>Number(activity.activity_id)===Number(row.activity_id)));
+          assert.equal(currentScores.length,students.length*active.length);
+          assert(currentScores.every(row=>row.raw_score!==null&&Number.isInteger(Number(row.raw_score))));
         }
         details.terms.push({term:code,activities:active.length,scores:active.length*students.length,activitiesAdded:activityAdds,scoresAdded:scoreAdds,
           status:submitSectionNames.includes(cls.section_name)?'SUBMITTED':sheet.workflow_status});
@@ -200,6 +213,10 @@ async function populateAll(pool, { apply, submitCedar, through, backupDir,
     const preservedIds=classes.filter(row=>!submitSectionNames.includes(row.section_name)).map(row=>row.subject_offering_id);
     const [afterPreserved]=preservedIds.length ? await c.execute(`SELECT * FROM STUDENT_GRADE WHERE subject_offering_id IN (${slots(preservedIds)}) ORDER BY student_grade_id`,preservedIds) : [[]];
     assert.deepEqual(afterPreserved,accepted.filter(row=>preservedIds.some(id=>Number(id)===Number(row.subject_offering_id))),'Grades outside requested submissions must remain unchanged.');
+    const selectedTerms=new Set(periods.map(row=>termCode(row.term_name)));
+    const [afterAccepted]=await c.execute(`SELECT * FROM STUDENT_GRADE WHERE subject_offering_id IN (${slots(ids)}) ORDER BY student_grade_id`,ids);
+    assert.deepEqual(afterAccepted.filter(row=>!selectedTerms.has(termCode(row.term))),
+      accepted.filter(row=>!selectedTerms.has(termCode(row.term))),'Accepted grades in other terms must be preserved.');
     const [afterTeachers]=await c.execute(`SELECT * FROM TEACHER_ASSIGNMENT WHERE subject_offering_id IN (${slots(ids)}) ORDER BY teacher_assignment_id`,ids);
     const [afterAdvisers]=await c.execute(`SELECT * FROM SECTION_ADVISER_ASSIGNMENT WHERE section_id IN (${slots(sectionIds)}) AND school_year_id=? ORDER BY adviser_assignment_id`,[...sectionIds,year.school_year_id]);
     assert.deepEqual(afterTeachers,teachers);assert.deepEqual(afterAdvisers,advisers);

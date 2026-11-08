@@ -3,6 +3,7 @@ const router = express.Router();
 const db = require('../config/db');
 const Section = require('../models/Section');
 const cloudSync = require('../services/cloudSyncService');
+const { resolveCurrentUser } = require('../middleware/resolveCurrentUser');
 
 
 router.get('/', async (req, res) => {
@@ -18,10 +19,50 @@ router.get('/', async (req, res) => {
 router.get('/adviser/:userId', async (req, res) => {
   try {
     await cloudSync.syncSectionsFromCloud();
-    const sections = await Section.findAdviserSections(req.params.userId);
+    const options = {
+      archived: req.query.archived === 'true' ? true : req.query.archived === 'all' ? 'all' : false,
+    };
+    const sections = await Section.findAdviserSections(req.params.userId, options);
     res.json(sections);
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/archive', resolveCurrentUser, async (req, res) => {
+  try {
+    const { assignmentType, assignmentId, sectionId, schoolYearId, advisoryAssignmentId, teacherAssignmentId, reason } = req.body;
+    const result = await Section.archiveClass(req.currentUser.user_id, {
+      assignmentType,
+      assignmentId,
+      sectionId,
+      schoolYearId,
+      advisoryAssignmentId,
+      teacherAssignmentId,
+      reason,
+    });
+    res.json(result);
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ code: err.code || 'CLASS_ARCHIVE_FAILED',
+      error: err.statusCode ? err.message : 'The class could not be archived. Please retry.' });
+  }
+});
+
+router.post('/restore', resolveCurrentUser, async (req, res) => {
+  try {
+    const { assignmentType, assignmentId, sectionId, schoolYearId, advisoryAssignmentId, teacherAssignmentId } = req.body;
+    const result = await Section.restoreClass(req.currentUser.user_id, {
+      assignmentType,
+      assignmentId,
+      sectionId,
+      schoolYearId,
+      advisoryAssignmentId,
+      teacherAssignmentId,
+    });
+    res.json(result);
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ code: err.code || 'CLASS_RESTORE_FAILED',
+      error: err.statusCode ? err.message : 'The class could not be restored. Please retry.' });
   }
 });
 

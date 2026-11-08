@@ -1,5 +1,14 @@
-import { cachedApiFetch as fetch } from "./navigationCache.js";
+import { cachedApiFetch } from "./navigationCache.js";
 import { API_BASE_URL } from "./apiConfig.js";
+import { getStoredUser } from "../utils/auth.js";
+
+const fetch = (url, options = {}) => {
+  const user = getStoredUser();
+  const userId = user?.user_id || user?.id;
+  return cachedApiFetch(url, { ...options, headers: {
+    ...(userId ? { "X-Auralis-User-Id": String(userId) } : {}), ...options.headers,
+  } });
+};
 
 const parseResponse = async (response) => {
   const data = await response.json().catch(() => ({}));
@@ -27,126 +36,28 @@ const checkIsSpecialized = (val) => {
   return false;
 };
 
-export const getAdviserSections = async (userId) => {
+export const getAdviserSections = async (userId, options = {}) => {
   if (!userId) return [];
-
-
-  try {
-    const response = await fetch(`${API_BASE_URL}/sections/adviser/${userId}?classContextVersion=3`);
-    if (response.ok) {
-      const data = await response.json();
-      if (Array.isArray(data)) {
-        const mapped = data.map((item) => {
-          const isSpecialized = checkIsSpecialized(item.is_specialized) || (item.classType && String(item.classType).startsWith("Special Program"));
-          const isAdviser = item.isAdviser ?? (item.classType === "Advisory Class");
-          const progCode = item.program_code || item.programCode || null;
-          const validProgCode = progCode && String(progCode).toUpperCase() !== "EBEC" ? String(progCode).toUpperCase() : null;
-
-          let formattedClassType;
-          if (isAdviser && isSpecialized) {
-            formattedClassType = validProgCode ? `Advisory Class - ${validProgCode}` : "Advisory Class";
-          } else if (isSpecialized) {
-            formattedClassType = validProgCode ? `Special Program - ${validProgCode}` : "Special Program";
-          } else if (isAdviser) {
-            formattedClassType = "Advisory Class";
-          } else {
-            formattedClassType = "Regular Class";
-          }
-
-          return {
-            ...item,
-            program_code: item.program_code || null,
-            is_specialized: isSpecialized ? 1 : 0,
-            isAdviser: isAdviser,
-            classType: formattedClassType,
-          };
-        });
-        return mapped;
-      }
-    }
-  } catch (e) {
-    console.warn("Primary endpoint /sections/adviser failed:", e);
-  }
-
-  const combinedClasses = [];
-  const addedAssignments = new Set();
-
-  // 2. Fallback: Fetch user details from /api/users
-  try {
-    const resUsers = await fetch(`${API_BASE_URL}/users`);
-    if (!resUsers.ok) throw new Error('Assigned classes could not be loaded. Please retry.');
-    if (resUsers.ok) {
-      const usersList = await resUsers.json();
-      const targetUser = Array.isArray(usersList)
-        ? usersList.find((u) => String(u.user_id) === String(userId))
-        : null;
-
-      if (targetUser) {
-        const assignments = Array.isArray(targetUser.teaching_assignments) ? targetUser.teaching_assignments : [];
-
-        // Only use actual assignment identities; a section ID is not a teaching assignment.
-        const advisoryId = targetUser.adviser_assignment_id || targetUser.adviser_assignment?.adviser_assignment_id;
-        const advisorySectionId = targetUser.adviser_section_id || targetUser.adviser_assignment?.section_id;
-        if (advisoryId && advisorySectionId) {
-          const secId = advisorySectionId;
-          const isSpecialized = checkIsSpecialized(targetUser.is_specialized);
-
-          combinedClasses.push({
-            id: `advisory-${advisoryId}`,
-            assignmentType: "advisory",
-            assignmentId: Number(advisoryId),
-            adviser_assignment_id: Number(advisoryId),
-            section_id: secId,
-            subject_id: null,
-            subject_offering_id: null,
-            sectionName: targetUser.adviser_section_name || targetUser.section,
-            gradeLevel: formatGradeLevel(targetUser.adviser_grade_level_name || targetUser.gradeLevel),
-            grade_level_name: targetUser.adviser_grade_level_name || targetUser.gradeLevel,
-            subject: "All subjects",
-            classType: "Advisory Class",
-            is_specialized: isSpecialized ? 1 : 0,
-            isAdviser: true,
-            deadline: "2026-07-31",
-            submitted: false,
-          });
-        }
-
-        // Keep every subject's teaching card, including the advisory section.
-        assignments.forEach((ta) => {
-          const assignmentId = ta.teacher_assignment_id;
-          if (assignmentId && !addedAssignments.has(assignmentId)) {
-            addedAssignments.add(assignmentId);
-            const isSpecialized = checkIsSpecialized(ta.is_specialized);
-            const isAdviser = Number(ta.section_id) === Number(advisorySectionId)
-              && ta.school_year_id != null && ta.school_year_id === targetUser.adviser_assignment?.school_year_id;
-            combinedClasses.push({
-              id: `teaching-${assignmentId}`,
-              assignmentType: "teaching",
-              assignmentId: Number(assignmentId),
-              teacher_assignment_id: Number(assignmentId),
-              section_id: ta.section_id,
-              subject_id: ta.subject_id,
-              subject_offering_id: ta.subject_offering_id,
-              sectionName: ta.section_name,
-              gradeLevel: formatGradeLevel(ta.grade_level_name),
-              grade_level_name: ta.grade_level_name,
-              subject: ta.subject_name || "Mathematics",
-              classType: isAdviser ? "Advisory Class" : isSpecialized ? "Special Program" : "Regular Class",
-              is_specialized: isSpecialized ? 1 : 0,
-              isAdviser,
-              deadline: "2026-08-15",
-              submitted: false,
-            });
-          }
-        });
-      }
-    }
-  } catch (e) {
-    console.warn("Fallback fetch /api/users failed:", e);
-    throw new Error('Assigned classes could not be loaded. Please retry.', { cause: e });
-  }
-
-  return combinedClasses;
+  const archived = options.archived === 'all' ? 'all' : options.archived ? 'true' : 'false';
+  const queryParams = new URLSearchParams({ classContextVersion: '3', archived });
+  const response = await fetch(`${API_BASE_URL}/sections/adviser/${userId}?${queryParams}`, { force: true });
+  const data = await parseResponse(response);
+  if (!Array.isArray(data)) throw new Error('Assigned classes could not be loaded. Please retry.');
+  // The classes endpoint applies archive and school-year rules. A user-directory
+  // fallback cannot apply those rules and must not replace a failed classes read.
+  return data.map(item => {
+    const isSpecialized = checkIsSpecialized(item.is_specialized)
+      || Boolean(item.classType && String(item.classType).startsWith('Special Program'));
+    const isAdviser = item.isAdviser ?? (item.classType === 'Advisory Class');
+    const program = item.program_code || item.programCode || null;
+    const validProgram = program && String(program).toUpperCase() !== 'EBEC' ? String(program).toUpperCase() : null;
+    const classType = isAdviser
+      ? isSpecialized && validProgram ? `Advisory Class - ${validProgram}` : 'Advisory Class'
+      : isSpecialized ? validProgram ? `Special Program - ${validProgram}` : 'Special Program' : 'Regular Class';
+    return { ...item, gradeLevel: item.gradeLevel || formatGradeLevel(item.grade_level_name),
+      program_code: item.program_code || null, is_specialized: isSpecialized ? 1 : 0,
+      isAdviser, classType };
+  });
 };
 
 /**
@@ -186,4 +97,43 @@ export const getAllSections = async () => {
   } catch {
     return [];
   }
+};
+
+/**
+ * Fetch archived sections for a specific user.
+ */
+export const getArchivedSections = async (userId) => {
+  return getAdviserSections(userId, { archived: true });
+};
+
+/**
+ * Manually archive a class assignment / section.
+ */
+export const archiveClass = async (payload) => {
+  if (!getStoredUser()) throw new Error('Please sign in before archiving a class.');
+  const body = { ...payload };
+  delete body.userId;
+  const response = await fetch(`${API_BASE_URL}/sections/archive`, {
+    method: "POST",
+    queueOffline: false,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return parseResponse(response);
+};
+
+/**
+ * Restore an archived class assignment / section.
+ */
+export const restoreClass = async (payload) => {
+  if (!getStoredUser()) throw new Error('Please sign in before restoring a class.');
+  const body = { ...payload };
+  delete body.userId;
+  const response = await fetch(`${API_BASE_URL}/sections/restore`, {
+    method: "POST",
+    queueOffline: false,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return parseResponse(response);
 };
