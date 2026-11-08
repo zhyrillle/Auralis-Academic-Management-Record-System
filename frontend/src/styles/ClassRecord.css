@@ -2102,6 +2102,21 @@
   border-radius: 2px;
 }
 
+/* Hide number input stepper arrows in table score cells */
+.cr-score-input::-webkit-outer-spin-button,
+.cr-score-input::-webkit-inner-spin-button,
+.grade-input-cell input::-webkit-outer-spin-button,
+.grade-input-cell input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.cr-score-input,
+.grade-input-cell input {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
 .cr-calc-cell {
   width: 48px;
   min-width: 48px;
