@@ -574,13 +574,6 @@
   box-sizing: border-box;
 }
 
-.sf2-date-num-th.active-date-th {
-  background-color: #fef08a !important;
-  color: #854d0e !important;
-  outline: 2px solid #ca8a04;
-  outline-offset: -2px;
-}
-
 /* ════════════════ BODY ROWS ════════════════ */
 .sf2-table td {
   border: 1px solid #cbd5e1;
@@ -648,10 +641,6 @@
   max-width: 32px;
   padding: 2px 1px !important;
   background-color: #ffffff;
-}
-
-.sf2-active-col-cell {
-  background-color: #fefce8 !important;
 }
 
 .sf2-editable-cell {

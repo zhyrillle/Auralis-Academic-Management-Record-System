@@ -540,11 +540,7 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
   // ── Handle cell click: toggle Blank → P → L → A → Blank ──
   const handleCellClick = async (studentSectionId, dateStr, colIdx, studentId = null) => {
     if (saving || noClassDays[dateStr]) return;
-    if (colIdx !== activeColIndex) {
-      triggerToast("You can only edit attendance for the selected date on the calendar.");
-      return;
-    }
-    if (!isEditableDate) {
+    if (dateStr !== TODAY) {
       triggerToast("Past/Future dates are locked. Attendance can only be modified for today.");
       return;
     }
@@ -991,9 +987,12 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
       y += 1;
     }
     const newMonthStr = String(m + 1).padStart(2, "0");
-    const targetDay = Math.min(parseInt(parts[2], 10) || 1, new Date(y, m + 1, 0).getDate());
-    const newDayStr = String(targetDay).padStart(2, "0");
-    setSelectedDate(`${y}-${newMonthStr}-${newDayStr}`);
+    const todayParts = TODAY.split("-");
+    if (y === parseInt(todayParts[0], 10) && m === parseInt(todayParts[1], 10) - 1) {
+      setSelectedDate(TODAY);
+    } else {
+      setSelectedDate(`${y}-${newMonthStr}-01`);
+    }
   };
 
   const sectionName = adviserAssignment?.section_name || "–";
@@ -1287,14 +1286,13 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
                   return (
                     <React.Fragment key={`week-dates-${week.weekNum}`}>
                       {week.days.map((sd) => {
-                        const isActive = sd.dateStr === selectedDate;
                         return (
                           <th
                             key={`num-${sd.dateStr}`}
-                            className={`sf2-date-num-th ${isActive ? "active-date-th" : ""} ${noClassDays[sd.dateStr] ? 'sf2-no-class-day' : ''}`}
+                            className={`sf2-date-num-th ${noClassDays[sd.dateStr] ? 'sf2-no-class-day' : ''}`}
                             style={{
-                              backgroundColor: isActive ? "#fef08a" : colorObj.bg,
-                              color: isActive ? "#854d0e" : colorObj.text,
+                              backgroundColor: colorObj.bg,
+                              color: colorObj.text,
                               width: "28px",
                               fontSize: "11px",
                               fontWeight: "700",
@@ -1331,13 +1329,13 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
                       const altKey1 = `${stu.student_section_id}-${sd.dateStr}`;
                       const altKey2 = `${stu.student_id}-${sd.dateStr}`;
                       const status = attendanceMap[key] || attendanceMap[altKey1] || attendanceMap[altKey2] || null;
-                      const isActive = colIdx === activeColIndex;
+                      const isToday = sd.dateStr === TODAY;
                       const noClassReason = noClassDays[sd.dateStr];
 
                       return (
                         <td
                           key={`cell-${sId}-${sd.dateStr}`}
-                          className={`sf2-td-att-cell ${isActive ? "sf2-active-col-cell" : ""} ${isActive && isEditableDate && !noClassReason && !saving ? "sf2-editable-cell" : ""} ${noClassReason ? 'sf2-no-class-day' : ''}`}
+                          className={`sf2-td-att-cell ${isToday && !noClassReason && !saving ? "sf2-editable-cell" : ""} ${noClassReason ? 'sf2-no-class-day' : ''}`}
                           onClick={() => handleCellClick(sId, sd.dateStr, colIdx, stu.student_id)}
                           title={noClassReason ? `${NO_CLASS_LABELS[noClassReason]} · No classes. Any saved entry is preserved.` : `${stu.last_name}, ${stu.first_name} - ${sd.fullDate} (${status === "P" ? "Present" : status === "L" ? "Late" : status === "A" ? "Absent" : "Unrecorded"})`}
                         >
@@ -1402,13 +1400,13 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
                       const altKey1 = `${stu.student_section_id}-${sd.dateStr}`;
                       const altKey2 = `${stu.student_id}-${sd.dateStr}`;
                       const status = attendanceMap[key] || attendanceMap[altKey1] || attendanceMap[altKey2] || null;
-                      const isActive = colIdx === activeColIndex;
+                      const isToday = sd.dateStr === TODAY;
                       const noClassReason = noClassDays[sd.dateStr];
 
                       return (
                         <td
                           key={`cell-${sId}-${sd.dateStr}`}
-                          className={`sf2-td-att-cell ${isActive ? "sf2-active-col-cell" : ""} ${isActive && isEditableDate && !noClassReason && !saving ? "sf2-editable-cell" : ""} ${noClassReason ? 'sf2-no-class-day' : ''}`}
+                          className={`sf2-td-att-cell ${isToday && !noClassReason && !saving ? "sf2-editable-cell" : ""} ${noClassReason ? 'sf2-no-class-day' : ''}`}
                           onClick={() => handleCellClick(sId, sd.dateStr, colIdx, stu.student_id)}
                           title={noClassReason ? `${NO_CLASS_LABELS[noClassReason]} · No classes. Any saved entry is preserved.` : `${stu.last_name}, ${stu.first_name} - ${sd.fullDate} (${status === "P" ? "Present" : status === "L" ? "Late" : status === "A" ? "Absent" : "Unrecorded"})`}
                         >
