@@ -735,17 +735,6 @@ class Section {
       console.warn('Teacher sections query error:', err.message);
     }
 
-    let archiveEntries = [];
-    try {
-      const [ar] = await database.execute(
-        `SELECT assignment_type, assignment_id, section_id, archived_at, reason FROM CLASS_ARCHIVE WHERE user_id = ?`,
-        [userId]
-      );
-      archiveEntries = ar || [];
-    } catch (archiveErr) {
-      console.warn('Class archive read warning:', archiveErr.message);
-    }
-
     const advisorySections = new Set(advisoryRows.map(row => `${row.section_id}:${row.school_year_id}`));
 
     const checkIsSpecialized = (val) => {
@@ -825,12 +814,7 @@ class Section {
                                 normalizedSyStatus === 'archived' ||
                                 (normalizedSyStatus !== 'ongoing' && syEnd && Number(syEnd) < currentYear);
 
-      const manualArchive = archiveEntries.find(a =>
-        (a.assignment_type === assignmentType && Number(a.assignment_id) === Number(assignmentId)) ||
-        (a.assignment_type === 'section' && Number(a.section_id) === Number(sectionId))
-      );
-
-      const isManuallyArchived = Boolean(isArchivedCol == 1 || manualArchive);
+      const isManuallyArchived = Boolean(isArchivedCol == 1 || isArchivedCol === true);
       const isArchived = Boolean(isManuallyArchived || isSchoolYearEnded);
 
       let archivedReason = null;
@@ -839,10 +823,9 @@ class Section {
       if (isSchoolYearEnded) {
         archivedReason = 'School Year Ended';
         archivedAt = syEnd ? `${syEnd}-07-31T00:00:00.000Z` : new Date().toISOString();
-      }
-      if (isManuallyArchived) {
-        archivedReason = manualArchive?.reason || 'Manually archived';
-        archivedAt = manualArchive?.archived_at || archivedAtCol || new Date().toISOString();
+      } else if (isManuallyArchived) {
+        archivedReason = 'Manually archived';
+        archivedAt = archivedAtCol || new Date().toISOString();
       }
 
       return { isArchived, archivedAt, archivedReason };

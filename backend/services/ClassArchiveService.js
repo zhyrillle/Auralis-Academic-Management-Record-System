@@ -82,20 +82,13 @@ async function change(userId, input, restore, database) {
       context = row;
     }
     for (const target of targets) {
-      if (restore) {
-        await connection.execute('DELETE FROM CLASS_ARCHIVE WHERE user_id = ? AND assignment_type = ? AND assignment_id = ?',
-          [owner, target.type, target.id]);
-      } else {
-        await connection.execute(`INSERT INTO CLASS_ARCHIVE (user_id,assignment_type,assignment_id,section_id,archived_at,reason)
-          VALUES (?,?,?,?,UTC_TIMESTAMP(6),?)
-          ON DUPLICATE KEY UPDATE section_id=VALUES(section_id),archived_at=UTC_TIMESTAMP(6),reason=VALUES(reason)`,
-          [owner, target.type, target.id, context.sectionId, reason]);
-      }
-      // Identifiers come only from this fixed mapping; ownership is rechecked in the write.
+      // Rule-based manual archiving: update the assignment record directly
       const [table, key] = target.type === 'advisory'
         ? ['SECTION_ADVISER_ASSIGNMENT', 'adviser_assignment_id'] : ['TEACHER_ASSIGNMENT', 'teacher_assignment_id'];
-      await connection.execute(`UPDATE ${table} SET is_archived = ?, archived_at = ${restore ? 'NULL' : 'UTC_TIMESTAMP(6)'} WHERE ${key} = ? AND user_id = ?`,
-        [restore ? 0 : 1, target.id, owner]);
+      await connection.execute(
+        `UPDATE ${table} SET is_archived = ?, archived_at = ${restore ? 'NULL' : 'UTC_TIMESTAMP(6)'} WHERE ${key} = ? AND user_id = ?`,
+        [restore ? 0 : 1, target.id, owner]
+      );
     }
     await connection.commit();
     return { success: true, message: restore ? 'Class restored successfully.' : 'Class archived successfully.' };

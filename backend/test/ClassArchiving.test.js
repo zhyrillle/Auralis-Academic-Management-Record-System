@@ -104,9 +104,9 @@ test('assignments from different school years or a mismatched section are reject
 
 test('combined owned assignments archive and restore together',async()=>{
   const {state,database}=harness(),request={...input,advisoryAssignmentId:11,teacherAssignmentId:21};
-  await service.change(7,request,false,database);assert.equal(state.archives.length,2);
+  await service.change(7,request,false,database);
   assert(state.assignments.filter(a=>[11,21].includes(a.id)).every(a=>a.is_archived===1));
-  await service.change(7,request,true,database);assert.equal(state.archives.length,0);
+  await service.change(7,request,true,database);
   assert(state.assignments.filter(a=>[11,21].includes(a.id)).every(a=>a.is_archived===0));
   assert.equal(state.commits,2);
 });
@@ -116,7 +116,7 @@ test('restoring one assignment preserves another archived assignment in the same
   await service.change(7,input,false,database);
   await service.change(7,{...input,assignmentId:22,schoolYearId:2},false,database);
   await service.change(7,input,true,database);
-  assert.equal(state.archives.length,1);assert.equal(state.archives[0].assignment_id,22);
+  assert.equal(state.assignments.find(a=>a.id===21).is_archived,0);
   assert.equal(state.assignments.find(a=>a.id===22).is_archived,1);
 });
 
@@ -134,9 +134,9 @@ test('invalid identifiers and contradictory assignment IDs are rejected before d
   }
 });
 
-test('repeating an archive request creates only one entry',async()=>{
+test('repeating an archive request keeps the assignment archived',async()=>{
   const {state,database}=harness();await service.change(7,input,false,database);await service.change(7,input,false,database);
-  assert.equal(state.archives.length,1);
+  assert.equal(state.assignments.find(a=>a.id===21).is_archived,1);
 });
 
 test('class reads and writes use the same shared database when a cloud pool is configured',async()=>{
