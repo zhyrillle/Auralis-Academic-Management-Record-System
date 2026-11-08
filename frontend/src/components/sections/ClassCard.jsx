@@ -239,8 +239,8 @@ export default function ClassCard({ cls, onView, onGradingSheet, onEdit, childre
               height: "36px",
               borderRadius: "13px",
               border: "none",
-              backgroundColor: secondaryActionsDisabled ? "#f1f5f9" : "#C9A227",
-              color: secondaryActionsDisabled ? "#94a3b8" : "#ffffff",
+              backgroundColor: secondaryActionsDisabled ? "#f1f5f9" : "#f1f5f9",
+              color: secondaryActionsDisabled ? "#94a3b8" : "#886C14",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -254,10 +254,10 @@ export default function ClassCard({ cls, onView, onGradingSheet, onEdit, childre
             }}
             onClick={() => { if (!secondaryActionsDisabled) onGradingSheet(cls); }}
             onMouseEnter={(e) => {
-              if (!secondaryActionsDisabled) e.currentTarget.style.backgroundColor = "#886C14";
+              if (!secondaryActionsDisabled) e.currentTarget.style.backgroundColor = "#e2e8f0";
             }}
             onMouseLeave={(e) => {
-              if (!secondaryActionsDisabled) e.currentTarget.style.backgroundColor = "#C9A227";
+              if (!secondaryActionsDisabled) e.currentTarget.style.backgroundColor = "#f1f5f9";
             }}
           >
             <FileSpreadsheet size={15} style={{ flexShrink: 0 }} />
@@ -279,7 +279,7 @@ export default function ClassCard({ cls, onView, onGradingSheet, onEdit, childre
               height: "36px",
               borderRadius: "13px",
               border: "none",
-              backgroundColor: secondaryActionsDisabled ? "#f1f5f9" : "#112d61",
+              backgroundColor: secondaryActionsDisabled ? "#f1f5f9" : "#C9A227",
               color: secondaryActionsDisabled ? "#94a3b8" : "#ffffff",
               display: "flex",
               alignItems: "center",
@@ -294,10 +294,10 @@ export default function ClassCard({ cls, onView, onGradingSheet, onEdit, childre
             }}
             onClick={() => { if (!secondaryActionsDisabled) onEdit(cls); }}
             onMouseEnter={(e) => {
-              if (!secondaryActionsDisabled) e.currentTarget.style.backgroundColor = "#1e3e78";
+              if (!secondaryActionsDisabled) e.currentTarget.style.backgroundColor = "#886C14";
             }}
             onMouseLeave={(e) => {
-              if (!secondaryActionsDisabled) e.currentTarget.style.backgroundColor = "#112d61";
+              if (!secondaryActionsDisabled) e.currentTarget.style.backgroundColor = "#C9A227";
             }}
           >
             <Edit2 size={14} style={{ flexShrink: 0 }} />
