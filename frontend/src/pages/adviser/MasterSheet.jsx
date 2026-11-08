@@ -25,7 +25,6 @@ import {
 } from "../../services/masterSheetService.js";
 import { getStoredUser } from "../../utils/auth.js";
 import { SESSION_CHANGED_EVENT } from "../../offline/syncManager.js";
-import { maskLrn } from "../../utils/lrnHelper.js";
 import "../../styles/masterSheet.css";
 
 const getUserId = (user) => user?.user_id || user?.id || null;
@@ -433,7 +432,6 @@ export default function MasterSheet() {
       <tr key={student.studentSectionId} className="ms-student-row">
         <td className="ms-name-cell">
           {student.displayName}
-          <span className="ms-lrn">LRN: {student.lrn ? maskLrn(student.lrn) : "Not recorded"}</span>
         </td>
         {subjects.map((subject) => {
           const grades = student.grades[subject.key] || {

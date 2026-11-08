@@ -9,18 +9,18 @@
 
 /* Remove gray container / background behind performance report, mean and mps, and grade range */
 .page-content-area:has(> .performance-page) {
-  background-color: #ffffff !important;
+  background-color: #F8FAFC !important;
 }
 
 .performance-page {
   width: 100%;
-  background: #ffffff;
+  background: #F8FAFC;
 }
 
 .performance-main {
   width: 100%;
   padding: 0;
-  background: #ffffff;
+  background: #F8FAFC;
 }
 
 .performance-content {
@@ -28,7 +28,7 @@
   border-radius: 0;
   padding: 0 0 16px 0;
   box-shadow: none;
-  margin-bottom: 24px;
+  margin-bottom: 10px;
 }
 
 .page-title {
@@ -45,7 +45,7 @@
   align-items: center;
   justify-content: flex-start;
   gap: 16px;
-  margin-bottom: 24px;
+  margin-bottom: 0px;
 }
 
 .filters-label {
@@ -193,6 +193,7 @@
 }
 
 @media (max-width: 1024px) {
+
   .performance-content,
   .report-card {
     padding: 20px;
@@ -400,5 +401,3 @@
   color: var(--performance-heading);
   font-weight: 700;
 }
-
-

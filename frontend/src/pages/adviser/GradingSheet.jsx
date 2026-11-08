@@ -1,6 +1,6 @@
 import { SkeletonTableRows, SkeletonValue, SkeletonTable } from '../../components/common/PageSkeleton.jsx';
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { Download, Printer, Check, Calendar, CheckCircle2 } from "lucide-react";
+import { Download, Printer, Check, Calendar, CheckCircle2, X } from "lucide-react";
 import backIconUrl from "../../assets/backButton.svg";
 import SearchBar from "../../components/common/SearchBar.jsx";
 import SelectFilter from "../../components/common/SelectFilter.jsx";
@@ -87,13 +87,6 @@ export default function GradingSheet({
     const currentSubmission = submissionStatus.data?.subjects.find(subject => Number(subject.subjectOfferingId) === Number(statusOfferingId))
         ?.terms.find(term => term.term === currentTermCode);
 
-    // MAPEH Tab State: 'MA' (Music & Arts), 'PEH' (PE & Health), 'COMBINED' (Combined MAPEH)
-    const [activeMapehTab, setActiveMapehTab] = useState("MA");
-    // Combined Sheet Term Selector: 'T1', 'T2', 'T3', 'All' (defaults to current term or T1)
-    const [combinedTermChoice, setCombinedTermFilter] = useState(null);
-    const combinedTermFilter = combinedTermChoice || currentTermCode || "T1";
-
-
     const currentUser = useMemo(() => getStoredUser(), []);
     const teacherName = useMemo(() => {
         if (!currentUser) return "Teacher";
@@ -117,6 +110,28 @@ export default function GradingSheet({
             str.includes("health")
         );
     }, [activeSelectedClass]);
+
+    // MAPEH Tab State: 'MA' (Music & Arts), 'PEH' (PE & Health), 'COMBINED' (Combined MAPEH)
+    const [activeMapehTab, setActiveMapehTab] = useState("MA");
+    // Combined Sheet Term Selector: 'T1', 'T2', 'T3', 'All' (defaults to current term or T1)
+    const [combinedTermChoice, setCombinedTermFilter] = useState(null);
+    const combinedTermFilter = combinedTermChoice || currentTermCode || "T1";
+
+    const hasActiveFilters = Boolean(
+        searchStudentQuery.trim() !== "" ||
+        filterDescriptor !== "All" ||
+        filterRemark !== "All" ||
+        (isMapeh && activeMapehTab === "COMBINED" && combinedTermChoice !== null)
+    );
+
+    const handleClearFilters = () => {
+        setSearchStudentQuery("");
+        setFilterDescriptor("All");
+        setFilterRemark("All");
+        if (isMapeh) {
+            setCombinedTermFilter(null);
+        }
+    };
 
 
     // Calculate processed term & final grades for a student depending on active tab
@@ -203,8 +218,9 @@ export default function GradingSheet({
 
     const activeClassStudentsList = useMemo(() => {
         const filtered = students.filter((s) => {
-            const fullName = `${s.firstName} ${s.lastName}`.toLowerCase();
-            const matchesSearch = fullName.includes(searchStudentQuery.toLowerCase()) || s.lrn.toString().includes(searchStudentQuery);
+            const fullName = `${s.firstName || ""} ${s.lastName || ""}`.toLowerCase();
+            const matchesSearch = fullName.includes(searchStudentQuery.toLowerCase()) ||
+                (s.lrn ? String(s.lrn).includes(searchStudentQuery) : false);
 
             const grades = resolveStudentGrades(s);
             let checkGrade = grades.final;
@@ -229,7 +245,7 @@ export default function GradingSheet({
     }, [students, searchStudentQuery, filterDescriptor, filterRemark, isMapeh, activeMapehTab, combinedTermFilter, resolveStudentGrades]);
 
     const handleDownloadPDF = async () => {
-        let downloadSubject = activeSelectedClass.subject;
+        let downloadSubject = activeSelectedClass?.subject || activeSelectedClass?.subject_name || "Grading Sheet";
         let exportMapehTab = activeMapehTab;
 
         if (isMapeh) {
@@ -251,11 +267,11 @@ export default function GradingSheet({
         });
 
         const termSuffix = isMapeh && combinedTermFilter !== "All" ? ` (${combinedTermFilter === "T1" ? "Term 1" : combinedTermFilter === "T2" ? "Term 2" : "Term 3"})` : "";
-        showToast(`Downloaded PDF Grading Sheet for ${activeSelectedClass.gradeLevel} - ${activeSelectedClass.sectionName}${termSuffix} (${downloadSubject})`, "success", CheckCircle2);
+        showToast(`Downloaded PDF Grading Sheet for ${activeSelectedClass?.gradeLevel || ""} - ${activeSelectedClass?.sectionName || ""}${termSuffix} (${downloadSubject})`, "success", CheckCircle2);
     };
 
     const handlePrintSheet = () => {
-        let printSubject = activeSelectedClass.subject;
+        let printSubject = activeSelectedClass?.subject || activeSelectedClass?.subject_name || "Grading Sheet";
         let exportMapehTab = activeMapehTab;
 
         if (isMapeh) {
@@ -276,15 +292,15 @@ export default function GradingSheet({
             isPrintMode: true,
         });
 
-        showToast(`Opening Print Preview for ${activeSelectedClass.gradeLevel} - ${activeSelectedClass.sectionName} (${printSubject})`, "success", CheckCircle2);
+        showToast(`Opening Print Preview for ${activeSelectedClass?.gradeLevel || ""} - ${activeSelectedClass?.sectionName || ""} (${printSubject})`, "success", CheckCircle2);
     };
 
     const handleFooterSubmitTrigger = async () => {
         if (!onSubmit || !/^T[123]$/.test(currentTermCode)) throw new Error("Load the current class and term before submitting.");
-        const result = await onSubmit(activeSelectedClass.id, currentTermCode);
+        const result = await onSubmit(activeSelectedClass?.id, currentTermCode);
         if (result?.submitted !== true || result.term !== currentTermCode) throw new Error("The server did not confirm this term submission.");
         submissionStatus.retry();
-        showToast(`${currentTermLabel} grades for ${activeSelectedClass.gradeLevel} - ${activeSelectedClass.sectionName} submitted successfully!`, "success", CheckCircle2);
+        showToast(`${currentTermLabel} grades for ${activeSelectedClass?.gradeLevel || ""} - ${activeSelectedClass?.sectionName || ""} submitted successfully!`, "success", CheckCircle2);
         return result;
     };
 
@@ -423,18 +439,6 @@ export default function GradingSheet({
                     </button>
                     <h1 className="grading-sheet-title" onClick={onBack}>Assigned Classes</h1>
                 </div>
-
-                <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-                    <button className="download-btn" onClick={handleDownloadPDF} title="Download PDF Sheet" disabled={loading}>
-                        <Download size={18} />
-                        <span>Download PDF</span>
-                    </button>
-
-                    <button className="print-btn" onClick={handlePrintSheet} title="Print Grading Sheet" disabled={loading}>
-                        <Printer size={18} />
-                        <span>Print</span>
-                    </button>
-                </div>
             </div>
 
             {/* MAPEH Sub-Component Pill Navigation (Matching ClassRecord UI) */}
@@ -465,15 +469,29 @@ export default function GradingSheet({
             )}
 
             <div className="grading-sheet-subheader-container">
-                <div className="total-students-desc">
-                    Total students: {loading ? <SkeletonValue label="Loading student count" /> : activeClassStudentsList.totalCount}
-                </div>
-                {currentTermLabel ? (
-                    <div className="current-term-badge" title="Currently Active Grading Term">
-                        <Calendar size={15} />
-                        <span>{submissionWindow?.correction ? "Correction term" : "Current Term"}: <strong>{currentTermLabel}</strong></span>
+                <div className="grading-sheet-subheader-left">
+                    {currentTermLabel ? (
+                        <div className="current-term-badge" title="Currently Active Grading Term">
+                            <Calendar size={15} />
+                            <span>{submissionWindow?.correction ? "Correction term" : "Current Term"}: <strong>{currentTermLabel}</strong></span>
+                        </div>
+                    ) : null}
+                    <div className="total-students-desc">
+                        Total students: {loading ? <SkeletonValue label="Loading student count" /> : activeClassStudentsList.totalCount}
                     </div>
-                ) : null}
+                </div>
+
+                <div className="grading-sheet-actions-right">
+                    <button className="download-btn" onClick={handleDownloadPDF} title="Download PDF Sheet" disabled={loading}>
+                        <Download size={16} />
+                        <span>Download PDF</span>
+                    </button>
+
+                    <button className="print-btn" onClick={handlePrintSheet} title="Print Grading Sheet" disabled={loading}>
+                        <Printer size={16} />
+                        <span>Print</span>
+                    </button>
+                </div>
             </div>
 
             <div className="grading-filters-row">
@@ -501,6 +519,18 @@ export default function GradingSheet({
                             minWidth="170px"
                         />
                     )}
+
+                    {hasActiveFilters && (
+                        <button
+                            type="button"
+                            className="grading-clear-filters"
+                            onClick={handleClearFilters}
+                            title="Clear all filters"
+                        >
+                            <X size={13} />
+                            <span>Clear</span>
+                        </button>
+                    )}
                 </div>
 
                 <div className="grading-filters-right">
@@ -511,7 +541,7 @@ export default function GradingSheet({
                     />
                 </div>
 
-                {activeSelectedClass.submitted && (
+                {activeSelectedClass?.submitted && (
                     <div
                         style={{
                             display: "flex",
@@ -535,22 +565,16 @@ export default function GradingSheet({
                 {loading ? <SkeletonTable columns={7} /> : (<table className="grading-table">
                     <thead>
                         <tr className="grading-header-row-1">
-                            <th style={{ borderRight: "1px solid #e2e8f0", borderBottom: "none", backgroundColor: "#f8fafc" }}></th>
+                            <th className="table-corner-th" style={{ borderBottom: "none" }}></th>
                             <th colSpan={isMapeh && activeMapehTab === "COMBINED" && combinedTermFilter === "All" ? "6" : isMapeh && activeMapehTab === "COMBINED" ? "2" : "3"} className="border-bottom-line">
-                                Grade and section: <span className="info-cell-title">{activeSelectedClass.gradeLevel} - {activeSelectedClass.sectionName}</span>
+                                Grade and section: <span className="info-cell-title">{activeSelectedClass?.gradeLevel} - {activeSelectedClass?.sectionName}</span>
                             </th>
                             <th colSpan={isMapeh && activeMapehTab === "COMBINED" && combinedTermFilter === "All" ? "6" : "3"} className="border-bottom-line">
                                 School year: <span className="info-cell-title">2026-2027</span>
-                                {currentTermLabel ? (
-                                    <>
-                                        <span style={{ margin: "0 8px", color: "#cbd5e1" }}>|</span>
-                                        Current Term: <span className="info-cell-title">{currentTermLabel}</span>
-                                    </>
-                                ) : null}
                             </th>
                         </tr>
                         <tr className="grading-header-row-2">
-                            <th style={{ textTransform: "uppercase", fontSize: "12px", fontWeight: "700", letterSpacing: "0.5px", borderRight: "1px solid #e2e8f0", textAlign: "center", color: "#475569" }}>
+                            <th className="grading-learners-names-th">
                                 learners' names
                             </th>
                             <th colSpan={isMapeh && activeMapehTab === "COMBINED" && combinedTermFilter === "All" ? "6" : isMapeh && activeMapehTab === "COMBINED" ? "2" : "3"}>
@@ -564,7 +588,7 @@ export default function GradingSheet({
                         {/* RENDER TABLE HEADERS SPECIFIC TO VIEW MODE */}
                         {isMapeh && activeMapehTab === "COMBINED" && combinedTermFilter !== "All" ? (
                             <tr className="grading-header-row-3">
-                                <th style={{ borderRight: "1px solid #e2e8f0", backgroundColor: "#f1f5f9" }}></th>
+                                <th className="table-corner-th"></th>
                                 <th>MUSIC &amp; ARTS ({combinedTermFilter === "T1" ? "TERM 1" : combinedTermFilter === "T2" ? "TERM 2" : "TERM 3"})</th>
                                 <th>PE &amp; HEALTH ({combinedTermFilter === "T1" ? "TERM 1" : combinedTermFilter === "T2" ? "TERM 2" : "TERM 3"})</th>
                                 <th>MAPEH ({combinedTermFilter === "T1" ? "TERM 1 GRADE" : combinedTermFilter === "T2" ? "TERM 2 GRADE" : "TERM 3 GRADE"})</th>
@@ -574,13 +598,13 @@ export default function GradingSheet({
                         ) : isMapeh && activeMapehTab === "COMBINED" && combinedTermFilter === "All" ? (
                             <>
                                 <tr className="grading-header-row-3">
-                                    <th rowSpan="2" style={{ borderRight: "1px solid #e2e8f0", backgroundColor: "#f1f5f9", verticalAlign: "middle" }}></th>
+                                    <th rowSpan="2" className="table-corner-th" style={{ verticalAlign: "middle" }}></th>
                                     <th colSpan="3" className="combined-term-header">TERM 1</th>
                                     <th colSpan="3" className="combined-term-header">TERM 2</th>
                                     <th colSpan="3" className="combined-term-header">TERM 3</th>
-                                    <th rowSpan="2" style={{ verticalAlign: "middle", backgroundColor: "#f1f5f9" }}>Final Grade</th>
-                                    <th rowSpan="2" style={{ verticalAlign: "middle", backgroundColor: "#f1f5f9" }}>Descriptor</th>
-                                    <th rowSpan="2" style={{ verticalAlign: "middle", backgroundColor: "#f1f5f9" }}>Remark</th>
+                                    <th rowSpan="2" className="final-grade-header" style={{ verticalAlign: "middle" }}>Final Grade</th>
+                                    <th rowSpan="2" style={{ verticalAlign: "middle" }}>Descriptor</th>
+                                    <th rowSpan="2" style={{ verticalAlign: "middle" }}>Remark</th>
                                 </tr>
                                 <tr>
                                     <th className="combined-sub-header">M&amp;A</th>
@@ -598,44 +622,65 @@ export default function GradingSheet({
                             </>
                         ) : (
                             <tr className="grading-header-row-3">
-                                <th style={{ borderRight: "1px solid #e2e8f0", backgroundColor: "#f1f5f9" }}></th>
+                                <th className="table-corner-th"></th>
                                 <th>Term 1</th>
                                 <th>Term 2</th>
                                 <th>Term 3</th>
-                                <th>Final Grade</th>
+                                <th className="final-grade-header">Final Grade</th>
                                 <th>Descriptor</th>
                                 <th>Remark</th>
                             </tr>
                         )}
                     </thead>
                     <tbody>
-                      {loading ? <SkeletonTableRows columns={isMapeh ? 13 : 7} /> : <>
-                        {/* ----------------- MALE GROUP ----------------- */}
-                        <tr className="sex-header-row">
-                            <td colSpan={isMapeh && activeMapehTab === "COMBINED" && combinedTermFilter === "All" ? "13" : isMapeh && activeMapehTab === "COMBINED" ? "6" : "7"} className="sex-header-cell">
-                                Male
-                            </td>
-                        </tr>
-
-                        {activeClassStudentsList.males.length === 0 ? (
-                            <tr>
-                                <td colSpan={isMapeh && activeMapehTab === "COMBINED" && combinedTermFilter === "All" ? "13" : isMapeh && activeMapehTab === "COMBINED" ? "6" : "7"} style={{ textAlign: "center", color: "#94a3b8", fontStyle: "italic", padding: "16px" }}>
-                                    No male students matching filters
+                        {loading ? <SkeletonTableRows columns={isMapeh ? 13 : 7} /> : <>
+                            {/* ----------------- MALE GROUP ----------------- */}
+                            <tr className="sex-header-row sex-header-row--male">
+                                <td colSpan={isMapeh && activeMapehTab === "COMBINED" && combinedTermFilter === "All" ? "13" : isMapeh && activeMapehTab === "COMBINED" ? "6" : "7"} className="sex-header-cell">
+                                    Male
                                 </td>
                             </tr>
-                        ) : (
-                            activeClassStudentsList.males.map((stud) => {
-                                const grades = resolveStudentGrades(stud);
 
-                                if (isMapeh && activeMapehTab === "COMBINED") {
-                                    if (combinedTermFilter === "T1" || combinedTermFilter === "T2" || combinedTermFilter === "T3") {
-                                        const termNum = combinedTermFilter;
-                                        const maVal = termNum === "T1" ? grades.t1_ma : termNum === "T2" ? grades.t2_ma : grades.t3_ma;
-                                        const pehVal = termNum === "T1" ? grades.t1_peh : termNum === "T2" ? grades.t2_peh : grades.t3_peh;
-                                        const combinedVal = termNum === "T1" ? grades.t1_combined : termNum === "T2" ? grades.t2_combined : grades.t3_combined;
-                                        const descriptor = getDescriptor(combinedVal);
-                                        const remark = getRemark(combinedVal);
+                            {activeClassStudentsList.males.length === 0 ? (
+                                <tr>
+                                    <td colSpan={isMapeh && activeMapehTab === "COMBINED" && combinedTermFilter === "All" ? "13" : isMapeh && activeMapehTab === "COMBINED" ? "6" : "7"} style={{ textAlign: "center", color: "#94a3b8", fontStyle: "italic", padding: "16px" }}>
+                                        No male students matching filters
+                                    </td>
+                                </tr>
+                            ) : (
+                                activeClassStudentsList.males.map((stud) => {
+                                    const grades = resolveStudentGrades(stud);
 
+                                    if (isMapeh && activeMapehTab === "COMBINED") {
+                                        if (combinedTermFilter === "T1" || combinedTermFilter === "T2" || combinedTermFilter === "T3") {
+                                            const termNum = combinedTermFilter;
+                                            const maVal = termNum === "T1" ? grades.t1_ma : termNum === "T2" ? grades.t2_ma : grades.t3_ma;
+                                            const pehVal = termNum === "T1" ? grades.t1_peh : termNum === "T2" ? grades.t2_peh : grades.t3_peh;
+                                            const combinedVal = termNum === "T1" ? grades.t1_combined : termNum === "T2" ? grades.t2_combined : grades.t3_combined;
+                                            const descriptor = getDescriptor(combinedVal);
+                                            const remark = getRemark(combinedVal);
+
+                                            return (
+                                                <tr key={stud.id} className="student-data-row">
+                                                    <td className="student-name-cell">
+                                                        <span className="student-full-name">
+                                                            {stud.lastName}, {stud.firstName} {stud.middleName ? `${stud.middleName.charAt(0)}.` : ""}
+                                                        </span>
+                                                    </td>
+                                                    <td className="grade-value-cell">{maVal}</td>
+                                                    <td className="grade-value-cell">{pehVal}</td>
+                                                    <td className="final-grade-cell combined-grade-highlight">{combinedVal}</td>
+                                                    <td className="descriptor-cell">
+                                                        {combinedVal && <span className={`badge ${getDescriptorClass(descriptor)}`}>{descriptor}</span>}
+                                                    </td>
+                                                    <td className="remark-cell">
+                                                        {combinedVal && <span className={`badge ${remark === "Passed" ? "badge-passed" : "badge-failed"}`}>{remark}</span>}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        }
+
+                                        // Combined Sheet — ALL TERMS summary view
                                         return (
                                             <tr key={stud.id} className="student-data-row">
                                                 <td className="student-name-cell">
@@ -643,20 +688,35 @@ export default function GradingSheet({
                                                         {stud.lastName}, {stud.firstName} {stud.middleName ? `${stud.middleName.charAt(0)}.` : ""}
                                                     </span>
                                                 </td>
-                                                <td className="grade-value-cell">{maVal}</td>
-                                                <td className="grade-value-cell">{pehVal}</td>
-                                                <td className="final-grade-cell combined-grade-highlight">{combinedVal}</td>
+
+                                                {/* Term 1 */}
+                                                <td className="grade-value-cell">{grades.t1_ma}</td>
+                                                <td className="grade-value-cell">{grades.t1_peh}</td>
+                                                <td className="grade-value-cell combined-grade-highlight">{grades.t1_combined}</td>
+
+                                                {/* Term 2 */}
+                                                <td className="grade-value-cell">{grades.t2_ma}</td>
+                                                <td className="grade-value-cell">{grades.t2_peh}</td>
+                                                <td className="grade-value-cell combined-grade-highlight">{grades.t2_combined}</td>
+
+                                                {/* Term 3 */}
+                                                <td className="grade-value-cell">{grades.t3_ma}</td>
+                                                <td className="grade-value-cell">{grades.t3_peh}</td>
+                                                <td className="grade-value-cell combined-grade-highlight">{grades.t3_combined}</td>
+
+                                                {/* Final */}
+                                                <td className="final-grade-cell">{grades.final}</td>
                                                 <td className="descriptor-cell">
-                                                    {combinedVal && <span className={`badge ${getDescriptorClass(descriptor)}`}>{descriptor}</span>}
+                                                    {grades.final && <span className={`badge ${getDescriptorClass(grades.descriptor)}`}>{grades.descriptor}</span>}
                                                 </td>
                                                 <td className="remark-cell">
-                                                    {combinedVal && <span className={`badge ${remark === "Passed" ? "badge-passed" : "badge-failed"}`}>{remark}</span>}
+                                                    {grades.final && <span className={`badge ${grades.remark === "Passed" ? "badge-passed" : "badge-failed"}`}>{grades.remark}</span>}
                                                 </td>
                                             </tr>
                                         );
                                     }
 
-                                    // Combined Sheet — ALL TERMS summary view
+                                    // STANDARD SUBJECT OR SINGLE MAPEH COMPONENT TAB (MA / PEH)
                                     return (
                                         <tr key={stud.id} className="student-data-row">
                                             <td className="student-name-cell">
@@ -664,23 +724,9 @@ export default function GradingSheet({
                                                     {stud.lastName}, {stud.firstName} {stud.middleName ? `${stud.middleName.charAt(0)}.` : ""}
                                                 </span>
                                             </td>
-
-                                            {/* Term 1 */}
-                                            <td className="grade-value-cell">{grades.t1_ma}</td>
-                                            <td className="grade-value-cell">{grades.t1_peh}</td>
-                                            <td className="grade-value-cell combined-grade-highlight">{grades.t1_combined}</td>
-
-                                            {/* Term 2 */}
-                                            <td className="grade-value-cell">{grades.t2_ma}</td>
-                                            <td className="grade-value-cell">{grades.t2_peh}</td>
-                                            <td className="grade-value-cell combined-grade-highlight">{grades.t2_combined}</td>
-
-                                            {/* Term 3 */}
-                                            <td className="grade-value-cell">{grades.t3_ma}</td>
-                                            <td className="grade-value-cell">{grades.t3_peh}</td>
-                                            <td className="grade-value-cell combined-grade-highlight">{grades.t3_combined}</td>
-
-                                            {/* Final */}
+                                            <td className="grade-value-cell">{grades.t1}</td>
+                                            <td className="grade-value-cell">{grades.t2}</td>
+                                            <td className="grade-value-cell">{grades.t3}</td>
                                             <td className="final-grade-cell">{grades.final}</td>
                                             <td className="descriptor-cell">
                                                 {grades.final && <span className={`badge ${getDescriptorClass(grades.descriptor)}`}>{grades.descriptor}</span>}
@@ -690,57 +736,56 @@ export default function GradingSheet({
                                             </td>
                                         </tr>
                                     );
-                                }
+                                })
+                            )}
 
-                                // STANDARD SUBJECT OR SINGLE MAPEH COMPONENT TAB (MA / PEH)
-                                return (
-                                    <tr key={stud.id} className="student-data-row">
-                                        <td className="student-name-cell">
-                                            <span className="student-full-name">
-                                                {stud.lastName}, {stud.firstName} {stud.middleName ? `${stud.middleName.charAt(0)}.` : ""}
-                                            </span>
-                                        </td>
-                                        <td className="grade-value-cell">{grades.t1}</td>
-                                        <td className="grade-value-cell">{grades.t2}</td>
-                                        <td className="grade-value-cell">{grades.t3}</td>
-                                        <td className="final-grade-cell">{grades.final}</td>
-                                        <td className="descriptor-cell">
-                                            {grades.final && <span className={`badge ${getDescriptorClass(grades.descriptor)}`}>{grades.descriptor}</span>}
-                                        </td>
-                                        <td className="remark-cell">
-                                            {grades.final && <span className={`badge ${grades.remark === "Passed" ? "badge-passed" : "badge-failed"}`}>{grades.remark}</span>}
-                                        </td>
-                                    </tr>
-                                );
-                            })
-                        )}
-
-                        {/* ----------------- FEMALE GROUP ----------------- */}
-                        <tr className="sex-header-row" style={{ borderTop: "2px solid #cbd5e1" }}>
-                            <td colSpan={isMapeh && activeMapehTab === "COMBINED" && combinedTermFilter === "All" ? "13" : isMapeh && activeMapehTab === "COMBINED" ? "6" : "7"} className="sex-header-cell">
-                                Female
-                            </td>
-                        </tr>
-
-                        {activeClassStudentsList.females.length === 0 ? (
-                            <tr>
-                                <td colSpan={isMapeh && activeMapehTab === "COMBINED" && combinedTermFilter === "All" ? "13" : isMapeh && activeMapehTab === "COMBINED" ? "6" : "7"} style={{ textAlign: "center", color: "#94a3b8", fontStyle: "italic", padding: "16px" }}>
-                                    No female students matching filters
+                            {/* ----------------- FEMALE GROUP ----------------- */}
+                            <tr className="sex-header-row sex-header-row--female">
+                                <td colSpan={isMapeh && activeMapehTab === "COMBINED" && combinedTermFilter === "All" ? "13" : isMapeh && activeMapehTab === "COMBINED" ? "6" : "7"} className="sex-header-cell">
+                                    Female
                                 </td>
                             </tr>
-                        ) : (
-                            activeClassStudentsList.females.map((stud) => {
-                                const grades = resolveStudentGrades(stud);
 
-                                if (isMapeh && activeMapehTab === "COMBINED") {
-                                    if (combinedTermFilter === "T1" || combinedTermFilter === "T2" || combinedTermFilter === "T3") {
-                                        const termNum = combinedTermFilter;
-                                        const maVal = termNum === "T1" ? grades.t1_ma : termNum === "T2" ? grades.t2_ma : grades.t3_ma;
-                                        const pehVal = termNum === "T1" ? grades.t1_peh : termNum === "T2" ? grades.t2_peh : grades.t3_peh;
-                                        const combinedVal = termNum === "T1" ? grades.t1_combined : termNum === "T2" ? grades.t2_combined : grades.t3_combined;
-                                        const descriptor = getDescriptor(combinedVal);
-                                        const remark = getRemark(combinedVal);
+                            {activeClassStudentsList.females.length === 0 ? (
+                                <tr>
+                                    <td colSpan={isMapeh && activeMapehTab === "COMBINED" && combinedTermFilter === "All" ? "13" : isMapeh && activeMapehTab === "COMBINED" ? "6" : "7"} style={{ textAlign: "center", color: "#94a3b8", fontStyle: "italic", padding: "16px" }}>
+                                        No female students matching filters
+                                    </td>
+                                </tr>
+                            ) : (
+                                activeClassStudentsList.females.map((stud) => {
+                                    const grades = resolveStudentGrades(stud);
 
+                                    if (isMapeh && activeMapehTab === "COMBINED") {
+                                        if (combinedTermFilter === "T1" || combinedTermFilter === "T2" || combinedTermFilter === "T3") {
+                                            const termNum = combinedTermFilter;
+                                            const maVal = termNum === "T1" ? grades.t1_ma : termNum === "T2" ? grades.t2_ma : grades.t3_ma;
+                                            const pehVal = termNum === "T1" ? grades.t1_peh : termNum === "T2" ? grades.t2_peh : grades.t3_peh;
+                                            const combinedVal = termNum === "T1" ? grades.t1_combined : termNum === "T2" ? grades.t2_combined : grades.t3_combined;
+                                            const descriptor = getDescriptor(combinedVal);
+                                            const remark = getRemark(combinedVal);
+
+                                            return (
+                                                <tr key={stud.id} className="student-data-row">
+                                                    <td className="student-name-cell">
+                                                        <span className="student-full-name">
+                                                            {stud.lastName}, {stud.firstName} {stud.middleName ? `${stud.middleName.charAt(0)}.` : ""}
+                                                        </span>
+                                                    </td>
+                                                    <td className="grade-value-cell">{maVal}</td>
+                                                    <td className="grade-value-cell">{pehVal}</td>
+                                                    <td className="final-grade-cell combined-grade-highlight">{combinedVal}</td>
+                                                    <td className="descriptor-cell">
+                                                        {combinedVal && <span className={`badge ${getDescriptorClass(descriptor)}`}>{descriptor}</span>}
+                                                    </td>
+                                                    <td className="remark-cell">
+                                                        {combinedVal && <span className={`badge ${remark === "Passed" ? "badge-passed" : "badge-failed"}`}>{remark}</span>}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        }
+
+                                        // Combined Sheet — ALL TERMS summary view
                                         return (
                                             <tr key={stud.id} className="student-data-row">
                                                 <td className="student-name-cell">
@@ -748,20 +793,35 @@ export default function GradingSheet({
                                                         {stud.lastName}, {stud.firstName} {stud.middleName ? `${stud.middleName.charAt(0)}.` : ""}
                                                     </span>
                                                 </td>
-                                                <td className="grade-value-cell">{maVal}</td>
-                                                <td className="grade-value-cell">{pehVal}</td>
-                                                <td className="final-grade-cell combined-grade-highlight">{combinedVal}</td>
+
+                                                {/* Term 1 */}
+                                                <td className="grade-value-cell">{grades.t1_ma}</td>
+                                                <td className="grade-value-cell">{grades.t1_peh}</td>
+                                                <td className="grade-value-cell combined-grade-highlight">{grades.t1_combined}</td>
+
+                                                {/* Term 2 */}
+                                                <td className="grade-value-cell">{grades.t2_ma}</td>
+                                                <td className="grade-value-cell">{grades.t2_peh}</td>
+                                                <td className="grade-value-cell combined-grade-highlight">{grades.t2_combined}</td>
+
+                                                {/* Term 3 */}
+                                                <td className="grade-value-cell">{grades.t3_ma}</td>
+                                                <td className="grade-value-cell">{grades.t3_peh}</td>
+                                                <td className="grade-value-cell combined-grade-highlight">{grades.t3_combined}</td>
+
+                                                {/* Final */}
+                                                <td className="final-grade-cell">{grades.final}</td>
                                                 <td className="descriptor-cell">
-                                                    {combinedVal && <span className={`badge ${getDescriptorClass(descriptor)}`}>{descriptor}</span>}
+                                                    {grades.final && <span className={`badge ${getDescriptorClass(grades.descriptor)}`}>{grades.descriptor}</span>}
                                                 </td>
                                                 <td className="remark-cell">
-                                                    {combinedVal && <span className={`badge ${remark === "Passed" ? "badge-passed" : "badge-failed"}`}>{remark}</span>}
+                                                    {grades.final && <span className={`badge ${grades.remark === "Passed" ? "badge-passed" : "badge-failed"}`}>{grades.remark}</span>}
                                                 </td>
                                             </tr>
                                         );
                                     }
 
-                                    // Combined Sheet — ALL TERMS summary view
+                                    // STANDARD SUBJECT OR SINGLE MAPEH COMPONENT TAB (MA / PEH)
                                     return (
                                         <tr key={stud.id} className="student-data-row">
                                             <td className="student-name-cell">
@@ -769,23 +829,9 @@ export default function GradingSheet({
                                                     {stud.lastName}, {stud.firstName} {stud.middleName ? `${stud.middleName.charAt(0)}.` : ""}
                                                 </span>
                                             </td>
-
-                                            {/* Term 1 */}
-                                            <td className="grade-value-cell">{grades.t1_ma}</td>
-                                            <td className="grade-value-cell">{grades.t1_peh}</td>
-                                            <td className="grade-value-cell combined-grade-highlight">{grades.t1_combined}</td>
-
-                                            {/* Term 2 */}
-                                            <td className="grade-value-cell">{grades.t2_ma}</td>
-                                            <td className="grade-value-cell">{grades.t2_peh}</td>
-                                            <td className="grade-value-cell combined-grade-highlight">{grades.t2_combined}</td>
-
-                                            {/* Term 3 */}
-                                            <td className="grade-value-cell">{grades.t3_ma}</td>
-                                            <td className="grade-value-cell">{grades.t3_peh}</td>
-                                            <td className="grade-value-cell combined-grade-highlight">{grades.t3_combined}</td>
-
-                                            {/* Final */}
+                                            <td className="grade-value-cell">{grades.t1}</td>
+                                            <td className="grade-value-cell">{grades.t2}</td>
+                                            <td className="grade-value-cell">{grades.t3}</td>
                                             <td className="final-grade-cell">{grades.final}</td>
                                             <td className="descriptor-cell">
                                                 {grades.final && <span className={`badge ${getDescriptorClass(grades.descriptor)}`}>{grades.descriptor}</span>}
@@ -795,31 +841,9 @@ export default function GradingSheet({
                                             </td>
                                         </tr>
                                     );
-                                }
-
-                                // STANDARD SUBJECT OR SINGLE MAPEH COMPONENT TAB (MA / PEH)
-                                return (
-                                    <tr key={stud.id} className="student-data-row">
-                                        <td className="student-name-cell">
-                                            <span className="student-full-name">
-                                                {stud.lastName}, {stud.firstName} {stud.middleName ? `${stud.middleName.charAt(0)}.` : ""}
-                                            </span>
-                                        </td>
-                                        <td className="grade-value-cell">{grades.t1}</td>
-                                        <td className="grade-value-cell">{grades.t2}</td>
-                                        <td className="grade-value-cell">{grades.t3}</td>
-                                        <td className="final-grade-cell">{grades.final}</td>
-                                        <td className="descriptor-cell">
-                                            {grades.final && <span className={`badge ${getDescriptorClass(grades.descriptor)}`}>{grades.descriptor}</span>}
-                                        </td>
-                                        <td className="remark-cell">
-                                            {grades.final && <span className={`badge ${grades.remark === "Passed" ? "badge-passed" : "badge-failed"}`}>{grades.remark}</span>}
-                                        </td>
-                                    </tr>
-                                );
-                            })
-                        )}
-                    </>}
+                                })
+                            )}
+                        </>}
                     </tbody>
                 </table>)}
             </div>
@@ -835,12 +859,14 @@ export default function GradingSheet({
                 modalTitle={`Submit ${currentTermLabel || "term"} grades to adviser?`}
                 statusContent={<>
                     {submissionTerms.some(t => t.correction) && <label>Submission term: <SelectFilter value={currentTermCode || ""}
-                        onChange={setSubmissionTermChoice} options={submissionTerms.map(t => ({ value: t.term,
-                            label: `Term ${t.term.slice(1)}${t.correction ? " · Correction" : ""}` }))} /></label>}
+                        onChange={setSubmissionTermChoice} options={submissionTerms.map(t => ({
+                            value: t.term,
+                            label: `Term ${t.term.slice(1)}${t.correction ? " · Correction" : ""}`
+                        }))} /></label>}
                     <GradeSubmissionBadge record={currentSubmission} term={currentTermCode}
-                    loading={Boolean(statusOfferingId) && submissionStatus.loading}
-                    error={!statusOfferingId ? "Subject offering unavailable" : submissionStatus.error}
-                    retry={statusOfferingId ? submissionStatus.retry : undefined} /></>}
+                        loading={Boolean(statusOfferingId) && submissionStatus.loading}
+                        error={!statusOfferingId ? "Subject offering unavailable" : submissionStatus.error}
+                        retry={statusOfferingId ? submissionStatus.retry : undefined} /></>}
             />
 
             {/* Bottom-Right Toast Alert Notification (Exact Master Sheet Styling) */}

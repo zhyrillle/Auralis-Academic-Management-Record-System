@@ -67,51 +67,81 @@
 
 .download-btn,
 .print-btn {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  white-space: nowrap;
+}
+
+.download-btn {
   background-color: #123062;
   border: 1px solid #123062;
   color: #ffffff;
-  padding: 10px 20px;
-  border-radius: 10px;
-  font-size: var(--fs-subtext);
-  font-weight: var(--fw-bold);
-  cursor: pointer;
-  transition: all 0.2s;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.01);
+  box-shadow: 0 2px 6px rgba(18, 48, 98, 0.16);
 }
 
-.download-btn:hover,
-.print-btn:hover {
-  background-color: var(--button-primary-hover-color);
-  color: #ffffff;
-  border-color: var(--button-primary-hover-color);
-  box-shadow: 0 4px 12px rgba(17, 45, 97, 0.15);
+.download-btn:hover:not(:disabled) {
+  background-color: #0b244e;
+  border-color: #0b244e;
+  transform: translateY(-1px);
 }
 
+.print-btn {
+  background-color: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #334155;
+  box-shadow: none;
+}
 
+.print-btn:hover:not(:disabled) {
+  background-color: #f1f5f9;
+  border-color: #94a3b8;
+  color: #0f172a;
+}
 
-/* ---- Sub-header ---- */
+.download-btn:disabled,
+.print-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ---- Sub-header Row: Left (Current Term, Total Students), Right (Download, Print) ---- */
 .grading-sheet-subheader-container {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
+  margin-bottom: 18px;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 14px;
+}
+
+.grading-sheet-subheader-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
 }
 
 .total-students-desc {
-  font-size: var(--fs-body);
-  color: var(--subtext-color);
-  font-weight: var(--fw-normal);
+  font-size: 13.5px;
+  color: #475569;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .current-term-badge {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
   background-color: #e0f2fe;
   color: #0369a1;
   border: 1px solid #bae6fd;
@@ -125,6 +155,13 @@
 .current-term-badge strong {
   font-weight: 700;
   color: #0284c7;
+}
+
+.grading-sheet-actions-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 /* ---- Filters Row ---- */
@@ -148,6 +185,28 @@
   font-size: 14px;
   font-weight: 400;
   color: #757575;
+}
+
+.grading-clear-filters {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #fee2e2;
+  color: #dc2626;
+  border: none;
+  border-radius: 8px;
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.18s ease;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.grading-clear-filters:hover {
+  background: #fecaca;
+  color: #b91c1c;
 }
 
 .grading-filters-right {
@@ -190,8 +249,8 @@
 .table-wrapper {
   background-color: #ffffff;
   border-radius: 16px;
-  border: 1px solid #eef2f6;
-  box-shadow: 0 4px 25px rgba(0, 0, 0, 0.02);
+  border: 1px solid #dce5f0;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.06);
   overflow-x: auto;
   margin-bottom: 24px;
 }
@@ -200,94 +259,163 @@
   width: 100%;
   border-collapse: collapse;
   text-align: left;
-  font-size: 14px;
+  font-size: 0.78rem;
+  color: #20304a;
 }
 
 .grading-table th,
 .grading-table td {
-  padding: 12px 16px;
-  border: 1px solid #e2e8f0;
+  padding: 10px 14px;
+  border: 1px solid #dce5f0;
   vertical-align: middle;
 }
 
+/* Header Rows (Class metadata) */
 .grading-table thead th {
-  background-color: #f8fafc;
-  color: #334155;
-  font-weight: 600;
+  background-color: #f5f8fc;
+  color: #365176;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
 }
 
 .grading-table thead tr:first-child th {
-  border-bottom: 2px solid #cbd5e1;
+  border-bottom: 2px solid #b9c9df;
 }
 
 .border-bottom-line {
-  border-bottom: 2px solid #cbd5e1 !important;
+  border-bottom: 2px solid #b9c9df !important;
 }
 
 .grading-table thead tr:nth-child(2) th {
   border-top: none;
-  border-bottom: 2px solid #cbd5e1;
+  border-bottom: 2px solid #b9c9df;
+  background-color: #f5f8fc;
 }
 
-.grading-table thead tr:last-child th {
-  background-color: #f1f5f9;
-  font-size: 12px;
-  font-weight: 700;
+.grading-learners-names-th {
   text-transform: uppercase;
-  color: #475569;
-  letter-spacing: 0.5px;
+  font-size: 0.72rem !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.04em;
   text-align: center;
+  color: #365176 !important;
+  background-color: #f5f8fc;
 }
 
-.grading-table thead tr:last-child th:first-child {
+/* Header Row 3 (Column names) */
+.grading-table thead tr:last-child th,
+.grading-table thead tr.grading-header-row-3 th {
+  background-color: #f5f8fc;
+  font-size: 0.71rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: #365176;
+  letter-spacing: 0.04em;
+  text-align: center;
+  border-bottom: 2px solid #b9c9df;
+}
+
+.grading-table thead tr:last-child th:first-child,
+.grading-table thead tr.grading-header-row-3 th:first-child {
   text-align: left;
+}
+
+.table-corner-th {
+  background-color: #f5f8fc !important;
+  border-right: 1px solid #dce5f0 !important;
+}
+
+.final-grade-header {
+  color: #183c73 !important;
+  background-color: #eaf0f8 !important;
+  font-size: 0.72rem !important;
+  font-weight: 900 !important;
+}
+
+.combined-term-header {
+  background-color: #f5f8fc !important;
+  color: #112d61 !important;
+  font-weight: 800 !important;
+  text-align: center;
+  border: 1px solid #dce5f0 !important;
+}
+
+.combined-sub-header {
+  background-color: #f5f8fc !important;
+  color: #365176 !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  text-align: center;
+  border: 1px solid #dce5f0 !important;
 }
 
 .info-cell-title {
   font-weight: 700;
-  color: var(--sidebar-bg, #112d61);
+  color: #112d61;
 }
 
 /* ---- Sex Group Header Rows ---- */
 .sex-header-row {
-  background-color: rgba(17, 45, 97, 0.04);
+  background-color: #e9f2fb;
+  border-top: 2px solid #b9c9df;
+  border-bottom: 1px solid #dce5f0;
 }
 
 .sex-header-cell {
-  font-weight: 700;
-  color: var(--sidebar-bg, #112d61);
-  font-size: 14px;
-  letter-spacing: 0.5px;
+  font-weight: 900;
+  color: #112d61;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
+  padding: 9px 16px;
+  background-color: #e9f2fb;
+}
+
+.sex-header-row--male .sex-header-cell {
+  background-color: #e9f2fb;
+  color: #112d61;
+}
+
+.sex-header-row--female {
+  border-top: 2px solid #b9c9df;
+  background-color: #e9f2fb;
+}
+
+.sex-header-row--female .sex-header-cell {
+  background-color: #e9f2fb;
+  color: #112d61;
 }
 
 /* ---- Body Rows ---- */
 .student-data-row {
-  transition: background-color 0.15s;
+  background-color: #ffffff;
+  transition: background-color 0.15s ease;
 }
 
-.student-data-row:hover {
-  background-color: #f8fafc;
+.student-data-row:hover td {
+  background-color: #f9fbfd !important;
 }
 
 .student-name-cell {
-  font-weight: 500;
+  font-weight: 700;
   color: #1e293b;
-  font-size: 13.5px;
+  font-size: 0.8rem;
   line-height: 1.35;
+  background-color: inherit;
 }
 
 .student-full-name {
-  font-size: 13.5px !important;
-  font-weight: 600;
-  color: #0f172a;
+  font-size: 0.8rem !important;
+  font-weight: 700;
+  color: #1e293b;
   display: block;
 }
 
 .student-lrn {
-  font-size: 12px;
-  color: #64748b;
-  font-weight: 400;
+  font-size: 0.68rem;
+  color: #8291a8;
+  font-weight: 500;
   display: block;
   margin-top: 3px;
 }
@@ -296,16 +424,23 @@
 .grade-value-cell {
   width: 90px;
   text-align: center;
-  font-weight: 600;
-  color: #334155;
+  font-weight: 650;
+  color: #20304a;
+  background-color: inherit;
 }
 
 .final-grade-cell {
-  font-size: 14px;
-  font-weight: 700;
-  color: #1e293b;
+  font-size: 0.8rem;
+  font-weight: 850;
+  color: #112d61;
   text-align: center;
-  background-color: rgba(248, 250, 252, 0.5);
+  background-color: #eef3fa;
+}
+
+.combined-grade-highlight {
+  background-color: #eef3fa !important;
+  font-weight: 850;
+  color: #112d61;
 }
 
 .descriptor-cell {
@@ -571,4 +706,4 @@
   font-weight: 700 !important;
   color: #0f172a !important;
   background-color: #eff6ff !important;
-}
+}
