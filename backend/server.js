@@ -145,4 +145,35 @@ app.listen(PORT, () => {
     });
   }, 60 * 1000);
   lifecycleTimer.unref();
+
+  // Automatic background Cloud-to-Local sync (keeps localhost aligned with team edits on Aiven Cloud)
+  const runBackgroundCloudSync = async () => {
+    const pool = require('./config/db');
+    if (!pool.cloudPool) return;
+    try {
+      const {
+        syncSectionsFromCloud,
+        syncAcademicAssignmentsFromCloud,
+        syncStudentsFromCloud,
+        syncStudentSectionsFromCloud,
+        syncAttendanceFromCloud,
+        syncPhilIriFromCloud,
+      } = require('./services/cloudSyncService');
+
+      await syncSectionsFromCloud().catch((e) => console.warn('[AutoSync] Sections:', e.message));
+      await syncAcademicAssignmentsFromCloud().catch((e) => console.warn('[AutoSync] Assignments:', e.message));
+      await syncStudentsFromCloud().catch((e) => console.warn('[AutoSync] Students:', e.message));
+      await syncStudentSectionsFromCloud().catch((e) => console.warn('[AutoSync] Student Sections:', e.message));
+      await syncAttendanceFromCloud().catch((e) => console.warn('[AutoSync] Attendance:', e.message));
+      await syncPhilIriFromCloud().catch((e) => console.warn('[AutoSync] Phil-IRI:', e.message));
+    } catch (err) {
+      console.warn('[AutoSync] Background cloud sync error:', err.message);
+    }
+  };
+
+  runBackgroundCloudSync().catch((err) => console.warn('[AutoSync] Initial sync skipped:', err.message));
+  const cloudSyncTimer = setInterval(() => {
+    runBackgroundCloudSync().catch((err) => console.warn('[AutoSync] Periodic sync skipped:', err.message));
+  }, 5 * 60 * 1000);
+  cloudSyncTimer.unref();
 });
