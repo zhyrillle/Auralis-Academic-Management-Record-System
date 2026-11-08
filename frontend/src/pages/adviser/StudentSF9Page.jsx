@@ -21,8 +21,9 @@ export default function StudentSF9Page(props) {
   const student = props.student;
   const identity = student?.student_id || student?.studentId || student?.student_section_id || student?.studentSectionId || student?.lrn || student?.id || "default";
   const schoolYear = student?.schoolYearId || student?.schoolYear || "";
+  const initialTab = props.initialTab || student?.initialTab || "";
   // Remount learner-specific state before showing another learner's report.
-  return <StudentSF9Details key={`${identity}:${schoolYear}:${props.reportIdentifier || ""}`} {...props} />;
+  return <StudentSF9Details key={`${identity}:${schoolYear}:${initialTab}:${props.reportIdentifier || ""}`} {...props} />;
 }
 
 function StudentReportSkeleton({ student, onBack }) {
@@ -51,11 +52,12 @@ function StudentReportSkeleton({ student, onBack }) {
   </div>;
 }
 
-function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab, isAdviser: propIsAdviser, reportIdentifier, loadReport = getStudentSF9Details }) {
+function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab: propInitialTab, isAdviser: propIsAdviser, reportIdentifier, loadReport = getStudentSF9Details }) {
   const storedUser = useMemo(() => getStoredUser(), []);
   const draftScope = useMemo(() => getSessionScope(), []);
   const normRole = useMemo(() => normalizeRole(storedUser?.role, storedUser), [storedUser]);
   const userRole = propUserRole || (normRole === "adviser" ? "adviser" : normRole === "principal" ? "principal" : "teacher");
+  const initialTab = propInitialTab || student?.initialTab;
   const isAdviser = typeof propIsAdviser === "boolean"
     ? propIsAdviser
     : typeof student?.isAdviser === "boolean"

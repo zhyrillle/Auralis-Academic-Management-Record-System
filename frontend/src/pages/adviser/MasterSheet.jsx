@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
+  Award,
   Download,
   FileSpreadsheet,
   LoaderCircle,
@@ -12,6 +13,7 @@ import SearchBar from "../../components/common/SearchBar.jsx";
 import Toast from "../../components/common/Toast.jsx";
 import GradeSubmissionStatusPanel from "../../components/common/GradeSubmissionStatus.jsx";
 import MasterSheetSkeleton from "./MasterSheetSkeleton.jsx";
+import HonorStudentsModal from "./HonorStudentsModal.jsx";
 import { SkeletonValue } from '../../components/common/PageSkeleton.jsx';
 import {
   downloadMasterSheet,
@@ -58,6 +60,7 @@ export default function MasterSheet() {
   const [isLoadingOptions, setIsLoadingOptions] = useState(!initial.assignments);
   const [isLoadingSheet, setIsLoadingSheet] = useState(Boolean(initial.assignmentId && !initial.sheet));
   const [isDownloading, setIsDownloading] = useState(false);
+  const [isHonorsModalOpen, setIsHonorsModalOpen] = useState(false);
   const [requestError, setRequestError] = useState("");
   const [toast, setToast] = useState(emptyToast);
   const masterSheetRef = useRef(initial.sheet || null);
@@ -531,6 +534,10 @@ export default function MasterSheet() {
           </div>
           <div className="ms-control-actions">
             <GradeSubmissionStatusPanel adviserAssignmentId={selectedAssignmentId} disabled />
+            <button type="button" className="ms-honors-trigger-btn" disabled>
+              <Award size={17} aria-hidden="true" />
+              <span>Honor Students</span>
+            </button>
             <fieldset className="ms-search-fieldset">
               <SearchBar query={searchQuery} setQuery={setSearchQuery} placeholder="Search student name or LRN..." />
             </fieldset>
@@ -581,6 +588,17 @@ export default function MasterSheet() {
             </div>
             <div className="ms-control-actions">
               <GradeSubmissionStatusPanel adviserAssignmentId={selectedAssignmentId} refreshKey={masterSheet.submissionRevision} disabled={isRefreshingSheet} />
+              <button
+                type="button"
+                className="ms-honors-trigger-btn"
+                onClick={() => setIsHonorsModalOpen(true)}
+                disabled={isRefreshingSheet || !masterSheet?.students?.length}
+                title="View Honor Students"
+                aria-label="View Honor Students"
+              >
+                <Award size={17} aria-hidden="true" />
+                <span>Honor Students</span>
+              </button>
               <fieldset
                 className="ms-search-fieldset"
                 disabled={isRefreshingSheet}
@@ -702,6 +720,16 @@ export default function MasterSheet() {
 
         </div>
       )}
+
+      <HonorStudentsModal
+        isOpen={isHonorsModalOpen}
+        onClose={() => setIsHonorsModalOpen(false)}
+        students={masterSheet?.students || []}
+        subjects={masterSheet?.subjects || []}
+        section={masterSheet?.section}
+        schoolYear={masterSheet?.schoolYear}
+        adviserName={masterSheet?.adviser?.name}
+      />
 
       <Toast
         message={toast.message}

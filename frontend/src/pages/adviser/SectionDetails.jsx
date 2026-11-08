@@ -30,22 +30,6 @@ const PERFORMANCE_BANDS = [
   { key: "EMERGING", colorClass: "emerging" },
 ];
 
-const HONOR_FILTERS = [
-  { key: "WITH_HONORS", label: "With" },
-  { key: "WITH_HIGH_HONORS", label: "High" },
-  { key: "WITH_HIGHEST_HONORS", label: "Highest" },
-];
-
-const HONOR_LABELS = {
-  WITH_HONORS: "With Honors",
-  WITH_HIGH_HONORS: "With High Honors",
-  WITH_HIGHEST_HONORS: "With Highest Honors",
-  NONE: "None",
-  AWAITING_GRADES: "Awaiting grades",
-  NEEDS_REVIEW: "Needs review",
-  UNAVAILABLE: "Awaiting grades",
-};
-
 export default function SectionDetails({
   student,
   section,
@@ -86,7 +70,6 @@ export default function SectionDetails({
   const [error, setError] = useState("");
   const [selectedTerm, setSelectedTerm] = useState("T1");
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedHonor, setSelectedHonor] = useState(null);
   const [selectedRisk, setSelectedRisk] = useState(null);
   const [sortBy, setSortBy] = useState("name");
   const [sortAscending, setSortAscending] = useState(true);
@@ -179,7 +162,6 @@ export default function SectionDetails({
       setError("");
       setSelectedTerm("T1");
       setSearchQuery("");
-      setSelectedHonor(null);
       setSelectedRisk(null);
       if (assignmentId && assignmentType && userId) loadDetails("T1");
     });
@@ -193,11 +175,10 @@ export default function SectionDetails({
     const query = searchQuery.trim().toLowerCase();
     const result = (data?.learners || []).filter((learner) => {
       const matchesSearch = !query
-        || learner.name.toLowerCase().includes(query)
-      const matchesHonor = !selectedHonor || learner.honorStatus === selectedHonor;
+        || learner.name.toLowerCase().includes(query);
       const matchesRisk = !selectedRisk || (learner.riskAssessment?.status === "available"
         && learner.riskAssessment.riskLevel === selectedRisk);
-      return matchesSearch && matchesHonor && matchesRisk;
+      return matchesSearch && matchesRisk;
     });
 
     return [...result].sort((left, right) => {
@@ -216,7 +197,7 @@ export default function SectionDetails({
         ? leftValue.localeCompare(rightValue)
         : rightValue.localeCompare(leftValue);
     });
-  }, [data, searchQuery, selectedHonor, selectedRisk, sortAscending, sortBy]);
+  }, [data, searchQuery, selectedRisk, sortAscending, sortBy]);
 
   const kpiCards = useMemo(() => {
     const bands = data?.summary?.performanceBands || {};
@@ -230,58 +211,27 @@ export default function SectionDetails({
     ];
   }, [data]);
 
-  const handleActionClick = (learner) => {
-    if (onViewStudent) onViewStudent(learner);
+  const handleActionClick = (learner, initialTab = "personal") => {
+    if (onViewStudent) onViewStudent(learner, initialTab);
     else setActiveSf9Student({
       studentId: learner.studentId,
       studentSectionId: learner.studentSectionId,
       name: learner.name,
-      schoolYearId: data.context.schoolYear.id,
-      schoolYear: data.context.schoolYear.label,
-      section: data.context.sectionName,
-      gradeLevel: data.context.gradeLevel,
+      schoolYearId: data?.context?.schoolYear?.id,
+      schoolYear: data?.context?.schoolYear?.label,
+      section: data?.context?.sectionName,
+      gradeLevel: data?.context?.gradeLevel,
+      initialTab,
       // SF9 determines its own year-end standing; a selected-term honor is not a final award.
     });
-  };
-
-  const handleHonorToggle = (honorKey) => {
-    setSelectedHonor((current) => current === honorKey ? null : honorKey);
-  };
-
-  const renderHonorBadge = (learner) => {
-    const status = learner.honorStatus;
-    const classNames = {
-      WITH_HONORS: "badge-honor-with",
-      WITH_HIGH_HONORS: "badge-honor-high",
-      WITH_HIGHEST_HONORS: "badge-honor-highest",
-      NONE: "badge-honor-none",
-      UNAVAILABLE: "badge-honor-unavailable",
-      AWAITING_GRADES: "badge-honor-unavailable",
-      NEEDS_REVIEW: "badge-honor-unavailable",
-    };
-    const hasCompletionDetails = learner.gradeState !== "COMPLETE" && Boolean(learner.gradeSummary);
-    const tooltipId = `honor-completion-${learner.studentSectionId}`;
-    return (
-      <span className="section-honor-status"
-        tabIndex={hasCompletionDetails ? 0 : undefined}
-        aria-describedby={hasCompletionDetails ? tooltipId : undefined}>
-        <Badge className={`badge-rect ${classNames[status] || "badge-honor-unavailable"}`}>
-          {HONOR_LABELS[status] || "Awaiting grades"}
-        </Badge>
-        {hasCompletionDetails && (
-          <span className="section-honor-tooltip" id={tooltipId} role="tooltip">
-            {learner.gradeSummary.completeSubjects} / {learner.gradeSummary.requiredSubjects} subjects ready
-          </span>
-        )}
-      </span>
-    );
   };
 
   if (activeSf9Student) {
     return (
       <StudentSF9Page
         student={activeSf9Student}
-        isAdviser={isSectionAdviser}
+        initialTab={activeSf9Student.initialTab || "personal"}
+        isAdviser={isSectionAdviser || activeSf9Student.initialTab === "sf9" || activeSf9Student.initialTab === "sf10"}
         userRole={userRole}
         onBack={() => setActiveSf9Student(null)}
       />
@@ -324,26 +274,6 @@ export default function SectionDetails({
               ))}
             </div>
           </div>}
-
-          {isSectionAdviser && (
-            <div className="section-filter-block">
-              <span className="section-filter-label">Honor standing · {termLabel}</span>
-              <div className="filter-segmented-group" aria-label="Honor standing filter">
-                {HONOR_FILTERS.map(({ key, label }) => (
-                  <button
-                    key={key}
-                    type="button"
-                    disabled={Boolean(pendingTerm)}
-                    onClick={() => handleHonorToggle(key)}
-                    className={`filter-rect-btn ${selectedHonor === key ? "active" : ""}`}
-                    aria-pressed={selectedHonor === key}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       </div>);
 
@@ -382,11 +312,9 @@ export default function SectionDetails({
         </button>
       </div>
 
-      {(isSectionAdviser || isEnglishTeachingClass) && <div className="section-details-status-note" role="status">
-        {isSectionAdviser
-          ? <div><p>Honor standing uses complete, submitted or locked {termLabel} grades with every learning area passed. It is a term standing, not a year-end award.</p></div>
-          : <div aria-hidden="true" />}
-        {isEnglishTeachingClass && <PredictionInfoButton />}
+      {isEnglishTeachingClass && <div className="section-details-status-note" role="status">
+        <div aria-hidden="true" />
+        <PredictionInfoButton />
       </div>}
 
       <SkeletonContent loading={Boolean(pendingTerm)} skeleton={<SkeletonCards count={5} />}>
@@ -466,7 +394,6 @@ export default function SectionDetails({
                   <th className="text-left section-name-column">Student Name</th>
                   {showEnglishRisk && <th className="text-center section-risk-column">At-risk Status<span className="section-status-detail">English{data?.riskContext?.targetTerm ? ` · Term ${data.riskContext.targetTerm.slice(1)}` : ""}</span></th>}
                   <th className="text-center section-grade-column">{termLabel} Grade</th>
-                  {isSectionAdviser && <th className="text-center section-honor-column">Honor Status</th>}
                   <th className="text-center section-action-column">Action</th>
                 </tr>
               </thead>
@@ -488,22 +415,41 @@ export default function SectionDetails({
                     <td className={`text-center ${learner.gradeState === "INCOMPLETE" ? "grade-incomplete" : ""}`}>
                       {Number.isFinite(learner.termGrade) ? learner.termGrade : "Incomplete"}
                     </td>
-                    {isSectionAdviser && <td className="text-center">{renderHonorBadge(learner)}</td>}
-                    <td className="text-center">
-                      <button
-                        type="button"
-                        onClick={() => handleActionClick(learner)}
-                        className="action-eye-btn"
-                        title="View Student Details"
-                        aria-label={`View ${learner.name}`}
-                      >
-                        <Eye size={20} />
-                      </button>
+                    <td className="text-center section-action-cell">
+                      <div className="section-actions-wrapper">
+                        <button
+                          type="button"
+                          onClick={() => handleActionClick(learner, "personal")}
+                          className="action-eye-btn"
+                          title="View Student Profile"
+                          aria-label={`View ${learner.name} profile`}
+                        >
+                          <Eye size={16} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleActionClick(learner, "sf9")}
+                          className="action-sf-btn action-sf9-btn"
+                          title="View Official SF9 Form"
+                          aria-label={`View SF9 for ${learner.name}`}
+                        >
+                          SF9
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleActionClick(learner, "sf10")}
+                          className="action-sf-btn action-sf10-btn"
+                          title="View Official SF10 Form"
+                          aria-label={`View SF10 for ${learner.name}`}
+                        >
+                          SF10
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 )) : (
                   <tr>
-                    <td colSpan={5 + Number(isSectionAdviser) + Number(showEnglishRisk)} className="section-details-no-results">
+                    <td colSpan={4 + Number(showEnglishRisk)} className="section-details-no-results">
                       No learners match the current search and status filters.
                     </td>
                   </tr>

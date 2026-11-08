@@ -470,12 +470,24 @@
   color: var(--badge-honor-none-text);
 }
 
-/* Gold Action Eye Button */
+/* Section Details Row Action Buttons */
+.section-action-cell {
+  padding: 8px 6px;
+  vertical-align: middle;
+}
+
+.section-actions-wrapper {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
 .action-eye-btn {
-  background-color: var(--button-secondary-color, #c9a227);
-  color: var(--white-text-color, #ffffff);
-  width: 100%;
-  max-width: 65px;
+  background-color: #f1f5f9;
+  color: #64748b;
+  width: 32px;
   height: 28px;
   border-radius: 8px;
   border: none;
@@ -483,13 +495,51 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: background-color 0.15s ease;
+  transition: all 0.15s ease;
   padding: 0;
-  margin: 0 auto;
+  flex-shrink: 0;
 }
 
 .action-eye-btn:hover {
-  background-color: var(--button-secondary-darker-color, #886c14);
+  background-color: #e2e8f0;
+  color: #1e293b;
+}
+
+.action-sf-btn {
+  height: 28px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 9px;
+  font-family: var(--font-dm-sans, inherit);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  line-height: 1;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.action-sf9-btn {
+  background-color: #C9A227;
+  color: #ffffff;
+}
+
+.action-sf9-btn:hover {
+  background-color: #886C14;
+}
+
+.action-sf10-btn {
+  background-color: #112d61;
+  color: #ffffff;
+}
+
+.action-sf10-btn:hover {
+  background-color: #1e3e78;
 }
 
 /* Backend-driven Section Details states and responsive hooks */
@@ -534,28 +584,26 @@
   overflow-x: auto;
 }
 
-.section-number-column { width: 5%; }
+.section-number-column { width: 6%; }
 .section-lrn-column { width: 16%; }
-.section-name-column { width: 26%; }
+.section-name-column { width: 44%; }
 .section-risk-column { width: 18%; }
-.section-grade-column { width: 12%; }
-.section-honor-column { width: 16%; }
-.section-action-column { width: 7%; }
+.section-grade-column { width: 20%; }
+.section-action-column { width: 20%; min-width: 140px; }
 
-.section-details-page .section-data-table--advisory .section-lrn-column { width: 20%; }
-.section-details-page .section-data-table--advisory .section-name-column { width: 32%; }
-.section-details-page .section-data-table--advisory .section-grade-column { width: 14%; }
-.section-details-page .section-data-table--advisory .section-honor-column { width: 22%; }
-.section-details-page .section-data-table--english .section-lrn-column { width: 18%; }
-.section-details-page .section-data-table--english .section-name-column { width: 30%; }
+.section-details-page .section-data-table--advisory .section-number-column { width: 6%; }
+.section-details-page .section-data-table--advisory .section-name-column { width: 48%; }
+.section-details-page .section-data-table--advisory .section-grade-column { width: 22%; }
+.section-details-page .section-data-table--advisory .section-action-column { width: 24%; min-width: 140px; }
+.section-details-page .section-data-table--english .section-number-column { width: 6%; }
+.section-details-page .section-data-table--english .section-name-column { width: 34%; }
 .section-details-page .section-data-table--english .section-risk-column { width: 20%; }
-.section-details-page .section-data-table--english .section-grade-column { width: 17%; }
-.section-details-page .section-data-table--english .section-action-column { width: 10%; }
+.section-details-page .section-data-table--english .section-grade-column { width: 18%; }
+.section-details-page .section-data-table--english .section-action-column { width: 22%; min-width: 140px; }
 .section-details-page .section-data-table--teaching .section-number-column { width: 6%; }
-.section-details-page .section-data-table--teaching .section-lrn-column { width: 22%; }
-.section-details-page .section-data-table--teaching .section-name-column { width: 42%; }
-.section-details-page .section-data-table--teaching .section-grade-column { width: 20%; }
-.section-details-page .section-data-table--teaching .section-action-column { width: 10%; }
+.section-details-page .section-data-table--teaching .section-name-column { width: 48%; }
+.section-details-page .section-data-table--teaching .section-grade-column { width: 22%; }
+.section-details-page .section-data-table--teaching .section-action-column { width: 24%; min-width: 140px; }
 
 .badge-risk-unavailable,
 .badge-honor-unavailable {
@@ -565,6 +613,7 @@
 }
 
 .action-eye-btn:focus-visible,
+.action-sf-btn:focus-visible,
 .sort-order-btn:focus-visible,
 .filter-rect-btn:focus-visible,
 .section-details-retry-btn:focus-visible,
