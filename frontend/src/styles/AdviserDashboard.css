@@ -149,6 +149,18 @@
   line-height: 1.4;
 }
 
+.adviser-dashboard__banner-illustration-select {
+  max-width: 100%;
+  margin-top: 8px;
+  padding: 2px 5px;
+  border: 1px solid #b45309;
+  border-radius: 6px;
+  background: #fef3c7;
+  color: #78350f;
+  font: inherit;
+  font-size: 0.75rem;
+}
+
 .adviser-dashboard__banner-art-wrap {
   position: absolute;
   right: 28px;
@@ -1359,7 +1371,8 @@
     flex-direction: column;
   }
 
-  .adviser-dashboard__banner-art-wrap {
+  .adviser-dashboard__banner-art-wrap,
+  .adviser-dashboard__banner-illustration-select {
     display: none;
   }
 

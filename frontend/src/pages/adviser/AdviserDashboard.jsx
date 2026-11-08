@@ -51,6 +51,7 @@ import AdviserCoreValuesDonut from "../../components/adviser/AdviserCoreValuesDo
 
 // Banner Asset
 import bannerArt from "../../assets/adviser-banner-illustration.png";
+import maleBannerArt from "../../assets/adviser-banner-illustration-male.png";
 
 // Scoped Stylesheet
 import "../../styles/AdviserDashboard.css";
@@ -58,6 +59,24 @@ import "../../styles/AdviserDashboard.css";
 export default function AdviserDashboard() {
   const navigate = useNavigate();
   const [currentUser, setCurrentUser] = useState(() => getStoredUser());
+  const userId = currentUser?.user_id || currentUser?.id;
+  const illustrationKey = `adviser-banner-illustration:${userId}`;
+  const [illustration, setIllustration] = useState(() => {
+    try {
+      return userId && localStorage.getItem(illustrationKey) === "male" ? "male" : "female";
+    } catch {
+      return "female";
+    }
+  });
+  const changeIllustration = (event) => {
+    const choice = event.target.value;
+    setIllustration(choice);
+    try {
+      if (userId) localStorage.setItem(illustrationKey, choice);
+    } catch {
+      // The choice still works for this visit when storage is unavailable.
+    }
+  };
 
   // Role flag: strictly determined by presence in SECTION_ADVISER_ASSIGNMENT
   const [isAdviser, setIsAdviser] = useState(() => {
@@ -670,6 +689,17 @@ export default function AdviserDashboard() {
               <p className="adviser-dashboard__greeting-sub">
                 Here's an overview of today's academic activities.
               </p>
+              {isAdviser && (
+                <select
+                  className="adviser-dashboard__banner-illustration-select"
+                  aria-label="Banner illustration"
+                  value={illustration}
+                  onChange={changeIllustration}
+                >
+                  <option value="female">Female illustration</option>
+                  <option value="male">Male illustration</option>
+                </select>
+              )}
             </div>
             
             {/* Decorative stationery doodles (background layer, middle band) */}
@@ -762,7 +792,7 @@ export default function AdviserDashboard() {
 
             <div className="adviser-dashboard__banner-art-wrap">
               <img
-                src={bannerArt}
+                src={isAdviser && illustration === "male" ? maleBannerArt : bannerArt}
                 alt="Adviser illustration"
                 className="adviser-dashboard__banner-img"
               />
