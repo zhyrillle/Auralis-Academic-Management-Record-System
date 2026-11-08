@@ -98,8 +98,18 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
     (typeof activeClass?.id === "string" && activeClass.id.startsWith("class-") ? Number(activeClass.id.replace("class-", "")) : null);
 
   const isSubjectAttendance = useMemo(() => {
-    if (activeClass?.assignmentType === "teaching") return true;
-    if (activeClass?.teacher_assignment_id) return true;
+    if (activeClass?.attendance_scope === "SECTION") return false;
+    if (activeClass?.attendance_scope === "SUBJECT") return true;
+
+    // If the user is the adviser of this section, default to the official SF2 section attendance
+    if (activeClass?.isAdviser === true || activeClass?.assignmentType === "advisory" || activeClass?.advisoryView) {
+      return false;
+    }
+
+    if (activeClass?.assignmentType === "teaching" || activeClass?.teacher_assignment_id) {
+      return true;
+    }
+
     const sub = activeClass?.subject || activeClass?.subject_name || activeClass?.subjectName;
     if (sub && sub !== "All subjects") return true;
     if (activeClass?.subject_offering_id || activeClass?.offering_id) return true;
@@ -383,6 +393,17 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
           byDate[d] = sh.attendance_sheet_id;
         });
         setNoClassDays(noClassDaysFromSheets(sheets));
+
+        // If the current selected date's month has no sheets at all, but there are existing recorded sheets:
+        const currentMonthPrefix = (selectedDate || TODAY).slice(0, 7);
+        const hasCurrentMonthSheets = sheets.some(sh => (sh.attendance_date?.split("T")[0] || sh.attendance_date).startsWith(currentMonthPrefix));
+        if (!hasCurrentMonthSheets && sheets.length > 0) {
+          const sortedDates = sheets.map(sh => sh.attendance_date?.split("T")[0] || sh.attendance_date).filter(Boolean).sort();
+          if (sortedDates.length > 0) {
+            const latestDate = sortedDates[sortedDates.length - 1];
+            setSelectedDate(latestDate);
+          }
+        }
       }
       setSheetsByDate(byDate);
 
