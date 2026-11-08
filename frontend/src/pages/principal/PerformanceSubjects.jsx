@@ -151,7 +151,7 @@ export default function PerformanceSubjects() {
   ];
 
   return (
-    <main className="pa-page pp-page">
+    <main className="pa-page pp-page pp-page--subjects">
       <header className="pa-page-header">
         <div>
           <div className="pa-title-row">
