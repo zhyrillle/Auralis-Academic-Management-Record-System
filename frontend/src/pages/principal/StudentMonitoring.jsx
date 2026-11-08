@@ -301,23 +301,54 @@ function LearnerDetails({ student, context, onClose }) {
         )}
         <section className="sm-detail-sources">
           <div>
-            <h3><CalendarCheck2 size={17} aria-hidden="true" />Attendance</h3>
+            <div className="sm-source-header">
+              <h3><CalendarCheck2 size={17} aria-hidden="true" />Attendance</h3>
+              <details className="sm-info">
+                <summary
+                  className="sm-icon-button"
+                  aria-label="About attendance records"
+                  title="About attendance records"
+                >
+                  <Info size={18} aria-hidden="true" />
+                </summary>
+                <div className="sm-info-content">
+                  <strong>About attendance</strong>
+                  {student.attendance?.reason && <p>{student.attendance.reason}</p>}
+                  <p>
+                    Section attendance through {sourceDate(context.asOf)}. Late marks
+                    remain separate from absences. Attendance does not change the
+                    academic band.
+                  </p>
+                </div>
+              </details>
+            </div>
             {hasAttendanceRecords ? (
-              <>
-                <Attendance value={student.attendance} />
-                {student.attendance.reason && <p>{student.attendance.reason}</p>}
-                <p>
-                  Section attendance through {sourceDate(context.asOf)}. Late marks
-                  remain separate from absences.
-                </p>
-              </>
+              <Attendance value={student.attendance} />
             ) : (
               <p className="sm-source-empty">Records needed</p>
             )}
           </div>
           {context.isEnglish && (
             <div>
-              <h3><BookOpen size={17} aria-hidden="true" />English PHIL-IRI</h3>
+              <div className="sm-source-header">
+                <h3><BookOpen size={17} aria-hidden="true" />English PHIL-IRI</h3>
+                <details className="sm-info">
+                  <summary
+                    className="sm-icon-button"
+                    aria-label="About English PHIL-IRI records"
+                    title="About English PHIL-IRI records"
+                  >
+                    <Info size={18} aria-hidden="true" />
+                  </summary>
+                  <div className="sm-info-content">
+                    <strong>About English PHIL-IRI</strong>
+                    <p>
+                      Available English assessments recorded by the review date.
+                      Attendance and reading do not change the academic band.
+                    </p>
+                  </div>
+                </details>
+              </div>
               {hasReadingRecords ? (
                 <>
                   <Reading value={student.reading} />
@@ -335,10 +366,6 @@ function LearnerDetails({ student, context, onClose }) {
                       {format(student.reading.assessment.comprehension)}%
                     </p>
                   )}
-                  <p>
-                    Available English assessments recorded by the review date.
-                    Attendance and reading do not change the academic band.
-                  </p>
                 </>
               ) : (
                 <p className="sm-source-empty">Records needed</p>
