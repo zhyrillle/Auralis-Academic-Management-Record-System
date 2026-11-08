@@ -15,8 +15,9 @@ function routeHarness(sections) {
     post() {}, put() {}, delete() {},
   };
   const db = {
-    execute: async sql => {
+    execute: async (sql, params) => {
       calls.push(sql);
+      if (sql.includes('FROM SCHOOL_YEAR WHERE school_year_id = ?')) return [[{...schoolYear,school_year_id:params[0]}]];
       if (/\bsec\.user_id\b/i.test(sql)) {
         throw new Error("Unknown column 'sec.user_id' in 'field list'");
       }
@@ -39,21 +40,22 @@ function routeHarness(sections) {
       if (name === 'crypto') return require('node:crypto');
       if (name === '../config/db') return db;
       if (name === '../models/UserManagementOptions') {
-        return { getActiveSchoolYear: async () => schoolYear };
+        return { getActiveSchoolYear: async () => schoolYear, getSchoolYears: async () => [schoolYear] };
       }
+      if (name === '../services/UserClassAssignments') return {};
       if (unusedDependencies.has(name)) return {};
       throw new Error(`Unexpected dependency: ${name}`);
     },
   });
   return {
     calls, gradeLevels, schoolYear,
-    run: async () => {
+    run: async (query = {}) => {
       const response = {
         statusCode: 200,
         status(code) { this.statusCode = code; return this; },
         json(body) { this.body = body; return this; },
       };
-      await routes.get('/management-options')({}, response);
+      await routes.get('/management-options')({query}, response);
       return response;
     },
   };
@@ -73,7 +75,7 @@ test('management options load assigned advisers without SECTION.user_id', async 
   const sql = harness.calls.find(query => query.includes('FROM SECTION sec'));
   assert.match(sql, /FROM SECTION_ADVISER_ASSIGNMENT saa/);
   assert.match(sql, /WHERE saa\.section_id = sec\.section_id/);
-  assert.match(sql, /LOWER\(sy\.status\) IN \('active', 'ongoing'\)/);
+  assert.match(sql, /saa\.school_year_id = \?/);
   assert.match(sql, /ORDER BY saa\.adviser_assignment_id DESC\s+LIMIT 1/);
   assert.match(sql, /\) AS adviser_user_id/);
   assert.doesNotMatch(sql, /\bsec\.user_id\b/i);
@@ -90,4 +92,22 @@ test('management options preserve sections with no assigned adviser', async () =
   assert.match(subjectSql, /FROM TEACHER_ASSIGNMENT ta/);
   assert.match(subjectSql, /WHERE ta\.subject_offering_id = so\.subject_offering_id/);
   assert.match(subjectSql, /\) AS teacher_user_id/);
+  assert.match(subjectSql, /WHERE so\.school_year_id = \?/);
+  assert.deepEqual(response.body.schoolYears, [harness.schoolYear]);
+});
+
+test('management options can select an upcoming year explicitly', async () => {
+  const harness = routeHarness([]);
+  const response = await harness.run({school_year_id:'9'});
+  assert.equal(response.statusCode,200);
+  assert.equal(response.body.schoolYear.school_year_id,9);
+});
+
+test('invalid school-year selections fail before assignment-option queries', async () => {
+  for (const year of ['-1','abc','1 OR 1=1']) {
+    const harness=routeHarness([]);
+    const response=await harness.run({school_year_id:year});
+    assert.equal(response.statusCode,400);
+    assert.equal(harness.calls.length,0);
+  }
 });

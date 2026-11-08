@@ -1,4 +1,4 @@
-import { cachedApiFetch as fetch, clearNavigationCache } from "../../services/navigationCache";
+import { cachedApiFetch as fetch } from "../../services/navigationCache";
 import useCachedQuery from "../../services/useCachedQuery";
 import { cacheKey } from "../../services/navigationCache";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -6,6 +6,7 @@ import DropdownSelect from "../../components/common/DropdownSelect";
 import OverlayPanel from "../../components/common/OverlayPanel";
 import { SkeletonBlock, SkeletonTableRows } from '../../components/common/PageSkeleton.jsx';
 import UserFormModal from "./manage-users/UserFormModal";
+import { assignmentFieldsForYear, adviserIsInYear } from "../../utils/userAssignments";
 import "../../styles/ManageUsers.css";
 import { isSessionCancellation } from "../../offline/syncManager.js";
 import { API_BASE_URL as API_URL } from "../../services/apiConfig";
@@ -179,8 +180,9 @@ async function loadUsers() {
   return Array.isArray(data) ? data : [];
 }
 
-async function loadManagementOptions() {
-  const response = await fetch(`${API_URL}/users/management-options`, { cache: 'no-store' });
+async function loadManagementOptions(schoolYearId = '') {
+  const suffix = schoolYearId ? '?school_year_id=' + encodeURIComponent(schoolYearId) : '';
+  const response = await fetch(`${API_URL}/users/management-options${suffix}`, { cache: 'no-store' });
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || "Failed to load form options.");
   return data;
@@ -194,10 +196,13 @@ export default function UserManagement() {
   const users = userQuery.data || EMPTY_LIST;
   const loadingUsers = userQuery.loading;
   const userError = userQuery.error;
-  const gradeLevels = optionsQuery.data?.gradeLevels || [];
-  const sections = optionsQuery.data?.sections || [];
-  const departments = optionsQuery.data?.departments || [];
-  const subjectOfferings = optionsQuery.data?.subjectOfferings || [];
+  const [formOptions, setFormOptions] = useState(null);
+  const assignmentOptions = formOptions || optionsQuery.data;
+  const schoolYears = assignmentOptions?.schoolYears || [];
+  const gradeLevels = assignmentOptions?.gradeLevels || [];
+  const sections = assignmentOptions?.sections || [];
+  const departments = assignmentOptions?.departments || [];
+  const subjectOfferings = assignmentOptions?.subjectOfferings || [];
 
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("All Roles");
@@ -228,6 +233,7 @@ export default function UserManagement() {
     password: "",
     role: "",
     department_id: "",
+    school_year_id: String(optionsQuery.data?.schoolYear?.school_year_id || ""),
     adviser_grade_level_id: "",
     adviser_section_id: "",
     teaching_assignments: [],
@@ -237,7 +243,6 @@ export default function UserManagement() {
   const [formData, setFormData] = useState(emptyForm);
 
   const fetchUsers = userQuery.refresh;
-  const fetchFormOptions = optionsQuery.refresh;
 
   useEffect(() => () => { formRequestId.current += 1; profileRequestId.current += 1; }, []);
 
@@ -249,7 +254,8 @@ export default function UserManagement() {
       isFetching = true;
       try {
         await userQuery.refresh();
-      } catch (_) {
+      } catch {
+        // The page keeps its current rows while the query reports refresh errors.
       } finally {
         isFetching = false;
       }
@@ -317,15 +323,19 @@ export default function UserManagement() {
     setProfileOpen(false);
   };
 
-  const handleAddUser = () => {
-    formRequestId.current += 1;
-    setLoadingDetails(false);
-    setDetailsError("");
-    setEditTarget(null);
-    closeProfile();
-    setFormMode("add");
-    setFormError("");
-    setFormData({ ...emptyForm });
+  const handleAddUser = async () => {
+    const requestId = ++formRequestId.current;
+    setLoadingDetails(true);
+    setDetailsError('');setEditTarget(null);closeProfile();setFormMode('add');setFormError('');
+    setFormData({...emptyForm});setFormOptions(null);
+    try {
+      const options = await loadManagementOptions();
+      if (requestId !== formRequestId.current) return;
+      setFormOptions(options);
+      setFormData(prev => ({...prev,...assignmentFieldsForYear(null,options)}));
+    } catch(error) {
+      if (requestId === formRequestId.current) setDetailsError(error.message || 'The user form could not be loaded.');
+    } finally { if (requestId === formRequestId.current) setLoadingDetails(false); }
   };
 
   const handleViewUser = async (user) => {
@@ -344,7 +354,7 @@ export default function UserManagement() {
     }
   };
 
-  const handleEditUser = async (user) => {
+  const handleEditUser = async (user, requestedYearId = null) => {
     const requestId = ++formRequestId.current;
     setEditTarget(user);
     setLoadingDetails(true);
@@ -355,58 +365,22 @@ export default function UserManagement() {
       closeProfile();
 
       // Fetch user details from API
-      const response = await fetch(`${API_URL}/users/${user.user_id}`, { cache: 'no-store' });
+      const suffix = requestedYearId ? '?school_year_id=' + encodeURIComponent(requestedYearId) : '';
+      const response = await fetch(`${API_URL}/users/${user.user_id}${suffix}`, { cache: 'no-store' });
       if (!response.ok) throw new Error("User information could not be loaded.");
       const fullUser = await response.json();
       if (requestId !== formRequestId.current) return;
-      const options = await fetchFormOptions();
+      const options = await loadManagementOptions(requestedYearId || '');
       if (requestId !== formRequestId.current) return;
       if (!options) {
         setDetailsError("Load the assignment options before editing this user.");
         return;
       }
-      const availableOfferings = options.subjectOfferings || [];
       const availableDepartments = options.departments || [];
-      const availableSections = options.sections || [];
 
       const currentDisplayRole = getDisplayRole(fullUser);
 
-      let formattedAssignments = [];
-      if (Array.isArray(fullUser.teaching_assignments)) {
-        formattedAssignments = fullUser.teaching_assignments.map((ta) => {
-          let gId = ta.grade_level_id ? String(ta.grade_level_id) : "";
-          let sId = ta.section_id ? String(ta.section_id) : "";
-
-          if ((!gId || !sId) && ta.subject_offering_id) {
-            const matchedOffering = availableOfferings.find(
-              (so) => String(so.subject_offering_id) === String(ta.subject_offering_id)
-            );
-            if (matchedOffering) {
-              sId = sId || String(matchedOffering.section_id);
-            }
-          }
-          if (!gId && sId) {
-            const matchedSec = availableSections.find((sec) => String(sec.section_id) === String(sId));
-            if (matchedSec) {
-              gId = String(matchedSec.grade_level_id);
-            }
-          }
-
-          return {
-            grade_level_id: gId,
-            section_id: sId,
-            subject_offering_id: ta.subject_offering_id ? String(ta.subject_offering_id) : "",
-          };
-        });
-      }
-
-      let resolvedGradeLevelId = fullUser.adviser_grade_level_id ? String(fullUser.adviser_grade_level_id) : "";
-      if (!resolvedGradeLevelId && fullUser.adviser_section_id) {
-        const matchedSec = availableSections.find(
-          (s) => String(s.section_id) === String(fullUser.adviser_section_id)
-        );
-        if (matchedSec) resolvedGradeLevelId = String(matchedSec.grade_level_id);
-      }
+      const assignmentFields = assignmentFieldsForYear(fullUser, options);
 
       let resolvedDeptId = fullUser.department_id ? String(fullUser.department_id) : "";
       if (!resolvedDeptId && fullUser.department_name && availableDepartments.length > 0) {
@@ -414,6 +388,7 @@ export default function UserManagement() {
         if (matched) resolvedDeptId = String(matched.department_id);
       }
 
+      setFormOptions(options);
       setFormData({
         user_id: fullUser.user_id,
         first_name: fullUser.first_name || "",
@@ -422,9 +397,7 @@ export default function UserManagement() {
         password: "",
         role: currentDisplayRole,
         department_id: resolvedDeptId,
-        adviser_grade_level_id: resolvedGradeLevelId,
-        adviser_section_id: fullUser.adviser_section_id ? String(fullUser.adviser_section_id) : "",
-        teaching_assignments: formattedAssignments,
+        ...assignmentFields,
         status: fullUser.account_status || "active",
       });
     } catch (error) {
@@ -434,6 +407,27 @@ export default function UserManagement() {
     } finally {
       if (requestId === formRequestId.current) setLoadingDetails(false);
     }
+  };
+
+  const handleSchoolYearChange = async (value) => {
+    const requestId = ++formRequestId.current;
+    setFormError('');setDetailsError('');
+    setFormData(prev => ({...prev,school_year_id:value,adviser_grade_level_id:'',adviser_section_id:'',teaching_assignments:[]}));
+    if (!value) { setLoadingDetails(false);return; }
+    setLoadingDetails(true);
+    try {
+      const [options, fullUser] = await Promise.all([
+        loadManagementOptions(value),
+        formData.user_id ? fetch(`${API_URL}/users/${formData.user_id}?school_year_id=${encodeURIComponent(value)}`,{cache:'no-store'})
+          .then(async response => { const data=await response.json();if(!response.ok)throw new Error(data.error || 'Assignments could not be loaded.');return data; }) : null,
+      ]);
+      if (requestId !== formRequestId.current) return;
+      setFormOptions(options);
+      setFormData(prev => ({...prev,...assignmentFieldsForYear(fullUser,options),
+        role:fullUser?.adviser_section_id && ['Subject Teacher','Adviser'].includes(prev.role) ? 'Adviser' : prev.role}));
+    } catch(error) {
+      if (requestId === formRequestId.current) setDetailsError(error.message || 'Assignments for this school year could not be loaded.');
+    } finally { if (requestId === formRequestId.current) setLoadingDetails(false); }
   };
 
   const handleCloseForm = () => {
@@ -466,6 +460,7 @@ export default function UserManagement() {
 
   const handleFormChange = (e) => {
     const { name, value } = e.target;
+    if (name === "school_year_id") { handleSchoolYearChange(value); return; }
     setFormData((prev) => {
       const next = { ...prev, [name]: value };
       if (name === "role" && value === "Principal") {
@@ -497,6 +492,7 @@ export default function UserManagement() {
         ) || users.some(
           (u) =>
             String(u.user_id) !== String(prev.user_id) &&
+            adviserIsInYear(u, prev.school_year_id) &&
             String(u.adviser_section_id || "") === String(prev.adviser_section_id)
         );
         if (isSectionTaken) {
@@ -564,6 +560,10 @@ export default function UserManagement() {
       return;
     }
 
+    if (['Subject Teacher','Adviser'].includes(formData.role) && !schoolYears.some(year => String(year.school_year_id) === String(formData.school_year_id))) {
+      setFormError('Please select a school year for the class assignments.');return;
+    }
+
     if (formData.role === "Adviser" && !formData.adviser_section_id) {
       setFormError("Please select an advisory section for the adviser.");
       return;
@@ -580,7 +580,8 @@ export default function UserManagement() {
       (assign) =>
         !String(assign.grade_level_id || "").trim() ||
         !String(assign.section_id || "").trim() ||
-        !String(assign.subject_offering_id || "").trim()
+        !String(assign.subject_offering_id || "").trim() ||
+        !subjectOfferings.some(offering => String(offering.subject_offering_id) === String(assign.subject_offering_id) && String(offering.school_year_id) === String(formData.school_year_id))
     );
 
     if (hasIncompleteRow) {
@@ -623,6 +624,7 @@ export default function UserManagement() {
       email: formData.email.trim().toLowerCase(),
       role: dbRole,
       account_status: formData.status,
+      school_year_id: formData.school_year_id ? Number(formData.school_year_id) : undefined,
       department_id: formData.role === "Principal" ? null : (formData.department_id ? Number(formData.department_id) : null),
       adviser_section_id: formData.role === "Adviser" ? formData.adviser_section_id || null : null,
       teaching_assignments: nonRowEmptyAssignments,
@@ -947,12 +949,13 @@ export default function UserManagement() {
             sections={sections}
             departments={departments}
             subjectOfferings={subjectOfferings}
+            schoolYears={schoolYears}
             users={users}
             loading={loadingOptions || loadingDetails}
             loadError={detailsError || optionsError}
             error={formError}
             saving={savingUser}
-            onRetry={() => editTarget ? handleEditUser(editTarget) : fetchFormOptions()}
+            onRetry={() => editTarget ? handleEditUser(editTarget, formData.school_year_id) : handleAddUser()}
             onChange={handleFormChange}
             onAddAssignment={handleAddTeachingAssignment}
             onRemoveAssignment={handleRemoveTeachingAssignment}
