@@ -1452,6 +1452,63 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
     }
   };
 
+  // 2D Spreadsheet cell keyboard navigation (DepEd Class Record grid)
+  const handleCellKeyDown = useCallback((e, rowIndex, colIndex) => {
+    const totalCols = writtenWorkColumns.length + performanceTaskColumns.length + 3;
+    const totalRows = students.length;
+
+    const navigateToCell = (targetRow, targetCol) => {
+      if (targetRow < 0 || targetRow >= totalRows) return;
+      if (targetCol < 0 || targetCol >= totalCols) return;
+
+      const targetInput = document.querySelector(
+        `input.cr-score-input[data-row="${targetRow}"][data-col="${targetCol}"]`
+      );
+      if (targetInput) {
+        targetInput.focus();
+        targetInput.select();
+        targetInput.scrollIntoView({ block: "nearest", inline: "nearest" });
+      }
+    };
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      navigateToCell(rowIndex + 1, colIndex);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      navigateToCell(rowIndex - 1, colIndex);
+    } else if (e.key === "ArrowLeft") {
+      if (colIndex > 0) {
+        e.preventDefault();
+        navigateToCell(rowIndex, colIndex - 1);
+      }
+    } else if (e.key === "ArrowRight") {
+      if (colIndex < totalCols - 1) {
+        e.preventDefault();
+        navigateToCell(rowIndex, colIndex + 1);
+      }
+    } else if (e.key === "Tab" || e.key === "Enter") {
+      e.preventDefault();
+      if (!e.shiftKey) {
+        // Move down to next student in same column
+        if (rowIndex + 1 < totalRows) {
+          navigateToCell(rowIndex + 1, colIndex);
+        } else if (colIndex + 1 < totalCols) {
+          // Bottom of column -> wrap to top of next column
+          navigateToCell(0, colIndex + 1);
+        }
+      } else {
+        // Shift + Tab / Shift + Enter -> move up to previous student
+        if (rowIndex > 0) {
+          navigateToCell(rowIndex - 1, colIndex);
+        } else if (colIndex > 0) {
+          // Top of column -> wrap to bottom of previous column
+          navigateToCell(totalRows - 1, colIndex - 1);
+        }
+      }
+    }
+  }, [writtenWorkColumns.length, performanceTaskColumns.length, students.length]);
+
   // ============================================================
   // ADD / EDIT COLUMN MODAL
   // ============================================================
@@ -2410,6 +2467,7 @@ const formatToISODate = (val) => {
                               key={student.id}
                               student={student}
                               number={index + 1}
+                              rowIndex={index}
                               grades={grades}
                               writtenWorkColumns={writtenWorkColumns}
                               performanceTaskColumns={performanceTaskColumns}
@@ -2421,6 +2479,7 @@ const formatToISODate = (val) => {
                               handleGradeChange={handleGradeChange}
                               handleExamScoreChange={handleExamScoreChange}
                               handleScoreBlur={handleScoreBlur}
+                              handleCellKeyDown={handleCellKeyDown}
                               transmutationConfig={transmutationConfig}
                             />
                           ))}
@@ -2439,6 +2498,7 @@ const formatToISODate = (val) => {
                               key={student.id}
                               student={student}
                               number={maleStudents.length + index + 1}
+                              rowIndex={maleStudents.length + index}
                               grades={grades}
                               writtenWorkColumns={writtenWorkColumns}
                               performanceTaskColumns={performanceTaskColumns}
@@ -2450,6 +2510,7 @@ const formatToISODate = (val) => {
                               handleGradeChange={handleGradeChange}
                               handleExamScoreChange={handleExamScoreChange}
                               handleScoreBlur={handleScoreBlur}
+                              handleCellKeyDown={handleCellKeyDown}
                               transmutationConfig={transmutationConfig}
                             />
                           ))}
@@ -2578,6 +2639,7 @@ const formatToISODate = (val) => {
 function StudentRow({
   student,
   number,
+  rowIndex,
   grades,
   writtenWorkColumns,
   performanceTaskColumns,
@@ -2589,6 +2651,7 @@ function StudentRow({
   handleGradeChange,
   handleExamScoreChange,
   handleScoreBlur,
+  handleCellKeyDown,
   transmutationConfig,
 }) {
   const studentGrades = grades[student.id] || EMPTY_SCORES;
@@ -2629,12 +2692,13 @@ function StudentRow({
       </td>
 
       {/* WRITTEN WORKS */}
-      {writtenWorkColumns.map((column) => {
+      {writtenWorkColumns.map((column, colIdx) => {
         const val = studentWW[column.id];
         const numVal = Number(val);
         const cellKey = `${student.id}_${column.id}`;
         const isExceeded = errorTooltip?.cellKey === cellKey;
         const isScoreFailing = !isExceeded && val !== undefined && val !== "" && !isNaN(numVal) && column.max_score > 0 && numVal / column.max_score < 0.6;
+        const currentCol = colIdx;
 
         return (
           <td key={column.id} className={`cr-score-input-cell ${isScoreFailing ? "failing-cell" : ""}`}>
@@ -2646,6 +2710,9 @@ function StudentRow({
                 value={val !== undefined ? val : ""}
                 disabled={isLocked}
                 readOnly={isLocked}
+                data-row={rowIndex}
+                data-col={currentCol}
+                data-student-id={student.id}
                 className={`cr-score-input ${isExceeded ? "exceeded-score-input" : ""} ${isScoreFailing ? "failing-input" : ""} ${isLocked ? "locked-input" : ""}`}
                 onChange={(e) =>
                   handleGradeChange(
@@ -2658,6 +2725,8 @@ function StudentRow({
                   )
                 }
                 onBlur={handleScoreBlur}
+                onFocus={(e) => e.target.select()}
+                onKeyDown={(e) => handleCellKeyDown && handleCellKeyDown(e, rowIndex, currentCol)}
                 title={isLocked ? "This term is locked and read-only" : `Max: ${column.max_score}`}
               />
               {isExceeded && (
@@ -2677,12 +2746,13 @@ function StudentRow({
       <td className="cr-calc-cell">{rowCalculation.writtenWorks.ws}</td>
 
       {/* PERFORMANCE TASKS */}
-      {performanceTaskColumns.map((column) => {
+      {performanceTaskColumns.map((column, colIdx) => {
         const val = studentPT[column.id];
         const numVal = Number(val);
         const cellKey = `${student.id}_${column.id}`;
         const isExceeded = errorTooltip?.cellKey === cellKey;
         const isScoreFailing = !isExceeded && val !== undefined && val !== "" && !isNaN(numVal) && column.max_score > 0 && numVal / column.max_score < 0.6;
+        const currentCol = writtenWorkColumns.length + colIdx;
 
         return (
           <td key={column.id} className={`cr-score-input-cell ${isScoreFailing ? "failing-cell" : ""}`}>
@@ -2694,6 +2764,9 @@ function StudentRow({
                 value={val !== undefined ? val : ""}
                 disabled={isLocked}
                 readOnly={isLocked}
+                data-row={rowIndex}
+                data-col={currentCol}
+                data-student-id={student.id}
                 className={`cr-score-input ${isExceeded ? "exceeded-score-input" : ""} ${isScoreFailing ? "failing-input" : ""} ${isLocked ? "locked-input" : ""}`}
                 onChange={(e) =>
                   handleGradeChange(
@@ -2706,6 +2779,8 @@ function StudentRow({
                   )
                 }
                 onBlur={handleScoreBlur}
+                onFocus={(e) => e.target.select()}
+                onKeyDown={(e) => handleCellKeyDown && handleCellKeyDown(e, rowIndex, currentCol)}
                 title={isLocked ? "This term is locked and read-only" : `Max: ${column.max_score}`}
               />
               {isExceeded && (
@@ -2732,6 +2807,7 @@ function StudentRow({
         const cellKey = `${student.id}_st1`;
         const isExceeded = errorTooltip?.cellKey === cellKey;
         const isFailing = !isExceeded && val !== undefined && val !== "" && !isNaN(numVal) && examConfig.st1HPS > 0 && numVal / examConfig.st1HPS < 0.6;
+        const currentCol = writtenWorkColumns.length + performanceTaskColumns.length + 0;
         return (
           <td className={`cr-score-input-cell ${isFailing ? "failing-cell" : ""}`}>
             <div className="grade-input-wrapper">
@@ -2742,9 +2818,14 @@ function StudentRow({
                 value={val !== undefined && val !== null ? val : ""}
                 disabled={isLocked}
                 readOnly={isLocked}
+                data-row={rowIndex}
+                data-col={currentCol}
+                data-student-id={student.id}
                 className={`cr-score-input ${isExceeded ? "exceeded-score-input" : ""} ${isFailing ? "failing-input" : ""} ${isLocked ? "locked-input" : ""}`}
                 onChange={(e) => handleExamScoreChange(student.id, "st1", e.target.value, examConfig.st1HPS, examConfig.st1Id)}
                 onBlur={handleScoreBlur}
+                onFocus={(e) => e.target.select()}
+                onKeyDown={(e) => handleCellKeyDown && handleCellKeyDown(e, rowIndex, currentCol)}
                 title={isLocked ? "Locked" : `Max: ${examConfig.st1HPS}`}
               />
               {isExceeded && <div className="score-exceeded-badge">{errorTooltip.message}</div>}
@@ -2760,6 +2841,7 @@ function StudentRow({
         const cellKey = `${student.id}_st2`;
         const isExceeded = errorTooltip?.cellKey === cellKey;
         const isFailing = !isExceeded && val !== undefined && val !== "" && !isNaN(numVal) && examConfig.st2HPS > 0 && numVal / examConfig.st2HPS < 0.6;
+        const currentCol = writtenWorkColumns.length + performanceTaskColumns.length + 1;
         return (
           <td className={`cr-score-input-cell ${isFailing ? "failing-cell" : ""}`}>
             <div className="grade-input-wrapper">
@@ -2770,9 +2852,14 @@ function StudentRow({
                 value={val !== undefined && val !== null ? val : ""}
                 disabled={isLocked}
                 readOnly={isLocked}
+                data-row={rowIndex}
+                data-col={currentCol}
+                data-student-id={student.id}
                 className={`cr-score-input ${isExceeded ? "exceeded-score-input" : ""} ${isFailing ? "failing-input" : ""} ${isLocked ? "locked-input" : ""}`}
                 onChange={(e) => handleExamScoreChange(student.id, "st2", e.target.value, examConfig.st2HPS, examConfig.st2Id)}
                 onBlur={handleScoreBlur}
+                onFocus={(e) => e.target.select()}
+                onKeyDown={(e) => handleCellKeyDown && handleCellKeyDown(e, rowIndex, currentCol)}
                 title={isLocked ? "Locked" : `Max: ${examConfig.st2HPS}`}
               />
               {isExceeded && <div className="score-exceeded-badge">{errorTooltip.message}</div>}
@@ -2788,6 +2875,7 @@ function StudentRow({
         const cellKey = `${student.id}_te`;
         const isExceeded = errorTooltip?.cellKey === cellKey;
         const isFailing = !isExceeded && val !== undefined && val !== "" && !isNaN(numVal) && examConfig.teHPS > 0 && numVal / examConfig.teHPS < 0.6;
+        const currentCol = writtenWorkColumns.length + performanceTaskColumns.length + 2;
         return (
           <td className={`cr-score-input-cell ${isFailing ? "failing-cell" : ""}`}>
             <div className="grade-input-wrapper">
@@ -2798,9 +2886,14 @@ function StudentRow({
                 value={val !== undefined && val !== null ? val : ""}
                 disabled={isLocked}
                 readOnly={isLocked}
+                data-row={rowIndex}
+                data-col={currentCol}
+                data-student-id={student.id}
                 className={`cr-score-input ${isExceeded ? "exceeded-score-input" : ""} ${isFailing ? "failing-input" : ""} ${isLocked ? "locked-input" : ""}`}
                 onChange={(e) => handleExamScoreChange(student.id, "te", e.target.value, examConfig.teHPS, examConfig.teId)}
                 onBlur={handleScoreBlur}
+                onFocus={(e) => e.target.select()}
+                onKeyDown={(e) => handleCellKeyDown && handleCellKeyDown(e, rowIndex, currentCol)}
                 title={isLocked ? "Locked" : `Max: ${examConfig.teHPS}`}
               />
               {isExceeded && <div className="score-exceeded-badge">{errorTooltip.message}</div>}
