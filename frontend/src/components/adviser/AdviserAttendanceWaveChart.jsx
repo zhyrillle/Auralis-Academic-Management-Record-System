@@ -1,3 +1,4 @@
+import { SkeletonBlock } from '../common/PageSkeleton.jsx';
 import React, { useState } from "react";
 
 export default function AdviserAttendanceWaveChart({
@@ -61,14 +62,14 @@ export default function AdviserAttendanceWaveChart({
   return (
     <div className="adviser-dashboard__chart-card">
       <div className="adviser-dashboard__chart-header">
-        <h3 className="adviser-dashboard__chart-title">
+        <h3 className="adviser-dashboard__chart-title">{loading ? <SkeletonBlock width={200} height={18} /> : <>
           Attendance Trend Analysis
-        </h3>
+        </>}</h3>
       </div>
 
       <div className="adviser-dashboard__attendance-chart-body">
         {loading ? (
-          <div className="adviser-dashboard__skeleton-chart" />
+          <SkeletonBlock className="adviser-dashboard__skeleton-chart" />
         ) : (
           <svg
             viewBox="0 0 640 360"

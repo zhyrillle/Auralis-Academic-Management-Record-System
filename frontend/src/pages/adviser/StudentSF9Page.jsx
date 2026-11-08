@@ -1,3 +1,4 @@
+import { SkeletonBlock } from '../../components/common/PageSkeleton.jsx';
 import { useState, useMemo, useEffect } from "react";
 import { Eye, Download, FileText, Sparkles, Printer, FileSpreadsheet, CheckCircle2, Loader2 } from "lucide-react";
 import "../../styles/studentSF9.css";
@@ -32,18 +33,18 @@ function StudentReportSkeleton({ student, onBack }) {
     </div>
     <div className="student-header-grid sf9-report-skeleton" aria-hidden="true">
       {Array.from({ length: 5 }, (_, index) => <div className="sf9-skeleton-card" key={index}>
-        <span className="sf9-skeleton-block sf9-skeleton-heading" /><span className="sf9-skeleton-block" />
+        <SkeletonBlock className="sf9-skeleton-block sf9-skeleton-heading" /><SkeletonBlock className="sf9-skeleton-block" />
       </div>)}
     </div>
     <div className="sf9-skeleton-tabs" aria-hidden="true">
-      {Array.from({ length: 3 }, (_, index) => <span className="sf9-skeleton-block" key={index} />)}
+      {Array.from({ length: 3 }, (_, index) => <SkeletonBlock className="sf9-skeleton-block" key={index} />)}
     </div>
     <div className="sf9-skeleton-sheet" aria-hidden="true">
-      <span className="sf9-skeleton-block sf9-skeleton-title" />
-      <span className="sf9-skeleton-block sf9-skeleton-subtitle" />
+      <SkeletonBlock className="sf9-skeleton-block sf9-skeleton-title" />
+      <SkeletonBlock className="sf9-skeleton-block sf9-skeleton-subtitle" />
       <div className="sf9-skeleton-table">
         {Array.from({ length: 7 }, (_, row) => <div className="sf9-skeleton-row" key={row}>
-          {Array.from({ length: 4 }, (_, column) => <span className="sf9-skeleton-block" key={column} />)}
+          {Array.from({ length: 4 }, (_, column) => <SkeletonBlock className="sf9-skeleton-block" key={column} />)}
         </div>)}
       </div>
     </div>

@@ -4,7 +4,7 @@ import { cacheKey } from "../../services/navigationCache";
 import { useEffect, useMemo, useRef, useState } from "react";
 import DropdownSelect from "../../components/common/DropdownSelect";
 import OverlayPanel from "../../components/common/OverlayPanel";
-import ManageUsersSkeleton from "./manage-users/ManageUsersSkeleton";
+import { SkeletonBlock, SkeletonTableRows } from '../../components/common/PageSkeleton.jsx';
 import UserFormModal from "./manage-users/UserFormModal";
 import "../../styles/ManageUsers.css";
 import { isSessionCancellation } from "../../offline/syncManager.js";
@@ -675,7 +675,49 @@ export default function UserManagement() {
         {userError && <div className="users-state-message users-state-message--error" role="alert">{userError}</div>}
 
         {loadingUsers && users.length === 0 ? (
-          <ManageUsersSkeleton />
+          <div className="manage-users-skeleton" role="status" aria-label="Loading user management data">
+            <section className="users-panel">
+              <div className="users-panel-header manage-users-skeleton__panel-header">
+                <div>
+                  <SkeletonBlock className="manage-users-skeleton__block manage-users-skeleton__panel-title" />
+                  <SkeletonBlock className="manage-users-skeleton__block manage-users-skeleton__panel-copy" />
+                </div>
+                <SkeletonBlock className="manage-users-skeleton__block manage-users-skeleton__count" />
+              </div>
+
+              <div className="filter-container">
+                <label className="search-box">
+                  <Icon type="search" size={18} />
+                  <span className="visually-hidden">Search users</span>
+                  <input type="text" placeholder="Search by name or email" value={search} onChange={(e) => setSearch(e.target.value)} />
+                </label>
+                <DropdownSelect
+                  label="Filter users by role"
+                  value={roleFilter}
+                  options={ROLE_FILTER_OPTIONS}
+                  onChange={setRoleFilter}
+                  disabled={false}
+                  className="manage-users-filter-select"
+                />
+                <DropdownSelect
+                  label="Filter users by status"
+                  value={statusFilter}
+                  options={STATUS_FILTER_OPTIONS}
+                  onChange={setStatusFilter}
+                  disabled={false}
+                  className="manage-users-filter-select"
+                />
+              </div>
+
+
+              <div className="manage-users-skeleton__table">
+                <SkeletonBlock className="manage-users-skeleton__block manage-users-skeleton__table-header" />
+                <table className="app-skeleton-table"><tbody><SkeletonTableRows rows={7} columns={6} /></tbody></table>
+              </div>
+            </section>
+
+            <span className="visually-hidden">Loading users.</span>
+          </div>
         ) : (
           <>
             <section className="users-panel" aria-busy={loadingUsers}>

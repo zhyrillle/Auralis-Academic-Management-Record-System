@@ -12,11 +12,14 @@ import SearchBar from "../../components/common/SearchBar.jsx";
 import Toast from "../../components/common/Toast.jsx";
 import GradeSubmissionStatusPanel from "../../components/common/GradeSubmissionStatus.jsx";
 import MasterSheetSkeleton from "./MasterSheetSkeleton.jsx";
+import { SkeletonValue } from '../../components/common/PageSkeleton.jsx';
 import {
   downloadMasterSheet,
   getMasterSheet,
   getMasterSheetOptions,
   normalizeMasterSheetError,
+  peekMasterSheetOptions,
+  peekMasterSheet,
 } from "../../services/masterSheetService.js";
 import { getStoredUser } from "../../utils/auth.js";
 import { SESSION_CHANGED_EVENT } from "../../offline/syncManager.js";
@@ -42,19 +45,25 @@ const triggerBrowserDownload = (blob, filename) => {
 export default function MasterSheet() {
   const currentUser = useMemo(() => getStoredUser(), []);
   const userId = getUserId(currentUser);
-  const [assignments, setAssignments] = useState([]);
-  const [selectedAssignmentId, setSelectedAssignmentId] = useState("");
-  const [masterSheet, setMasterSheet] = useState(null);
+  const initial = useMemo(() => {
+    const assignments = peekMasterSheetOptions(userId)?.assignments;
+    const preferred = assignments?.find(assignment => assignment.isCurrent) || assignments?.[0];
+    const assignmentId = preferred ? String(preferred.adviserAssignmentId) : '';
+    return { assignments, assignmentId, sheet: assignmentId ? peekMasterSheet(assignmentId, userId) : undefined };
+  }, [userId]);
+  const [assignments, setAssignments] = useState(initial.assignments || []);
+  const [selectedAssignmentId, setSelectedAssignmentId] = useState(initial.assignmentId);
+  const [masterSheet, setMasterSheet] = useState(initial.sheet || null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [isLoadingOptions, setIsLoadingOptions] = useState(true);
-  const [isLoadingSheet, setIsLoadingSheet] = useState(false);
+  const [isLoadingOptions, setIsLoadingOptions] = useState(!initial.assignments);
+  const [isLoadingSheet, setIsLoadingSheet] = useState(Boolean(initial.assignmentId && !initial.sheet));
   const [isDownloading, setIsDownloading] = useState(false);
   const [requestError, setRequestError] = useState("");
   const [toast, setToast] = useState(emptyToast);
-  const masterSheetRef = useRef(null);
+  const masterSheetRef = useRef(initial.sheet || null);
   const lastSheetReadAtRef = useRef(0);
   const readGenerationRef = useRef(0);
-  const lastLoadedAssignmentIdRef = useRef("");
+  const lastLoadedAssignmentIdRef = useRef(initial.sheet ? initial.assignmentId : "");
   const skipNextAssignmentLoadRef = useRef(false);
   const [isTableScrolling, setIsTableScrolling] = useState(false);
   const scrollIdleTimerRef = useRef(null);
@@ -152,7 +161,7 @@ export default function MasterSheet() {
         const preferred =
           nextAssignments.find((assignment) => assignment.isCurrent) ||
           nextAssignments[0];
-        if (preferred) setIsLoadingSheet(true);
+        if (preferred && !peekMasterSheet(preferred.adviserAssignmentId, userId)) setIsLoadingSheet(true);
         setSelectedAssignmentId(
           preferred ? String(preferred.adviserAssignmentId) : "",
         );
@@ -340,12 +349,14 @@ export default function MasterSheet() {
       (assignment) => String(assignment.schoolYearId) === String(schoolYearId),
     );
     if (matchingAssignment) {
+      setMasterSheet(null);
       setIsLoadingSheet(true);
       setSelectedAssignmentId(String(matchingAssignment.adviserAssignmentId));
     }
   };
 
   const handleAssignmentChange = (assignmentId) => {
+    setMasterSheet(null);
     setIsLoadingSheet(true);
     setSelectedAssignmentId(String(assignmentId));
   };
@@ -448,14 +459,6 @@ export default function MasterSheet() {
   const isInitialLoading = isLoadingOptions || (isLoadingSheet && !masterSheet);
   const isRefreshingSheet = isLoadingSheet && Boolean(masterSheet);
 
-  if (isInitialLoading) {
-    return (
-      <div className="ms-container" aria-busy="true">
-        <MasterSheetSkeleton />
-      </div>
-    );
-  }
-
   return (
     <div className="ms-container" aria-busy={isRefreshingSheet}>
       <div className="ms-page-header">
@@ -468,7 +471,7 @@ export default function MasterSheet() {
           </p>
         </div>
 
-        {assignments.length > 0 && (
+        {(
           <div
             className="ms-selectors"
             aria-label="Master Sheet assignment selection"
@@ -479,19 +482,21 @@ export default function MasterSheet() {
                 label="School year"
                 value={selectedSchoolYearId}
                 options={schoolYearOptions}
+                placeholder="School year"
                 onChange={handleSchoolYearChange}
-                disabled={isLoadingSheet}
+                disabled={isLoadingSheet || isLoadingOptions || !assignments.length}
               />
             </div>
-            {assignmentsForSelectedYear.length > 1 && (
+            {(isLoadingOptions || assignmentsForSelectedYear.length > 1) && (
               <div className="ms-selector-field">
                 <span>Advisory class</span>
                 <DropdownSelect
                   label="Advisory class"
                   value={selectedAssignmentId}
                   options={sectionOptions}
+                  placeholder="Advisory class"
                   onChange={handleAssignmentChange}
-                  disabled={isLoadingSheet}
+                  disabled={isLoadingSheet || isLoadingOptions || !assignments.length}
                 />
               </div>
             )}
@@ -518,7 +523,24 @@ export default function MasterSheet() {
         </div>
       )}
 
-      {!requestError && assignments.length === 0 && (
+      {isInitialLoading && !requestError && <>
+        <div className="ms-controls-row ms-controls-row--loading">
+          <div className="ms-summary">
+            <span className="ms-summary__metric"><SkeletonValue label="Loading learner count" width={72} /></span>
+            <span className="ms-summary__metric"><SkeletonValue label="Loading grade completion" width={145} /></span>
+          </div>
+          <div className="ms-control-actions">
+            <GradeSubmissionStatusPanel adviserAssignmentId={selectedAssignmentId} disabled />
+            <fieldset className="ms-search-fieldset">
+              <SearchBar query={searchQuery} setQuery={setSearchQuery} placeholder="Search student name or LRN..." />
+            </fieldset>
+            <button type="button" className="ms-download-btn" disabled><Download size={17} />Download PDF</button>
+          </div>
+        </div>
+        <MasterSheetSkeleton />
+      </>}
+
+      {!isInitialLoading && !requestError && assignments.length === 0 && (
         <div className="ms-feedback-card">
           <EmptyState
             icon={FileSpreadsheet}
@@ -542,18 +564,9 @@ export default function MasterSheet() {
 
       {!requestError && masterSheet?.students.length > 0 && (
         <div
-          className={`ms-sheet-content ${isRefreshingSheet ? "ms-sheet-content--busy" : ""}`}
+          className="ms-sheet-content"
         >
-          {isRefreshingSheet && (
-            <div
-              className="ms-refresh-overlay"
-              role="status"
-              aria-live="polite"
-            >
-              <LoaderCircle size={20} className="ms-spin" aria-hidden="true" />
-              <span>Loading selected Master Sheet…</span>
-            </div>
-          )}
+
           <div className="ms-controls-row">
             <div className="ms-summary">
               <span className="ms-summary__metric">

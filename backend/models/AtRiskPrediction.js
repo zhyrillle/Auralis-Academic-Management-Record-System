@@ -19,9 +19,11 @@ function missingRecordSources({ profile, features }) {
 
 class AtRiskPrediction {
   static async getOptions() {
-    const [years] = await db.execute(`SELECT school_year_id, starts_on, ends_on, status
-      FROM SCHOOL_YEAR ORDER BY CASE WHEN LOWER(status) IN ('ongoing', 'active') THEN 0 ELSE 1 END, starts_on DESC`);
-    const [grades] = await db.execute('SELECT grade_level_name FROM GRADE_LEVEL ORDER BY grade_level_id');
+    const [[years], [grades]] = await Promise.all([
+      db.execute(`SELECT school_year_id, starts_on, ends_on, status
+        FROM SCHOOL_YEAR ORDER BY CASE WHEN LOWER(status) IN ('ongoing', 'active') THEN 0 ELSE 1 END, starts_on DESC`),
+      db.execute('SELECT grade_level_name FROM GRADE_LEVEL ORDER BY grade_level_id'),
+    ]);
     return {
       schoolYears: years.map(row => ({ value: schoolYearRange(row), label: `SY ${schoolYearRange(row)?.replace('-', '–')}` })).filter(row => row.value),
       gradeLevels: [{ value: 'all', label: 'All Grade Levels' }, ...grades.map(row => ({

@@ -1,5 +1,6 @@
+import PageSkeleton from '../../components/common/PageSkeleton.jsx';
 import { useState, useMemo, useEffect } from "react";
-import { ArrowDownNarrowWide, Loader2 } from "lucide-react";
+import { ArrowDownNarrowWide } from "lucide-react";
 import { useLocation } from "react-router-dom";
 
 // Components
@@ -32,17 +33,23 @@ export default function AdviserSections({ userRole: propUserRole }) {
   const [classes, setClasses] = useState([]);
   const [studentsBySection, setStudentsBySection] = useState({});
   const [loading, setLoading] = useState(true);
+  const [classesError, setClassesError] = useState('');
+  const [classesReadVersion, setClassesReadVersion] = useState(0);
   const [recordReadVersion, setRecordReadVersion] = useState(0);
   const [recordReadError, setRecordReadError] = useState("");
+  const [gradingLoading, setGradingLoading] = useState(false);
 
   // Fetch sections from backend
   useEffect(() => {
+    let cancelled = false;
     async function fetchAdviserClasses() {
       setLoading(true);
+      setClassesError('');
       try {
         const user = getStoredUser();
         const userId = user?.user_id || user?.id || 1;
         const fetched = await getAdviserSections(userId);
+        if (cancelled) return;
 
         if (fetched && Array.isArray(fetched) && fetched.length > 0) {
           setClasses(fetched);
@@ -50,15 +57,18 @@ export default function AdviserSections({ userRole: propUserRole }) {
           setClasses([]);
         }
       } catch (err) {
+        if (cancelled) return;
         console.error("Error fetching adviser sections:", err);
+        setClassesError(err.message || 'Assigned classes could not be loaded.');
         setClasses([]);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }
 
     fetchAdviserClasses();
-  }, []);
+    return () => { cancelled = true; };
+  }, [classesReadVersion]);
 
   // Navigation View State
   const [currentView, setCurrentView] = useState(
@@ -67,22 +77,24 @@ export default function AdviserSections({ userRole: propUserRole }) {
   const [activeSelectedClass, setactiveSelectedClass] = useState(
     location.state?.activeSelectedClass || null
   );
+  const classKey = activeSelectedClass?.id;
+  const sectionId = activeSelectedClass?.section_id || activeSelectedClass?.id;
+  const offeringId = activeSelectedClass?.subject_offering_id || activeSelectedClass?.offering_id || null;
+  const subjectId = activeSelectedClass?.subject_id || null;
+  const subjectName = activeSelectedClass?.subject || activeSelectedClass?.subject_name || null;
+  const schoolYearId = activeSelectedClass?.school_year_id || activeSelectedClass?.schoolYearId;
 
   // Fetch students when a section is opened
   useEffect(() => {
     let cancelled = false;
     async function fetchSectionStudents() {
-      if (!activeSelectedClass) return;
-      const sectionId = activeSelectedClass.section_id || activeSelectedClass.id;
-      if (!sectionId) return;
-      const classKey = activeSelectedClass.id;
-      const offeringId = activeSelectedClass.subject_offering_id || activeSelectedClass.offering_id || null;
-      const subjectId = activeSelectedClass.subject_id || null;
-      const subjectName = activeSelectedClass.subject || activeSelectedClass.subject_name || null;
+      // Section Details and Class Record load their own records. Only the grading
+      // sheet needs this read; depending on the whole class object repeated it.
+      if (currentView !== "grading-sheet" || !sectionId) return;
       setRecordReadError("");
+      setGradingLoading(true);
 
       try {
-        const schoolYearId = activeSelectedClass.school_year_id || activeSelectedClass.schoolYearId;
         const summary = offeringId && schoolYearId ? await getTeacherGradingSummary({
           subject_offering_id: offeringId, section_id: sectionId, school_year_id: schoolYearId,
         }, { force: recordReadVersion > 0 }) : null;
@@ -127,12 +139,14 @@ export default function AdviserSections({ userRole: propUserRole }) {
         console.error("Error fetching students for section:", err);
         setRecordReadError(err.message || "Unable to load this grading sheet.");
         setStudentsBySection(prev => ({ ...prev, [classKey]: [] }));
+      } finally {
+        if (!cancelled) setGradingLoading(false);
       }
     }
 
     fetchSectionStudents();
     return () => { cancelled = true; };
-  }, [activeSelectedClass, recordReadVersion]);
+  }, [currentView, classKey, sectionId, offeringId, subjectId, subjectName, schoolYearId, recordReadVersion]);
 
   // Controls Filters and Sorting
   const [filterSubject, setFilterSubject] = useState("All");
@@ -183,6 +197,10 @@ export default function AdviserSections({ userRole: propUserRole }) {
     }
 
     result.sort((a, b) => {
+      // Pin whole-class advisory cards ahead of subject cards, even when a
+      // subject card also carries the adviser's star label.
+      const advisoryPriority = Number(b.assignmentType === "advisory") - Number(a.assignmentType === "advisory");
+      if (advisoryPriority) return advisoryPriority;
       let valA = a[sortBy] ? a[sortBy].toLowerCase() : "";
       let valB = b[sortBy] ? b[sortBy].toLowerCase() : "";
       if (sortBy === "gradeLevel") {
@@ -373,13 +391,10 @@ export default function AdviserSections({ userRole: propUserRole }) {
             </div>
           </div>
 
+          {classesError && <div role="alert">{classesError}<button type="button" onClick={() => setClassesReadVersion(value => value + 1)}>Retry</button></div>}
           {loading ? (
-            <div style={{ textAlign: "center", padding: "60px 20px", color: "#64748b" }}>
-              <style>{`@keyframes spinLoader { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
-              <Loader2 size={32} style={{ animation: "spinLoader 1s linear infinite", marginBottom: "12px", color: "#C9A227" }} />
-              <p style={{ fontWeight: 500, fontSize: "15px" }}>Loading assigned classes...</p>
-            </div>
-          ) : filteredAndSortedClasses.length === 0 ? (
+            <PageSkeleton label="Loading assigned classes" layout="cards" rows={6} />
+          ) : classesError ? null : filteredAndSortedClasses.length === 0 ? (
             <div style={{ textAlign: "center", padding: "40px", backgroundColor: "#ffffff", borderRadius: "16px", color: "#64748b", border: "1px solid #eef2f6" }}>
               <p style={{ fontWeight: 600, fontSize: "16px", marginBottom: "4px" }}>No assigned classes found</p>
               <p style={{ fontSize: "14px" }}>Try adjusting your search filters above.</p>
@@ -389,6 +404,7 @@ export default function AdviserSections({ userRole: propUserRole }) {
               {filteredAndSortedClasses.map((cls) => (
                 <ClassCard
                   key={cls.id} cls={cls}
+                  showSecondaryActions={cls.assignmentType !== "advisory"}
                   secondaryActionsDisabled={!(Number.isInteger(Number(cls.subject_offering_id || cls.offering_id))
                     && Number(cls.subject_offering_id || cls.offering_id) > 0)}
                   secondaryActionsDisabledReason="No teaching subject is assigned to you for this class. Use View to see the advisory section."
@@ -417,7 +433,7 @@ export default function AdviserSections({ userRole: propUserRole }) {
         />
       ) : currentView === "attendance-sheet" ? (
         <AttendanceSheet
-          key={`att-${activeSelectedClass?.section_id || activeSelectedClass?.id || "default"}`}
+          key={`att-${activeSelectedClass?.teacher_assignment_id || activeSelectedClass?.adviser_assignment_id || activeSelectedClass?.assignmentId || activeSelectedClass?.section_id || activeSelectedClass?.id || "default"}`}
           activeClass={activeSelectedClass}
           onBack={() => setCurrentView("class-record")}
         />
@@ -446,6 +462,7 @@ export default function AdviserSections({ userRole: propUserRole }) {
             calculateFinalGrade={calculateFinalGrade}
             onSubmit={handleGradeSubmit}
             recordError={recordReadError}
+            loading={!recordReadError && (gradingLoading || !Object.hasOwn(studentsBySection, activeSelectedClass.id))}
             onRetry={() => setRecordReadVersion(version => version + 1)}
           />
         )

@@ -45,6 +45,7 @@
 
 .cr-record-loading,
 .cr-record-load-error {
+  box-sizing: border-box;
   min-height: 360px;
   padding: 24px;
   background: #fff;
@@ -68,7 +69,7 @@
   margin-bottom: 28px;
 }
 
-.cr-record-skeleton-seal {
+.cr-record-skeleton-seal.app-skeleton-block {
   width: 64px;
   height: 64px;
   flex: 0 0 auto;
@@ -86,6 +87,12 @@
   color: #102c4d;
 }
 
+.cr-record-skeleton-title.app-skeleton-block {
+  width: 75%;
+  height: 24px;
+  margin: 0 auto 20px;
+}
+
 .cr-record-skeleton-meta {
   display: flex;
   justify-content: center;
@@ -99,7 +106,7 @@
   min-width: 0;
 }
 
-.cr-record-skeleton-count {
+.cr-record-skeleton-count.app-skeleton-block {
   width: 130px;
   height: 16px;
   margin-bottom: 14px;
@@ -141,16 +148,6 @@
   height: 12px;
 }
 
-.cr-record-skeleton-meta span,
-.cr-record-skeleton-seal,
-.cr-record-skeleton-count,
-.cr-record-skeleton-row i {
-  display: block;
-  border-radius: 5px;
-  background: #eef2f7;
-  animation: cr-record-pulse 1.4s ease-in-out infinite alternate;
-}
-
 .cr-record-skeleton-seal { border-radius: 50%; }
 .cr-record-skeleton-table-head span:last-child,
 .cr-record-skeleton-row > span:last-child { border-right: 0; }
@@ -160,21 +157,10 @@
 .cr-record-load-error p,
 .cr-record-error-message { color: #b42318; }
 
-@keyframes cr-record-pulse {
-  to { opacity: 0.5; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .cr-record-skeleton-meta span,
-  .cr-record-skeleton-seal,
-  .cr-record-skeleton-count,
-  .cr-record-skeleton-row i { animation: none; }
-}
-
 @media (max-width: 640px) {
   .cr-record-loading { padding: 18px 12px; }
   .cr-record-skeleton-header { gap: 12px; }
-  .cr-record-skeleton-seal { width: 32px; height: 32px; }
+  .cr-record-skeleton-seal.app-skeleton-block { width: 32px; height: 32px; }
   .cr-record-skeleton-heading { flex: 1; width: auto; }
   .cr-record-skeleton-heading h2 { font-size: 16px; }
   .cr-record-skeleton-meta { gap: 6px; }

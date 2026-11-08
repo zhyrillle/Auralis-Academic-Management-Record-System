@@ -1,3 +1,4 @@
+import { SkeletonTableRows, SkeletonValue, SkeletonTable } from '../../components/common/PageSkeleton.jsx';
 import { useEffect, useMemo, useState, useCallback } from "react";
 import {
   FileSpreadsheet,
@@ -737,7 +738,7 @@ disabled={isDownloading || isLoadingRecord || Boolean(recordError) || !activeOff
 
         {/* TOTAL STUDENTS COUNTER */}
         <div className="student-count">
-          Total Students: {filteredStudents.length}
+          Total Students: {isLoadingRecord ? <SkeletonValue label="Loading student count" /> : recordError ? "Unavailable" : filteredStudents.length}
         </div>
 
         {/* ==================================================
@@ -761,7 +762,7 @@ disabled={isDownloading || isLoadingRecord || Boolean(recordError) || !activeOff
 
           return (
             <div className="class-record-table-wrapper">
-              <table className="class-record-table">
+              {isLoadingRecord ? <SkeletonTable columns={7} /> : (<table className="class-record-table">
                 {/* Fixed column widths to match adviser template */}
                 <colgroup>
                   <col style={{ width: "40px", minWidth: "40px", maxWidth: "40px" }} />
@@ -1032,7 +1033,7 @@ disabled={isDownloading || isLoadingRecord || Boolean(recordError) || !activeOff
                     TABLE BODY (Male and Female Student Rows)
                 ================================================= */}
                 <tbody>
-                  {filteredStudents.length === 0 ? (
+                  {isLoadingRecord ? <SkeletonTableRows columns={totalTableCols} /> : filteredStudents.length === 0 ? (
                     <tr>
                       <td
                         colSpan={totalTableCols}
@@ -1480,7 +1481,7 @@ disabled={isDownloading || isLoadingRecord || Boolean(recordError) || !activeOff
                     </>
                   )}
                 </tbody>
-              </table>
+              </table>)}
             </div>
           );
         })()}

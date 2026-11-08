@@ -1,3 +1,4 @@
+import { SkeletonBlock, SkeletonTable } from '../common/PageSkeleton.jsx';
 /**
  * @typedef {Object} PerformanceMatrixItem
  * @property {string} section
@@ -22,17 +23,17 @@ export default function PerformanceMatrixTable({ data, loading }) {
   if (loading) {
     return (
       <div className="dept-card">
-        <h2 className="dept-card-title">Performance Analysis Matrix</h2>
-        <div className="dept-skeleton-table" />
+        <h2 className="dept-card-title">{loading ? <SkeletonBlock width="45%" height={18} /> : <>Performance Analysis Matrix</>}</h2>
+        <SkeletonBlock className="dept-skeleton-table"  />
       </div>
     );
   }
 
   return (
     <div className="dept-card">
-      <h2 className="dept-card-title">Performance Analysis Matrix</h2>
+      <h2 className="dept-card-title">{loading ? <SkeletonBlock width="45%" height={18} /> : <>Performance Analysis Matrix</>}</h2>
       <div className="dept-table-wrap">
-        <table className="dept-table">
+        {loading ? <SkeletonTable columns={7} /> : (<table className="dept-table">
           <thead>
             <tr>
               <th>Section</th>
@@ -64,7 +65,7 @@ export default function PerformanceMatrixTable({ data, loading }) {
               );
             })}
           </tbody>
-        </table>
+        </table>)}
       </div>
     </div>
   );

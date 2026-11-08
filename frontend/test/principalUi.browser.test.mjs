@@ -63,7 +63,7 @@ try {
   assert.equal(await page.locator('.bar-chart__axis-label').count(), 4);
   await screenshot('grades-laptop');
   await page.getByRole('tab', { name: 'Term 1', exact: true }).click();
-  await page.waitForFunction(() => !document.querySelector('.pa-content.is-busy'));
+  await page.waitForFunction(() => !document.querySelector('.pa-content .app-skeleton-region'));
   assert(reads.some(read => read.path.endsWith('/grade-levels') && read.params.term === 'term-1'));
   await go('/principal/performance-level/sections');
   await page.getByRole('heading', { name: 'Sections by Performance Band', exact: true }).waitFor();
@@ -83,7 +83,7 @@ try {
   await screenshot('subjects-laptop');
   await page.getByRole('button', { name: 'Grade level: All grade levels' }).click();
   await page.getByRole('option', { name: 'Grade 7', exact: true }).click();
-  await page.waitForFunction(() => !document.querySelector('.pa-content.is-busy'));
+  await page.waitForFunction(() => !document.querySelector('.pa-content .app-skeleton-region'));
   assert(reads.some(read => read.path.endsWith('/subjects') && read.params.gradeLevel === '7'));
   await go('/principal/performance-level/teachers');
   await page.getByRole('heading', { name: 'Class Average by Teacher', exact: true }).waitFor();

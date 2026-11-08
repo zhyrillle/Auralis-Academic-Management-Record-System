@@ -1,10 +1,12 @@
+import { SkeletonBlock } from '../common/PageSkeleton.jsx';
 import React from "react";
 
 export default function AdviserEntryProgressGauge({ progress = 0, loading = false }) {
   if (loading) {
     return (
       <div className="adviser-dashboard__entry-gauge-card adviser-dashboard__entry-gauge-card--skeleton">
-        <div className="adviser-dashboard__skeleton-circle" />
+        <SkeletonBlock className="adviser-dashboard__skeleton-circle" />
+        <SkeletonBlock className="adviser-dashboard__gauge-skeleton-label" width={100} />
       </div>
     );
   }

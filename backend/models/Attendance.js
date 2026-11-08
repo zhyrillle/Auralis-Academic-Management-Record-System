@@ -35,10 +35,52 @@ class Attendance {
     return rows;
   }
 
-  // Get all attendance records for a section
-  static async findBySectionId(sectionId, schoolYearId = null) {
-    const [rows] = await db.execute(
-      `SELECT
+  // Get all attendance records for a section, scoped to adviser or subject teacher
+  static async findBySectionId(sectionId, schoolYearId = null, options = {}) {
+    const { attendance_scope, adviser_assignment_id, teacher_assignment_id, user_id } = options;
+    const isSubject = attendance_scope === 'SUBJECT' || Boolean(teacher_assignment_id);
+
+    if (isSubject) {
+      const params = [sectionId];
+      let query = `
+        SELECT
+          a.attendance_id,
+          a.attendance_sheet_id,
+          ash.attendance_date,
+          a.student_section_id,
+          a.status,
+          a.remarks,
+          st.student_id,
+          st.first_name,
+          st.last_name,
+          st.sex
+        FROM ATTENDANCE a
+        INNER JOIN ATTENDANCE_SHEET ash ON ash.attendance_sheet_id = a.attendance_sheet_id
+        INNER JOIN TEACHER_ASSIGNMENT ta ON ta.teacher_assignment_id = ash.teacher_assignment_id
+        INNER JOIN SUBJECT_OFFERING so ON so.subject_offering_id = ta.subject_offering_id
+        INNER JOIN STUDENT_SECTION ss ON ss.student_section_id = a.student_section_id
+        INNER JOIN STUDENT st ON st.student_id = ss.student_id
+        WHERE so.section_id = ? AND ash.attendance_scope = 'SUBJECT'
+      `;
+      if (teacher_assignment_id) {
+        query += ` AND ash.teacher_assignment_id = ?`;
+        params.push(teacher_assignment_id);
+      } else if (user_id) {
+        query += ` AND ta.user_id = ?`;
+        params.push(user_id);
+      }
+      if (schoolYearId) {
+        query += ` AND so.school_year_id = ?`;
+        params.push(schoolYearId);
+      }
+      query += ` ORDER BY ash.attendance_date ASC, st.last_name ASC, st.first_name ASC`;
+      const [rows] = await db.execute(query, params);
+      return rows;
+    }
+
+    const params = [sectionId];
+    let query = `
+      SELECT
         a.attendance_id,
         a.attendance_sheet_id,
         ash.attendance_date,
@@ -51,13 +93,24 @@ class Attendance {
         st.sex
       FROM ATTENDANCE a
       INNER JOIN ATTENDANCE_SHEET ash ON ash.attendance_sheet_id = a.attendance_sheet_id
+      INNER JOIN SECTION_ADVISER_ASSIGNMENT saa ON saa.adviser_assignment_id = ash.adviser_assignment_id
       INNER JOIN STUDENT_SECTION ss ON ss.student_section_id = a.student_section_id
       INNER JOIN STUDENT st ON st.student_id = ss.student_id
-      WHERE ss.section_id = ?
-        ${schoolYearId ? 'AND ss.school_year_id = ?' : ''}
-      ORDER BY ash.attendance_date ASC, st.last_name ASC, st.first_name ASC`,
-      schoolYearId ? [sectionId, schoolYearId] : [sectionId]
-    );
+      WHERE saa.section_id = ? AND ash.attendance_scope = 'SECTION'
+    `;
+    if (adviser_assignment_id) {
+      query += ` AND ash.adviser_assignment_id = ?`;
+      params.push(adviser_assignment_id);
+    } else if (user_id) {
+      query += ` AND saa.user_id = ?`;
+      params.push(user_id);
+    }
+    if (schoolYearId) {
+      query += ` AND saa.school_year_id = ?`;
+      params.push(schoolYearId);
+    }
+    query += ` ORDER BY ash.attendance_date ASC, st.last_name ASC, st.first_name ASC`;
+    const [rows] = await db.execute(query, params);
     return rows;
   }
 
@@ -75,13 +128,16 @@ class Attendance {
       return exactMatch[0].student_section_id;
     }
 
-    // Check if rawId is a student_id linked to this sheet's section
+    // Check if rawId is a student_id linked to this sheet's section (supports both adviser and teacher sheets)
     const [bySheetSec] = await db.execute(
       `SELECT ss.student_section_id
        FROM STUDENT_SECTION ss
-       LEFT JOIN SECTION_ADVISER_ASSIGNMENT saa ON saa.section_id = ss.section_id
-       LEFT JOIN ATTENDANCE_SHEET ash ON ash.adviser_assignment_id = saa.adviser_assignment_id
-       WHERE ash.attendance_sheet_id = ? AND ss.student_id = ?
+       JOIN ATTENDANCE_SHEET ash ON ash.attendance_sheet_id = ?
+       LEFT JOIN SECTION_ADVISER_ASSIGNMENT saa ON saa.adviser_assignment_id = ash.adviser_assignment_id
+       LEFT JOIN TEACHER_ASSIGNMENT ta ON ta.teacher_assignment_id = ash.teacher_assignment_id
+       LEFT JOIN SUBJECT_OFFERING so ON so.subject_offering_id = ta.subject_offering_id
+       WHERE (ss.section_id = saa.section_id OR ss.section_id = so.section_id)
+         AND ss.student_id = ?
        LIMIT 1`,
       [sheetId, numId]
     );

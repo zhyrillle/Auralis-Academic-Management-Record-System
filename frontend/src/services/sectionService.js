@@ -17,7 +17,7 @@ const formatGradeLevel = (name) => {
 
 /**
  * Fetch assigned classes/sections (the teacher's Advisory Class + assigned subject teaching sections) for a specific user from backend.
- * Merges advisory and taught classes into a single card per section, displaying the subject name.
+ * Keeps advisory standing separate from every assigned teaching subject.
  * @param {string|number} userId
  */
 const checkIsSpecialized = (val) => {
@@ -32,17 +32,17 @@ export const getAdviserSections = async (userId) => {
 
 
   try {
-    const response = await fetch(`${API_BASE_URL}/sections/adviser/${userId}?classContextVersion=2`);
+    const response = await fetch(`${API_BASE_URL}/sections/adviser/${userId}?classContextVersion=3`);
     if (response.ok) {
       const data = await response.json();
-      if (Array.isArray(data) && data.length > 0) {
+      if (Array.isArray(data)) {
         const mapped = data.map((item) => {
           const isSpecialized = checkIsSpecialized(item.is_specialized) || (item.classType && String(item.classType).startsWith("Special Program"));
           const isAdviser = item.isAdviser ?? (item.classType === "Advisory Class");
           const progCode = item.program_code || item.programCode || null;
           const validProgCode = progCode && String(progCode).toUpperCase() !== "EBEC" ? String(progCode).toUpperCase() : null;
 
-          let formattedClassType = item.classType;
+          let formattedClassType;
           if (isAdviser && isSpecialized) {
             formattedClassType = validProgCode ? `Advisory Class - ${validProgCode}` : "Advisory Class";
           } else if (isSpecialized) {
@@ -69,11 +69,12 @@ export const getAdviserSections = async (userId) => {
   }
 
   const combinedClasses = [];
-  const addedSectionIds = new Set();
+  const addedAssignments = new Set();
 
   // 2. Fallback: Fetch user details from /api/users
   try {
     const resUsers = await fetch(`${API_BASE_URL}/users`);
+    if (!resUsers.ok) throw new Error('Assigned classes could not be loaded. Please retry.');
     if (resUsers.ok) {
       const usersList = await resUsers.json();
       const targetUser = Array.isArray(usersList)
@@ -83,26 +84,26 @@ export const getAdviserSections = async (userId) => {
       if (targetUser) {
         const assignments = Array.isArray(targetUser.teaching_assignments) ? targetUser.teaching_assignments : [];
 
-        // A. Add Advisory Class if assigned (Single Card, using taught subject name)
-        if (targetUser.adviser_section_id || targetUser.section || targetUser.adviser_section_name) {
-          const secId = targetUser.adviser_section_id || 1;
-          addedSectionIds.add(Number(secId));
-
-          // Find if teacher teaches a specific subject in this advisory section
-          const advisoryTa = assignments.find((ta) => Number(ta.section_id) === Number(secId));
-          const subjectName = advisoryTa?.subject_name || "All subjects";
-          const isSpecialized = checkIsSpecialized(targetUser.is_specialized) || checkIsSpecialized(advisoryTa?.is_specialized);
+        // Only use actual assignment identities; a section ID is not a teaching assignment.
+        const advisoryId = targetUser.adviser_assignment_id || targetUser.adviser_assignment?.adviser_assignment_id;
+        const advisorySectionId = targetUser.adviser_section_id || targetUser.adviser_assignment?.section_id;
+        if (advisoryId && advisorySectionId) {
+          const secId = advisorySectionId;
+          const isSpecialized = checkIsSpecialized(targetUser.is_specialized);
 
           combinedClasses.push({
-            id: `sec-${secId}`,
+            id: `advisory-${advisoryId}`,
+            assignmentType: "advisory",
+            assignmentId: Number(advisoryId),
+            adviser_assignment_id: Number(advisoryId),
             section_id: secId,
-            subject_id: advisoryTa?.subject_id || null,
-            subject_offering_id: advisoryTa?.subject_offering_id || null,
+            subject_id: null,
+            subject_offering_id: null,
             sectionName: targetUser.adviser_section_name || targetUser.section,
             gradeLevel: formatGradeLevel(targetUser.adviser_grade_level_name || targetUser.gradeLevel),
             grade_level_name: targetUser.adviser_grade_level_name || targetUser.gradeLevel,
-            subject: subjectName,
-            classType: isSpecialized ? "Special Program" : "Advisory Class",
+            subject: "All subjects",
+            classType: "Advisory Class",
             is_specialized: isSpecialized ? 1 : 0,
             isAdviser: true,
             deadline: "2026-07-31",
@@ -110,14 +111,19 @@ export const getAdviserSections = async (userId) => {
           });
         }
 
-        // B. Add Assigned Regular Teaching Classes (deduplicated by section_id)
+        // Keep every subject's teaching card, including the advisory section.
         assignments.forEach((ta) => {
-          const secIdNum = Number(ta.section_id);
-          if (!addedSectionIds.has(secIdNum)) {
-            addedSectionIds.add(secIdNum);
+          const assignmentId = ta.teacher_assignment_id;
+          if (assignmentId && !addedAssignments.has(assignmentId)) {
+            addedAssignments.add(assignmentId);
             const isSpecialized = checkIsSpecialized(ta.is_specialized);
+            const isAdviser = Number(ta.section_id) === Number(advisorySectionId)
+              && ta.school_year_id != null && ta.school_year_id === targetUser.adviser_assignment?.school_year_id;
             combinedClasses.push({
-              id: `sec-${ta.section_id}`,
+              id: `teaching-${assignmentId}`,
+              assignmentType: "teaching",
+              assignmentId: Number(assignmentId),
+              teacher_assignment_id: Number(assignmentId),
               section_id: ta.section_id,
               subject_id: ta.subject_id,
               subject_offering_id: ta.subject_offering_id,
@@ -125,9 +131,9 @@ export const getAdviserSections = async (userId) => {
               gradeLevel: formatGradeLevel(ta.grade_level_name),
               grade_level_name: ta.grade_level_name,
               subject: ta.subject_name || "Mathematics",
-              classType: isSpecialized ? "Special Program" : "Regular Class",
+              classType: isAdviser ? "Advisory Class" : isSpecialized ? "Special Program" : "Regular Class",
               is_specialized: isSpecialized ? 1 : 0,
-              isAdviser: false,
+              isAdviser,
               deadline: "2026-08-15",
               submitted: false,
             });
@@ -137,6 +143,7 @@ export const getAdviserSections = async (userId) => {
     }
   } catch (e) {
     console.warn("Fallback fetch /api/users failed:", e);
+    throw new Error('Assigned classes could not be loaded. Please retry.', { cause: e });
   }
 
   return combinedClasses;
@@ -176,7 +183,7 @@ export const getAllSections = async () => {
   try {
     const response = await fetch(`${API_BASE_URL}/sections`);
     return parseResponse(response);
-  } catch (e) {
+  } catch {
     return [];
   }
 };

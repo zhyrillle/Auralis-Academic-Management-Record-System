@@ -7,7 +7,7 @@ export default function PerformanceFilters({ terms, term, onTermChange, schoolYe
     <FilterToolbar className="pa-navigation pp-filter-bar" label="Performance filters" end={
       <div className="pa-filter-controls pp-filter-controls">
         {children}
-        <DropdownSelect label="School year" value={schoolYear} options={schoolYears} onChange={onSchoolYearChange} disabled={disabled} />
+        <DropdownSelect label="School year" value={schoolYear} options={schoolYears} placeholder="School year" onChange={onSchoolYearChange} disabled={disabled || !schoolYears.length} />
       </div>
     }>
       <AnalyticsTermTabs options={terms} value={term} onChange={onTermChange} disabled={disabled} />

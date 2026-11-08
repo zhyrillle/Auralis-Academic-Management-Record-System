@@ -1,3 +1,4 @@
+import PageSkeleton, { SkeletonBlock, SkeletonCards, SkeletonContent, SkeletonChart, SkeletonList } from '../../components/common/PageSkeleton.jsx';
 import { usePrincipalQuery } from "../../services/principalData";
 import { useState } from "react";
 import {
@@ -13,7 +14,6 @@ import {
   getLowestPerformers,
   principalPerformanceTerms,
 } from "../../services/principalPerformanceService";
-import AnalyticsSkeleton from "./analytics/AnalyticsSkeleton";
 import AnalyticsStatCard from "./analytics/AnalyticsStatCard";
 import BarChart from "../../components/charts/BarChart";
 import PerformanceFilters from "./performance-level/PerformanceFilters";
@@ -35,10 +35,31 @@ export default function PerformanceLowest() {
   const changeFilter = (setter) => (value) => setter(value);
   const retry = refresh;
 
-  if (loading && !data) return <AnalyticsSkeleton table />;
+  const pageHeader = (<header className="pa-page-header">
+        <div>
+          <div className="pa-title-row">
+            <h1>Lowest Performers</h1>
+          </div>
+          <p>
+            Identify grade levels, sections, and subjects requiring immediate
+            academic support.
+          </p>
+        </div>
+      </header>);
+
+  const loadingSkeleton = (
+    <PageSkeleton className="pa-skeleton pa-skeleton--content" label="Loading performance analytics">
+      <SkeletonCards count={4} />
+      <div className="app-skeleton-stack">
+        <div className="pp-lowest-grid"><section className="app-skeleton-panel pp-lowest-grid__grade-levels"><SkeletonBlock width="42%" height={18} /><SkeletonList rows={4} /></section><section className="app-skeleton-panel pp-lowest-grid__subjects"><SkeletonBlock width="42%" height={18} /><SkeletonList rows={4} /></section><section className="app-skeleton-panel pp-lowest-grid__sections"><SkeletonBlock width="42%" height={18} /><SkeletonList rows={7} /></section></div><div className="app-skeleton-charts"><SkeletonChart /><SkeletonChart /></div>
+      </div>
+    </PageSkeleton>
+  );
+
+  if (loading && !data) return <main className="pa-page pp-page">{pageHeader}<PerformanceFilters terms={principalPerformanceTerms} term={term} onTermChange={changeFilter(setTerm)} schoolYears={schoolYears} schoolYear={schoolYear} onSchoolYearChange={changeFilter(setSchoolYear)}><DropdownSelect label="Grade level" value={gradeLevel} options={[{ value: "all", label: "All grade levels" }]} onChange={changeFilter(setGradeLevel)} /></PerformanceFilters>{loadingSkeleton}</main>;
   if (!data)
     return (
-      <main className="pa-page pp-page">
+      <main className="pa-page pp-page">{pageHeader}
         <section className="pa-state-panel">
           <EmptyState
             className="pa-empty-state"
@@ -120,17 +141,7 @@ export default function PerformanceLowest() {
 
   return (
     <main className="pa-page pp-page">
-      <header className="pa-page-header">
-        <div>
-          <div className="pa-title-row">
-            <h1>Lowest Performers</h1>
-          </div>
-          <p>
-            Identify grade levels, sections, and subjects requiring immediate
-            academic support.
-          </p>
-        </div>
-      </header>
+      {pageHeader}
       <PerformanceFilters
         terms={principalPerformanceTerms}
         term={term}
@@ -158,19 +169,8 @@ export default function PerformanceLowest() {
           </button>
         </div>
       )}
-      <div
-        className={`pa-content${isFiltering ? " is-busy" : ""}`}
-        aria-busy={isFiltering}
-      >
-        {isFiltering && (
-          <div
-            className="pa-busy-overlay"
-            role="status"
-            aria-label="Updating performance data"
-          >
-            <span className="pa-spinner pa-spinner--large" />
-          </div>
-        )}
+      <SkeletonContent className="pa-content" loading={isFiltering} skeleton={loadingSkeleton}>
+
         {!hasData ? (
           <section className="pa-panel pa-state-panel">
             <EmptyState
@@ -259,7 +259,7 @@ export default function PerformanceLowest() {
             </div>
           </>
         )}
-      </div>
+      </SkeletonContent>
     </main>
   );
 }

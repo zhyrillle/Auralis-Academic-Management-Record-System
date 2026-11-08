@@ -646,3 +646,6 @@
     animation: none;
   }
 }
+
+.student-admin-panel-heading > div { min-width: 0; }
+.student-admin-panel-heading .app-skeleton-block + .app-skeleton-block { margin-top: 10px; }

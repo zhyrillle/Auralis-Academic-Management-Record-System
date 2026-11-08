@@ -1,3 +1,4 @@
+import { SkeletonBlock } from '../common/PageSkeleton.jsx';
 import React, { useState } from "react";
 
 export default function AdviserSubjectBarChart({
@@ -17,16 +18,15 @@ export default function AdviserSubjectBarChart({
   return (
     <div className="adviser-dashboard__chart-card">
       <div className="adviser-dashboard__chart-header">
-        <h3 className="adviser-dashboard__chart-title">
+        <h3 className="adviser-dashboard__chart-title">{loading ? <SkeletonBlock width={210} height={18} /> : <>
           Section Performance Breakdown
-        </h3>
+        </>}</h3>
       </div>
 
       <div className="adviser-dashboard__bar-chart-body-with-pills">
         {loading ? (
-          <div className="adviser-dashboard__skeleton-chart" />
+          <SkeletonBlock className="adviser-dashboard__skeleton-chart" />
         ) : (
-          <>
             <div className="adviser-dashboard__vbar-container">
               <svg
                 viewBox="0 0 460 220"
@@ -156,20 +156,19 @@ export default function AdviserSubjectBarChart({
                 )}
               </svg>
             </div>
-            <div className="adviser-dashboard__term-pills-vertical">
-              {terms.map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  className={`adviser-dashboard__term-circle-pill ${term === t ? "active" : ""}`}
-                  onClick={() => onTermChange && onTermChange(t)}
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
-          </>
         )}
+        <div className="adviser-dashboard__term-pills-vertical">
+          {terms.map((t) => (
+            <button
+              key={t}
+              type="button"
+              className={`adviser-dashboard__term-circle-pill ${term === t ? "active" : ""}`}
+              onClick={() => onTermChange && onTermChange(t)}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );

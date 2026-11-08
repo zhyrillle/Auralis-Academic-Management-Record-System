@@ -1,4 +1,4 @@
-import { cachedApiFetch as fetch } from "./navigationCache.js";
+import { cachedApiFetch as fetch, getCachedApiData } from "./navigationCache.js";
 import { jsPDF } from "jspdf";
 import educationSealUrl from "../assets/deped_logo.png";
 import depedWordmarkUrl from "../assets/deped-logo.gif";
@@ -22,9 +22,14 @@ export const normalizeMasterSheetError = (error) => {
   return error?.message || "The Master Sheet request could not be completed.";
 };
 
+const optionsUrl = userId => `${API_BASE_URL}/master-sheets/options?user_id=${encodeURIComponent(userId)}`;
+const sheetUrl = (assignmentId, userId) => `${API_BASE_URL}/master-sheets/${encodeURIComponent(assignmentId)}?user_id=${encodeURIComponent(userId)}&gradeFlowVersion=2`;
+export const peekMasterSheetOptions = userId => getCachedApiData(optionsUrl(userId));
+export const peekMasterSheet = (assignmentId, userId) => getCachedApiData(sheetUrl(assignmentId, userId));
+
 export const getMasterSheetOptions = async (userId, { force = false } = {}) => {
   const response = await fetch(
-    `${API_BASE_URL}/master-sheets/options?user_id=${encodeURIComponent(userId)}`,
+    optionsUrl(userId),
     { force },
   );
   return parseJsonResponse(response);
@@ -32,7 +37,7 @@ export const getMasterSheetOptions = async (userId, { force = false } = {}) => {
 
 export const getMasterSheet = async (adviserAssignmentId, userId, { force = false } = {}) => {
   const response = await fetch(
-    `${API_BASE_URL}/master-sheets/${encodeURIComponent(adviserAssignmentId)}?user_id=${encodeURIComponent(userId)}&gradeFlowVersion=2`,
+    sheetUrl(adviserAssignmentId, userId),
     { force },
   );
   return parseJsonResponse(response);

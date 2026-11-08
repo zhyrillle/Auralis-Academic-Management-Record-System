@@ -1066,6 +1066,29 @@
   gap: 16px;
 }
 
+.adviser-dashboard__test-exam-right--loading {
+  background: transparent;
+}
+
+.adviser-dashboard__test-chart-skeleton.app-skeleton-block {
+  width: 140px;
+  height: 140px;
+}
+
+.adviser-dashboard__skeleton-subtitle.app-skeleton-block { margin-top: 8px; }
+
+.adviser-dashboard__test-score-placeholders {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.adviser-dashboard__test-score-placeholders > div {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+
 .adviser-dashboard__test-right-header {
   display: flex;
   justify-content: flex-end;
@@ -1278,11 +1301,34 @@
 /* --------------------------------------------------------------------------
    Skeleton Loading Placeholders
    -------------------------------------------------------------------------- */
+.adviser-dashboard__placeholder-banner {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+  box-sizing: border-box;
+}
+
+.adviser-dashboard__placeholder-banner > div { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; min-width: 0; flex: 1; }
+.adviser-dashboard__placeholder-art.app-skeleton-block { width: 110px; height: 80px; flex: none; }
+.adviser-dashboard__placeholder-actions { display: grid; align-content: start; gap: 12px; }
+.adviser-dashboard__placeholder-class { gap: 14px; }
+.adviser-dashboard__placeholder-section-heading.app-skeleton-block { margin: 8px 0 16px; }
+.adviser-dashboard__container--initial-loading .adviser-dashboard__chart-header > div:first-child { min-width: 0; flex: 1; }
+.adviser-dashboard__container--initial-loading .adviser-dashboard__term-pills { flex-shrink: 0; }
+.adviser-dashboard__container--initial-loading .adviser-dashboard__bottom-grid { grid-template-columns: minmax(0, 1fr); }
+.adviser-dashboard__container--initial-loading .adviser-dashboard__chart-card { min-width: 0; }
+.adviser-dashboard__container--initial-loading .adviser-dashboard__radar-card,
+.adviser-dashboard__entry-gauge-card--skeleton { background: #fff; border: 1px solid #e2e8f0; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03); }
+.adviser-dashboard__entry-gauge-card--skeleton .adviser-dashboard__skeleton-circle.app-skeleton-block { width: 180px; height: 90px; border-radius: 180px 180px 0 0; }
+.adviser-dashboard__gauge-skeleton-label.app-skeleton-block { margin-top: 20px; }
+.adviser-dashboard__bar-chart-body-with-pills > .adviser-dashboard__skeleton-chart { flex: 1; min-width: 0; width: 100%; }
+.adviser-dashboard__skeleton-radar.app-skeleton-block { width: min(70%, 260px); height: auto; aspect-ratio: 1; border-radius: 50%; }
+
 .adviser-dashboard__skeleton-line {
   height: 14px;
-  background: #E2E8F0;
+
   border-radius: 4px;
-  animation: pulse 1.5s infinite;
+
 }
 
 .adviser-dashboard__skeleton-line--short {
@@ -1296,17 +1342,17 @@
 
 .adviser-dashboard__skeleton-chart {
   height: 180px;
-  background: #F1F5F9;
+
   border-radius: 8px;
-  animation: pulse 1.5s infinite;
+
 }
 
 .adviser-dashboard__skeleton-circle {
   width: 140px;
   height: 140px;
   border-radius: 50%;
-  background: #F1F5F9;
-  animation: pulse 1.5s infinite;
+
+
 }
 
 @keyframes pulse {
@@ -1351,6 +1397,7 @@
 }
 
 @media (max-width: 768px) {
+  .adviser-dashboard__placeholder-art { display: none; }
   .adviser-dashboard__container {
     padding: 16px;
   }

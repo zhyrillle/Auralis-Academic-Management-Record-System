@@ -26,13 +26,32 @@ router.get('/adviser/:adviserAssignmentId', async (req, res) => {
   }
 });
 
-// GET all sheets for a specific section
+// GET all sheets for a specific teacher assignment (for building the date grid)
+router.get('/teacher/:teacherAssignmentId', async (req, res) => {
+  try {
+    await cloudSync.syncAttendanceFromCloud();
+    const sheets = await AttendanceSheet.findByTeacherAssignmentId(req.params.teacherAssignmentId);
+    res.json(sheets);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET all sheets for a specific section, scoped to adviser or subject teacher
 router.get('/section/:sectionId', async (req, res) => {
   try {
     await cloudSync.syncAttendanceFromCloud();
     const schoolYearId = req.query.schoolYearId;
     if (schoolYearId !== undefined && !/^[1-9]\d*$/.test(String(schoolYearId))) return res.status(400).json({ error: 'Invalid school year.' });
-    const sheets = await AttendanceSheet.findBySectionId(req.params.sectionId, schoolYearId);
+
+    const options = {
+      attendance_scope: req.query.attendance_scope || req.query.scope,
+      adviser_assignment_id: req.query.adviser_assignment_id || req.query.adviserAssignmentId,
+      teacher_assignment_id: req.query.teacher_assignment_id || req.query.teacherAssignmentId,
+      user_id: req.query.user_id || req.query.userId || req.headers['x-auralis-user-id'] || null,
+    };
+
+    const sheets = await AttendanceSheet.findBySectionId(req.params.sectionId, schoolYearId, options);
     res.json(sheets);
   } catch (err) {
     res.status(500).json({ error: err.message });

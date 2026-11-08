@@ -1,3 +1,4 @@
+import PageSkeleton, { SkeletonContent, SkeletonBlock } from '../../components/common/PageSkeleton.jsx';
 import { cacheKey } from "../../services/navigationCache";
 import useCachedQuery from "../../services/useCachedQuery";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -7,7 +8,6 @@ import {
   ChevronDown,
   CircleAlert,
   LayoutDashboard,
-  LoaderCircle,
   RefreshCw,
   Settings2,
 } from "lucide-react";
@@ -20,39 +20,14 @@ import {
 import ReopeningActivityDrawer from "./academic-period/ReopeningActivityDrawer";
 import ReviewRequestDrawer from "./academic-period/ReviewRequestDrawer";
 import GradingPeriodOverview from "./academic-period/overview/GradingPeriodOverview";
-import GradingPeriodOverviewSkeleton from "./academic-period/overview/GradingPeriodOverviewSkeleton";
 import GradingPeriodSettings from "./academic-period/timeline/GradingPeriodSettings";
-import GradingPeriodTimelineSkeleton from "./academic-period/timeline/GradingPeriodTimelineSkeleton";
 import "../../styles/AcademicPeriod.css";
 
 function ContentLoadingFrame({ loadingMode, pendingLabel, children }) {
-  const isYearChanging = loadingMode === "year-change";
-  const isBackgroundLoading = loadingMode === "background";
-  const isBusy = isYearChanging || isBackgroundLoading;
-
-  return (
-    <div
-      className={`grade-lock-content-frame ${
-        isYearChanging ? "grade-lock-content-frame--year-change" : ""
-      } ${
-        isBackgroundLoading ? "grade-lock-content-frame--background" : ""
-      }`}
-      aria-busy={isBusy}
-    >
-      {isYearChanging && (
-        <div className="grade-lock-year-change-overlay" role="status">
-          <LoaderCircle size={20} aria-hidden="true" />
-          <span>Loading {pendingLabel || "school year"}</span>
-        </div>
-      )}
-      {isBackgroundLoading && (
-        <span className="grade-lock-sr-only" role="status" aria-live="polite">
-          Refreshing academic period data.
-        </span>
-      )}
-      {children}
-    </div>
-  );
+  return <SkeletonContent loading={loadingMode === "year-change"}
+    skeleton={<PageSkeleton label={`Loading ${pendingLabel || "school year"}`} cards={3} />}>
+    {children}
+  </SkeletonContent>;
 }
 
 export default function AcademicPeriod({ user }) {
@@ -236,7 +211,7 @@ export default function AcademicPeriod({ user }) {
         <div className="grade-lock-header__controls" aria-label="Page controls">
           <span className="grade-lock-header__filter-label">School year</span>
           {loadingMode === "initial" ? (
-            <div className="grade-lock-school-year-skeleton" aria-hidden="true" />
+            <button type="button" className="grade-lock-school-year__trigger" disabled aria-label="Filter by school year">School year<ChevronDown size={17} /></button>
           ) : (
             <div
               className={`grade-lock-school-year ${
@@ -321,9 +296,133 @@ export default function AcademicPeriod({ user }) {
       {/* Active view content */}
       {loadingMode === "initial" ? (
         activeView === "settings" ? (
-          <GradingPeriodTimelineSkeleton />
+          <section
+            className="grading-period-skeleton grading-period-timeline-skeleton"
+            aria-busy="true"
+          >
+            <span className="grade-lock-sr-only" role="status" aria-live="polite">
+              Loading the academic period timeline and settings.
+            </span>
+
+            <div className="timeline-skeleton__scope" aria-hidden="true">
+              <div>
+                <SkeletonBlock className="grading-period-skeleton__block timeline-skeleton__scope-label" />
+                <SkeletonBlock className="grading-period-skeleton__block timeline-skeleton__scope-year" />
+              </div>
+              <SkeletonBlock className="grading-period-skeleton__block timeline-skeleton__scope-copy" />
+            </div>
+
+            <article className="timeline-skeleton__panel" aria-hidden="true">
+              <header className="timeline-skeleton__heading">
+                <SkeletonBlock className="grading-period-skeleton__block timeline-skeleton__eyebrow" />
+                <SkeletonBlock className="grading-period-skeleton__block grading-period-skeleton__heading" />
+                <SkeletonBlock className="grading-period-skeleton__block grading-period-skeleton__subheading" />
+              </header>
+
+              <div className="timeline-skeleton__workspace">
+                <div className="timeline-skeleton__periods">
+                  {Array.from({ length: 3 }, (_, index) => (
+                    <div className="timeline-skeleton__period" key={index}>
+                      <SkeletonBlock className="grading-period-skeleton__block timeline-skeleton__period-icon" />
+                      <div>
+                        <SkeletonBlock className="grading-period-skeleton__block timeline-skeleton__period-name" />
+                        <SkeletonBlock className="grading-period-skeleton__block timeline-skeleton__period-date" />
+                      </div>
+                      <SkeletonBlock className="grading-period-skeleton__block timeline-skeleton__period-badge" />
+                    </div>
+                  ))}
+                </div>
+
+                <div className="timeline-skeleton__editor">
+                  <div className="timeline-skeleton__editor-heading">
+                    <div>
+                      <SkeletonBlock className="grading-period-skeleton__block timeline-skeleton__editor-label" />
+                      <SkeletonBlock className="grading-period-skeleton__block timeline-skeleton__editor-title" />
+                    </div>
+                    <SkeletonBlock className="grading-period-skeleton__block timeline-skeleton__period-badge" />
+                  </div>
+                  <SkeletonBlock className="grading-period-skeleton__block timeline-skeleton__notice" />
+                  <div className="timeline-skeleton__fields">
+                    {Array.from({ length: 7 }, (_, index) => (
+                      <div className="timeline-skeleton__field" key={index}>
+                        <SkeletonBlock className="grading-period-skeleton__block timeline-skeleton__field-label" />
+                        <SkeletonBlock className="grading-period-skeleton__block timeline-skeleton__field-input" />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="timeline-skeleton__actions">
+                    <SkeletonBlock className="grading-period-skeleton__block" />
+                    <SkeletonBlock className="grading-period-skeleton__block" />
+                  </div>
+                </div>
+              </div>
+            </article>
+
+            <article className="timeline-skeleton__upcoming" aria-hidden="true">
+              <SkeletonBlock className="grading-period-skeleton__block timeline-skeleton__upcoming-icon" />
+              <div>
+                <SkeletonBlock className="grading-period-skeleton__block grading-period-skeleton__heading" />
+                <SkeletonBlock className="grading-period-skeleton__block grading-period-skeleton__subheading" />
+              </div>
+              <SkeletonBlock className="grading-period-skeleton__block timeline-skeleton__upcoming-button" />
+            </article>
+          </section>
         ) : (
-          <GradingPeriodOverviewSkeleton />
+          <section
+            className="grading-period-skeleton grading-period-overview-skeleton"
+            aria-busy="true"
+          >
+            <span className="grade-lock-sr-only" role="status" aria-live="polite">
+              Loading the academic period overview.
+            </span>
+
+            <div className="grading-period-skeleton__section-heading" aria-hidden="true">
+              <SkeletonBlock className="grading-period-skeleton__block grading-period-skeleton__heading" />
+              <SkeletonBlock className="grading-period-skeleton__block grading-period-skeleton__subheading" />
+            </div>
+
+            <div className="grading-period-skeleton__term-grid" aria-hidden="true">
+              {Array.from({ length: 3 }, (_, index) => (
+                <article className="grading-period-skeleton__term-card" key={index}>
+                  <div className="grading-period-skeleton__term-topline">
+                    <SkeletonBlock className="grading-period-skeleton__block grading-period-skeleton__date" />
+                    <SkeletonBlock className="grading-period-skeleton__block grading-period-skeleton__badge" />
+                  </div>
+                  <SkeletonBlock className="grading-period-skeleton__block grading-period-skeleton__term-title" />
+                  <SkeletonBlock className="grading-period-skeleton__block grading-period-skeleton__label" />
+                  <SkeletonBlock className="grading-period-skeleton__block grading-period-skeleton__progress" />
+                  <div className="grading-period-skeleton__term-meta">
+                    <SkeletonBlock className="grading-period-skeleton__block" />
+                    <SkeletonBlock className="grading-period-skeleton__block" />
+                  </div>
+                  <SkeletonBlock className="grading-period-skeleton__block grading-period-skeleton__button" />
+                </article>
+              ))}
+            </div>
+
+            <article className="grading-period-skeleton__operations" aria-hidden="true">
+              <div className="grading-period-skeleton__operations-header">
+                <div>
+                  <SkeletonBlock className="grading-period-skeleton__block grading-period-skeleton__heading" />
+                  <SkeletonBlock className="grading-period-skeleton__block grading-period-skeleton__subheading" />
+                </div>
+                <SkeletonBlock className="grading-period-skeleton__block grading-period-skeleton__tabs" />
+              </div>
+              <div className="grading-period-skeleton__summary">
+                <SkeletonBlock className="grading-period-skeleton__block grading-period-skeleton__summary-value" />
+                <SkeletonBlock className="grading-period-skeleton__block grading-period-skeleton__summary-progress" />
+                <SkeletonBlock className="grading-period-skeleton__block grading-period-skeleton__summary-chip" />
+                <SkeletonBlock className="grading-period-skeleton__block grading-period-skeleton__summary-chip" />
+              </div>
+              {Array.from({ length: 4 }, (_, index) => (
+                <div className="grading-period-skeleton__row" key={index}>
+                  <SkeletonBlock className="grading-period-skeleton__block" />
+                  <SkeletonBlock className="grading-period-skeleton__block" />
+                  <SkeletonBlock className="grading-period-skeleton__block" />
+                </div>
+              ))}
+            </article>
+          </section>
         )
       ) : pageError ? (
         <section

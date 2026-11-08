@@ -1,4 +1,8 @@
 import math
+import json
+from pathlib import Path
+import subprocess
+import sys
 import unittest
 import pandas as pd
 from predict import load_model, predict
@@ -25,6 +29,22 @@ class ModelWorkerTests(unittest.TestCase):
 
     def test_empty_batch_checks_model_without_inventing_rows(self):
         self.assertEqual(predict(self.bundle, self.metadata, [])['predictions'], [])
+
+    def test_reusable_worker_keeps_scores_and_recovers_after_invalid_input(self):
+        messages = [dict(id=1, records=[self.record()]), dict(id=2, records=[{}]),
+                    dict(id=3, records=[self.record()])]
+        output = subprocess.run([sys.executable, str(Path(__file__).with_name('predict.py')), '--serve'],
+                                input=''.join(json.dumps(row) + '\n' for row in messages),
+                                text=True, capture_output=True, check=True, timeout=60)
+        first, invalid, last = [json.loads(line) for line in output.stdout.splitlines()]
+        self.assertEqual([first['id'], invalid['id'], last['id']], [1, 2, 3])
+        expected = predict(self.bundle, self.metadata, [self.record()])
+        for result in (first, last):
+            actual, reference = result['predictions'][0], expected['predictions'][0]
+            self.assertTrue(math.isclose(actual['score'], reference['score'], abs_tol=1e-12))
+            self.assertEqual(actual['riskLevel'], reference['riskLevel'])
+            self.assertEqual(actual['predictedAtRisk'], reference['predictedAtRisk'])
+        self.assertIn('error', invalid)
 
     def test_recorded_absence_rates_pass_through_and_only_missing_rate_is_imputed(self):
         records = [{**self.record(), 'absence_rate': value} for value in (0, 0.05, 1, None)]

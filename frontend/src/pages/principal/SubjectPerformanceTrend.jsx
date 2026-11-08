@@ -1,3 +1,4 @@
+import PageSkeleton, { SkeletonCards, SkeletonContent, SkeletonChart } from '../../components/common/PageSkeleton.jsx';
 import { usePrincipalQuery } from "../../services/principalData";
 import FilterToolbar from "../../components/common/FilterToolbar";
 import { mutedSeriesStyles } from "./analytics/principalChartStyles";
@@ -17,7 +18,6 @@ import {
   getSubjectPerformanceTrend,
   principalAnalyticsTerms,
 } from "../../services/principalAnalyticsService";
-import AnalyticsSkeleton from "./analytics/AnalyticsSkeleton";
 import AnalyticsStatCard from "./analytics/AnalyticsStatCard";
 import AnalyticsTermTabs from "./analytics/AnalyticsTermTabs";
 import LineChart from "../../components/charts/LineChart";
@@ -124,11 +124,62 @@ export default function SubjectPerformanceTrend() {
     ];
   }, [data]);
 
-  if (loading && !data) return <AnalyticsSkeleton />;
+  const pageHeader = (<header className="pa-page-header">
+        <div>
+          <div className="pa-title-row">
+            <h1>Subject Performance Trend</h1>
+          </div>
+          <p>
+            Review average-grade movement by subject, term, grade level, and
+            school year.
+          </p>
+        </div>
+      </header>);
+
+  const loadingSkeleton = (
+    <PageSkeleton className="pa-skeleton pa-skeleton--content" label="Loading performance analytics">
+      <SkeletonCards count={4} />
+      <div className="app-skeleton-stack">
+        {viewMode === "trend" ? <><SkeletonChart /><SkeletonChart /></> : <SkeletonChart />}
+      </div>
+    </PageSkeleton>
+  );
+
+  if (loading && !data) return <main className="pa-page">{pageHeader}<FilterToolbar className="pa-navigation" label="Subject performance filters">
+        <AnalyticsTermTabs
+          options={ANALYTICS_MODES}
+          value={viewMode}
+          onChange={changeFilter(setViewMode)}
+          disabled={false}
+          ariaLabel="Analytics view"
+          className="pa-mode-tabs"
+        />
+        <div className="pa-filter-controls">
+          <label>
+            <DropdownSelect
+              label="Grade level"
+              value={gradeLevel}
+              options={[{ value: "all", label: "All grade levels" }]}
+              onChange={changeFilter(setGradeLevel)}
+              disabled={false}
+            />
+          </label>
+          <label>
+            <DropdownSelect
+              label="School year"
+              placeholder="School year"
+              value={schoolYear}
+              options={schoolYears}
+              onChange={changeFilter(setSchoolYear)}
+              disabled={false}
+            />
+          </label>
+        </div>
+      </FilterToolbar>{loadingSkeleton}</main>;
 
   if (!data) {
     return (
-      <main className="pa-page">
+      <main className="pa-page">{pageHeader}
         <section className="pa-state-panel">
           <EmptyState
             className="pa-empty-state"
@@ -184,17 +235,7 @@ export default function SubjectPerformanceTrend() {
 
   return (
     <main className="pa-page">
-      <header className="pa-page-header">
-        <div>
-          <div className="pa-title-row">
-            <h1>Subject Performance Trend</h1>
-          </div>
-          <p>
-            Review average-grade movement by subject, term, grade level, and
-            school year.
-          </p>
-        </div>
-      </header>
+      {pageHeader}
 
       <FilterToolbar className="pa-navigation" label="Subject performance filters">
         <AnalyticsTermTabs
@@ -218,6 +259,7 @@ export default function SubjectPerformanceTrend() {
           <label>
             <DropdownSelect
               label="School year"
+              placeholder="School year"
               value={schoolYear}
               options={schoolYearOptions}
               onChange={changeFilter(setSchoolYear)}
@@ -236,19 +278,8 @@ export default function SubjectPerformanceTrend() {
         </div>
       )}
 
-      <div
-        className={`pa-content${isFiltering ? " is-busy" : ""}`}
-        aria-busy={isFiltering}
-      >
-        {isFiltering && (
-          <div
-            className="pa-busy-overlay"
-            role="status"
-            aria-label="Updating analytics"
-          >
-            <span className="pa-spinner pa-spinner--large" />
-          </div>
-        )}
+      <SkeletonContent className="pa-content" loading={isFiltering} skeleton={loadingSkeleton}>
+
 
         {!data.subjects.length ? (
           <section className="pa-state-panel">
@@ -404,7 +435,7 @@ export default function SubjectPerformanceTrend() {
             )}
           </>
         )}
-      </div>
+      </SkeletonContent>
     </main>
   );
 }

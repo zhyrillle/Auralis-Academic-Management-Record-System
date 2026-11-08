@@ -86,14 +86,9 @@
 .grading-period-skeleton__block,
 .grading-period-skeleton__term-card,
 .grading-period-skeleton__operations {
-  background-image: linear-gradient(
-    90deg,
-    #f2f5f9 25%,
-    #e4eaf1 37%,
-    #f2f5f9 63%
-  );
-  background-size: 400% 100%;
-  animation: grade-lock-skeleton-shimmer 1.25s ease infinite;
+
+
+
 }
 
 .grade-lock-school-year-skeleton {
@@ -192,9 +187,7 @@
   animation: grade-lock-loading-spin 0.8s linear infinite;
 }
 
-@keyframes grade-lock-skeleton-shimmer {
-  to { background-position: -100% 0; }
-}
+
 
 @keyframes grade-lock-loading-spin {
   to { transform: rotate(360deg); }
@@ -226,7 +219,7 @@
   .grading-period-skeleton__block,
   .grading-period-skeleton__term-card,
   .grading-period-skeleton__operations {
-    animation: none;
+
   }
 
   .grade-lock-year-change-overlay svg {

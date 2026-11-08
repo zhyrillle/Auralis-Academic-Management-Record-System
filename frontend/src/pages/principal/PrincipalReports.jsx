@@ -1,3 +1,4 @@
+import { SkeletonBlock, SkeletonValue, SkeletonTable } from '../../components/common/PageSkeleton.jsx';
 import useCachedQuery from "../../services/useCachedQuery";
 import { cacheKey } from "../../services/navigationCache";
 import { useMemo, useState } from "react";
@@ -206,14 +207,14 @@ export default function PrincipalReports() {
         <section className="pr-table-card" aria-busy={loading}>
           <div className="pr-card-header">
             <div>
-              <h2 className="pr-card-title">Student reports</h2>
+              <h2 className="pr-card-title">{loading ? <SkeletonBlock width={180} height={20} /> : "Student reports"}</h2>
               <p className="pr-card-subtitle" aria-live="polite">
-                {loading ? "Loading learners…" : error ? "Student records unavailable" : `${sectionLearners.length} learners · ${secName} · ${termLabel}`}
+                {loading ? <SkeletonValue label="Loading learner count" width={180} /> : error ? "Student records unavailable" : `${sectionLearners.length} learners · ${secName} · ${termLabel}`}
               </p>
             </div>
           </div>
           <div className="pr-table-wrap" tabIndex={0} role="region" aria-label="Student records">
-            <table className="pr-table">
+            {loading ? <SkeletonTable columns={4} /> : (<table className="pr-table">
               <thead>
                 <tr>
                   <th scope="col">STUDENT</th>
@@ -227,7 +228,7 @@ export default function PrincipalReports() {
                   Array.from({ length: 6 }, (_, row) => (
                     <tr key={row} aria-hidden="true">
                       {Array.from({ length: 4 }, (_, col) => (
-                        <td key={col}><span className="pr-skeleton" /></td>
+                        <td key={col}><SkeletonBlock className="pr-skeleton"  /></td>
                       ))}
                     </tr>
                   ))
@@ -279,7 +280,7 @@ export default function PrincipalReports() {
                   </tr>
                 )}
               </tbody>
-            </table>
+            </table>)}
           </div>
         </section>
       </div>
@@ -310,13 +311,13 @@ export default function PrincipalReports() {
             </div>
             <div className="pr-dropdowns-group">
               <DropdownSelect
-                label="School year"
-                value={schoolYearId}
-                options={yearOptions}
-                placeholder="No school years available"
-                disabled={loading || !data.years.length}
-                onChange={(value) => { setSchoolYearId(value); setGradeId("all"); }}
-              />
+                  label="School year"
+                  value={schoolYearId}
+                  options={yearOptions}
+                  placeholder={loading ? "School year" : "No school years available"}
+                  disabled={loading || !data.years.length}
+                  onChange={(value) => { setSchoolYearId(value); setGradeId("all"); }}
+                />
               <DropdownSelect
                 label="Grade level"
                 value={gradeId}
@@ -336,10 +337,10 @@ export default function PrincipalReports() {
               <div className="pr-class-cards-grid" aria-hidden="true">
                 {Array.from({ length: 6 }, (_, idx) => (
                   <div key={idx} className="pr-class-card">
-                    <span className="pr-skeleton" style={{ width: "60%", height: 20 }} />
-                    <span className="pr-skeleton" style={{ width: "40%", height: 14 }} />
-                    <span className="pr-skeleton" style={{ width: "50%", height: 16 }} />
-                    <span className="pr-skeleton" style={{ width: "100%", height: 38, borderRadius: 999, marginTop: "auto" }} />
+                    <SkeletonBlock className="pr-skeleton" style={{ width: "60%", height: 20 }}  />
+                    <SkeletonBlock className="pr-skeleton" style={{ width: "40%", height: 14 }}  />
+                    <SkeletonBlock className="pr-skeleton" style={{ width: "50%", height: 16 }}  />
+                    <SkeletonBlock className="pr-skeleton" style={{ width: "100%", height: 38, borderRadius: 999, marginTop: "auto" }}  />
                   </div>
                 ))}
               </div>

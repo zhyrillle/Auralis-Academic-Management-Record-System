@@ -1,3 +1,4 @@
+import PageSkeleton from '../../components/common/PageSkeleton.jsx';
 import { cachedApiFetch as fetch } from "../../services/navigationCache.js";
 import { API_BASE_URL } from "../../services/apiConfig.js";
 import React, { useState, useEffect } from "react";
@@ -117,9 +118,7 @@ export default function DeptHeadEvalList({ onBack, onCreateFeedback, windowStatu
       {/* ── Dept Head List (grouped by department) ── */}
       <div className="tel-list-card">
         {loading ? (
-          <div className="tel-empty">
-            <p>Loading department heads...</p>
-          </div>
+          <PageSkeleton label="Loading department heads" layout="cards" rows={3} />
         ) : filtered.length === 0 ? (
           <div className="tel-empty">
             <Search size={32} color="#cbd5e1" />

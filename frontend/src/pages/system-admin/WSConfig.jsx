@@ -13,7 +13,7 @@ import {
   X,
 } from "lucide-react";
 import DropdownSelect from "../../components/common/DropdownSelect";
-import { WSConfigSkeletonRows, WSConfigPlaceholder, WSConfigBusy } from "./ws-config/WSConfigSkeleton";
+import { SkeletonBlock, SkeletonTable } from '../../components/common/PageSkeleton.jsx';
 import {
   getSchoolYears,
   getSubjectWeightConfiguration,
@@ -517,6 +517,16 @@ export default function WSConfig() {
     }
   };
 
+  const loadingRows = Array.from({ length: 8 }, (_, row) => (
+    <tr className="ws-config-skeleton-row" key={row} aria-hidden="true">
+      {Array.from({ length: 5 }, (_, column) => (
+        <td key={column}>
+          <SkeletonBlock className={`ws-config-skeleton ${column === 0 ? "ws-config-skeleton-subject" : "ws-config-skeleton-value"}`} />
+        </td>
+      ))}
+    </tr>
+  ));
+
   return (
     <div className="ws-config-page">
       <header className="ws-config-header">
@@ -529,7 +539,7 @@ export default function WSConfig() {
         </div>
 
         <div className="ws-config-actions">
-          {isInitialLoading && <WSConfigPlaceholder className="ws-config-skeleton-year" />}
+          {isInitialLoading && <SkeletonBlock className="ws-config-skeleton ws-config-skeleton-year" />}
           {currentSchoolYear && (
             <div
               className="ws-config-current-year"
@@ -627,18 +637,18 @@ export default function WSConfig() {
       >
         <div className="ws-config-panel__heading">
           <div>
-            <h2 id="ws-config-table-title">Subject Weight Distribution</h2>
+            <h2 id="ws-config-table-title">{isInitialLoading ? <SkeletonBlock width={230} height={20} /> : "Subject Weight Distribution"}</h2>
             <p>Each subject’s component weights must add up to exactly 100%.</p>
           </div>
           <span className="ws-config-panel__count">
-            {isInitialLoading ? <WSConfigPlaceholder className="ws-config-skeleton-count" /> : hasLoadedConfiguration ? `${displayedWeights.length} subjects` : "Not loaded"}
+            {isInitialLoading ? <SkeletonBlock className="ws-config-skeleton ws-config-skeleton-count" /> : hasLoadedConfiguration ? `${displayedWeights.length} subjects` : "Not loaded"}
           </span>
         </div>
 
         {isInitialLoading && <span className="ws-config-sr-only" role="status">Loading subject weights.</span>}
-        {isLoading && hasLoadedConfiguration && <WSConfigBusy />}
+
         <div className="ws-config-table-wrapper" inert={(isLoading && hasLoadedConfiguration) || isSaving ? true : undefined}>
-          <table className="ws-config-table">
+          {isInitialLoading ? <SkeletonTable columns={7} /> : (<table className="ws-config-table">
             <thead>
               <tr>
                 <th scope="col">Subject</th>
@@ -651,7 +661,7 @@ export default function WSConfig() {
             </thead>
             <tbody>
               {isInitialLoading ? (
-                <WSConfigSkeletonRows />
+                loadingRows
               ) : !hasLoadedConfiguration && requestError ? (
                 <tr><td className="ws-config-table-state" colSpan={5}>Subject weights could not be loaded. Use Try Again above.</td></tr>
               ) : displayedWeights.length === 0 ? (
@@ -818,7 +828,7 @@ export default function WSConfig() {
                 })
               )}
             </tbody>
-          </table>
+          </table>)}
         </div>
       </section>
 
@@ -889,10 +899,10 @@ export default function WSConfig() {
                   </div>
                 )}
                 <div className="ws-config-history-content" aria-busy={isHistoryLoading}>
-                  {isHistoryLoading && hasLoadedHistory && <WSConfigBusy />}
+
                   {isHistoryLoading && !hasLoadedHistory && <span className="ws-config-sr-only" role="status">Loading historical configuration.</span>}
                   <div className="ws-config-history-table-wrapper" inert={isHistoryLoading && hasLoadedHistory ? true : undefined}>
-                    <table className="ws-config-history-table">
+                    {isHistoryLoading && (!hasLoadedHistory || String(pendingHistoryYearId) !== String(historySchoolYearId)) ? <SkeletonTable columns={7} /> : (<table className="ws-config-history-table">
                       <thead>
                         <tr>
                           <th scope="col">Subject</th>
@@ -903,7 +913,7 @@ export default function WSConfig() {
                         </tr>
                       </thead>
                       <tbody>
-                        {isHistoryLoading && !hasLoadedHistory ? <WSConfigSkeletonRows /> :
+                        {isHistoryLoading && (!hasLoadedHistory || String(pendingHistoryYearId) !== String(historySchoolYearId)) ? loadingRows :
                           !hasLoadedHistory && historyError ? (
                             <tr><td colSpan={5} className="ws-config-history-empty-cell">Historical weights could not be loaded.</td></tr>
                           ) : historyWeights.length === 0 ? (
@@ -931,7 +941,7 @@ export default function WSConfig() {
                           );
                         })}
                       </tbody>
-                    </table>
+                    </table>)}
                   </div>
                 </div>
               </>

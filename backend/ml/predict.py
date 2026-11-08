@@ -64,8 +64,20 @@ def predict(bundle, metadata, records):
 if __name__ == "__main__":
     try:
         saved_bundle, saved_metadata = load_model()
-        payload = json.load(sys.stdin)
-        json.dump(predict(saved_bundle, saved_metadata, payload["records"]), sys.stdout, allow_nan=False)
+        if "--serve" in sys.argv:
+            # Keep the trusted model in memory; every request still validates its inputs.
+            for line in sys.stdin:
+                request_id = None
+                try:
+                    payload = json.loads(line)
+                    request_id = payload["id"]
+                    result = predict(saved_bundle, saved_metadata, payload["records"])
+                except Exception as error:
+                    result = {"error": str(error)}
+                print(json.dumps({"id": request_id, **result}, allow_nan=False), flush=True)
+        else:
+            payload = json.load(sys.stdin)
+            json.dump(predict(saved_bundle, saved_metadata, payload["records"]), sys.stdout, allow_nan=False)
     except Exception as error:
         # No learner records or feature values are included in error output.
         json.dump({"error": str(error)}, sys.stdout)

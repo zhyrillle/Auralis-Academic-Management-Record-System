@@ -1,10 +1,10 @@
+import PageSkeleton, { SkeletonValue } from '../../components/common/PageSkeleton.jsx';
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   Users,
   BookOpen,
   GraduationCap,
-  RefreshCw,
   UserRound,
 } from "lucide-react";
 import DropdownSelect from "../../components/common/DropdownSelect";
@@ -38,18 +38,13 @@ export function MonitoringState({
   title = "No sections found",
   description = "Try another school year, grade level, or search.",
 }) {
+  if (loading) return <PageSkeleton label="Loading records" layout="cards" rows={6} />;
   return (
     <div
       className="dept-monitor-state"
       role={loading ? "status" : error ? "alert" : undefined}
     >
-      {loading ? (
-        <>
-          <RefreshCw className="dept-monitor-spin" size={23} />
-          <strong>Loading records…</strong>
-        </>
-      ) : (
-        <>
+      <>
           <EmptyState
             icon={BookOpen}
             title={error ? "Records are unavailable" : title}
@@ -65,7 +60,6 @@ export function MonitoringState({
             </button>
           )}
         </>
-      )}
     </div>
   );
 }
@@ -158,6 +152,11 @@ export default function DepartmentDirectory({ mode = "records" }) {
   if (context.loading || context.error)
     return (
       <div className="dept-monitor-page">
+        <header className="dept-monitor-header"><h1>{philIri ? "PHIL-IRI Records" : "Class Records"}</h1></header>
+        <FilterToolbar label="Section navigation" className="dept-monitor-navigation" end={<>
+          <DropdownSelect label="School year" value="" options={[]} placeholder="School year" disabled />
+          <DropdownSelect label="Grade level" value={gradeId} options={[{value:'all',label:'All grade levels'}]} onChange={value => update({grade:value})} />
+        </>}><SearchBar query={search} setQuery={value => update({q:value})} placeholder="Search sections or teachers…" /></FilterToolbar>
         <MonitoringState
           loading={context.loading}
           error={context.error}
@@ -178,6 +177,7 @@ export default function DepartmentDirectory({ mode = "records" }) {
     if (directory.loading || directory.error)
       return (
         <div className="dept-monitor-page">
+          <header className="dept-monitor-header"><BackButton onClick={back} /><h1>{philIri ? "PHIL-IRI Records" : "Class Records"}</h1></header>
           <MonitoringState
             loading={directory.loading}
             error={directory.error}
@@ -245,7 +245,7 @@ export default function DepartmentDirectory({ mode = "records" }) {
           options={[{ value: 'all', label: 'All grade levels' }, ...context.data.gradeLevels.map(grade => ({ value: String(grade.id), label: grade.name }))]}
           onChange={value => update({ grade: value })} />
         <span className="dept-monitor-section-count" aria-label="Section count" aria-live="polite">
-          <strong>{directory.loading || directory.error ? '—' : filtered.length}</strong> {filtered.length === 1 ? 'section' : 'sections'}
+          <>{directory.loading ? <SkeletonValue label="Loading section count" /> : directory.error ? "Unavailable" : <><strong>{filtered.length}</strong> {filtered.length === 1 ? "section" : "sections"}</>}</>
         </span>
       </>}>
         <SearchBar query={search} setQuery={value => update({ q: value })} placeholder="Search sections or teachers…" />

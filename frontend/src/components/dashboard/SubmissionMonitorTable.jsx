@@ -1,3 +1,4 @@
+import { SkeletonBlock, SkeletonRegion, SkeletonTable } from '../common/PageSkeleton.jsx';
 import { useState } from 'react';
 import ProgressBar from '../common/ProgressBar';
 import DropdownSelect from '../common/DropdownSelect';
@@ -21,7 +22,7 @@ export default function SubmissionMonitorTable({ data, loading, error, onRetry, 
 
   return <section className="dept-card dept-submission-monitor">
     <div className="dept-card-header-row">
-      <h2 className="dept-card-title">Submission Monitor</h2>
+      <h2 className="dept-card-title">{loading ? <SkeletonBlock width="45%" height={18} /> : <>Submission Monitor</>}</h2>
       <div className="dept-card-header-controls" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
         {onTermChange && (
           <DropdownSelect
@@ -42,7 +43,7 @@ export default function SubmissionMonitorTable({ data, loading, error, onRetry, 
         />
       </div>
     </div>
-    {loading ? <div className="dept-skeleton-table" role="status" aria-label="Loading submissions" /> : error ? <div className="dept-error-banner" role="alert">
+    {loading ? <SkeletonRegion label="Loading submissions"><SkeletonTable columns={5} rows={6} /></SkeletonRegion> : error ? <div className="dept-error-banner" role="alert">
       <p>Couldn’t load submissions. Please try again.</p>
       <button type="button" onClick={onRetry}>Retry submissions</button>
     </div> : <>

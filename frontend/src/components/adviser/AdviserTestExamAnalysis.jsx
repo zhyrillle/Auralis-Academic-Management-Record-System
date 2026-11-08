@@ -1,3 +1,4 @@
+import { SkeletonBlock } from '../common/PageSkeleton';
 import React, { useState } from "react";
 import { ChevronDown } from "lucide-react";
 
@@ -163,9 +164,9 @@ export default function AdviserTestExamAnalysis({
           ))}
         </div>
 
-        <div className="adviser-dashboard__test-visuals-wrap">
+        <div className="adviser-dashboard__test-visuals-wrap" role={loading ? "status" : undefined} aria-label={loading ? "Loading test and exam results" : undefined} aria-busy={loading || undefined}>
           <div className="adviser-dashboard__test-legend">
-            {legendItems.map((item) => (
+            {loading ? <SkeletonBlock width="80%" /> : legendItems.map((item) => (
               <span key={item.key} className="adviser-dashboard__test-legend-item">
                 <span
                   className="adviser-dashboard__test-legend-dot"
@@ -177,13 +178,18 @@ export default function AdviserTestExamAnalysis({
           </div>
 
           <div className="adviser-dashboard__test-charts-row">
-            {renderChart(currentData.above75 || [], "Got 75% Above")}
-            {renderChart(currentData.below75 || [], "Got 75% Below")}
+            {loading ? [0, 1].map(chart => <div className="adviser-dashboard__test-chart-item" key={chart}>
+              <SkeletonBlock className="adviser-dashboard__test-chart-skeleton" round />
+              <SkeletonBlock width={96} height={12} />
+            </div>) : <>
+              {renderChart(currentData.above75 || [], "Got 75% Above")}
+              {renderChart(currentData.below75 || [], "Got 75% Below")}
+            </>}
           </div>
         </div>
       </div>
 
-      <div className="adviser-dashboard__test-exam-right">
+      <div className={`adviser-dashboard__test-exam-right${loading ? ' adviser-dashboard__test-exam-right--loading' : ''}`}>
         <div className="adviser-dashboard__test-right-header">
           <div className="adviser-dashboard__test-dropdown-wrap">
             <button
@@ -214,7 +220,12 @@ export default function AdviserTestExamAnalysis({
           </div>
         </div>
 
-        <div className="adviser-dashboard__test-scores-grid">
+        {loading ? <div className="adviser-dashboard__test-score-placeholders" aria-hidden="true">
+          {[0, 1].map(column => <div key={column}>
+            <SkeletonBlock width="65%" />
+            {[0, 1, 2].map(row => <SkeletonBlock key={row} height={24} />)}
+          </div>)}
+        </div> : <div className="adviser-dashboard__test-scores-grid">
           <div className="adviser-dashboard__test-score-col">
             <div className="adviser-dashboard__test-col-title">Highest Score</div>
             {legendItems.map((item) => {
@@ -227,7 +238,7 @@ export default function AdviserTestExamAnalysis({
                   >
                     {item.key}
                   </span>
-                  <span className="adviser-dashboard__test-score-num">{score}</span>
+                  <span className="adviser-dashboard__test-score-num">{loading ? <SkeletonBlock width={40} /> : score}</span>
                 </div>
               );
             })}
@@ -245,12 +256,12 @@ export default function AdviserTestExamAnalysis({
                   >
                     {item.key}
                   </span>
-                  <span className="adviser-dashboard__test-score-num">{score}</span>
+                  <span className="adviser-dashboard__test-score-num">{loading ? <SkeletonBlock width={40} /> : score}</span>
                 </div>
               );
             })}
           </div>
-        </div>
+        </div>}
       </div>
     </div>
   );

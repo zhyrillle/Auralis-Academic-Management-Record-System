@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { getNavigationSnapshot, loadCached, subscribeNavigationCache } from './navigationCache';
 
-export default function useCachedQuery(key, loader, { enabled = true, keepPreviousData = false } = {}) {
+export default function useCachedQuery(key, loader, { enabled = true, keepPreviousData = false, refreshInterval = 60_000, revalidateOnFocus = true } = {}) {
   const loaderRef = useRef(loader);
   useEffect(() => { loaderRef.current = loader; }, [loader]);
 
@@ -18,6 +18,14 @@ export default function useCachedQuery(key, loader, { enabled = true, keepPrevio
     loadCached(key, () => loaderRef.current()).catch(() => {});
   }, [key, enabled]);
 
+  // Saves/session invalidation can remove an entry without changing its key.
+  // Start that missing read immediately rather than leaving its skeleton until
+  // the next scheduled refresh. Pending reads are deduplicated by loadCached.
+  const needsRead = Boolean(enabled && !entry?.pending && entry?.data === undefined && !entry?.error);
+  useEffect(() => {
+    if (needsRead) loadCached(key, () => loaderRef.current()).catch(() => {});
+  }, [key, needsRead]);
+
   // Refresh visible pages quietly once a minute, and when the user returns.
   useEffect(() => {
     if (!enabled) return;
@@ -26,15 +34,17 @@ export default function useCachedQuery(key, loader, { enabled = true, keepPrevio
         loadCached(key, () => loaderRef.current()).catch(() => {});
       }
     };
-    const interval = setInterval(revalidateVisible, 60_000);
-    window.addEventListener('focus', revalidateVisible);
-    document.addEventListener('visibilitychange', revalidateVisible);
+    const interval = refreshInterval > 0 ? setInterval(revalidateVisible, refreshInterval) : null;
+    if (revalidateOnFocus) {
+      window.addEventListener('focus', revalidateVisible);
+      document.addEventListener('visibilitychange', revalidateVisible);
+    }
     return () => {
       clearInterval(interval);
       window.removeEventListener('focus', revalidateVisible);
       document.removeEventListener('visibilitychange', revalidateVisible);
     };
-  }, [key, enabled]);
+  }, [key, enabled, refreshInterval, revalidateOnFocus]);
   const refresh = useCallback(() => loadCached(key, () => loaderRef.current(), { force: true }).catch(() => {}), [key]);
   return {
     data: enabled ? data : undefined,

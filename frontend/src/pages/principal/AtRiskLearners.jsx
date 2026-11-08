@@ -1,3 +1,4 @@
+import { SkeletonValue } from "../../components/common/PageSkeleton";
 import { useState } from 'react';
 import { SearchX } from 'lucide-react';
 import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom';
@@ -50,7 +51,7 @@ function LearnerList({ level }) {
         <img src={backIconUrl} alt="" width={17} height={17} />
       </Link>
       <div><h1 className="ar-title">{title}</h1>
-        <p className="ar-subtitle">{loading ? 'Loading English learners…' : `${matching.length} English learners · ${unavailable ? 'No prediction assigned' : 'Preliminary predictions'}`}</p>
+        <p className="ar-subtitle">{loading ? <SkeletonValue label="Loading learner count" width={230} /> : `${matching.length} English learners · ${unavailable ? 'No prediction assigned' : 'Preliminary predictions'}`}</p>
       </div>
     </div>
     <AtRiskFilters preview={filterPreview}>

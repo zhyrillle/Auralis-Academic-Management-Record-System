@@ -213,6 +213,23 @@ export async function apiFetch(input, init = {}) {
 // Cache JSON page reads using the same account/session cache as useCachedQuery.
 // Every consumer receives its own Response, so reading one never consumes another.
 // Writes retain apiFetch's existing invalidation and offline-queue behavior.
+function jsonRequestKey(input, init = {}) {
+  const headers = [...new Headers(init.headers).entries()]
+    .filter(([name]) => name !== 'authorization').sort(([a], [b]) => a.localeCompare(b));
+  const url = new URL(input, typeof window === 'undefined' ? 'http://localhost' : window.location.origin);
+  url.searchParams.sort();
+  return cacheKey('request:json', { url: url.href, headers: JSON.stringify(headers),
+    credentials: init.credentials || 'same-origin' });
+}
+
+// Reuse an already available response on the first render, without a loading flash.
+export function getCachedApiData(input, init = {}) {
+  if (!getSessionScope()) return undefined;
+  const snapshot = getCachedData(jsonRequestKey(input, init));
+  if (!snapshot) return undefined;
+  try { return JSON.parse(snapshot.body); } catch { return undefined; }
+}
+
 export async function cachedApiFetch(input, init = {}) {
   const { force = false, cacheRead = true, ...requestInit } = init;
   const method = String(requestInit.method || input?.method || 'GET').toUpperCase();
@@ -220,12 +237,7 @@ export async function cachedApiFetch(input, init = {}) {
       requestInit.cache === 'no-store' || !getSessionScope()) return apiFetch(input, requestInit);
   const { signal: callerSignal, ...sharedInit } = requestInit;
   if (callerSignal?.aborted) throw callerSignal.reason || new DOMException('Aborted', 'AbortError');
-  const headers = [...new Headers(requestInit.headers).entries()]
-    .filter(([name]) => name !== 'authorization').sort(([a], [b]) => a.localeCompare(b));
-  const url = new URL(input, typeof window === 'undefined' ? 'http://localhost' : window.location.origin);
-  url.searchParams.sort();
-  const key = cacheKey('request:json', { url: url.href, headers: JSON.stringify(headers),
-    credentials: requestInit.credentials || 'same-origin' });
+  const key = jsonRequestKey(input, requestInit);
   const read = async () => {
     // A component can stop waiting without aborting another component's shared read.
     // Logout still aborts the underlying request through the session signal.

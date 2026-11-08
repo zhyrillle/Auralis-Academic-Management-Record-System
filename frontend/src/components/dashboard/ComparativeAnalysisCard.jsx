@@ -1,3 +1,4 @@
+import { SkeletonBlock, SkeletonRegion } from '../common/PageSkeleton.jsx';
 import StackedBarChart from '../charts/StackedBarChart';
 
 const gradeNumber = value => Number(String(value || '').match(/(?:10|[7-9])/)?.[0]);
@@ -15,8 +16,8 @@ export default function ComparativeAnalysisCard({ data, loading, error, departme
       ] };
   });
   return <section className="dept-card dept-card-wide dept-comparison-chart">
-    <h2 className="dept-card-title">Grade comparison{departmentName ? ' · ' + departmentName : ''}</h2>
-    {loading ? <div className="dept-skeleton-table" role="status" aria-label="Loading grade comparison" /> : error ? <p className="dept-error-text">{error}</p>
+    <h2 className="dept-card-title">{loading ? <SkeletonBlock width="45%" height={18} /> : <>Grade comparison{departmentName ? ' · ' + departmentName : ''}</>}</h2>
+    {loading ? <SkeletonRegion label="Loading grade comparison"><SkeletonBlock className="dept-skeleton-table" /></SkeletonRegion> : error ? <p className="dept-error-text">{error}</p>
       : <StackedBarChart groups={groups} ariaLabel="Grade comparison for Grades 7 to 10" showTooltips />}
   </section>;
 }

@@ -1598,7 +1598,7 @@
   .lrn-action-btn { display: none !important; }
 }
 
-.sf9-skeleton-block { display: block; width: 65%; height: 12px; border-radius: 4px; background: #f1f3f5; }
+.sf9-skeleton-block { display: block; width: 65%; height: 12px; border-radius: 4px;  }
 .sf9-skeleton-card { display: flex; flex-direction: column; justify-content: center; gap: 16px; min-height: 112px; padding: 20px; border: 1px solid #e5e7eb; border-radius: 12px; background: #fff; }
 .sf9-skeleton-heading { width: 45%; height: 20px; }
 .sf9-skeleton-tabs { display: flex; gap: 12px; }
