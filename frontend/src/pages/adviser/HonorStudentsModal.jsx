@@ -1,7 +1,6 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   Award,
-  Sparkles,
   Download,
   Printer,
   Loader2,
@@ -11,6 +10,7 @@ import {
   X,
 } from "lucide-react";
 import OverlayPanel from "../../components/common/OverlayPanel.jsx";
+import Toast from "../../components/common/Toast.jsx";
 import { exportHonorStudentsPdf } from "../../utils/exportHonorStudentsPdf.js";
 import "../../styles/honorStudentsModal.css";
 
@@ -35,6 +35,81 @@ export default function HonorStudentsModal({
   const [searchQuery, setSearchQuery] = useState("");
   const [isExporting, setIsExporting] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
+  const [resolvedPrincipalName, setResolvedPrincipalName] = useState(principalName || "");
+  const [toast, setToast] = useState({ message: "", variant: "success", icon: null });
+
+  const showToast = (message, variant = "success", icon = CheckCircle2) => {
+    setToast({ message, variant, icon });
+    setTimeout(() => {
+      setToast({ message: "", variant: "success", icon: null });
+    }, 4000);
+  };
+
+  // Helper to extract and format principal's name from USER table records
+  const formatPrincipalFromUsers = (users) => {
+    if (!Array.isArray(users)) return "";
+    const principal = users.find(
+      (u) =>
+        String(u.role || "").toLowerCase() === "principal" ||
+        String(u.display_role || "").toLowerCase() === "principal" ||
+        String(u.role) === "1"
+    );
+    if (!principal) return "";
+    const baseName = `${principal.first_name || ""} ${principal.last_name || ""}`.trim();
+    const ext = (principal.extension_name || "").trim();
+    let formatted = ext ? `${baseName}, ${ext}` : baseName;
+    if (
+      formatted &&
+      !formatted.toUpperCase().includes("PH.D") &&
+      !formatted.toUpperCase().includes("PHD")
+    ) {
+      formatted = `${formatted}, Ph.D.`;
+    }
+    return formatted;
+  };
+
+  // Dynamically resolve principal from props or by querying the USER table (/api/users)
+  const resolvePrincipalName = async () => {
+    if (resolvedPrincipalName) return resolvedPrincipalName;
+    try {
+      const res = await fetch("/api/users");
+      if (res.ok) {
+        const users = await res.json();
+        const formatted = formatPrincipalFromUsers(users);
+        if (formatted) {
+          setResolvedPrincipalName(formatted);
+          return formatted;
+        }
+      }
+    } catch (err) {
+      console.warn("Could not fetch principal from user table:", err);
+    }
+    return resolvedPrincipalName || "";
+  };
+
+  // Fetch dynamically the principal's name if not provided via props
+  useEffect(() => {
+    if (principalName) {
+      setResolvedPrincipalName(principalName);
+      return;
+    }
+    let isMounted = true;
+    fetch("/api/users")
+      .then((res) => (res.ok ? res.json() : []))
+      .then((users) => {
+        if (!isMounted) return;
+        const formatted = formatPrincipalFromUsers(users);
+        if (formatted) {
+          setResolvedPrincipalName(formatted);
+        }
+      })
+      .catch((err) => {
+        console.warn("Could not fetch principal from user table:", err);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [principalName]);
 
   // Compute overall grade completion statistics across the entire section roster
   const completionStats = useMemo(() => {
@@ -43,11 +118,8 @@ export default function HonorStudentsModal({
     let completeCount = 0;
 
     (students || []).forEach((student) => {
-      // In MasterSheetService, student.generalAverage is only non-null
-      // when all subject terms are complete and numeric.
-      const hasValidGenAvg =
-        typeof student.generalAverage === "number" &&
-        Number.isFinite(student.generalAverage);
+      const rawAvg = Number(student.generalAverage);
+      const hasValidGenAvg = Number.isFinite(rawAvg) && rawAvg > 0;
 
       if (totalSubjects > 0) {
         let subjectComplete = 0;
@@ -95,11 +167,8 @@ export default function HonorStudentsModal({
     const results = [];
 
     (students || []).forEach((student) => {
-      // Must have complete general average
-      if (
-        typeof student.generalAverage !== "number" ||
-        !Number.isFinite(student.generalAverage)
-      ) {
+      const rawAvg = Number(student.generalAverage);
+      if (!Number.isFinite(rawAvg) || rawAvg <= 0) {
         return;
       }
 
@@ -121,7 +190,7 @@ export default function HonorStudentsModal({
         });
       }
 
-      const genAvg = Math.round(student.generalAverage);
+      const genAvg = Math.round(rawAvg);
       let status = null;
       let statusLabel = "";
 
@@ -146,17 +215,19 @@ export default function HonorStudentsModal({
           status,
           statusLabel,
           genAvgDisplay: genAvg,
-          numericAverage: genAvg,
+          numericAverage: rawAvg,
         });
       }
     });
 
-    // Sort descending by General Average, then alphabetically by Name
+    // Automatically order strictly highest-to-lowest general average
     return results.sort((a, b) => {
-      if (b.numericAverage !== a.numericAverage) {
-        return b.numericAverage - a.numericAverage;
+      const avgA = Number(a.numericAverage ?? a.generalAverage ?? a.genAvgDisplay ?? 0);
+      const avgB = Number(b.numericAverage ?? b.generalAverage ?? b.genAvgDisplay ?? 0);
+      if (avgB !== avgA) {
+        return avgB - avgA;
       }
-      return (a.displayName || "").localeCompare(b.displayName || "");
+      return String(a.displayName || "").localeCompare(String(b.displayName || ""));
     });
   }, [students, subjects]);
 
@@ -175,7 +246,7 @@ export default function HonorStudentsModal({
     return { highest, high, withHonors, total: honorStudents.length };
   }, [honorStudents]);
 
-  // Filtered list based on active pill and search query
+  // Filtered list based on active pill and search query (preserves highest-to-lowest order)
   const displayedStudents = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
 
@@ -190,17 +261,21 @@ export default function HonorStudentsModal({
     });
   }, [honorStudents, searchQuery, selectedFilter]);
 
-  // Download PDF Handler
+  // Download PDF Handler with Toast feedback
   const handleDownloadPdf = async () => {
     if (isExporting || isPrinting || honorStudents.length === 0) return;
     setIsExporting(true);
+    const sectionDisplay = section?.name ? `${section?.gradeLevel || ""} - ${section.name}` : "Section";
+    showToast(`Generating PDF of Honor Students for ${sectionDisplay}...`, "info", CheckCircle2);
+
     try {
+      const activePrincipal = (await resolvePrincipalName()) || resolvedPrincipalName;
       const { blob, filename } = await exportHonorStudentsPdf({
         honorStudents,
         section,
         schoolYear,
         adviserName,
-        principalName,
+        principalName: activePrincipal,
       });
 
       const url = URL.createObjectURL(blob);
@@ -211,25 +286,36 @@ export default function HonorStudentsModal({
       anchor.click();
       anchor.remove();
       URL.revokeObjectURL(url);
+
+      showToast(`Downloaded official PDF of Honor Students for ${sectionDisplay}`, "success", CheckCircle2);
     } catch (err) {
       console.error("Failed to generate Honor Students PDF:", err);
+      showToast("Failed to download Honor Students PDF. Please try again.", "error");
     } finally {
       setIsExporting(false);
     }
   };
 
-  // Print PDF Handler
+  // Print PDF Handler with Toast feedback and matching filename for Save-as-PDF
   const handlePrintPdf = async () => {
     if (isExporting || isPrinting || honorStudents.length === 0) return;
     setIsPrinting(true);
+    const sectionDisplay = section?.name ? `${section?.gradeLevel || ""} - ${section.name}` : "Section";
+    showToast(`Preparing print document for ${sectionDisplay}...`, "info", Printer);
+
     try {
-      const { blob } = await exportHonorStudentsPdf({
+      const activePrincipal = (await resolvePrincipalName()) || resolvedPrincipalName;
+      const { blob, filename } = await exportHonorStudentsPdf({
         honorStudents,
         section,
         schoolYear,
         adviserName,
-        principalName,
+        principalName: activePrincipal,
       });
+
+      const printTitle = filename.replace(/\.pdf$/i, "");
+      const originalDocTitle = document.title;
+      document.title = printTitle;
 
       const blobUrl = URL.createObjectURL(blob);
       const iframe = document.createElement("iframe");
@@ -244,12 +330,17 @@ export default function HonorStudentsModal({
 
       iframe.onload = () => {
         try {
+          if (iframe.contentDocument) {
+            iframe.contentDocument.title = printTitle;
+          }
           iframe.contentWindow.focus();
           iframe.contentWindow.print();
+          showToast(`Opening Print Preview for ${sectionDisplay}`, "success", Printer);
         } catch {
           window.open(blobUrl, "_blank");
         } finally {
           setTimeout(() => {
+            document.title = originalDocTitle;
             if (document.body.contains(iframe)) {
               document.body.removeChild(iframe);
             }
@@ -259,24 +350,24 @@ export default function HonorStudentsModal({
       };
     } catch (err) {
       console.error("Failed to print Honor Students PDF:", err);
+      showToast("Failed to print Honor Students document. Please try again.", "error");
     } finally {
       setIsPrinting(false);
     }
   };
 
+  // Badges without the Sparkles icon
   const renderBadge = (student) => {
     switch (student.status) {
       case "WITH_HIGHEST_HONORS":
         return (
           <span className="ms-honors-badge ms-honors-badge--highest">
-            <Sparkles size={12} aria-hidden="true" />
             With Highest Honors
           </span>
         );
       case "WITH_HIGH_HONORS":
         return (
           <span className="ms-honors-badge ms-honors-badge--high">
-            <Sparkles size={12} aria-hidden="true" />
             With High Honors
           </span>
         );
@@ -284,7 +375,6 @@ export default function HonorStudentsModal({
       default:
         return (
           <span className="ms-honors-badge ms-honors-badge--with">
-            <Sparkles size={12} aria-hidden="true" />
             With Honors
           </span>
         );
@@ -292,15 +382,6 @@ export default function HonorStudentsModal({
   };
 
   const isActionDisabled = isPrinting || isExporting || honorStudents.length === 0;
-
-  const disabledWarningMessage =
-    isPrinting || isExporting
-      ? "Generating document, please wait..."
-      : honorStudents.length === 0
-        ? !completionStats.isFinalized
-          ? `Warning: Term grades across all subjects are incomplete (${completionStats.pendingCount} students pending). No honor students qualify yet.`
-          : "Warning: No students in this section qualify for academic honors."
-        : "";
 
   const title = "Honor Students";
   const eyebrow = section?.name
@@ -437,50 +518,32 @@ export default function HonorStudentsModal({
               )}
             </div>
 
-            {/* Print button with warning tooltip and not-allowed cursor on disabled */}
-            <div
-              className={`ms-honors-action-wrapper ${isActionDisabled ? "ms-honors-action-wrapper--disabled" : ""
-                }`}
-            >
+            {/* Print button */}
+            <div className="ms-honors-action-wrapper">
               <button
                 type="button"
                 className="ms-honors-btn-print"
                 onClick={handlePrintPdf}
                 disabled={isActionDisabled}
-                aria-label={disabledWarningMessage || "Print official list of honor students"}
+                aria-label="Print official list of honor students"
               >
                 {isPrinting ? <Loader2 size={14} className="ms-spin" /> : <Printer size={14} />}
                 <span>{isPrinting ? "Printing…" : "Print"}</span>
               </button>
-              {isActionDisabled && disabledWarningMessage && (
-                <div className="ms-honors-action-tooltip" role="tooltip">
-                  <AlertTriangle size={13} className="ms-honors-tooltip-warn-icon" aria-hidden="true" />
-                  <span>{disabledWarningMessage}</span>
-                </div>
-              )}
             </div>
 
-            {/* Download button with warning tooltip and not-allowed cursor on disabled */}
-            <div
-              className={`ms-honors-action-wrapper ${isActionDisabled ? "ms-honors-action-wrapper--disabled" : ""
-                }`}
-            >
+            {/* Download button */}
+            <div className="ms-honors-action-wrapper">
               <button
                 type="button"
                 className="ms-honors-btn-download"
                 onClick={handleDownloadPdf}
                 disabled={isActionDisabled}
-                aria-label={disabledWarningMessage || "Download PDF of honor students"}
+                aria-label="Download PDF of honor students"
               >
                 {isExporting ? <Loader2 size={14} className="ms-spin" /> : <Download size={14} />}
                 <span>{isExporting ? "Downloading…" : "Download PDF"}</span>
               </button>
-              {isActionDisabled && disabledWarningMessage && (
-                <div className="ms-honors-action-tooltip" role="tooltip">
-                  <AlertTriangle size={13} className="ms-honors-tooltip-warn-icon" aria-hidden="true" />
-                  <span>{disabledWarningMessage}</span>
-                </div>
-              )}
             </div>
           </div>
         </div>
@@ -555,6 +618,13 @@ export default function HonorStudentsModal({
           </table>
         </div>
       </div>
+
+      <Toast
+        message={toast.message}
+        variant={toast.variant}
+        icon={toast.icon || undefined}
+        onDismiss={() => setToast({ message: "", variant: "success", icon: null })}
+      />
     </OverlayPanel>
   );
 }

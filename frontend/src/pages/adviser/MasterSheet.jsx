@@ -62,6 +62,7 @@ export default function MasterSheet() {
   const [isHonorsModalOpen, setIsHonorsModalOpen] = useState(false);
   const [requestError, setRequestError] = useState("");
   const [toast, setToast] = useState(emptyToast);
+  const [fallbackPrincipalName, setFallbackPrincipalName] = useState("");
   const masterSheetRef = useRef(initial.sheet || null);
   const lastSheetReadAtRef = useRef(0);
   const readGenerationRef = useRef(0);
@@ -71,6 +72,40 @@ export default function MasterSheet() {
   const scrollIdleTimerRef = useRef(null);
 
   useEffect(() => () => window.clearTimeout(scrollIdleTimerRef.current), []);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/users")
+      .then((res) => (res.ok ? res.json() : []))
+      .then((users) => {
+        if (cancelled || !Array.isArray(users)) return;
+        const p = users.find(
+          (u) =>
+            String(u.role || "").toLowerCase() === "principal" ||
+            String(u.display_role || "").toLowerCase() === "principal" ||
+            String(u.role) === "1"
+        );
+        if (p) {
+          const baseName = `${p.first_name || ""} ${p.last_name || ""}`.trim();
+          const ext = (p.extension_name || "").trim();
+          let formatted = ext ? `${baseName}, ${ext}` : baseName;
+          if (
+            formatted &&
+            !formatted.toUpperCase().includes("PH.D") &&
+            !formatted.toUpperCase().includes("PHD")
+          ) {
+            formatted = `${formatted}, Ph.D.`;
+          }
+          if (!cancelled && formatted) {
+            setFallbackPrincipalName(formatted);
+          }
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleTableScroll = () => {
     setIsTableScrolling(true);
@@ -727,6 +762,7 @@ export default function MasterSheet() {
         section={masterSheet?.section}
         schoolYear={masterSheet?.schoolYear}
         adviserName={masterSheet?.adviser?.name}
+        principalName={masterSheet?.principal?.name || fallbackPrincipalName || ""}
       />
 
       <Toast
