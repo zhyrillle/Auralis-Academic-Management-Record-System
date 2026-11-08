@@ -126,7 +126,6 @@ export default function ProfilePage({ user, onUserUpdated }) {
   const [savedProfile, setSavedProfile] = useState(emptyProfile);
   const [draftProfile, setDraftProfile] = useState(emptyProfile);
   const [isEditing, setIsEditing] = useState(false);
-  const [bannerIllustration, setBannerIllustration] = useState({ saved: "female", draft: "female" });
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [pageError, setPageError] = useState("");
@@ -149,6 +148,10 @@ export default function ProfilePage({ user, onUserUpdated }) {
   const storedUser = useMemo(() => readStoredUser(), []);
   const userId = user?.user_id || storedUser?.user_id;
   const isAdviser = normalizeRole(user || storedUser) === "adviser";
+  const [bannerIllustration, setBannerIllustration] = useState(() => {
+    const illustration = getAdviserBannerIllustration(userId);
+    return { saved: illustration, draft: illustration };
+  });
   const [profileReadVersion, setProfileReadVersion] = useState(0);
   const errors = useMemo(() => validateProfile(draftProfile), [draftProfile]);
   const hasProfileChanges = useMemo(
@@ -513,6 +516,10 @@ export default function ProfilePage({ user, onUserUpdated }) {
     { label: "Last Name", value: savedProfile.lastName || "—" },
     { label: "Extension Name", value: savedProfile.extensionName || "—" },
     { label: "Email Address", value: savedProfile.email || "—" },
+    ...(isAdviser ? [{
+      label: "Banner illustration",
+      value: bannerIllustration.saved === "male" ? "Male illustration" : "Female illustration",
+    }] : []),
     { label: "User Role", value: savedProfile.role },
     { label: "Account Status", value: savedProfile.accountStatus, isStatus: true },
     { label: "Last Login", value: formatDateTime(savedProfile.lastLoginAt) },
