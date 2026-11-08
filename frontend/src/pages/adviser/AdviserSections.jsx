@@ -163,6 +163,27 @@ export default function AdviserSections({ userRole: propUserRole }) {
     setFilterClassType("All");
   };
 
+  const classCards = useMemo(() => {
+    const sectionKey = (cls) => `${cls.section_id}:${cls.school_year_id || cls.schoolYearId || ""}`;
+    const advisoryClasses = new Map(classes
+      .filter((cls) => cls.assignmentType === "advisory")
+      .map((cls) => [sectionKey(cls), cls]));
+    const teachingSections = new Set(classes
+      .filter((cls) => cls.assignmentType === "teaching")
+      .map(sectionKey));
+    const combinedSections = new Set();
+
+    return classes.flatMap((cls) => {
+      const key = sectionKey(cls);
+      if (cls.assignmentType === "advisory" && teachingSections.has(key)) return [];
+      const advisory = advisoryClasses.get(key);
+      if (cls.assignmentType !== "teaching" || !advisory || combinedSections.has(key)) return [cls];
+      combinedSections.add(key);
+      // Keep View's adviser assignment separate from the subject record actions.
+      return [{ ...cls, isAdviser: true, classType: advisory.classType, advisoryView: advisory }];
+    });
+  }, [classes]);
+
   const [toasts, setToasts] = useState([]);
 
   const triggerToast = (message, type = "success") => {
@@ -186,7 +207,7 @@ export default function AdviserSections({ userRole: propUserRole }) {
   };
 
   const filteredAndSortedClasses = useMemo(() => {
-    let result = [...classes];
+    let result = [...classCards];
     if (filterSubject !== "All") result = result.filter((c) => c.subject === filterSubject);
     if (filterGrade !== "All") result = result.filter((c) => c.gradeLevel === filterGrade);
     if (filterClassType !== "All") {
@@ -205,10 +226,6 @@ export default function AdviserSections({ userRole: propUserRole }) {
     }
 
     result.sort((a, b) => {
-      // Pin whole-class advisory cards ahead of subject cards, even when a
-      // subject card also carries the adviser's star label.
-      const advisoryPriority = Number(b.assignmentType === "advisory") - Number(a.assignmentType === "advisory");
-      if (advisoryPriority) return advisoryPriority;
       let valA = a[sortBy] ? a[sortBy].toLowerCase() : "";
       let valB = b[sortBy] ? b[sortBy].toLowerCase() : "";
       if (sortBy === "gradeLevel") {
@@ -221,10 +238,10 @@ export default function AdviserSections({ userRole: propUserRole }) {
       return 0;
     });
     return result;
-  }, [classes, filterSubject, filterGrade, filterClassType, sortBy, sortAscending]);
+  }, [classCards, filterSubject, filterGrade, filterClassType, sortBy, sortAscending]);
 
-  const subjectOptions = useMemo(() => ["All", ...Array.from(new Set(classes.map((c) => c.subject)))], [classes]);
-  const gradeOptions = useMemo(() => ["All", ...Array.from(new Set(classes.map((c) => c.gradeLevel)))], [classes]);
+  const subjectOptions = useMemo(() => ["All", ...Array.from(new Set(classCards.map((c) => c.subject)))], [classCards]);
+  const gradeOptions = useMemo(() => ["All", ...Array.from(new Set(classCards.map((c) => c.gradeLevel)))], [classCards]);
 
   const handleUpdateQuarterlyGrades = (term, quarterlyGradesMap) => {
     if (!activeSelectedClass) return;
@@ -423,11 +440,10 @@ export default function AdviserSections({ userRole: propUserRole }) {
               {filteredAndSortedClasses.map((cls) => (
                 <ClassCard
                   key={cls.id} cls={cls}
-                  showSecondaryActions={cls.assignmentType !== "advisory"}
                   secondaryActionsDisabled={!(Number.isInteger(Number(cls.subject_offering_id || cls.offering_id))
                     && Number(cls.subject_offering_id || cls.offering_id) > 0)}
                   secondaryActionsDisabledReason="No teaching subject is assigned to you for this class. Use View to see the advisory section."
-                  onView={(c) => { setactiveSelectedClass(c); setCurrentView("section-details"); }}
+                  onView={(c) => { setactiveSelectedClass(c.advisoryView || c); setCurrentView("section-details"); }}
                   onGradingSheet={(c) => { setactiveSelectedClass(c); setCurrentView("grading-sheet"); }}
                   onEdit={(c) => { setactiveSelectedClass(c); setCurrentView("class-record"); }}
                 />

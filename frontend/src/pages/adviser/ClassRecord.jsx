@@ -1862,12 +1862,12 @@ const formatToISODate = (val) => {
               </button>
             )}
 
-            {/* ATTENDANCE WITH CONDITIONAL DISABLING */}
+            {/* Attendance remains available when grades are locked. */}
             <button
               type="button"
-              className={`class-record-action-btn attendance-btn ${isLocked ? "disabled" : ""}`}
+              className={`class-record-action-btn attendance-btn ${!isRecordReady ? "disabled" : ""}`}
               onClick={
-                isLocked
+                !isRecordReady
                   ? undefined
                   : () => {
                       const prefix = location.pathname.startsWith("/teacher") ? "/teacher" : "/adviser";
@@ -1893,8 +1893,8 @@ const formatToISODate = (val) => {
                       }
                     }
               }
-              disabled={isLocked}
-              title={!isRecordReady ? "Attendance is unavailable while the record is loading or unavailable." : isLocked ? "Attendance is unavailable for closed/locked terms." : "Attendance"}
+              disabled={!isRecordReady}
+              title={!isRecordReady ? "Attendance is unavailable while the record is loading or unavailable." : "Attendance"}
             >
               <span className="action-icon">▰</span>
               Attendance
