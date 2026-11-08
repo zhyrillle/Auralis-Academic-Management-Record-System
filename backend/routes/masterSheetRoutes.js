@@ -28,17 +28,17 @@ router.get("/principal", async (req, res) => {
   try {
     const db = require("../config/db");
     const [pRows] = await db.execute(
-      `SELECT first_name, last_name, extension_name FROM USER WHERE role IN ('1', 'principal', '5') LIMIT 1`
+      `SELECT first_name, last_name, extension_name, credentials FROM USER WHERE role IN ('1', 'principal', '5') LIMIT 1`
     );
     let principalName = "";
     if (pRows && pRows.length > 0) {
       const p = pRows[0];
       const baseName = `${p.first_name || ''} ${p.last_name || ''}`.trim();
       const ext = (p.extension_name || '').trim();
-      principalName = ext ? `${baseName}, ${ext}` : baseName;
-      if (principalName && !principalName.toUpperCase().includes("PH.D") && !principalName.toUpperCase().includes("PHD")) {
-        principalName = `${principalName}, Ph.D.`;
-      }
+      const cred = (p.credentials || '').trim();
+      let formatted = ext ? `${baseName}, ${ext}` : baseName;
+      if (cred) formatted = `${formatted}, ${cred}`;
+      principalName = formatted;
     }
     return res.json({ principalName });
   } catch (error) {

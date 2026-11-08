@@ -88,11 +88,42 @@ export default function GradingSheet({
         ?.terms.find(term => term.term === currentTermCode);
 
     const currentUser = useMemo(() => getStoredUser(), []);
+    const [principalName, setPrincipalName] = useState("");
+    const [teacherCredentials, setTeacherCredentials] = useState("");
+
+    useEffect(() => {
+        let cancelled = false;
+        fetch("/api/users")
+            .then(res => res.ok ? res.json() : [])
+            .then(users => {
+                if (cancelled || !Array.isArray(users)) return;
+                const p = users.find(u => String(u.role || "").toLowerCase() === "principal" || String(u.display_role || "").toLowerCase() === "principal" || String(u.role) === "1");
+                if (p) {
+                    const base = `${p.first_name || ""} ${p.last_name || ""}`.trim();
+                    const ext = (p.extension_name || "").trim();
+                    const cred = (p.credentials || "").trim();
+                    let formatted = ext ? `${base}, ${ext}` : base;
+                    if (cred) formatted = `${formatted}, ${cred}`;
+                    setPrincipalName(formatted);
+                }
+                const t = users.find(u => Number(u.user_id) === Number(currentUser?.id || currentUser?.user_id));
+                if (t?.credentials) {
+                    setTeacherCredentials(t.credentials.trim());
+                }
+            })
+            .catch(() => { });
+        return () => { cancelled = true; };
+    }, [currentUser]);
+
     const teacherName = useMemo(() => {
         if (!currentUser) return "Teacher";
         const fullName = `${currentUser.first_name || ""} ${currentUser.last_name || ""}`.trim();
-        return fullName || currentUser.username || "Teacher";
-    }, [currentUser]);
+        const ext = (currentUser.extension_name || "").trim();
+        let formatted = ext ? `${fullName}, ${ext}` : fullName;
+        const cred = teacherCredentials || (currentUser.credentials || "").trim();
+        if (cred) formatted = `${formatted}, ${cred}`;
+        return formatted || currentUser.username || "Teacher";
+    }, [currentUser, teacherCredentials]);
 
     // MAPEH Subject Detection
     const isMapeh = useMemo(() => {
@@ -260,6 +291,7 @@ export default function GradingSheet({
             getDescriptor,
             getRemark,
             teacherName,
+            principalName,
             isMapeh,
             activeMapehTab: exportMapehTab,
             combinedTermFilter,
@@ -286,6 +318,7 @@ export default function GradingSheet({
             getDescriptor,
             getRemark,
             teacherName,
+            principalName,
             isMapeh,
             activeMapehTab: exportMapehTab,
             combinedTermFilter,

@@ -88,14 +88,9 @@ export default function MasterSheet() {
         if (p) {
           const baseName = `${p.first_name || ""} ${p.last_name || ""}`.trim();
           const ext = (p.extension_name || "").trim();
+          const cred = (p.credentials || "").trim();
           let formatted = ext ? `${baseName}, ${ext}` : baseName;
-          if (
-            formatted &&
-            !formatted.toUpperCase().includes("PH.D") &&
-            !formatted.toUpperCase().includes("PHD")
-          ) {
-            formatted = `${formatted}, Ph.D.`;
-          }
+          if (cred) formatted = `${formatted}, ${cred}`;
           if (!cancelled && formatted) {
             setFallbackPrincipalName(formatted);
           }

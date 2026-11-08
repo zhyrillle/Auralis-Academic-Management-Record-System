@@ -317,7 +317,7 @@ export async function exportSf9Pdf({
           <!-- School Head signature on the left below Adviser -->
           <div style="display: flex; justify-content: flex-start; margin-left: 40px;">
             <div style="width: 180px; text-align: center;">
-              <div style="border-bottom: 1px solid #000000; font-weight: bold; font-size: 11px; padding-bottom: 2px; min-height: 16px;">${studentProfile.principalName ? `${studentProfile.principalName}, Ph.D.` : ""}</div>
+              <div style="border-bottom: 1px solid #000000; font-weight: bold; font-size: 11px; padding-bottom: 2px; min-height: 16px;">${(studentProfile.principalName || "").toUpperCase()}</div>
               <div style="font-size: 10px; margin-top: 2px;">School Head</div>
             </div>
           </div>
@@ -342,7 +342,7 @@ export async function exportSf9Pdf({
 
         <div style="display: flex; justify-content: flex-start; margin-left: 10px;">
           <div style="width: 180px; text-align: center;">
-            <div style="border-bottom: 1px solid #000000; font-weight: bold; font-size: 11px; padding-bottom: 2px; min-height: 16px;">${studentProfile.principalName ? `${studentProfile.principalName}, Ph.D.` : ""}</div>
+            <div style="border-bottom: 1px solid #000000; font-weight: bold; font-size: 11px; padding-bottom: 2px; min-height: 16px;">${(studentProfile.principalName || "").toUpperCase()}</div>
             <div style="font-size: 10px; margin-top: 2px;">School Head</div>
           </div>
         </div>

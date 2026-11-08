@@ -59,8 +59,10 @@ const formatPersonName = (person) => {
   const parts = [person.first_name];
   if (person.middle_name) parts.push(person.middle_name);
   parts.push(person.last_name);
-  if (person.extension_name) parts.push(person.extension_name);
-  return parts.filter(Boolean).join(" ");
+  let base = parts.filter(Boolean).join(" ");
+  if (person.extension_name) base = `${base}, ${person.extension_name}`;
+  if (person.credentials) base = `${base}, ${person.credentials}`;
+  return base;
 };
 
 const normalizeSex = (sex) => {
@@ -153,7 +155,8 @@ class MasterSheetService {
          u.first_name,
          u.middle_name,
          u.last_name,
-         u.extension_name
+         u.extension_name,
+         u.credentials
        FROM SECTION_ADVISER_ASSIGNMENT saa
        INNER JOIN SECTION sec ON sec.section_id = saa.section_id
        LEFT JOIN PROGRAM p ON p.program_id = sec.program_id
@@ -238,16 +241,16 @@ class MasterSheetService {
     let principalName = "";
     try {
       const [pRows] = await db.execute(
-        `SELECT first_name, last_name, extension_name FROM USER WHERE role IN ('1', 'principal', '5') LIMIT 1`
+        `SELECT first_name, last_name, extension_name, credentials FROM USER WHERE role IN ('1', 'principal', '5') LIMIT 1`
       );
       if (pRows && pRows.length > 0) {
         const p = pRows[0];
         const baseName = `${p.first_name || ''} ${p.last_name || ''}`.trim();
         const ext = (p.extension_name || '').trim();
-        principalName = ext ? `${baseName}, ${ext}` : baseName;
-        if (principalName && !principalName.toUpperCase().includes("PH.D") && !principalName.toUpperCase().includes("PHD")) {
-          principalName = `${principalName}, Ph.D.`;
-        }
+        const cred = (p.credentials || '').trim();
+        let formatted = ext ? `${baseName}, ${ext}` : baseName;
+        if (cred) formatted = `${formatted}, ${cred}`;
+        principalName = formatted;
       }
     } catch {
       // Non-blocking if principal lookup fails

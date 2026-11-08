@@ -340,15 +340,7 @@ export async function exportHonorStudentsPdf({
   pdf.setTextColor(15, 23, 42);
 
   const cleanAdviser = (adviserName || "CLASS ADVISER").toUpperCase();
-  let cleanPrincipal = (principalName || "SCHOOL PRINCIPAL").trim().toUpperCase();
-  if (
-    cleanPrincipal &&
-    cleanPrincipal !== "SCHOOL PRINCIPAL" &&
-    !cleanPrincipal.includes("PH.D") &&
-    !cleanPrincipal.includes("PHD")
-  ) {
-    cleanPrincipal = `${cleanPrincipal}, PH.D.`;
-  }
+  const cleanPrincipal = (principalName || "SCHOOL PRINCIPAL").trim().toUpperCase();
 
   pdf.text(cleanAdviser, adviserCenterX, y, { align: "center" });
   pdf.text(cleanPrincipal, principalCenterX, y, { align: "center" });

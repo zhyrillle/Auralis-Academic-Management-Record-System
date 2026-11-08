@@ -393,6 +393,7 @@ const getManagementUsers = async (schoolYearId = null) => {
       u.middle_name,
       u.last_name,
       u.extension_name,
+      u.credentials,
       u.email,
       u.pfp_url,
       u.account_status,
