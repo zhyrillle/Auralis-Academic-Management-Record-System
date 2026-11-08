@@ -56,11 +56,11 @@ class Attendance {
           st.sex
         FROM ATTENDANCE a
         INNER JOIN ATTENDANCE_SHEET ash ON ash.attendance_sheet_id = a.attendance_sheet_id
-        INNER JOIN TEACHER_ASSIGNMENT ta ON ta.teacher_assignment_id = ash.teacher_assignment_id
-        INNER JOIN SUBJECT_OFFERING so ON so.subject_offering_id = ta.subject_offering_id
         INNER JOIN STUDENT_SECTION ss ON ss.student_section_id = a.student_section_id
         INNER JOIN STUDENT st ON st.student_id = ss.student_id
-        WHERE so.section_id = ? AND ash.attendance_scope = 'SUBJECT'
+        LEFT JOIN TEACHER_ASSIGNMENT ta ON ta.teacher_assignment_id = ash.teacher_assignment_id
+        LEFT JOIN SUBJECT_OFFERING so ON so.subject_offering_id = ta.subject_offering_id
+        WHERE ss.section_id = ? AND ash.attendance_scope = 'SUBJECT'
       `;
       if (teacher_assignment_id) {
         query += ` AND ash.teacher_assignment_id = ?`;
@@ -70,8 +70,8 @@ class Attendance {
         params.push(user_id);
       }
       if (schoolYearId) {
-        query += ` AND so.school_year_id = ?`;
-        params.push(schoolYearId);
+        query += ` AND (so.school_year_id = ? OR ss.school_year_id = ?)`;
+        params.push(schoolYearId, schoolYearId);
       }
       query += ` ORDER BY ash.attendance_date ASC, st.last_name ASC, st.first_name ASC`;
       const [rows] = await db.execute(query, params);
@@ -93,21 +93,18 @@ class Attendance {
         st.sex
       FROM ATTENDANCE a
       INNER JOIN ATTENDANCE_SHEET ash ON ash.attendance_sheet_id = a.attendance_sheet_id
-      INNER JOIN SECTION_ADVISER_ASSIGNMENT saa ON saa.adviser_assignment_id = ash.adviser_assignment_id
       INNER JOIN STUDENT_SECTION ss ON ss.student_section_id = a.student_section_id
       INNER JOIN STUDENT st ON st.student_id = ss.student_id
-      WHERE saa.section_id = ? AND ash.attendance_scope = 'SECTION'
+      LEFT JOIN SECTION_ADVISER_ASSIGNMENT saa ON saa.adviser_assignment_id = ash.adviser_assignment_id
+      WHERE ss.section_id = ? AND ash.attendance_scope = 'SECTION'
     `;
     if (adviser_assignment_id) {
-      query += ` AND ash.adviser_assignment_id = ?`;
+      query += ` AND (ash.adviser_assignment_id = ? OR ash.adviser_assignment_id IS NULL)`;
       params.push(adviser_assignment_id);
-    } else if (user_id) {
-      query += ` AND saa.user_id = ?`;
-      params.push(user_id);
     }
     if (schoolYearId) {
-      query += ` AND saa.school_year_id = ?`;
-      params.push(schoolYearId);
+      query += ` AND (ss.school_year_id = ? OR saa.school_year_id = ?)`;
+      params.push(schoolYearId, schoolYearId);
     }
     query += ` ORDER BY ash.attendance_date ASC, st.last_name ASC, st.first_name ASC`;
     const [rows] = await db.execute(query, params);
