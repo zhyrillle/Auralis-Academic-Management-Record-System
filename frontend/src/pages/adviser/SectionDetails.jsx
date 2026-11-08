@@ -76,15 +76,15 @@ export default function SectionDetails({
   const [activeSf9Student, setActiveSf9Student] = useState(null);
 
   const isSectionAdviser = useMemo(() => {
+    if (typeof isAdviser === "boolean") return isAdviser;
+    if (typeof activeSection?.isAdviser === "boolean") return activeSection.isAdviser;
     if (data?.context?.assignmentType) return data.context.assignmentType === "advisory";
     if (data?.assignmentType) return data.assignmentType === "advisory";
     if (data?.meta?.assignmentType) return data.meta.assignmentType === "advisory";
     if (activeSection?.assignmentType) return activeSection.assignmentType === "advisory";
-    if (typeof activeSection?.isAdviser === "boolean") return activeSection.isAdviser;
-    if (activeSection?.classType) return String(activeSection.classType).startsWith("Advisory Class");
-    if (typeof isAdviser === "boolean") return isAdviser;
-    return userRole === "adviser";
-  }, [data, activeSection, isAdviser, userRole]);
+    if (activeSection?.classType) return String(activeSection.classType).toLowerCase().includes("advisory");
+    return false;
+  }, [data, activeSection, isAdviser]);
 
   const assignmentType = activeSection?.assignmentType
     || (isSectionAdviser ? "advisory" : "teaching");
@@ -212,7 +212,8 @@ export default function SectionDetails({
   }, [data]);
 
   const handleActionClick = (learner, initialTab = "personal") => {
-    if (onViewStudent) onViewStudent(learner, initialTab);
+    const tab = isSectionAdviser ? initialTab : "personal";
+    if (onViewStudent) onViewStudent(learner, tab);
     else setActiveSf9Student({
       studentId: learner.studentId,
       studentSectionId: learner.studentSectionId,
@@ -221,7 +222,8 @@ export default function SectionDetails({
       schoolYear: data?.context?.schoolYear?.label,
       section: data?.context?.sectionName,
       gradeLevel: data?.context?.gradeLevel,
-      initialTab,
+      initialTab: tab,
+      isAdviser: isSectionAdviser,
       // SF9 determines its own year-end standing; a selected-term honor is not a final award.
     });
   };
@@ -231,7 +233,7 @@ export default function SectionDetails({
       <StudentSF9Page
         student={activeSf9Student}
         initialTab={activeSf9Student.initialTab || "personal"}
-        isAdviser={isSectionAdviser || activeSf9Student.initialTab === "sf9" || activeSf9Student.initialTab === "sf10"}
+        isAdviser={isSectionAdviser}
         userRole={userRole}
         onBack={() => setActiveSf9Student(null)}
       />
@@ -426,24 +428,28 @@ export default function SectionDetails({
                         >
                           <Eye size={16} />
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => handleActionClick(learner, "sf9")}
-                          className="action-sf-btn action-sf9-btn"
-                          title="View Official SF9 Form"
-                          aria-label={`View SF9 for ${learner.name}`}
-                        >
-                          SF9
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleActionClick(learner, "sf10")}
-                          className="action-sf-btn action-sf10-btn"
-                          title="View Official SF10 Form"
-                          aria-label={`View SF10 for ${learner.name}`}
-                        >
-                          SF10
-                        </button>
+                        {isSectionAdviser && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => handleActionClick(learner, "sf9")}
+                              className="action-sf-btn action-sf9-btn"
+                              title="View Official SF9 Form"
+                              aria-label={`View SF9 for ${learner.name}`}
+                            >
+                              SF9
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleActionClick(learner, "sf10")}
+                              className="action-sf-btn action-sf10-btn"
+                              title="View Official SF10 Form"
+                              aria-label={`View SF10 for ${learner.name}`}
+                            >
+                              SF10
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>

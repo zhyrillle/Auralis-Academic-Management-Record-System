@@ -26,7 +26,7 @@ export default function MasterSheetSkeleton() {
           {[0, 1].map(group => <Fragment key={group}>
             <tr className="ms-loading-group"><td colSpan={21}><SkeletonBlock width={66} height={10} /></td></tr>
             {Array.from({ length: group === 0 ? 4 : 3 }, (_, row) => <tr className="ms-loading-row" key={row}>
-              <td className="ms-loading-learner"><SkeletonBlock width="72%" height={12} /><SkeletonBlock width="46%" height={8} /></td>
+              <td className="ms-loading-learner"><SkeletonBlock width="72%" height={14} /></td>
               {subjects.flatMap(subject => [0, 1, 2, 3].map(term => <td key={`${subject}-${term}`} className={term === 3 ? 'ms-loading-final' : 'ms-loading-grade'}><SkeletonBlock width={18} height={10} /></td>))}
             </tr>)}
           </Fragment>)}

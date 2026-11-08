@@ -596,14 +596,14 @@
 .section-details-page .section-data-table--advisory .section-grade-column { width: 22%; }
 .section-details-page .section-data-table--advisory .section-action-column { width: 24%; min-width: 140px; }
 .section-details-page .section-data-table--english .section-number-column { width: 6%; }
-.section-details-page .section-data-table--english .section-name-column { width: 34%; }
-.section-details-page .section-data-table--english .section-risk-column { width: 20%; }
+.section-details-page .section-data-table--english .section-name-column { width: 44%; }
+.section-details-page .section-data-table--english .section-risk-column { width: 22%; }
 .section-details-page .section-data-table--english .section-grade-column { width: 18%; }
-.section-details-page .section-data-table--english .section-action-column { width: 22%; min-width: 140px; }
+.section-details-page .section-data-table--english .section-action-column { width: 10%; min-width: 60px; }
 .section-details-page .section-data-table--teaching .section-number-column { width: 6%; }
-.section-details-page .section-data-table--teaching .section-name-column { width: 48%; }
-.section-details-page .section-data-table--teaching .section-grade-column { width: 22%; }
-.section-details-page .section-data-table--teaching .section-action-column { width: 24%; min-width: 140px; }
+.section-details-page .section-data-table--teaching .section-name-column { width: 60%; }
+.section-details-page .section-data-table--teaching .section-grade-column { width: 24%; }
+.section-details-page .section-data-table--teaching .section-action-column { width: 10%; min-width: 60px; }
 
 .badge-risk-unavailable,
 .badge-honor-unavailable {
