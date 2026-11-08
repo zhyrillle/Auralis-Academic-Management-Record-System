@@ -14,6 +14,7 @@ import JSZip from "jszip";
 
 // Auth
 import { getStoredUser } from "../../utils/auth";
+import { getAdviserBannerIllustration } from "../../utils/adviserBannerIllustration";
 
 // Exporters & Assets
 import { exportSf9Pdf } from "../../utils/exportSf9Pdf";
@@ -64,23 +65,7 @@ export default function AdviserDashboard() {
   const currentUser = useMemo(() => getStoredUser(), []);
 
   const userId = currentUser?.user_id || currentUser?.id;
-  const illustrationKey = `adviser-banner-illustration:${userId}`;
-  const [illustration, setIllustration] = useState(() => {
-    try {
-      return userId && localStorage.getItem(illustrationKey) === "male" ? "male" : "female";
-    } catch {
-      return "female";
-    }
-  });
-  const changeIllustration = (event) => {
-    const choice = event.target.value;
-    setIllustration(choice);
-    try {
-      if (userId) localStorage.setItem(illustrationKey, choice);
-    } catch {
-      // The choice still works for this visit when storage is unavailable.
-    }
-  };
+  const illustration = getAdviserBannerIllustration(userId);
   const cacheOptions = { enabled: Boolean(userId), refreshInterval: 0, revalidateOnFocus: false };
   const overview = useCachedQuery(cacheKey('adviser:dashboard-overview', { userId }), async () => {
     const [role, summary, classes, attendance] = await Promise.all([
@@ -621,17 +606,6 @@ export default function AdviserDashboard() {
               <p className="adviser-dashboard__greeting-sub">
                 Here's an overview of today's academic activities.
               </p>
-              {isAdviser && (
-                <select
-                  className="adviser-dashboard__banner-illustration-select"
-                  aria-label="Banner illustration"
-                  value={illustration}
-                  onChange={changeIllustration}
-                >
-                  <option value="female">Female illustration</option>
-                  <option value="male">Male illustration</option>
-                </select>
-              )}
             </div>
             
             {/* Decorative stationery doodles (background layer, middle band) */}

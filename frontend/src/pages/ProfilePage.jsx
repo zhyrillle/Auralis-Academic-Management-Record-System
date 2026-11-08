@@ -20,6 +20,8 @@ import {
   updateUserProfile,
   updateUserProfilePicture,
 } from "../services/userService";
+import { normalizeRole } from "../utils/auth";
+import { getAdviserBannerIllustration, saveAdviserBannerIllustration } from "../utils/adviserBannerIllustration";
 import "../styles/profile.css";
 
 const acceptedImageTypes = ["image/jpeg", "image/png", "image/webp"];
@@ -124,6 +126,7 @@ export default function ProfilePage({ user, onUserUpdated }) {
   const [savedProfile, setSavedProfile] = useState(emptyProfile);
   const [draftProfile, setDraftProfile] = useState(emptyProfile);
   const [isEditing, setIsEditing] = useState(false);
+  const [bannerIllustration, setBannerIllustration] = useState({ saved: "female", draft: "female" });
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [pageError, setPageError] = useState("");
@@ -145,6 +148,7 @@ export default function ProfilePage({ user, onUserUpdated }) {
 
   const storedUser = useMemo(() => readStoredUser(), []);
   const userId = user?.user_id || storedUser?.user_id;
+  const isAdviser = normalizeRole(user || storedUser) === "adviser";
   const [profileReadVersion, setProfileReadVersion] = useState(0);
   const errors = useMemo(() => validateProfile(draftProfile), [draftProfile]);
   const hasProfileChanges = useMemo(
@@ -154,7 +158,9 @@ export default function ProfilePage({ user, onUserUpdated }) {
       ),
     [draftProfile, savedProfile],
   );
-  const canSave = hasProfileChanges && Object.keys(errors).length === 0 && !isSaving;
+  const hasIllustrationChange = isAdviser && bannerIllustration.draft !== bannerIllustration.saved;
+  const canSave = !isSaving && (hasProfileChanges || hasIllustrationChange)
+    && (!hasProfileChanges || Object.keys(errors).length === 0);
   const fullName = [
     savedProfile.firstName,
     savedProfile.middleName,
@@ -235,6 +241,8 @@ export default function ProfilePage({ user, onUserUpdated }) {
   };
 
   const handleEdit = () => {
+    const illustration = getAdviserBannerIllustration(userId);
+    setBannerIllustration({ saved: illustration, draft: illustration });
     setDraftProfile({ ...savedProfile });
     setPageError("");
     setIsEditing(true);
@@ -256,18 +264,24 @@ export default function ProfilePage({ user, onUserUpdated }) {
     try {
       setIsSaving(true);
       setPageError("");
-      const updatedUser = await updateUserProfile(userId, {
-        first_name: draftProfile.firstName.trim(),
-        middle_name: draftProfile.middleName.trim() || null,
-        last_name: draftProfile.lastName.trim(),
-        extension_name: draftProfile.extensionName.trim() || null,
-        email: draftProfile.email.trim(),
-      });
-      const updatedProfile = mapApiUserToProfile(updatedUser, savedProfile);
-      setSavedProfile(updatedProfile);
-      setDraftProfile(updatedProfile);
+      if (hasProfileChanges) {
+        const updatedUser = await updateUserProfile(userId, {
+          first_name: draftProfile.firstName.trim(),
+          middle_name: draftProfile.middleName.trim() || null,
+          last_name: draftProfile.lastName.trim(),
+          extension_name: draftProfile.extensionName.trim() || null,
+          email: draftProfile.email.trim(),
+        });
+        const updatedProfile = mapApiUserToProfile(updatedUser, savedProfile);
+        setSavedProfile(updatedProfile);
+        setDraftProfile(updatedProfile);
+        syncAuthenticatedUser(updatedUser);
+      }
+      if (hasIllustrationChange) {
+        saveAdviserBannerIllustration(userId, bannerIllustration.draft);
+        setBannerIllustration({ saved: bannerIllustration.draft, draft: bannerIllustration.draft });
+      }
       setIsEditing(false);
-      syncAuthenticatedUser(updatedUser);
       showToast("Profile updated successfully.");
     } catch (error) {
       setPageError(error.message);
@@ -647,6 +661,20 @@ export default function ProfilePage({ user, onUserUpdated }) {
               <input type="email" name="email" value={draftProfile.email} onChange={handleFieldChange} aria-invalid={Boolean(errors.email)} />
               {errors.email && <small role="alert">{errors.email}</small>}
             </label>
+            {isAdviser && (
+              <label className="profile-field">
+                <span>Banner illustration</span>
+                <select value={bannerIllustration.draft} disabled={isSaving}
+                  onChange={(event) => {
+                    const choice = event.target.value;
+                    setBannerIllustration((current) => ({ ...current, draft: choice }));
+                  }}>
+                  <option value="female">Female illustration</option>
+                  <option value="male">Male illustration</option>
+                </select>
+                <small>Saved for this account in this browser.</small>
+              </label>
+            )}
             <div className="profile-field profile-field--locked">
               <span>User Role</span>
               <div className="profile-locked-value"><LockKeyhole size={17} aria-hidden="true" />{draftProfile.role}</div>

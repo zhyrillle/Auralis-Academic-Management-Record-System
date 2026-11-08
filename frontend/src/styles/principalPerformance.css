@@ -560,12 +560,12 @@
   overflow-wrap: anywhere;
 }
 
-.pp-page--subjects .pp-table th:nth-child(1) { width: 19%; }
-.pp-page--subjects .pp-table th:nth-child(2) { width: 13%; }
-.pp-page--subjects .pp-table th:nth-child(3) { width: 20%; }
+.pp-page--subjects .pp-table th:nth-child(1) { width: 18%; }
+.pp-page--subjects .pp-table th:nth-child(2) { width: 11%; }
+.pp-page--subjects .pp-table th:nth-child(3) { width: 25%; }
 .pp-page--subjects .pp-table th:nth-child(4),
-.pp-page--subjects .pp-table th:nth-child(5) { width: 17.5%; }
-.pp-page--subjects .pp-table th:nth-child(6) { width: 13%; }
+.pp-page--subjects .pp-table th:nth-child(5) { width: 17%; }
+.pp-page--subjects .pp-table th:nth-child(6) { width: 12%; }
 
 .pp-page--subjects .pp-table :is(th, td):is(:nth-child(2), :nth-child(6)) {
   text-align: center;
@@ -575,7 +575,17 @@
   min-width: 0;
 }
 
-.pp-page--subjects .pp-inline-progress > span {
+.pp-page--subjects .pp-inline-progress .progress-bar {
+  min-width: 0;
+  height: 10px;
+  background: #e2e8f0;
+}
+
+.pp-page--subjects .pp-table .pp-status {
+  white-space: normal;
+}
+
+.pp-page--subjects .pp-inline-progress > span:last-child {
   flex: 0 0 6ch;
   font-variant-numeric: tabular-nums;
   text-align: right;
