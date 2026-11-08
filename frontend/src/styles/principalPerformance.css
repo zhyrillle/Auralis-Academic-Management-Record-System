@@ -548,3 +548,36 @@
   .pp-inline-progress { min-width: 112px; gap: 7px; }
   .pp-teacher-series-key { gap: 8px 11px; padding-inline: 12px; }
 }
+
+/* Subject-Level Breakdown: keep each value inside its own column. */
+.pp-page--subjects .pp-table {
+  min-width: 740px;
+  table-layout: fixed;
+}
+
+.pp-page--subjects .pp-table :is(th, td) {
+  padding-inline: 16px;
+  overflow-wrap: anywhere;
+}
+
+.pp-page--subjects .pp-table th:nth-child(1) { width: 19%; }
+.pp-page--subjects .pp-table th:nth-child(2) { width: 13%; }
+.pp-page--subjects .pp-table th:nth-child(3) { width: 20%; }
+.pp-page--subjects .pp-table th:nth-child(4),
+.pp-page--subjects .pp-table th:nth-child(5) { width: 17.5%; }
+.pp-page--subjects .pp-table th:nth-child(6) { width: 13%; }
+
+.pp-page--subjects .pp-table :is(th, td):is(:nth-child(2), :nth-child(6)) {
+  text-align: center;
+}
+
+.pp-page--subjects .pp-inline-progress {
+  min-width: 0;
+}
+
+.pp-page--subjects .pp-inline-progress > span {
+  flex: 0 0 6ch;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}

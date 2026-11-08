@@ -172,7 +172,7 @@ export default function PerformanceSubjects() {
   ];
 
   return (
-    <main className="pa-page pp-page">
+    <main className="pa-page pp-page pp-page--subjects">
       {pageHeader}
       <PerformanceFilters
         terms={principalPerformanceTerms}
