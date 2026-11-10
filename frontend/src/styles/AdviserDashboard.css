@@ -1904,3 +1904,622 @@
 .at-risk-modal__done-btn:hover {
   background: #1E293B;
 }
+
+/* ==========================================================================
+   Grade Submission Status Modal (Pending Submissions & Submitted Grades)
+   ========================================================================== */
+
+.submission-status-modal__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: submissionModalFadeIn 0.2s ease-out;
+}
+
+@keyframes submissionModalFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.submission-status-modal__card {
+  background: #FFFFFF;
+  border-radius: 20px;
+  box-shadow: 0 20px 40px -8px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.05);
+  width: 100%;
+  max-width: 720px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: submissionModalScaleUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes submissionModalScaleUp {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.submission-status-modal__header {
+  padding: 24px 28px 14px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  border-bottom: 1px solid #F1F5F9;
+}
+
+.submission-status-modal__title-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.submission-status-modal__icon-wrap {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.submission-status-modal__icon-wrap--pending {
+  background: #FFF7ED;
+  color: #EA580C;
+}
+
+.submission-status-modal__icon-wrap--submitted {
+  background: #ECFDF5;
+  color: #059669;
+}
+
+.submission-status-modal__badge-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.submission-status-modal__badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 6px;
+  letter-spacing: 0.02em;
+}
+
+.submission-status-modal__badge--term {
+  background: #F1F5F9;
+  color: #475569;
+}
+
+.submission-status-modal__badge--pending {
+  background: #FFF7ED;
+  color: #EA580C;
+}
+
+.submission-status-modal__badge--submitted {
+  background: #ECFDF5;
+  color: #059669;
+}
+
+.submission-status-modal__title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: #0F172A;
+  line-height: 1.25;
+}
+
+.submission-status-modal__close-btn {
+  background: transparent;
+  border: none;
+  padding: 8px;
+  border-radius: 8px;
+  color: #64748B;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.submission-status-modal__close-btn:hover {
+  background: #F1F5F9;
+  color: #0F172A;
+}
+
+.submission-status-modal__subtitle {
+  margin: 0;
+  padding: 0 28px 14px;
+  font-size: 13.5px;
+  color: #64748B;
+  line-height: 1.45;
+}
+
+/* Tabs Navigation */
+.submission-status-modal__tabs-nav {
+  padding: 0 28px 12px;
+  display: flex;
+  gap: 10px;
+}
+
+.submission-status-modal__tab-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: 1.5px solid #E2E8F0;
+  background: #F8FAFC;
+  color: #64748B;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.submission-status-modal__tab-btn:hover {
+  background: #F1F5F9;
+  border-color: #CBD5E1;
+  color: #0F172A;
+}
+
+.submission-status-modal__tab-btn--active.submission-status-modal__tab-btn--pending {
+  background: #FFF7ED;
+  border-color: #FB923C;
+  color: #C2410C;
+}
+
+.submission-status-modal__tab-btn--active.submission-status-modal__tab-btn--submitted {
+  background: #ECFDF5;
+  border-color: #34D399;
+  color: #047857;
+}
+
+.submission-status-modal__tab-counter {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 12px;
+}
+
+.submission-status-modal__tab-counter--pending {
+  background: #FED7AA;
+  color: #9A3412;
+}
+
+.submission-status-modal__tab-counter--submitted {
+  background: #A7F3D0;
+  color: #065F46;
+}
+
+/* Controls */
+.submission-status-modal__controls {
+  padding: 0 28px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.submission-status-modal__search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.submission-status-modal__search-icon {
+  position: absolute;
+  left: 12px;
+  color: #94A3B8;
+  pointer-events: none;
+}
+
+.submission-status-modal__search-input {
+  width: 100%;
+  padding: 9px 34px;
+  border-radius: 10px;
+  border: 1px solid #CBD5E1;
+  font-size: 13.5px;
+  outline: none;
+  background: #F8FAFC;
+  transition: all 0.15s ease;
+}
+
+.submission-status-modal__search-input:focus {
+  background: #FFFFFF;
+  border-color: #FF6B00;
+  box-shadow: 0 0 0 3px rgba(255, 107, 0, 0.15);
+}
+
+.submission-status-modal__clear-btn {
+  position: absolute;
+  right: 10px;
+  background: transparent;
+  border: none;
+  color: #94A3B8;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.submission-status-modal__clear-btn:hover {
+  color: #0F172A;
+}
+
+.submission-status-modal__section-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.submission-status-modal__filter-icon {
+  color: #94A3B8;
+  margin-right: 2px;
+}
+
+.submission-status-modal__section-pill {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 8px;
+  border: 1px solid #E2E8F0;
+  background: #FFFFFF;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.submission-status-modal__section-pill:hover {
+  border-color: #CBD5E1;
+  background: #F8FAFC;
+}
+
+.submission-status-modal__section-pill--active {
+  background: #0F172A;
+  color: #FFFFFF;
+  border-color: #0F172A;
+}
+
+/* Body */
+.submission-status-modal__body {
+  padding: 0 28px 20px;
+  overflow-y: auto;
+  flex: 1 1 auto;
+}
+
+.submission-status-modal__loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 20px;
+  gap: 14px;
+  color: #64748B;
+  font-size: 14px;
+}
+
+.submission-status-modal__spinner {
+  color: #FF6B00;
+  animation: submissionModalSpin 1s linear infinite;
+}
+
+@keyframes submissionModalSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.submission-status-modal__error {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 10px;
+  background: #FEE2E2;
+  color: #991B1B;
+  font-size: 13.5px;
+}
+
+/* List & Cards */
+.submission-status-modal__list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.submission-status-modal__item-card {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.submission-status-modal__item-card--pending {
+  border-left: 4px solid #F97316;
+  box-shadow: 0 2px 4px rgba(249, 115, 22, 0.04);
+}
+
+.submission-status-modal__item-card--submitted {
+  border-left: 4px solid #10B981;
+  box-shadow: 0 2px 4px rgba(16, 185, 129, 0.04);
+}
+
+.submission-status-modal__item-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06);
+}
+
+.submission-status-modal__item-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.submission-status-modal__item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.submission-status-modal__section-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.submission-status-modal__section-name {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: #0F172A;
+}
+
+.submission-status-modal__grade-pill {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #F1F5F9;
+  color: #475569;
+}
+
+.submission-status-modal__subject-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.submission-status-modal__subject-icon {
+  color: #64748B;
+  flex-shrink: 0;
+}
+
+.submission-status-modal__subject-name {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.submission-status-modal__subject-code {
+  font-size: 12px;
+  color: #64748B;
+}
+
+.submission-status-modal__status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 6px;
+}
+
+.submission-status-modal__status-pill--pending {
+  background: #FFF7ED;
+  color: #C2410C;
+  border: 1px solid #FDBA74;
+}
+
+.submission-status-modal__status-pill--submitted {
+  background: #ECFDF5;
+  color: #047857;
+  border: 1px solid #6EE7B7;
+}
+
+/* Mid: progress and student count */
+.submission-status-modal__item-mid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 0;
+}
+
+.submission-status-modal__meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #64748B;
+}
+
+.submission-status-modal__meta-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.submission-status-modal__submitted-date {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #059669;
+  font-weight: 500;
+}
+
+.submission-status-modal__progress-bar-wrap {
+  width: 100%;
+  height: 6px;
+  background: #F1F5F9;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.submission-status-modal__progress-bar {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+.submission-status-modal__progress-bar--pending {
+  background: linear-gradient(90deg, #F97316, #EA580C);
+}
+
+.submission-status-modal__progress-bar--submitted {
+  background: linear-gradient(90deg, #10B981, #059669);
+}
+
+/* Bottom: Action */
+.submission-status-modal__item-bottom {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  padding-top: 6px;
+  border-top: 1px solid #F8FAFC;
+}
+
+.submission-status-modal__action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.submission-status-modal__action-btn--encode {
+  background: #FFF7ED;
+  color: #C2410C;
+  border: 1px solid #FDBA74;
+}
+
+.submission-status-modal__action-btn--encode:hover {
+  background: #EA580C;
+  color: #FFFFFF;
+  border-color: #EA580C;
+}
+
+.submission-status-modal__action-btn--view {
+  background: #F8FAFC;
+  color: #334155;
+  border: 1px solid #CBD5E1;
+}
+
+.submission-status-modal__action-btn--view:hover {
+  background: #0F172A;
+  color: #FFFFFF;
+  border-color: #0F172A;
+}
+
+/* Empty States */
+.submission-status-modal__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 44px 24px;
+  gap: 8px;
+}
+
+.submission-status-modal__empty-icon-wrap {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 6px;
+}
+
+.submission-status-modal__empty-icon-wrap--success {
+  background: #ECFDF5;
+  color: #059669;
+}
+
+.submission-status-modal__empty-icon-wrap--neutral {
+  background: #FFF7ED;
+  color: #EA580C;
+}
+
+.submission-status-modal__empty-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: #0F172A;
+}
+
+.submission-status-modal__empty-desc {
+  margin: 0;
+  font-size: 13.5px;
+  color: #64748B;
+  max-width: 440px;
+  line-height: 1.5;
+}
+
+/* Footer */
+.submission-status-modal__footer {
+  padding: 14px 28px;
+  border-top: 1px solid #F1F5F9;
+  background: #F8FAFC;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.submission-status-modal__footer-count {
+  font-size: 12.5px;
+  color: #64748B;
+}
+
+.submission-status-modal__done-btn {
+  background: #0F172A;
+  color: #FFFFFF;
+  border: none;
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 8px 20px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  flex-shrink: 0;
+}
+
+.submission-status-modal__done-btn:hover {
+  background: #1E293B;
+}

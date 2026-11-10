@@ -53,6 +53,7 @@ import AdviserTestExamAnalysis from "../../components/adviser/AdviserTestExamAna
 import AdviserSubjectAreaHBarChart from "../../components/adviser/AdviserSubjectAreaHBarChart";
 import AdviserCoreValuesDonut from "../../components/adviser/AdviserCoreValuesDonut";
 import AtRiskStudentsModal from "../../components/adviser/AtRiskStudentsModal";
+import SubmissionStatusModal from "../../components/adviser/SubmissionStatusModal";
 
 // Banner Asset
 import bannerArt from "../../assets/adviser-banner-illustration.png";
@@ -88,6 +89,18 @@ export default function AdviserDashboard() {
   const [testSection, setTestSection] = useState('All');
   const [areaChoice, setSubjectAreaTerm] = useState(null);
   const [isAtRiskModalOpen, setIsAtRiskModalOpen] = useState(false);
+  const [submissionsModal, setSubmissionsModal] = useState({
+    isOpen: false,
+    initialTab: "pending",
+  });
+
+  const handleOpenPendingSubmissions = () => {
+    setSubmissionsModal({ isOpen: true, initialTab: "pending" });
+  };
+
+  const handleOpenSubmittedGrades = () => {
+    setSubmissionsModal({ isOpen: true, initialTab: "submitted" });
+  };
   const [coreChoice] = useState(null);
   const defaultTerm = summary.activeTerm || 'T1';
   const subjectTerm = subjectChoice || defaultTerm, radarTerm = radarChoice || defaultTerm;
@@ -864,6 +877,8 @@ export default function AdviserDashboard() {
               accentColor="#FF6B00"
               topBorderColor="#FF6B00"
               loading={loading}
+              clickable
+              onClick={handleOpenPendingSubmissions}
             />
             <AdviserStatCard
               title="Submitted Grades"
@@ -871,6 +886,8 @@ export default function AdviserDashboard() {
               accentColor="#10B981"
               topBorderColor="#10B981"
               loading={loading}
+              clickable
+              onClick={handleOpenSubmittedGrades}
             />
           </div>
         </div>
@@ -945,6 +962,18 @@ export default function AdviserDashboard() {
         isOpen={isAtRiskModalOpen}
         onClose={() => setIsAtRiskModalOpen(false)}
         userId={userId}
+      />
+
+      {/* Grade Submissions Status Modal (Pending Submissions & Submitted Grades) */}
+      <SubmissionStatusModal
+        isOpen={submissionsModal.isOpen}
+        initialTab={submissionsModal.initialTab}
+        onClose={() => setSubmissionsModal((prev) => ({ ...prev, isOpen: false }))}
+        userId={userId}
+        activeTerm={summary?.activeTerm || defaultTerm || "T1"}
+        preloadedSubmissions={summary?.submissionDetails}
+        assignedClasses={assignedClasses}
+        onNavigateToClass={handleContinueEntry}
       />
 
       {/* Toast Notification */}
