@@ -104,6 +104,7 @@ async function syncUsersFromCloud() {
   );
 
   const syncWork = (async () => {
+    await ensureCredentialsColumn();
     // 1. Fetch users from Aiven Cloud
     const [cloudUsers] = await db.cloudPool.query(
       `SELECT user_id, role, department_id, first_name, middle_name, last_name, extension_name, credentials, email, password, account_status, pfp_url, last_login_at
@@ -373,11 +374,28 @@ async function deleteUserOnCloud(userId) {
   }
 }
 
+let credentialsChecked = false;
+async function ensureCredentialsColumn() {
+  if (credentialsChecked) return;
+  try {
+    const [cols] = await db.query("SHOW COLUMNS FROM USER LIKE 'credentials'");
+    if (!cols || cols.length === 0) {
+      await db.query("ALTER TABLE USER ADD COLUMN credentials VARCHAR(255) NULL AFTER extension_name");
+      console.log("Auto-migrated USER table: added 'credentials' column.");
+    }
+    credentialsChecked = true;
+  } catch (err) {
+    console.warn("Could not check/add credentials column on USER table:", err.message);
+  }
+}
+ensureCredentialsColumn().catch(() => {});
+
 const getManagementUsers = async (schoolYearId = null) => {
   if (schoolYearId !== null && (!Number.isSafeInteger(Number(schoolYearId)) || Number(schoolYearId) <= 0)) throw new Error('Invalid assignment school year.');
   // The only interpolated value is the validated numeric school-year ID.
   const schoolYearFilter = schoolYearId === null ? "(sy.status IS NULL OR LOWER(sy.status) IN ('active', 'ongoing'))" : 'sy.school_year_id = ' + Number(schoolYearId);
-  const [rows] = await db.execute(`
+  await ensureCredentialsColumn();
+  const sql = `
     SELECT
       u.user_id,
       u.role,
@@ -496,7 +514,20 @@ const getManagementUsers = async (schoolYearId = null) => {
     FROM USER u
     WHERE u.role <> 'system_admin'
     ORDER BY u.last_name ASC, u.first_name ASC
-  `);
+  `;
+  let rows;
+  try {
+    const [result] = await db.execute(sql);
+    rows = result;
+  } catch (err) {
+    if (err && (err.code === 'ER_BAD_FIELD_ERROR' || err.errno === 1054) && String(err.message).includes('credentials')) {
+      const fallbackSql = sql.replace(/\bu\.credentials\b/g, 'NULL AS credentials');
+      const [result] = await db.execute(fallbackSql);
+      rows = result;
+    } else {
+      throw err;
+    }
+  }
 
   for (let user of rows) {
     const [assignments] = await db.execute(

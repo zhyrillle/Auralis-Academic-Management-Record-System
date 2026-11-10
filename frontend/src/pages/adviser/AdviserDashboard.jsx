@@ -161,6 +161,57 @@ export default function AdviserDashboard() {
     return firstName ? `Hello, ${firstName}!` : "Hello!";
   };
 
+  
+
+  const handleOpenGradingSheet = (item) => {
+    if (!item) return;
+
+    const sectionId = item.section_id || 1;
+    const offeringId = item.subject_offering_id || null;
+
+    // Find matching class from assignedClasses if available
+    const matchingClass = assignedClasses.find(
+      (c) =>
+        (offeringId && (c.subject_offering_id === offeringId || c.subject_offering_ids?.includes(offeringId))) ||
+        c.section_id === sectionId ||
+        c.section === item.section_name ||
+        c.sectionName === item.section_name
+    ) || {};
+
+    const targetClass = {
+      ...matchingClass,
+      ...item,
+      id: item.teacher_assignment_id
+        ? `teaching-${item.teacher_assignment_id}`
+        : matchingClass.id || `teaching-${offeringId || sectionId}`,
+      assignmentType: matchingClass.assignmentType || "teaching",
+      assignmentId: item.teacher_assignment_id || matchingClass.assignmentId || matchingClass.teacher_assignment_id,
+      teacher_assignment_id: item.teacher_assignment_id || matchingClass.teacher_assignment_id,
+      section_id: sectionId,
+      sectionName: item.section_name || matchingClass.sectionName || matchingClass.section,
+      section: item.section_name || matchingClass.sectionName || matchingClass.section,
+      subject_offering_id: offeringId || matchingClass.subject_offering_id,
+      offering_id: offeringId || matchingClass.subject_offering_id,
+      subject_id: item.subject_id || matchingClass.subject_id,
+      subject: item.subject_name || matchingClass.subject,
+      subject_name: item.subject_name || matchingClass.subject,
+      gradeLevel: item.grade_level_name || matchingClass.gradeLevel,
+      grade_level_name: item.grade_level_name || matchingClass.gradeLevel,
+      school_year_id: item.school_year_id || matchingClass.school_year_id || 1,
+      schoolYearId: item.schoolYearId || matchingClass.schoolYearId || 1,
+      active_term: summary?.activeTerm || defaultTerm || "T1",
+    };
+
+    const targetPath = isAdviser ? "/adviser/sections" : "/teacher/sections";
+
+    navigate(targetPath, {
+      state: {
+        currentView: "grading-sheet",
+        activeSelectedClass: targetClass,
+      },
+    });
+  };
+
   const handleContinueEntry = (selected) => {
     const cls =
       typeof selected === "object"
@@ -1000,7 +1051,7 @@ export default function AdviserDashboard() {
         activeTerm={summary?.activeTerm || defaultTerm || "T1"}
         preloadedSubmissions={summary?.submissionDetails}
         assignedClasses={assignedClasses}
-        onNavigateToClass={handleContinueEntry}
+        onNavigateToClass={handleOpenGradingSheet}
       />
 
       {/* Toast Notification */}

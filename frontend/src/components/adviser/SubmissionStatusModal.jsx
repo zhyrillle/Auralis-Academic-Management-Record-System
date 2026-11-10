@@ -12,6 +12,7 @@ import {
   Calendar,
   AlertCircle,
   ExternalLink,
+  FileSpreadsheet,
 } from "lucide-react";
 import { getTeacherSubmissions } from "../../services/adviserDashboardService";
 
@@ -185,16 +186,28 @@ export default function SubmissionStatusModal({
     if (onNavigateToClass) {
       onClose();
       onNavigateToClass({
+        id: item.teacher_assignment_id
+          ? `teaching-${item.teacher_assignment_id}`
+          : (item.id || `teaching-${item.subject_offering_id || item.section_id}`),
+        assignmentType: "teaching",
+        assignmentId: item.teacher_assignment_id || item.assignmentId,
+        teacher_assignment_id: item.teacher_assignment_id,
         section_id: item.section_id,
-        sectionName: item.section_name,
-        section: item.section_name,
-        subject: item.subject_name,
-        subject_id: item.subject_id,
+        sectionName: item.section_name || item.section,
+        section: item.section_name || item.section,
         subject_offering_id: item.subject_offering_id,
-        gradeLevel: item.grade_level_name,
+        offering_id: item.subject_offering_id,
+        subject_id: item.subject_id,
+        subject: item.subject_name || item.subject,
+        subject_name: item.subject_name || item.subject,
+        gradeLevel: item.grade_level_name || item.gradeLevel,
+        grade_level_name: item.grade_level_name || item.gradeLevel,
+        school_year_id: item.school_year_id || item.schoolYearId || 1,
+        schoolYearId: item.school_year_id || item.schoolYearId || 1,
         studentCount: item.student_count,
         entryProgress: item.progress,
         status: item.is_submitted ? "Submitted" : "In Progress",
+        active_term: activeTerm,
       });
     }
   };
@@ -489,8 +502,8 @@ export default function SubmissionStatusModal({
                         }`}
                         onClick={() => handleActionClick(item)}
                       >
-                        <span>{isSub ? "View Class Record" : "Continue Grade Entry"}</span>
-                        {isSub ? <ExternalLink size={14} /> : <ArrowRight size={14} />}
+                        <FileSpreadsheet size={15} />
+                        <span>{isSub ? "View Grading Sheet" : "Open Grading Sheet"}</span>
                       </button>
                     </div>
                   </div>

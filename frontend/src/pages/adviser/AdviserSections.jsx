@@ -102,6 +102,15 @@ export default function AdviserSections({ userRole: propUserRole, isArchivedView
   const [activeSelectedClass, setactiveSelectedClass] = useState(
     location.state?.activeSelectedClass || null
   );
+
+  useEffect(() => {
+    if (location.state?.currentView) {
+      setCurrentView(location.state.currentView);
+    }
+    if (location.state?.activeSelectedClass) {
+      setactiveSelectedClass(location.state.activeSelectedClass);
+    }
+  }, [location.state]);
   const classKey = activeSelectedClass?.id;
   const sectionId = activeSelectedClass?.section_id || activeSelectedClass?.id;
   const offeringId = activeSelectedClass?.subject_offering_id || activeSelectedClass?.offering_id || null;
@@ -427,7 +436,7 @@ export default function AdviserSections({ userRole: propUserRole, isArchivedView
     if (!activeSelectedClass) return null;
 
     return (
-      { ...(classes.find((c) => c.id === activeSelectedClass.id) || {}), ...activeSelectedClass }
+      { ...(classes.find((c) => c.id === activeSelectedClass.id || (c.subject_offering_id && activeSelectedClass.subject_offering_id && Number(c.subject_offering_id) === Number(activeSelectedClass.subject_offering_id))) || {}), ...activeSelectedClass }
     );
   }, [classes, activeSelectedClass]);
 
