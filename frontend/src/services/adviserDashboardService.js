@@ -258,3 +258,26 @@ export async function getAtRiskStudents(userId) {
     };
   }
 }
+
+/**
+ * REST Route: GET /api/adviser/dashboard/submissions?userId=:userId
+ * Retrieves handled sections and subjects and their grade submission status.
+ */
+export async function getTeacherSubmissions(userId) {
+  const effectiveId = getEffectiveUserId(userId);
+  try {
+    const url = effectiveId
+      ? `${API_BASE_URL}/adviser/dashboard/submissions?userId=${encodeURIComponent(effectiveId)}`
+      : `${API_BASE_URL}/adviser/dashboard/submissions`;
+    const response = await fetch(url);
+    return await parseResponse(response);
+  } catch (error) {
+    console.warn("getTeacherSubmissions fallback:", error.message);
+    return {
+      submissionDetails: [],
+      pendingSubmissions: 0,
+      submittedGrades: 0,
+      totalOfferings: 0,
+    };
+  }
+}

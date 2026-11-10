@@ -447,6 +447,127 @@ async function getTeacherHighRiskStudents(userId, activeTermInfo) {
   }
 }
 
+/**
+ * Retrieves handled sections and subjects for a teacher along with submission status,
+ * student counts, and grading progress for the given term.
+ */
+async function getTeacherSubmissionsData(userId, activeTermInfo) {
+  try {
+    const termId = activeTermInfo?.termId || 1;
+    const syId = activeTermInfo?.schoolYearId || null;
+
+    const [assignedOfferings] = await db.execute(
+      `SELECT DISTINCT
+         ta.teacher_assignment_id,
+         so.subject_offering_id,
+         so.subject_id,
+         so.section_id,
+         sec.section_name,
+         gl.grade_level_name,
+         s.subject_name,
+         s.subject_code,
+         gs.grade_sheet_id,
+         COALESCE(gs.workflow_status, 'DRAFT') AS workflow_status,
+         gs.lock_status,
+         gs.submitted_at
+       FROM TEACHER_ASSIGNMENT ta
+       JOIN SUBJECT_OFFERING so ON so.subject_offering_id = ta.subject_offering_id
+       JOIN SECTION sec ON sec.section_id = so.section_id
+       LEFT JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
+       JOIN SUBJECT s ON s.subject_id = so.subject_id
+       LEFT JOIN GRADE_SHEET gs ON gs.subject_offering_id = so.subject_offering_id
+                               AND gs.term_id = ?
+       WHERE ta.user_id = ?
+         AND (so.school_year_id = ? OR ? IS NULL OR so.school_year_id IS NULL)
+       ORDER BY gl.grade_level_id ASC, sec.section_name ASC, s.subject_name ASC`,
+      [termId, userId, syId, syId]
+    ).catch((err) => {
+      console.warn('Error querying assigned offerings for submissions:', err.message);
+      return [[]];
+    });
+
+    const sectionIds = Array.from(new Set(assignedOfferings.map((o) => o.section_id).filter(Boolean)));
+    const offeringIds = Array.from(new Set(assignedOfferings.map((o) => o.subject_offering_id).filter(Boolean)));
+
+    const sectionCounts = new Map();
+    if (sectionIds.length > 0) {
+      const secPlaceholders = sectionIds.map(() => '?').join(',');
+      const [secRows] = await db.execute(
+        `SELECT ss.section_id, COUNT(DISTINCT ss.student_id) AS student_count
+         FROM STUDENT_SECTION ss
+         INNER JOIN STUDENT s ON s.student_id = ss.student_id
+         WHERE ss.section_id IN (${secPlaceholders})
+           AND (s.status = 'ACTIVE' OR s.status IS NULL)
+         GROUP BY ss.section_id`,
+        sectionIds
+      ).catch(() => [[]]);
+      secRows.forEach((r) => sectionCounts.set(r.section_id, Number(r.student_count || 0)));
+    }
+
+    const gradeCounts = new Map();
+    if (offeringIds.length > 0) {
+      const offPlaceholders = offeringIds.map(() => '?').join(',');
+      const [gradeRows] = await db.execute(
+        `SELECT subject_offering_id, COUNT(DISTINCT student_id) AS graded_count
+         FROM STUDENT_GRADE
+         WHERE subject_offering_id IN (${offPlaceholders})
+           AND COALESCE(quarterly_grade, initial_grade) IS NOT NULL
+         GROUP BY subject_offering_id`,
+        offeringIds
+      ).catch(() => [[]]);
+      gradeRows.forEach((r) => gradeCounts.set(r.subject_offering_id, Number(r.graded_count || 0)));
+    }
+
+    const submissionDetails = assignedOfferings.map((offering) => {
+      const isSubmitted =
+        offering.workflow_status === 'SUBMITTED' || offering.lock_status === 'TERM_LOCKED';
+      const studentCount = sectionCounts.get(offering.section_id) || 0;
+      const gradedCount = gradeCounts.get(offering.subject_offering_id) || 0;
+      const progress = isSubmitted
+        ? 100
+        : studentCount > 0
+        ? Math.min(100, Math.round((gradedCount / studentCount) * 100))
+        : 0;
+
+      return {
+        teacher_assignment_id: offering.teacher_assignment_id,
+        subject_offering_id: offering.subject_offering_id,
+        subject_id: offering.subject_id,
+        subject_name: offering.subject_name,
+        subject_code: offering.subject_code,
+        section_id: offering.section_id,
+        section_name: offering.section_name,
+        grade_level_name: offering.grade_level_name || '',
+        workflow_status: offering.workflow_status,
+        lock_status: offering.lock_status,
+        submitted_at: offering.submitted_at,
+        is_submitted: isSubmitted,
+        student_count: studentCount,
+        graded_count: gradedCount,
+        progress,
+      };
+    });
+
+    const submittedGrades = submissionDetails.filter((s) => s.is_submitted).length;
+    const pendingSubmissions = Math.max(0, submissionDetails.length - submittedGrades);
+
+    return {
+      submissionDetails,
+      pendingSubmissions,
+      submittedGrades,
+      totalOfferings: submissionDetails.length,
+    };
+  } catch (error) {
+    console.error('Error in getTeacherSubmissionsData:', error);
+    return {
+      submissionDetails: [],
+      pendingSubmissions: 0,
+      submittedGrades: 0,
+      totalOfferings: 0,
+    };
+  }
+}
+
 router.get('/summary', async (req, res) => {
   try {
     const userId = req.query.userId || req.headers['x-user-id'];
@@ -467,33 +588,10 @@ router.get('/summary', async (req, res) => {
 
     // Pending Submissions vs. Submitted Grades:
     // Strictly based on the actual grading sheets (subject offerings) the teacher handles for the active term.
-    const [assignedOfferings] = await db.execute(
-      `SELECT DISTINCT
-         ta.teacher_assignment_id,
-         so.subject_offering_id,
-         so.section_id,
-         sec.section_name,
-         s.subject_name,
-         gs.grade_sheet_id,
-         COALESCE(gs.workflow_status, 'DRAFT') AS workflow_status,
-         gs.lock_status,
-         gs.submitted_at
-       FROM TEACHER_ASSIGNMENT ta
-       JOIN SUBJECT_OFFERING so ON so.subject_offering_id = ta.subject_offering_id
-       JOIN SECTION sec ON sec.section_id = so.section_id
-       JOIN SUBJECT s ON s.subject_id = so.subject_id
-       LEFT JOIN GRADE_SHEET gs ON gs.subject_offering_id = so.subject_offering_id
-                               AND gs.term_id = ?
-       WHERE ta.user_id = ?
-         AND (so.school_year_id = ? OR ? IS NULL)`,
-      [activeTermInfo.termId, userId, activeTermInfo.schoolYearId || null, activeTermInfo.schoolYearId || null]
-    ).catch(() => [[]]);
-
-    const totalGradingSheets = assignedOfferings.length;
-    const submittedGrades = assignedOfferings.filter(
-      (sheet) => sheet.workflow_status === 'SUBMITTED' || sheet.lock_status === 'TERM_LOCKED'
-    ).length;
-    const pendingSubmissions = Math.max(0, totalGradingSheets - submittedGrades);
+    const submissionsData = await getTeacherSubmissionsData(userId, activeTermInfo);
+    const pendingSubmissions = submissionsData.pendingSubmissions;
+    const submittedGrades = submissionsData.submittedGrades;
+    const submissionDetails = submissionsData.submissionDetails;
 
     // Calculate grades and section averages from STUDENT_GRADE
     const { teachingRows } = await getTeacherClasses(userId);
@@ -657,6 +755,7 @@ router.get('/summary', async (req, res) => {
       totalStudents,
       pendingSubmissions,
       submittedGrades,
+      submissionDetails,
     });
   } catch (err) {
     console.error('Error in /summary endpoint:', err);
@@ -677,6 +776,28 @@ router.get('/at-risk-students', async (req, res) => {
     res.json(data);
   } catch (err) {
     console.error('Error in /at-risk-students endpoint:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/submissions', async (req, res) => {
+  try {
+    const userId = req.query.userId || req.headers['x-user-id'] || req.headers['x-auralis-user-id'];
+    if (!userId) {
+      return res.status(400).json({ error: 'userId is required' });
+    }
+
+    const activeTermInfo = await resolveCurrentActiveTerm();
+    const data = await getTeacherSubmissionsData(userId, activeTermInfo);
+
+    res.json({
+      activeTerm: activeTermInfo.termCode,
+      activeTermName: activeTermInfo.termName,
+      schoolYearId: activeTermInfo.schoolYearId,
+      ...data,
+    });
+  } catch (err) {
+    console.error('Error in /submissions endpoint:', err);
     res.status(500).json({ error: err.message });
   }
 });
