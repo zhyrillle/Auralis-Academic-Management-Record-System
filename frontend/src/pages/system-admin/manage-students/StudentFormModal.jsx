@@ -6,7 +6,7 @@ function initialValues(student) {
   const date = student?.birthdate ? new Date(student.birthdate) : null;
   return {
     student_id: student?.student_id ? String(student.student_id) : "",
-    LRN: String(student?.LRN || student?.lrn || ""),
+    ...(student?.student_id || student?.id ? {} : { LRN: "" }),
     first_name: student?.first_name || "",
     middle_name: student?.middle_name || "",
     last_name: student?.last_name || "",
@@ -82,7 +82,7 @@ export default function StudentFormModal({
     if (isSaving) return;
     const values = state.values;
     const errors = {};
-    if (!/^\d{12}$/.test(values.LRN.trim())) errors.LRN = "Enter a 12-digit LRN.";
+    if (!isEdit && !/^\d{12}$/.test(values.LRN.trim())) errors.LRN = "Enter a 12-digit LRN.";
     if (!values.first_name.trim()) errors.first_name = "First name is required.";
     if (!values.last_name.trim()) errors.last_name = "Last name is required.";
     if (!values.sex) errors.sex = "Select the student’s sex.";
@@ -96,7 +96,7 @@ export default function StudentFormModal({
     }
     onSubmit({
       ...values,
-      LRN: values.LRN.trim(),
+      ...(!isEdit ? { LRN: values.LRN.trim() } : {}),
       first_name: values.first_name.trim(),
       last_name: values.last_name.trim(),
       middle_name: values.middle_name.trim() || null,
@@ -110,8 +110,8 @@ export default function StudentFormModal({
       <button type="submit" form={formId} className="student-admin-button student-admin-button--primary" aria-busy={isSaving} disabled={isSaving}>{isSaving && <Loader2 size={15} className="student-admin-spinner" aria-hidden="true" />}{isSaving ? "Saving…" : isEdit ? "Update student" : "Save student"}</button></>}>
     {errorMessage && <p role="alert" className="student-admin-field-error">{errorMessage}</p>}
     <form id={formId} onSubmit={submit} noValidate className="student-admin-form student-profile-form">
-        <section className="student-admin-form-section"><h3>Identification & curriculum</h3><p>Required fields are marked with an asterisk.</p>
-          <div className="student-admin-form-grid">{input("LRN", "Learner Reference Number", {
+        <section className="student-admin-form-section"><h3>{isEdit ? "Curriculum" : "Identification & curriculum"}</h3><p>Required fields are marked with an asterisk.</p>
+          <div className="student-admin-form-grid">{!isEdit && input("LRN", "Learner Reference Number", {
             required: true,
             inputMode: "numeric",
             maxLength: 12,

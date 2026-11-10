@@ -1,6 +1,5 @@
 import { UserRound, Pencil } from "lucide-react";
 import OverlayPanel from "../../../components/common/OverlayPanel";
-import MaskedLrn from "../../../components/common/MaskedLrn";
 import { formatSectionGrade } from "../../../utils/studentSections";
 export default function StudentDetailModal({
   isOpen,
@@ -18,7 +17,7 @@ export default function StudentDetailModal({
   const address = [student?.street, student?.barangay, student?.city, student?.province, student?.country, student?.postal_code].filter(Boolean).join(", ") || "No address on record";
   const groups = [{
     title: "Academic information",
-    fields: [["LRN", <MaskedLrn key="lrn" lrn={student?.LRN || student?.lrn} maskedLrn={student?.masked_lrn} showToggle allowCopy />], ["Grade level", formatSectionGrade(student?.gradeLevel || student?.grade_level_name, student?.grade_level_id)], ["Section", student?.section || student?.section_name || "Unassigned"], ["Curriculum program", student?.program_code || "EBEC"], ["Status", student?.status || "Active"]]
+    fields: [["Grade level", formatSectionGrade(student?.gradeLevel || student?.grade_level_name, student?.grade_level_id)], ["Section", student?.section || student?.section_name || "Unassigned"], ["Curriculum program", student?.program_code || "EBEC"], ["Status", student?.status || "Active"]]
   }, {
     title: "Personal information",
     fields: [["Full name", fullName], ["Sex", student?.sex === "M" ? "Male" : student?.sex === "F" ? "Female" : student?.sex], ["Birthdate", birthdate]]

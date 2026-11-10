@@ -52,9 +52,10 @@ deliberately held reads. Program-column pills reuse Badge with one shared color
 mapping for STE, SPJ, SPA, and EBEC across both student tables. Activity scrolling
 uses a faster 60px/s timing basis with a four-second minimum loop.
 
-After integrating main's LRN privacy update, both tables and learner profiles
-reuse MaskedLrn. Checks verify masked defaults, reveal/hide, retained copy
-controls, and that revealing an LRN does not open the clickable profile row.
+LRN is omitted from both Admin student tables, section drawers, assignment
+reviews, learner profiles, deletion confirmations, and student searches. Only
+new registrations collect the LRN required by the existing API. Edit forms
+omit LRN from their update payload so the stored value is preserved.
 
 Collapsed sidebar groups reuse their existing navigation entries in an anchored
 native popover. Checks cover both student destinations, keyboard navigation,

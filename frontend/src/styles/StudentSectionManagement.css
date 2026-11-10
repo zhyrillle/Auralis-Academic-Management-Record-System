@@ -153,8 +153,8 @@
   min-width: 800px;
 }
 
-.section-assignment-table th:nth-child(n+5):not(:last-child),
-.section-assignment-table td:nth-child(n+5):not(:last-child) {
+.section-assignment-table th:nth-child(n+4):not(:last-child),
+.section-assignment-table td:nth-child(n+4):not(:last-child) {
   padding-left: 4px;
   padding-right: 6px;
 }

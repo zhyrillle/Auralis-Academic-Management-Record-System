@@ -4,7 +4,6 @@ import OverlayPanel from "../../../components/common/OverlayPanel";
 import SegmentedControl from "../../../components/common/SegmentedControl";
 import SearchBar from "../../../components/common/SearchBar";
 import DropdownSelect from "../../../components/common/DropdownSelect";
-import { maskLrn } from "../../../utils/lrnHelper";
 import EmptyState from "../../../components/common/EmptyState";
 import TablePagination from "../../../components/common/TablePagination";
 import SectionFormFields from "./SectionFormFields";
@@ -58,7 +57,7 @@ export default function SectionManagementDrawer({
 
   const members = students.filter(student => Number(student.section_id) === Number(section?.id));
   const eligible = students.filter(student => canAddToSection(student, section));
-  const filtered = (view === "add" ? eligible : members).filter(student => `${student.name} ${student.lrn} ${student.masked_lrn || ""}`.toLowerCase().includes(search.toLowerCase().trim()));
+  const filtered = (view === "add" ? eligible : members).filter(student => student.name.toLowerCase().includes(search.toLowerCase().trim()));
   const currentPage = Math.min(page, Math.max(1, Math.ceil(filtered.length / 4)));
   const shown = filtered.slice((currentPage - 1) * 4, currentPage * 4);
   const selectedIds = [...selected].filter(id => eligible.some(student => student.id === id));
@@ -372,7 +371,7 @@ export default function SectionManagementDrawer({
               <SearchBar query={search} setQuery={value => {
                 setSearch(value);
                 setPage(1);
-              }} placeholder="Search name or LRN…" />
+              }} placeholder="Search student name…" />
             </div>
             {view === "add" && shown.length > 0 && (
               <label className="student-admin-check section-select-page">
@@ -388,7 +387,7 @@ export default function SectionManagementDrawer({
               {shown.map(student => (
                 <div className="section-student-row" key={student.id}>
                   {view === "add" && <input type="checkbox" aria-label={`Select ${student.name}`} checked={selected.has(student.id)} onChange={() => toggle(student.id)} disabled={busy} />}
-                  <div><strong>{student.name}</strong><small>LRN {student.masked_lrn || maskLrn(student.lrn)} · {student.program_code || "EBEC"}</small></div>
+                  <div><strong>{student.name}</strong><small>{student.program_code || "EBEC"}</small></div>
                   {view === "add" ? (
                     <button type="button" className="student-admin-icon-button student-admin-icon-button--primary" aria-label={`Add ${student.name}`} aria-busy={Boolean(addingTarget?.ids.includes(student.id))} disabled={busy} onClick={() => addStudents([student.id])}>
                       {addingTarget?.ids.includes(student.id) ? <Loader2 size={16} className="student-admin-spinner" aria-hidden="true" /> : <Plus size={16} />}
@@ -406,7 +405,7 @@ export default function SectionManagementDrawer({
                 className="student-admin-empty"
                 icon={Users}
                 title={view === "add" ? "No eligible students found" : "No students found"}
-                description={search ? "Try another name or LRN." : view === "add" ? "All eligible students may already have a section." : "This section has no assigned students."}
+                description={search ? "Try another student name." : view === "add" ? "All eligible students may already have a section." : "This section has no assigned students."}
               />
             )}
             {filtered.length > 4 && <TablePagination page={currentPage} pageSize={4} total={filtered.length} onPageChange={setPage} />}

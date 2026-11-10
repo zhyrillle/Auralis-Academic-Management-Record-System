@@ -6,7 +6,6 @@ import { cacheKey } from "../../services/navigationCache";
 import { isSessionCancellation } from "../../offline/syncManager";
 import DropdownSelect from "../../components/common/DropdownSelect";
 import SearchBar from "../../components/common/SearchBar";
-import MaskedLrn from "../../components/common/MaskedLrn";
 import StatCard from "../../components/common/StatCard";
 import EmptyState from "../../components/common/EmptyState";
 import Toast from "../../components/common/Toast";
@@ -85,7 +84,7 @@ export default function ManageStudents() {
     });
     return result;
   }, [students]);
-  const filtered = useMemo(() => students.filter(student => (gradeFilter === "all" || normalizeGrade(student) === gradeFilter) && (programFilter === "all" || String(student.program_id) === programFilter) && `${studentName(student)} ${student.LRN || student.lrn || ""} ${student.masked_lrn || ""} ${student.section || student.section_name || ""}`.toLowerCase().includes(search.toLowerCase().trim())), [students, gradeFilter, programFilter, search]);
+  const filtered = useMemo(() => students.filter(student => (gradeFilter === "all" || normalizeGrade(student) === gradeFilter) && (programFilter === "all" || String(student.program_id) === programFilter) && `${studentName(student)} ${student.section || student.section_name || ""}`.toLowerCase().includes(search.toLowerCase().trim())), [students, gradeFilter, programFilter, search]);
   const currentPage = Math.min(page, Math.max(1, Math.ceil(filtered.length / 12)));
   const shown = filtered.slice((currentPage - 1) * 12, currentPage * 12);
   const openProfile = student => {
@@ -161,7 +160,7 @@ export default function ManageStudents() {
       <div className="student-admin-toolbar"><SearchBar query={search} setQuery={value => {
           setSearch(value);
           setPage(1);
-        }} placeholder="Search name, LRN, or section…" />
+        }} placeholder="Search name or section…" />
         <DropdownSelect label="Grade level" value={gradeFilter} options={GRADES} onChange={value => {
           setGradeFilter(value);
           setPage(1);
@@ -176,22 +175,20 @@ export default function ManageStudents() {
           setProgramFilter(value);
           setPage(1);
         }} /></div>
-      {query.loading ? <PageSkeleton label="Loading student records" columns={7} /> : query.error ? <div className="student-admin-empty"><EmptyState icon={AlertCircle} title="Students are unavailable" description={query.error} /><button type="button" className="student-admin-button" onClick={query.refresh}>Retry</button></div> : !shown.length ? <EmptyState className="student-admin-empty" icon={Users} title="No students found" description="Try another grade level, program, or search." /> : <><div className="student-admin-table-scroll"><table className="student-admin-table student-directory-table"><colgroup><col style={{
-                width: "16%"
+      {query.loading ? <PageSkeleton label="Loading student records" columns={6} /> : query.error ? <div className="student-admin-empty"><EmptyState icon={AlertCircle} title="Students are unavailable" description={query.error} /><button type="button" className="student-admin-button" onClick={query.refresh}>Retry</button></div> : !shown.length ? <EmptyState className="student-admin-empty" icon={Users} title="No students found" description="Try another grade level, program, or search." /> : <><div className="student-admin-table-scroll"><table className="student-admin-table student-directory-table"><colgroup><col style={{
+                width: "34%"
               }} /><col style={{
-                width: "25%"
-              }} /><col style={{
-                width: "8%"
-              }} /><col style={{
-                width: "11%"
+                width: "10%"
               }} /><col style={{
                 width: "13%"
               }} /><col style={{
-                width: "9%"
+                width: "15%"
+              }} /><col style={{
+                width: "10%"
               }} /><col style={{
                 width: "18%"
               }} /></colgroup>
-              <thead><tr><th>LRN</th><th>Student name</th><th>Sex</th><th>Grade level</th><th>Section</th><th>Program</th><th>Actions</th></tr></thead>
+              <thead><tr><th>Student name</th><th>Sex</th><th>Grade level</th><th>Section</th><th>Program</th><th>Actions</th></tr></thead>
               <tbody>{shown.map(student => {
                 const id = student.student_id || student.id;
                 const name = studentName(student);
@@ -202,7 +199,7 @@ export default function ManageStudents() {
                     event.preventDefault();
                     openProfile(student);
                   }
-                }}><td className="student-admin-mono"><MaskedLrn lrn={student.LRN || student.lrn} maskedLrn={student.masked_lrn} showToggle allowCopy /></td><td><strong>{name}</strong></td><td>{student.sex === "M" ? "Male" : student.sex === "F" ? "Female" : student.sex || "—"}</td><td>{grade === "unassigned" ? "Unassigned" : `Grade ${grade.slice(1)}`}</td><td><span className="student-admin-badge student-admin-badge--muted">{student.section || student.section_name || "Unassigned"}</span></td><td><Badge className="student-admin-program" variant={`program-${String(student.program_code || "EBEC").toLowerCase()}`} title={student.program_name || student.program_code || "EBEC"}>{student.program_code || "EBEC"}</Badge></td>
+                }}><td><strong>{name}</strong></td><td>{student.sex === "M" ? "Male" : student.sex === "F" ? "Female" : student.sex || "—"}</td><td>{grade === "unassigned" ? "Unassigned" : `Grade ${grade.slice(1)}`}</td><td><span className="student-admin-badge student-admin-badge--muted">{student.section || student.section_name || "Unassigned"}</span></td><td><Badge className="student-admin-program" variant={`program-${String(student.program_code || "EBEC").toLowerCase()}`} title={student.program_name || student.program_code || "EBEC"}>{student.program_code || "EBEC"}</Badge></td>
                   <td><div className="student-admin-actions">                    <button type="button" className="student-admin-icon-button" aria-label={`Edit ${name}`} title="Edit student" onClick={event => {
                         event.stopPropagation();
                         openForm(student);
@@ -221,7 +218,7 @@ export default function ManageStudents() {
       openForm(selectedStudent);
     }} />
     <OverlayPanel isOpen={deleteOpen} onClose={() => setDeleteOpen(false)} title="Delete student" eyebrow="Student record" busy={saving} error={toast?.type === "error" ? toast.message : ""} description="Review this action carefully. This deletes a learner profile, not just a section assignment." footer={<><button type="button" className="student-admin-button" disabled={saving} onClick={() => setDeleteOpen(false)}>Cancel</button><button type="button" className="student-admin-button student-admin-button--danger" disabled={saving} onClick={confirmDelete}>{saving ? "Deleting…" : "Delete student"}</button></>}>
-      <div className="student-admin-form-note"><strong>{deletingStudent && studentName(deletingStudent)}</strong><p>LRN: <MaskedLrn lrn={deletingStudent?.LRN || deletingStudent?.lrn} maskedLrn={deletingStudent?.masked_lrn} /></p>Academic records or other linked information may prevent deletion.</div>
+      <div className="student-admin-form-note"><strong>{deletingStudent && studentName(deletingStudent)}</strong><p>Academic records or other linked information may prevent deletion.</p></div>
     </OverlayPanel>
     <Toast className="app-toast--bottom-tray" message={toast?.message} variant={toast?.type} icon={toast?.type === "error" ? AlertCircle : undefined} onDismiss={() => setToast(null)} />
   </div>;

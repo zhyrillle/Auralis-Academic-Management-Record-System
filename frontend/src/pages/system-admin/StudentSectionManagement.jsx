@@ -6,8 +6,6 @@ import { cacheKey } from "../../services/navigationCache";
 import { isSessionCancellation } from "../../offline/syncManager";
 import DropdownSelect from "../../components/common/DropdownSelect";
 import SearchBar from "../../components/common/SearchBar";
-import MaskedLrn from "../../components/common/MaskedLrn";
-import { maskLrn } from "../../utils/lrnHelper";
 import SegmentedControl from "../../components/common/SegmentedControl";
 import OverlayPanel from "../../components/common/OverlayPanel";
 import EmptyState from "../../components/common/EmptyState";
@@ -95,8 +93,6 @@ async function loadSectionCatalog() {
       ...student,
       id,
       name: student.name || [student.first_name, student.middle_name, student.last_name, student.extension_name].filter(Boolean).join(" "),
-      lrn: String(student.LRN || student.lrn || ""),
-      masked_lrn: student.masked_lrn || maskLrn(student.LRN || student.lrn),
       grade_level_id: gradeId,
       gradeLevel: sectionId ? section?.grade_level_name || gradeMap.get(gradeId) || section?.level : "Unassigned",
       section_id: sectionId ? Number(sectionId) : null,
@@ -215,7 +211,7 @@ export default function StudentSectionManagement() {
 
   const filteredStudents = useMemo(() => {
     return students.filter(student =>
-      `${student.name} ${student.lrn} ${student.masked_lrn || ""}`.toLowerCase().includes(studentSearch.toLowerCase().trim()) &&
+      student.name.toLowerCase().includes(studentSearch.toLowerCase().trim()) &&
       (sectionFilter === "all" || (sectionFilter === "unassigned" ? !student.section_id : String(student.section_id) === sectionFilter)) &&
       (assignmentFilter === "all" || Boolean(student.section_id) === (assignmentFilter === "assigned"))
     );
@@ -747,7 +743,7 @@ export default function StudentSectionManagement() {
                   setStudentSearch(value);
                   setPage(1);
                 }}
-                placeholder="Search student name or LRN…"
+                placeholder="Search student name…"
               />
               <DropdownSelect
                 label="Section"
@@ -796,7 +792,7 @@ export default function StudentSectionManagement() {
             </div>
 
             {loading ? (
-              <PageSkeleton label="Loading students" columns={6} />
+              <PageSkeleton label="Loading students" columns={7} />
             ) : query.error ? (
               <div className="student-admin-empty">
                 <EmptyState icon={AlertCircle} title="Students are unavailable" description={query.error} />
@@ -810,11 +806,10 @@ export default function StudentSectionManagement() {
                   <table className="student-admin-table section-assignment-table">
                     <colgroup>
                       <col style={{ width: "4%" }} />
-                      <col style={{ width: "22%" }} />
-                      <col style={{ width: "15%" }} />
-                      <col style={{ width: "10%" }} />
+                      <col style={{ width: "31%" }} />
                       <col style={{ width: "12%" }} />
-                      <col style={{ width: "8%" }} />
+                      <col style={{ width: "14%" }} />
+                      <col style={{ width: "10%" }} />
                       <col style={{ width: "10%" }} />
                       <col style={{ width: "19%" }} />
                     </colgroup>
@@ -834,7 +829,6 @@ export default function StudentSectionManagement() {
                           />
                         </th>
                         <th>Student name</th>
-                        <th>LRN</th>
                         <th>Grade level</th>
                         <th>Section</th>
                         <th>Program</th>
@@ -854,9 +848,6 @@ export default function StudentSectionManagement() {
                             />
                           </td>
                           <td><strong>{student.name}</strong></td>
-                          <td className="student-admin-mono">
-                            <MaskedLrn lrn={student.lrn} maskedLrn={student.masked_lrn} showToggle allowCopy />
-                          </td>
                           <td>{formatSectionGrade(student.gradeLevel, student.grade_level_id)}</td>
                           <td>
                             <span className={`student-admin-badge ${student.section_id ? "" : "student-admin-badge--gold"}`}>
@@ -1019,7 +1010,7 @@ export default function StudentSectionManagement() {
       >
         <div className="section-assignment-review">
           {assignmentStudents.map(student => (
-            <span key={student.id}>{student.name}<small><MaskedLrn lrn={student.lrn} maskedLrn={student.masked_lrn} badge={false} /></small></span>
+            <span key={student.id}>{student.name}</span>
           ))}
         </div>
         <form id="assign-students-form" className="student-admin-form" onSubmit={submitAssignment}>
