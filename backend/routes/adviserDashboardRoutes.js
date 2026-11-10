@@ -538,6 +538,8 @@ async function getTeacherSubmissionsData(userId, activeTermInfo) {
         section_id: offering.section_id,
         section_name: offering.section_name,
         grade_level_name: offering.grade_level_name || '',
+        school_year_id: offering.school_year_id || syId || 1,
+        schoolYearId: offering.school_year_id || syId || 1,
         workflow_status: offering.workflow_status,
         lock_status: offering.lock_status,
         submitted_at: offering.submitted_at,
