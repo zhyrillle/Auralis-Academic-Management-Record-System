@@ -101,6 +101,33 @@ export default function AdviserDashboard() {
   const handleOpenSubmittedGrades = () => {
     setSubmissionsModal({ isOpen: true, initialTab: "submitted" });
   };
+  // Derive robust submission counters with fallback to assignedClasses
+  const pendingSubmissionsCount = useMemo(() => {
+    if (Array.isArray(summary?.submissionDetails) && summary.submissionDetails.length > 0) {
+      return summary.submissionDetails.filter((s) => !s.is_submitted).length;
+    }
+    if (typeof summary?.pendingSubmissions === 'number' && summary.pendingSubmissions > 0) {
+      return summary.pendingSubmissions;
+    }
+    if (assignedClasses.length > 0) {
+      return assignedClasses.filter((c) => c.status !== 'Submitted' && (c.entryProgress || 0) < 100).length;
+    }
+    return summary?.pendingSubmissions ?? 0;
+  }, [summary, assignedClasses]);
+
+  const submittedGradesCount = useMemo(() => {
+    if (Array.isArray(summary?.submissionDetails) && summary.submissionDetails.length > 0) {
+      return summary.submissionDetails.filter((s) => s.is_submitted).length;
+    }
+    if (typeof summary?.submittedGrades === 'number' && summary.submittedGrades > 0) {
+      return summary.submittedGrades;
+    }
+    if (assignedClasses.length > 0) {
+      return assignedClasses.filter((c) => c.status === 'Submitted' || (c.entryProgress || 0) >= 100).length;
+    }
+    return summary?.submittedGrades ?? 0;
+  }, [summary, assignedClasses]);
+
   const [coreChoice] = useState(null);
   const defaultTerm = summary.activeTerm || 'T1';
   const subjectTerm = subjectChoice || defaultTerm, radarTerm = radarChoice || defaultTerm;
@@ -873,7 +900,7 @@ export default function AdviserDashboard() {
           <div className="adviser-dashboard__assigned-stats-col">
             <AdviserStatCard
               title="Pending Submissions"
-              value={summary?.pendingSubmissions ?? 0}
+              value={pendingSubmissionsCount}
               accentColor="#FF6B00"
               topBorderColor="#FF6B00"
               loading={loading}
@@ -882,7 +909,7 @@ export default function AdviserDashboard() {
             />
             <AdviserStatCard
               title="Submitted Grades"
-              value={summary?.submittedGrades ?? 0}
+              value={submittedGradesCount}
               accentColor="#10B981"
               topBorderColor="#10B981"
               loading={loading}
