@@ -179,14 +179,18 @@ function getGradeDescriptor(grade, style = 'matatag') {
  * @param {Object} params.weights - component weights { WW: 20, PT: 50, EX: 30 }
  * @param {Object} [params.examConfig] - optional examination sub-weights & HPS { st1Weight, st2Weight, teWeight }
  */
-function calculateStudentGrades({ assessments = [], scores = {}, weights = {}, examConfig = {}, isMapeh = false, isMapehSubject: isMapehSubjectProp = false, transmutationConfig = null }) {
-  const isMapehSubject = Boolean(
+const roundGrade = value => parseFloat(value.toFixed(2));
+const weightedScore = (percentage, weight) => roundGrade(percentage * (weight / 100));
+const isMapehCalculation = ({ isMapeh = false, isMapehSubject = false, examConfig = {}, weights = {} }) => Boolean(
     isMapeh ||
-    isMapehSubjectProp ||
+    isMapehSubject ||
     examConfig?.isMapeh ||
     (weights.PT !== undefined && Number(weights.PT) === 60) ||
     (weights.EX !== undefined && Number(weights.EX) === 20 && weights.WW !== undefined && Number(weights.WW) === 20)
   );
+
+function calculateStudentGrades({ assessments = [], scores = {}, weights = {}, examConfig = {}, isMapeh = false, isMapehSubject: isMapehSubjectProp = false, transmutationConfig = null }) {
+  const isMapehSubject = isMapehCalculation({ isMapeh, isMapehSubject: isMapehSubjectProp, examConfig, weights });
 
   // Main component weights come from WS Config; internal examination rules remain subject-specific.
   const resolved = resolveComponentWeights(weights, isMapehSubject);
@@ -273,26 +277,26 @@ function calculateStudentGrades({ assessments = [], scores = {}, weights = {}, e
     if (code === 'QA' && isMapehSubject) {
       // MAPEH Examination formula: sum of ST1 + ST2 + TE raw scores over total HPS (75) times 20%
       if (comp.totalHps > 0) {
-        comp.ps = parseFloat(((comp.totalRaw / comp.totalHps) * 100).toFixed(2));
+        comp.ps = roundGrade((comp.totalRaw / comp.totalHps) * 100);
       } else {
         comp.ps = 0;
       }
-      comp.ws = parseFloat((comp.ps * (weightPct / 100)).toFixed(2));
+      comp.ws = weightedScore(comp.ps, weightPct);
     } else if (code === 'QA' && examItems.length > 0) {
       // Specialized Examinations logic with ST1 (30), ST2 (30), TE (40) sub-weights
       let sumExamWS = 0;
       let anyExamInput = false;
       examItems.forEach((item) => {
         if (item.hasVal && item.maxScore > 0) {
-          const subWS = parseFloat(((item.raw / item.maxScore) * item.weight).toFixed(2));
+          const subWS = roundGrade((item.raw / item.maxScore) * item.weight);
           sumExamWS += subWS;
           anyExamInput = true;
         }
       });
 
       if (anyExamInput) {
-        comp.ps = parseFloat(sumExamWS.toFixed(2));
-        comp.ws = parseFloat((comp.ps * (weightPct / 100)).toFixed(2));
+        comp.ps = roundGrade(sumExamWS);
+        comp.ws = weightedScore(comp.ps, weightPct);
         comp.hasInput = true;
       } else {
         comp.ps = 0;
@@ -301,11 +305,11 @@ function calculateStudentGrades({ assessments = [], scores = {}, weights = {}, e
     } else {
       // Standard formula
       if (comp.totalHps > 0) {
-        comp.ps = parseFloat(((comp.totalRaw / comp.totalHps) * 100).toFixed(2));
+        comp.ps = roundGrade((comp.totalRaw / comp.totalHps) * 100);
       } else {
         comp.ps = 0;
       }
-      comp.ws = parseFloat((comp.ps * (weightPct / 100)).toFixed(2));
+      comp.ws = weightedScore(comp.ps, weightPct);
     }
 
     totalWS += comp.ws;
@@ -317,7 +321,7 @@ function calculateStudentGrades({ assessments = [], scores = {}, weights = {}, e
   });
 
   // Initial Grade = WS_WW + WS_PT + WS_QA/EX
-  const initialGrade = !resolved.error && hasAnyInput ? parseFloat(totalWS.toFixed(2)) : null;
+  const initialGrade = !resolved.error && hasAnyInput ? roundGrade(totalWS) : null;
   const quarterlyGrade = initialGrade !== null ? transmuteGrade(initialGrade, null, transmutationConfig) : null;
   const termGrade = quarterlyGrade;
   const descriptor = termGrade !== null ? getGradeDescriptor(termGrade) : '-';
@@ -407,6 +411,9 @@ module.exports = {
   transmuteGrade,
   calculateStudentGrades,
   calculateStudentSummary,
+  roundGrade,
+  weightedScore,
+  isMapehCalculation,
   resolveComponentWeights,
   weightsFromRows,
   isProtectedGradeSheet,

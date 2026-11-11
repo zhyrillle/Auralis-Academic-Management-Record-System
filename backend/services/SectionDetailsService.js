@@ -1,5 +1,7 @@
 const db = require('../config/db');
 const AtRiskPrediction = require('../models/AtRiskPrediction');
+const StudentMonitoring = require('./StudentMonitoringService');
+const { academicBand } = require('./MonitoringProgress');
 const { decryptLrn } = require('../utils/encryption');
 const { SUBJECT_DEFINITIONS, resolveSubjectDefinition, getTermPosition } = require('./MasterSheetService');
 const { schoolYearRange } = require('./EnglishRiskFeatures');
@@ -8,10 +10,17 @@ const VALID_ASSIGNMENT_TYPES = new Set(['advisory', 'teaching']);
 const TERM_CODES = ['T1', 'T2', 'T3'];
 const RISK_LEVELS = new Set(['low', 'medium', 'high']);
 const SPECIALIZATION = { STE: 'research', SPJ: 'journalism', SPA: 'spa_spec' };
+const VIEW_VERSION = 'teacher-monitoring-v2';
 const serviceError = (statusCode, code, message) => Object.assign(new Error(message), { statusCode, code });
 const buildLearnerName = student => `${student.last_name}, ${student.first_name}${student.middle_name ? ` ${student.middle_name}` : ''}${student.extension_name ? ` ${student.extension_name}` : ''}`.trim();
 const validGrade = value => value != null && value !== '' && Number.isFinite(Number(value))
   && Number(value) >= 60 && Number(value) <= 100;
+const timestamp = value => {
+  if (!value) return NaN;
+  const raw = typeof value === 'string' && /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?$/.test(value)
+    ? `${value.replace(' ', 'T')}Z` : value;
+  return new Date(raw).getTime();
+};
 
 const getPerformanceBand = grade => {
   if (!Number.isFinite(grade)) return null;
@@ -75,7 +84,7 @@ function savedSubjectGrade(rows, isMapeh) {
 }
 
 class SectionDetailsService {
-  static validateRequest({ assignmentType, assignmentId, userId, term }) {
+  static validateRequest({ assignmentType, assignmentId, userId, term, riskMode = 'monitoring', viewVersion }) {
     const normalizedType = String(assignmentType || '').trim().toLowerCase();
     const numericAssignmentId = Number(assignmentId), numericUserId = Number(userId);
     const termCode = String(term || '').trim().toUpperCase();
@@ -83,7 +92,9 @@ class SectionDetailsService {
     if (!Number.isInteger(numericAssignmentId) || numericAssignmentId <= 0) throw serviceError(400, 'INVALID_ASSIGNMENT_ID', 'A valid assignment is required.');
     if (!Number.isInteger(numericUserId) || numericUserId <= 0) throw serviceError(401, 'AUTHENTICATION_REQUIRED', 'A signed-in user is required.');
     if (!TERM_CODES.includes(termCode)) throw serviceError(400, 'INVALID_TERM', 'Term must be T1, T2, or T3.');
-    return { assignmentType: normalizedType, assignmentId: numericAssignmentId, userId: numericUserId, termCode };
+    if (!['monitoring', 'prediction'].includes(riskMode)) throw serviceError(400, 'INVALID_RISK_MODE', 'Choose monitoring or prediction.');
+    if (viewVersion !== undefined && viewVersion !== VIEW_VERSION) throw serviceError(409, 'SECTION_DETAILS_VERSION_MISMATCH', 'Refresh the page to load the current Section Details view.');
+    return { assignmentType: normalizedType, assignmentId: numericAssignmentId, userId: numericUserId, termCode, riskMode };
   }
 
   static async resolveAssignment({ assignmentType, assignmentId, userId }, database = db) {
@@ -119,9 +130,11 @@ class SectionDetailsService {
     return rows[0];
   }
 
-  static async getSectionDetails(request, database = db, { predictionService = AtRiskPrediction } = {}) {
+  static async getSectionDetails(request, database = db, { predictionService = AtRiskPrediction, monitoringService = StudentMonitoring, now = new Date() } = {}) {
     const validated = this.validateRequest(request);
     const assignment = await this.resolveAssignment(validated, database);
+    const english = validated.assignmentType === 'teaching' && resolveSubjectDefinition(assignment)?.key === 'english';
+    if (validated.riskMode === 'prediction' && !english) throw serviceError(400, 'PREDICTION_ENGLISH_ONLY', 'Prediction is available only for assigned English teaching classes.');
     const [termRows] = await database.execute(`SELECT term_id, term_name, starts_at, ends_at,
       grade_submission_deadline_at, status FROM ACADEMIC_TERM WHERE school_year_id = ?
       ORDER BY starts_at ASC, term_id ASC`, [assignment.school_year_id]);
@@ -155,7 +168,97 @@ class SectionDetailsService {
         ${validated.assignmentType === 'teaching' ? 'AND so.subject_offering_id = ?' : ''}
       ORDER BY sg.subject_offering_id, ss.student_section_id, sg.student_grade_id`, gradeParameters);
     const response = this.buildResponse({ ...validated, assignment, termRows, offeringRows, studentRows, gradeRows });
-    return this.attachPredictions(response, assignment, database, predictionService);
+    response.viewVersion = VIEW_VERSION;
+    response.context.riskMode = validated.assignmentType === 'advisory' ? 'advisory' : validated.riskMode;
+    response.capabilities.predictionApplicable = english;
+    response.capabilities.predictionReady = false;
+    response.capabilities.predictionUnavailableReason = '';
+    if (validated.assignmentType === 'advisory') return this.attachPredictions(response, assignment, database, predictionService);
+    const [sheets] = english ? await database.execute(`SELECT grade_sheet_id, workflow_status, lock_status
+      FROM GRADE_SHEET WHERE subject_offering_id = ? AND term_id = ?`,
+    [assignment.subject_offering_id, matches[0].term_id]) : [[]];
+    const eligibility = this.predictionReadiness(response, sheets, now);
+    response.capabilities.predictionReady = eligibility.ready;
+    response.capabilities.predictionUnavailableReason = eligibility.reason;
+    response.capabilities.predictionUnavailableLabel = eligibility.label || '';
+    if (validated.riskMode === 'prediction' && eligibility.ready) {
+      return this.attachPredictions(response, assignment, database, predictionService);
+    }
+    if (validated.riskMode === 'prediction') response.notice = `${eligibility.reason} Showing current-term monitoring.`;
+    response.context.riskMode = 'monitoring';
+    return this.attachMonitoring(response, assignment, database, monitoringService, now);
+  }
+
+  static predictionReadiness(response, sheets, now) {
+    const unavailable = (label, reason) => ({ ready: false, label, reason });
+    if (!response.capabilities.predictionApplicable) return unavailable('English only', 'Prediction is available for English classes.');
+    const source = response.context.selectedTerm;
+    if (source.code === 'T3') return unavailable('No next term', 'Term 3 is the last term of this school year.');
+    const target = response.context.availableTerms.find(term => term.code === `T${Number(source.code[1]) + 1}`);
+    const end = timestamp(source.endsAt), start = timestamp(target?.startsAt);
+    if (!source.unique || !target?.unique || !Number.isFinite(end) || !Number.isFinite(start) || end >= start) {
+      return unavailable('Term dates need review', 'Ask the system administrator to check this term and the next term’s dates.');
+    }
+    if (end > new Date(now).getTime()) return unavailable(
+      timestamp(source.startsAt) > new Date(now).getTime() ? 'Term has not started' : 'Ongoing term',
+      'Predict becomes available after this term ends and its grades are submitted and finalized.');
+    if (sheets.length !== 1) return sheets.length
+      ? unavailable('Grade sheets need review', 'Ask the system administrator to check the duplicate grade sheets.')
+      : unavailable('Grades need to be submitted', 'Complete and submit this term’s grade sheet first.');
+    if (sheets[0].workflow_status !== 'SUBMITTED') {
+      return unavailable('Grades need to be submitted', 'Submit this term’s grade sheet to make prediction available.');
+    }
+    if (sheets[0].lock_status !== 'TERM_LOCKED') {
+      return unavailable('Grades await finalization', 'Predict becomes available once the submitted term grades are finalized.');
+    }
+    return { ready: true, reason: '' };
+  }
+
+  static async attachMonitoring(response, assignment, database, monitoringService, now) {
+    const preview = await monitoringService.getPreview(database, {
+      schoolYear: String(assignment.school_year_id), subject: String(assignment.subject_id),
+      term: response.context.selectedTerm.code,
+    }, now, { subjectOfferingId: Number(assignment.subject_offering_id), academicOnly: true });
+    if (preview.context.schoolYearId !== Number(assignment.school_year_id)
+      || preview.context.subjectId !== Number(assignment.subject_id)
+      || preview.context.term !== response.context.selectedTerm.code) {
+      throw serviceError(503, 'MONITORING_CONTEXT_MISMATCH', 'The monitoring response did not match the selected class.');
+    }
+    const byEnrollment = new Map();
+    for (const row of preview.students) {
+      if (row.subjectOfferingId !== Number(assignment.subject_offering_id) || row.sectionId !== Number(assignment.section_id)) continue;
+      if (byEnrollment.has(row.studentSectionId)) throw serviceError(503, 'INVALID_MONITORING_RESULT', 'Duplicate monitoring results need review.');
+      byEnrollment.set(row.studentSectionId, row.academic);
+    }
+    const performanceBands = createPerformanceBands(), counts = { low: 0, moderate: 0, high: 0, awaiting: 0 }, warnings = new Set();
+    for (const learner of response.learners) {
+      const academic = byEnrollment.get(learner.studentSectionId);
+      if (!academic || !['available', 'needs_records', 'review'].includes(academic.status)
+        || (academic.status === 'available' ? !Number.isFinite(academic.gradePreview)
+          || academic.gradePreview < 0 || academic.gradePreview > 100 || academicBand(academic.gradePreview) !== academic.riskLevel
+          : academic.gradePreview !== null || academic.riskLevel !== null)) {
+        throw serviceError(503, 'INVALID_MONITORING_RESULT', 'The monitoring grade and risk could not be loaded together.');
+      }
+      learner.academic = academic;
+      learner.riskAssessment = null;
+      if (academic.status === 'available') {
+        counts[academic.riskLevel]++;
+        performanceBands[getPerformanceBand(academic.gradePreview)].count++;
+      } else {
+        counts.awaiting++;
+        if (academic.status === 'review') academic.reasons.forEach(reason => warnings.add(reason));
+      }
+    }
+    response.summary.performanceBands = performanceBands;
+    response.summary.riskCounts = counts;
+    response.summary.atRiskCount = counts.moderate + counts.high;
+    response.summary.displayGradeCount = response.learners.length - counts.awaiting;
+    response.summary.missingDisplayGradeCount = counts.awaiting;
+    response.capabilities.atRiskAvailable = true;
+    response.riskContext = { mode: 'monitoring', subject: assignment.subject_name,
+      sourceTerm: response.context.selectedTerm.code, targetTerm: null, status: 'available' };
+    response.warnings = [...warnings];
+    return response;
   }
 
   static buildResponse({ assignmentType, assignmentId, termCode, assignment, termRows, offeringRows, studentRows, gradeRows }) {
@@ -237,7 +340,7 @@ class SectionDetailsService {
   static async attachPredictions(response, assignment, database, predictionService) {
     const sourceTerm = response.context.selectedTerm.code;
     const targetTerm = sourceTerm === 'T3' ? null : `T${Number(sourceTerm[1]) + 1}`;
-    const context = { subject: 'English', sourceTerm, targetTerm, status: 'unavailable', message: '' };
+    const context = { mode: 'prediction', subject: 'English', sourceTerm, targetTerm, status: 'unavailable', message: '' };
     response.riskContext = context;
     const setAll = (status, label, reason) => {
       context.status = status; context.message = reason;
@@ -274,6 +377,12 @@ class SectionDetailsService {
       for (const row of preview.unavailable.filter(belongsToAssignment)) unavailable.set(Number(row.studentSectionId), row);
       const counts = { low: 0, medium: 0, high: 0, awaiting: 0 };
       for (const learner of response.learners) {
+        if (response.viewVersion === VIEW_VERSION && !Number.isFinite(learner.termGrade)) {
+          counts.awaiting++;
+          learner.riskAssessment = { status: 'awaiting_records', label: 'Grades needed', targetTerm,
+            reason: 'A valid submitted source-term grade is needed before this learner can receive a prediction.' };
+          continue;
+        }
         const rows = predictions.get(learner.studentSectionId) || [];
         const row = rows[0];
         if (rows.length === 1 && !unavailable.has(learner.studentSectionId) && RISK_LEVELS.has(row.riskLevel)) {
@@ -308,3 +417,4 @@ module.exports = SectionDetailsService;
 module.exports.serviceError = serviceError;
 module.exports.getPerformanceBand = getPerformanceBand;
 module.exports.getHonorStatus = getHonorStatus;
+module.exports.VIEW_VERSION = VIEW_VERSION;

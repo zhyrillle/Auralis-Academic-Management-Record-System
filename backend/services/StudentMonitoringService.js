@@ -78,7 +78,10 @@ function readingIndicator(screenings, assessments, { start, end }) {
       comprehension: Number(assessment.comp_correct) / Number(assessment.total_comp_items) * 100 } : null };
 }
 
-async function getPreview(db, query, now = new Date()) {
+async function getPreview(db, query, now = new Date(), { subjectOfferingId, academicOnly = false } = {}) {
+  if (subjectOfferingId !== undefined && (!Number.isSafeInteger(subjectOfferingId) || subjectOfferingId <= 0)) {
+    throw fail('A valid subject offering is required.');
+  }
   const options = await getOptions(db, now);
   const selectedYear = options.schoolYears.find(row => row.value === String(query.schoolYear));
   const subject = options.subjects.find(row => row.value === String(query.subject) && row.schoolYearId === selectedYear?.value);
@@ -92,11 +95,15 @@ async function getPreview(db, query, now = new Date()) {
     startsOn: period.startsOn, endsOn: period.endsOn, asOf, isEnglish: /^(ENG|ENGLISH)$/i.test(subject.code)
       || /^English$/i.test(subject.label), hasStarted: period.startsOn <= today };
   const params = [period.id, context.schoolYearId, context.subjectId];
+  const offeringScope = subjectOfferingId === undefined ? '' : ' AND so.subject_offering_id = ?';
+  if (subjectOfferingId !== undefined) params.push(subjectOfferingId);
   const [[candidates], [activityRows], [weightRows], transmutationConfig] = await Promise.all([
     db.execute(`SELECT ss.student_section_id, st.student_id,
       CONCAT_WS(', ', st.last_name, CONCAT_WS(' ', st.first_name, NULLIF(st.middle_name, ''))) AS name,
       sec.section_id, sec.section_name, gl.grade_level_name, so.subject_offering_id,
       gs.grade_sheet_id, gs.workflow_status,
+      (SELECT COUNT(*) FROM SUBJECT_OFFERING sibling WHERE sibling.section_id = so.section_id
+        AND sibling.school_year_id = so.school_year_id AND sibling.subject_id = so.subject_id) AS subject_offering_count,
       (SELECT CONCAT_WS(' ', u.first_name, u.last_name) FROM SECTION_ADVISER_ASSIGNMENT saa
         JOIN USER u ON u.user_id = saa.user_id WHERE saa.section_id = sec.section_id
         AND saa.school_year_id = ss.school_year_id ORDER BY saa.adviser_assignment_id DESC LIMIT 1) AS adviser
@@ -104,7 +111,7 @@ async function getPreview(db, query, now = new Date()) {
       JOIN STUDENT st ON st.student_id = ss.student_id JOIN SECTION sec ON sec.section_id = so.section_id
       JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
       LEFT JOIN GRADE_SHEET gs ON gs.subject_offering_id = so.subject_offering_id AND gs.term_id = ?
-      WHERE so.school_year_id = ? AND so.subject_id = ? ORDER BY st.last_name, st.first_name`, params),
+      WHERE so.school_year_id = ? AND so.subject_id = ?${offeringScope} ORDER BY st.last_name, st.first_name`, params),
     db.execute(`SELECT gs.grade_sheet_id, ga.activity_id, ga.activity_name, ga.highest_possible_score,
       DATE_FORMAT(ga.activity_date, '%Y-%m-%d') AS activity_date, ga.mapeh_component, cw.subject_id AS weight_subject_id,
       cw.school_year_id AS weight_year_id, ct.component_code, sc.student_section_id, sc.score_id, sc.raw_score, sc.score_status
@@ -113,7 +120,7 @@ async function getPreview(db, query, now = new Date()) {
       LEFT JOIN SUBJECT_COMPONENT_WEIGHT cw ON cw.subj_comp_weight_id = ga.subj_comp_weight_id
       LEFT JOIN COMPONENT_TYPE ct ON ct.component_type_id = cw.component_type_id
       LEFT JOIN SCORE sc ON sc.activity_id = ga.activity_id
-      WHERE gs.term_id = ? AND so.school_year_id = ? AND so.subject_id = ?
+      WHERE gs.term_id = ? AND so.school_year_id = ? AND so.subject_id = ?${offeringScope}
       AND (ga.status = 'ACTIVE' OR ga.status IS NULL) ORDER BY ga.activity_id, sc.score_id`, params),
     db.execute(`SELECT cw.percentage, ct.component_code FROM SUBJECT_COMPONENT_WEIGHT cw
       JOIN COMPONENT_TYPE ct ON ct.component_type_id = cw.component_type_id WHERE cw.school_year_id = ? AND cw.subject_id = ?`,
@@ -140,7 +147,7 @@ async function getPreview(db, query, now = new Date()) {
       && (Number(activity.weight_subject_id) !== context.subjectId || Number(activity.weight_year_id) !== context.schoolYearId));
     let academic = computeProgress({ activities: ownActivities, weightRows, transmutationConfig, isMapeh, asOf });
     const reason = !context.hasStarted ? 'This term has not started.'
-      : rows.length > 1 ? 'Duplicate subject offerings or grade sheets need review.'
+      : rows.length > 1 || Number(row.subject_offering_count) > 1 ? 'Duplicate subject offerings or grade sheets need review.'
         : contextInvalid ? 'An activity is linked to weights for a different subject or school year.' : null;
     if (reason) academic = { ...academic, status: context.hasStarted ? 'review' : 'needs_records',
       riskLevel: null, progress: null, gradePreview: null, weightedPoints: 0, availableWeight: 0,
@@ -150,6 +157,9 @@ async function getPreview(db, query, now = new Date()) {
       section: row.section_name, grade: Number(String(row.grade_level_name).match(/\d+/)?.[0]),
       adviser: row.adviser || 'Not assigned', subjectOfferingId: Number(row.subject_offering_id), academic };
   });
+  const policy = { version: 'academic-progress-v2', highBelow: 75, moderateBelow: 80,
+    attendanceAffectsBand: false, readingAffectsBand: false, minimumRecordedActivities: 1 };
+  if (academicOnly) return { context, students, policy };
   const schoolStart = selectedYear.terms.find(term => term.value === 'T1')?.startsOn;
   const readingParams = [context.schoolYearId];
   const [attendance, [screenings], [assessments]] = await Promise.all([
@@ -171,8 +181,7 @@ async function getPreview(db, query, now = new Date()) {
     student.reading = context.isEnglish ? readingIndicator(screeningsByLearner.get(student.id) || [],
       assessmentsByLearner.get(student.id) || [], { start: schoolStart, end: asOf }) : null;
   }
-  return { context, students, policy: { version: 'academic-progress-v1', highBelow: 75, moderateBelow: 80,
-    attendanceAffectsBand: false, readingAffectsBand: false, minimumRecordedActivities: 1 } };
+  return { context, students, policy };
 }
 
 module.exports = { getOptions, getPreview, readingIndicator, dateInManila };

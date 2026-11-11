@@ -213,7 +213,7 @@ export default function AdviserSections({ userRole: propUserRole, isArchivedView
       const advisory = advisoryClasses.get(key);
       if (cls.assignmentType !== "teaching" || !advisory || combinedSections.has(key)) return [cls];
       combinedSections.add(key);
-      // Keep View's adviser assignment separate from the subject record actions.
+      // Keep the teaching context for subject grades and retain the adviser assignment for adviser actions.
       return [{ ...cls, isAdviser: true, classType: advisory.classType, advisoryView: advisory }];
     });
   }, [classes]);
@@ -929,7 +929,7 @@ export default function AdviserSections({ userRole: propUserRole, isArchivedView
                   secondaryActionsDisabled={!(Number.isInteger(Number(cls.subject_offering_id || cls.offering_id))
                     && Number(cls.subject_offering_id || cls.offering_id) > 0)}
                   secondaryActionsDisabledReason="No teaching subject is assigned to you for this class. Use View to see the advisory section."
-                  onView={(c) => { setactiveSelectedClass(c.advisoryView || c); setCurrentView("section-details"); }}
+                  onView={(c) => { setactiveSelectedClass(c); setCurrentView("section-details"); }}
                   onGradingSheet={(c) => { setactiveSelectedClass(c); setCurrentView("grading-sheet"); }}
                   onEdit={(c) => { setactiveSelectedClass(c); setCurrentView("class-record"); }}
                 />
