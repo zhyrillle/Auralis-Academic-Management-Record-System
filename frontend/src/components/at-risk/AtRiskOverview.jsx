@@ -87,7 +87,7 @@ export function AtRiskFilters({ preview, children, showInfo = true }) {
   );
 }
 
-export function AtRiskStats({ data, loading }) {
+export function AtRiskStats({ data, loading, filterQuery }) {
   return (
     <div className="ar-stats-row" aria-busy={loading}>
       {RISK_BANDS.map((band) => (
@@ -99,6 +99,8 @@ export function AtRiskStats({ data, loading }) {
           description={band.caption}
           tone={band.tone}
           icon={band.icon}
+          to={data && !loading ? learnerListPath('prediction', band.level, filterQuery) : undefined}
+          ariaLabel={`View ${band.label.toLowerCase()} learners`}
         />
       ))}
       <AnalyticsStatCard
@@ -111,6 +113,8 @@ export function AtRiskStats({ data, loading }) {
             : "English only"
         }
         icon={Users}
+        to={data && !loading ? learnerListPath('prediction', 'all', filterQuery) : undefined}
+        ariaLabel="View all learners with predictions"
       />
     </div>
   );

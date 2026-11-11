@@ -22,7 +22,7 @@ export default function AtRiskPrediction() {
     {error ? <div className="ar-preview-error" role="alert">
       <strong>Prediction unavailable</strong><p>{error}</p><button type="button" onClick={preview.retry}>Retry</button>
     </div> : <>
-      <AtRiskStats data={data} loading={loading} />
+      <AtRiskStats data={data} loading={loading} filterQuery={filterQuery} />
       <AtRiskAvailability data={data} origin="prediction" filterQuery={filterQuery} />
       {!loading && data && !data.students.length
         ? <EmptyState className="ar-preview-empty pa-empty-state" icon={ChartColumn}

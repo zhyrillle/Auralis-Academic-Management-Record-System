@@ -382,6 +382,13 @@ export default function StudentMonitoring() {
   const view = useStudentMonitoring();
   const { data, loading, error, options, params, change } = view;
   const [selected, setSelected] = useState(null);
+  const learnerListRef = useRef(null);
+  const openBand = (value) => {
+    change('band', value);
+    learnerListRef.current?.scrollIntoView({ block: 'start',
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+    learnerListRef.current?.focus({ preventScroll: true });
+  };
   const students = useMemo(() => data?.students || [], [data]);
   const grade = params.get("grade") || "all",
     section = params.get("section") || "all";
@@ -592,6 +599,8 @@ export default function StudentMonitoring() {
                   description={item.range}
                   tone={item.tone}
                   icon={item.icon}
+                  onClick={() => openBand(item.value)}
+                  ariaLabel={`View ${item.label.toLowerCase()} learners`}
                 />
               ))}
             </section>
@@ -599,7 +608,7 @@ export default function StudentMonitoring() {
             <section className="sm-panel sm-learners">
               <div className="sm-list-header">
                 <div>
-                  <h2>Learner monitoring</h2>
+                  <h2 ref={learnerListRef} tabIndex={-1} className="sm-learner-heading">Learner monitoring</h2>
                   <p>
                     Ordered by academic priority. Review the records and
                     calculation behind each academic band.
