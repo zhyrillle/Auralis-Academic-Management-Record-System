@@ -1,6 +1,7 @@
 import { cachedApiFetch as fetch } from "./navigationCache.js";
 import { cacheKey, loadCached } from './navigationCache.js';
-import { RISK_INPUT_POLICY, SECTION_DETAILS_CACHE } from './riskInputPolicy.js';
+import { RISK_INPUT_POLICY, SECTION_DETAILS_CACHE, TEACHER_RISK_VIEW_VERSION } from './riskInputPolicy.js';
+import { isSectionDetailsView } from '../utils/sectionDetailsPresentation.js';
 
 const API_BASE_URL = (
   import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api"
@@ -27,14 +28,15 @@ export const getSectionDetails = async ({
   assignmentType,
   assignmentId,
   term = "T1",
+  riskMode = 'monitoring',
   userId,
   signal,
   force = false,
 }) => {
   const read = async () => {
     const response = await fetch(
-      `${API_BASE_URL}/section-details/${encodeURIComponent(assignmentType)}/${encodeURIComponent(assignmentId)}?term=${encodeURIComponent(term)}&inputPolicy=${RISK_INPUT_POLICY}`,
-      { queueOffline: false,
+      `${API_BASE_URL}/section-details/${encodeURIComponent(assignmentType)}/${encodeURIComponent(assignmentId)}?term=${encodeURIComponent(term)}&riskMode=${encodeURIComponent(riskMode)}&inputPolicy=${RISK_INPUT_POLICY}&viewVersion=${TEACHER_RISK_VIEW_VERSION}`,
+      { queueOffline: false, force,
         headers: { "X-Auralis-User-Id": String(userId) },
         signal,
       },
@@ -47,10 +49,14 @@ export const getSectionDetails = async ({
         response.status,
       );
     }
+    if (!isSectionDetailsView(data, { assignmentType, assignmentId, term, riskMode })) {
+      throw new SectionDetailsRequestError('Section Details returned an outdated or incomplete response. Refresh the page and try again.',
+        'SECTION_DETAILS_VIEW_MISMATCH', 502);
+    }
     return data;
   };
   // Shared reads must not inherit one caller's abort signal.
   if (signal) return read();
   return loadCached(cacheKey(SECTION_DETAILS_CACHE, { assignmentType, assignmentId: Number(assignmentId),
-    term, userId: Number(userId) }), read, { force });
+    term, riskMode, userId: Number(userId) }), read, { force });
 };

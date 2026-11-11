@@ -13,6 +13,8 @@ router.get("/:assignmentType/:assignmentId", async (req, res) => {
       assignmentId: req.params.assignmentId,
       userId: req.currentUser.user_id,
       term: req.query.term || "T1",
+      riskMode: req.query.riskMode || "monitoring",
+      viewVersion: req.query.viewVersion,
     });
     return res.json(data);
   } catch (error) {

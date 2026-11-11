@@ -1,9 +1,10 @@
-const { getTransmutedGrade, resolveComponentWeights, weightsFromRows } = require('../utils/depedTransmutation');
+const { getTransmutedGrade, calculateStudentGrades, resolveComponentWeights, weightsFromRows,
+  roundGrade: round, weightedScore, isMapehCalculation } = require('../utils/depedTransmutation');
 
-const round = value => Math.round((value + Number.EPSILON) * 100) / 100;
 const number = value => value === null || value === undefined || value === '' || typeof value === 'boolean'
   ? null : Number.isFinite(Number(value)) ? Number(value) : null;
 const academicBand = grade => grade < 75 ? 'high' : grade < 80 ? 'moderate' : 'low';
+const normalize = (points, weight) => Math.min(100, round(weight === 100 ? points : points / weight * 100));
 const examKey = name => /\b(ST1|SUMMATIVE\s*(?:TEST\s*)?1)\b/i.test(name) ? 'ST1'
   : /\b(ST2|SUMMATIVE\s*(?:TEST\s*)?2)\b/i.test(name) ? 'ST2'
     : /\b(TE|TERM\s*EXAM|QUARTERLY\s*ASSESSMENT)\b/i.test(name) ? 'TE' : null;
@@ -43,30 +44,40 @@ function computeProgress({ activities = [], weightRows = [], transmutationConfig
     if (code === 'EX' && (!exam || group.EX.some(item => item.exam === exam))) {
       result.reasons.push('Examination activities must identify distinct ST1, ST2, and TE records.'); continue;
     }
-    group[code].push({ score, maximum, exam, missing: status === 'MISSING' });
+    group[code].push({ id: row.activity_id, name: row.activity_name, score, maximum, exam, missing: status === 'MISSING' });
     result.recordedActivities++;
   }
   if (result.reasons.length) return { ...result, status: 'review', reasons: [...new Set(result.reasons)] };
   const previews = [];
   for (const group of groups.values()) {
+    // Eligibility remains specific to monitoring; component arithmetic comes from Class Record.
+    const entries = ['WW', 'PT', 'EX'].flatMap(code => group[code].map(entry => ({ ...entry, code })));
+    const calculated = calculateStudentGrades({
+      assessments: entries.map(entry => ({ assessment_id: entry.id, activity_name: entry.name,
+        component_code: entry.code, max_score: entry.maximum, exam_key: entry.exam })),
+      scores: Object.fromEntries(entries.map(entry => [entry.id, entry.score])),
+      weights: resolved.weights, isMapeh, transmutationConfig,
+    });
+    const pooledExaminations = isMapehCalculation({ isMapeh, weights: resolved.weights });
     let points = 0, available = 0;
     for (const code of ['WW', 'PT', 'EX']) {
       const entries = group[code], weight = resolved.weights[code];
       const earned = entries.reduce((sum, item) => sum + item.score, 0);
       const possible = entries.reduce((sum, item) => sum + item.maximum, 0);
-      let percent = possible ? earned / possible * 100 : null;
+      const component = calculated.components[code === 'EX' ? 'QA' : code];
+      let percent = entries.length ? component.ps : null;
       let representedWeight = entries.length ? weight : 0;
-      let contribution = percent === null ? 0 : percent * weight / 100;
+      let contribution = entries.length ? component.ws : 0;
       if (code === 'EX' && entries.length) {
-        if (isMapeh) {
+        if (pooledExaminations) {
           // The existing MAPEH grade pools exam points; three exam stages share coverage.
           representedWeight = weight * entries.length / 3;
-          contribution = percent * representedWeight / 100;
+          contribution = weightedScore(component.ps, representedWeight);
         } else {
           const shares = { ST1: 30, ST2: 30, TE: 40 };
           representedWeight = entries.reduce((sum, entry) => sum + weight * shares[entry.exam] / 100, 0);
-          contribution = entries.reduce((sum, entry) => sum + entry.score / entry.maximum * weight * shares[entry.exam] / 100, 0);
-          percent = representedWeight ? contribution / representedWeight * 100 : null;
+          const representedShare = entries.reduce((sum, entry) => sum + shares[entry.exam], 0);
+          percent = representedShare ? component.ps / representedShare * 100 : null;
         }
       }
       points += contribution; available += representedWeight;
@@ -75,10 +86,11 @@ function computeProgress({ activities = [], weightRows = [], transmutationConfig
         weightedPoints: round(contribution), availableWeight: round(representedWeight),
         activityCount: entries.length, confirmedMissing: entries.filter(entry => entry.missing).length });
     }
-    result.weightedPoints += points / groups.size;
-    result.availableWeight += available / groups.size;
+    points = round(points);
+    result.weightedPoints += points;
+    result.availableWeight += available;
     if (available > 0) {
-      const preview = getTransmutedGrade(round(points / available * 100), null, transmutationConfig);
+      const preview = getTransmutedGrade(normalize(points, available), null, transmutationConfig);
       if (number(preview) === null || preview < 0 || preview > 100) {
         return { ...result, status: 'review', reasons: ['The configured transmutation table did not produce a valid preview.'] };
       }
@@ -86,7 +98,9 @@ function computeProgress({ activities = [], weightRows = [], transmutationConfig
     }
   }
   if (!previews.length || !result.availableWeight) return { ...result, reasons: ['No valid score in a component with a positive weight has been recorded.'] };
-  result.progress = round(result.weightedPoints / result.availableWeight * 100);
+  result.weightedPoints /= groups.size;
+  result.availableWeight /= groups.size;
+  result.progress = normalize(result.weightedPoints, result.availableWeight);
   // Complete MAPEH keeps the existing average of its two separately converted grades.
   result.gradePreview = isMapeh ? Math.round(previews.reduce((sum, grade) => sum + grade, 0) / previews.length) : previews[0];
   result.weightedPoints = round(result.weightedPoints);

@@ -99,3 +99,4 @@
 }
 @media (max-width: 640px) { .sm-filters .filter-toolbar__controls { flex-basis: 100%; }.sm-filters .dropdown-select { flex: 1 1 140px; width: auto; } }
 @media (max-width: 600px) { .sm-header { align-items: flex-start; }.sm-panel { padding: 16px; }.sm-list-controls, .sm-search { width: 100%; box-sizing: border-box; }.sm-search input { width: 100%; min-width: 0; }.sm-pagination { flex-wrap: wrap; }.sm-dialog { width: calc(100vw - 24px); max-height: calc(100dvh - 24px); }.sm-dialog-content { padding: 18px; gap: 16px; }.sm-dialog h2 { font-size: 20px; }.sm-calculation { padding: 16px 12px; }.sm-calculation-metrics strong { font-size: 27px; }.sm-detail-sources { grid-template-columns: minmax(0, 1fr); } }
+.sm-learner-heading { scroll-margin-top: 90px; }

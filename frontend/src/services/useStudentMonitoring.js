@@ -2,6 +2,7 @@ import { useSearchParams } from 'react-router-dom';
 import useCachedQuery from './useCachedQuery';
 import { cacheKey } from './navigationCache';
 import { getMonitoringOptions, getMonitoringPreview } from './studentMonitoringApi';
+import { ACADEMIC_PROGRESS_VERSION } from './riskInputPolicy';
 
 export default function useStudentMonitoring() {
   const [params, setParams] = useSearchParams();
@@ -17,7 +18,7 @@ export default function useStudentMonitoring() {
     || terms.find(row => row.startsOn <= options.today && row.endsOn >= options.today)
     || [...terms].reverse().find(row => row.startsOn <= options.today) || terms[0];
   const filters = { schoolYear: schoolYear?.value || '', subject: subject?.value || '', term: term?.value || '' };
-  const key = cacheKey('monitoring:preview:v1', filters);
+  const key = cacheKey(`monitoring:preview:${ACADEMIC_PROGRESS_VERSION}`, filters);
   const query = useCachedQuery(key, () => getMonitoringPreview(filters), {
     enabled: Boolean(filters.schoolYear && filters.subject && filters.term), keepPreviousData: false,
   });

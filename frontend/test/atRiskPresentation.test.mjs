@@ -173,7 +173,15 @@ try {
   const { getSectionDetails } = await server.ssrLoadModule('/src/services/sectionDetailsService.js');
   const requests = [];
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async url => { requests.push(new URL(url)); return new Response('{}', { headers: { 'Content-Type': 'application/json' } }); };
+  globalThis.fetch = async url => {
+    requests.push(new URL(url));
+    const payload = new URL(url).pathname.includes('/section-details/') ? {
+      viewVersion: 'teacher-monitoring-v2', context: { assignmentType: 'teaching', assignmentId: 1,
+        selectedTerm: { code: 'T1' }, riskMode: 'monitoring', subject: { id: 1, offeringId: 1, code: 'ENG', name: 'English' } },
+      riskContext: { mode: 'monitoring' }, summary: { performanceBands: {} }, learners: [],
+    } : {};
+    return new Response(JSON.stringify(payload), { headers: { 'Content-Type': 'application/json' } });
+  };
   try {
     await loadCached(cacheKey('section-details:v3', { assignmentType: 'teaching', assignmentId: 1, term: 'T1', userId: 1 }),
       async () => ({ staleRisk: true }));

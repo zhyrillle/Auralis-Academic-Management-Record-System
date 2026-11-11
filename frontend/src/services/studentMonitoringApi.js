@@ -1,6 +1,7 @@
 import { cachedApiFetch } from './navigationCache';
 import { API_BASE_URL } from './apiConfig';
 import { getStoredUser } from '../utils/auth';
+import { ACADEMIC_PROGRESS_VERSION } from './riskInputPolicy';
 
 async function read(path, filters = {}) {
   const user = getStoredUser();
@@ -13,4 +14,4 @@ async function read(path, filters = {}) {
 }
 
 export const getMonitoringOptions = () => read('options');
-export const getMonitoringPreview = filters => read('preview', filters);
+export const getMonitoringPreview = filters => read('preview', { ...filters, calculationVersion: ACADEMIC_PROGRESS_VERSION });
