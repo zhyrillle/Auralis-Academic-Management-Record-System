@@ -1035,7 +1035,7 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
   if (loading) return <div className="attendance-sheet-container">
     <div className="att-header-bar"><div className="att-title-area">
       <button className="back-btn" onClick={handleBack} title="Back to Class Record"><img src={backIconUrl} alt="Back" width={17} height={17} /></button>
-      <h1 className="att-title">Learner Attendance Conversion Tool</h1>
+      <h1 className="att-title">Attendance Sheet</h1>
     </div></div>
     <PageSkeleton label="Loading attendance spreadsheet" columns={8} rows={8} />
   </div>;
@@ -1064,7 +1064,7 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
           </button>
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-              <h1 className="att-title" style={{ margin: 0 }}>Learner Attendance Conversion Tool</h1>
+              <h1 className="att-title" style={{ margin: 0 }}>Attendance Sheet</h1>
               {/* GOOGLE DOCS STYLE AUTO-SAVE / OFFLINE INDICATOR */}
               <div
                 className="gdocs-sync-status"
@@ -1275,7 +1275,7 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
                       {week.days.map((sd, dIdx) => (
                         <th
                           key={`dow-${sd.dateStr}`}
-                          className={noClassDays[sd.dateStr] ? 'sf2-no-class-day' : ''}
+                          className={`${sd.dateStr === TODAY ? 'sf2-today' : ''} ${noClassDays[sd.dateStr] ? 'sf2-no-class-day' : ''}`}
                           style={{
                             backgroundColor: colorObj.bg,
                             color: colorObj.text,
@@ -1310,7 +1310,7 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
                         return (
                           <th
                             key={`num-${sd.dateStr}`}
-                            className={`sf2-date-num-th ${noClassDays[sd.dateStr] ? 'sf2-no-class-day' : ''}`}
+                            className={`sf2-date-num-th ${sd.dateStr === TODAY ? 'sf2-today' : ''} ${noClassDays[sd.dateStr] ? 'sf2-no-class-day' : ''}`}
                             style={{
                               backgroundColor: colorObj.bg,
                               color: colorObj.text,
@@ -1356,7 +1356,7 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
                       return (
                         <td
                           key={`cell-${sId}-${sd.dateStr}`}
-                          className={`sf2-td-att-cell ${isToday && !noClassReason && !saving ? "sf2-editable-cell" : ""} ${noClassReason ? 'sf2-no-class-day' : ''}`}
+                          className={`sf2-td-att-cell ${isToday ? 'sf2-today' : ''} ${isToday && !noClassReason && !saving ? "sf2-editable-cell" : ""} ${noClassReason ? 'sf2-no-class-day' : ''}`}
                           onClick={() => handleCellClick(sId, sd.dateStr, colIdx, stu.student_id)}
                           title={noClassReason ? `${NO_CLASS_LABELS[noClassReason]} · No classes. Any saved entry is preserved.` : `${stu.last_name}, ${stu.first_name} - ${sd.fullDate} (${status === "P" ? "Present" : status === "L" ? "Late" : status === "A" ? "Absent" : "Unrecorded"})`}
                         >
@@ -1394,7 +1394,7 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
                   MALE | Total Per Day ➡
                 </td>
                 {schoolDays.map((sd) => (
-                  <td key={`male-tot-${sd.dateStr}`} className={`sf2-subtotal-cell ${noClassDays[sd.dateStr] ? 'sf2-no-class-day' : ''}`}>
+                  <td key={`male-tot-${sd.dateStr}`} className={`sf2-subtotal-cell ${sd.dateStr === TODAY ? 'sf2-today' : ''} ${noClassDays[sd.dateStr] ? 'sf2-no-class-day' : ''}`}>
                     {noClassDays[sd.dateStr] ? '—' : dailyMaleTotals[sd.dateStr] || 0}
                   </td>
                 ))}
@@ -1427,7 +1427,7 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
                       return (
                         <td
                           key={`cell-${sId}-${sd.dateStr}`}
-                          className={`sf2-td-att-cell ${isToday && !noClassReason && !saving ? "sf2-editable-cell" : ""} ${noClassReason ? 'sf2-no-class-day' : ''}`}
+                          className={`sf2-td-att-cell ${isToday ? 'sf2-today' : ''} ${isToday && !noClassReason && !saving ? "sf2-editable-cell" : ""} ${noClassReason ? 'sf2-no-class-day' : ''}`}
                           onClick={() => handleCellClick(sId, sd.dateStr, colIdx, stu.student_id)}
                           title={noClassReason ? `${NO_CLASS_LABELS[noClassReason]} · No classes. Any saved entry is preserved.` : `${stu.last_name}, ${stu.first_name} - ${sd.fullDate} (${status === "P" ? "Present" : status === "L" ? "Late" : status === "A" ? "Absent" : "Unrecorded"})`}
                         >
@@ -1465,7 +1465,7 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
                   FEMALE | Total Per Day ➡
                 </td>
                 {schoolDays.map((sd) => (
-                  <td key={`female-tot-${sd.dateStr}`} className={`sf2-subtotal-cell ${noClassDays[sd.dateStr] ? 'sf2-no-class-day' : ''}`}>
+                  <td key={`female-tot-${sd.dateStr}`} className={`sf2-subtotal-cell ${sd.dateStr === TODAY ? 'sf2-today' : ''} ${noClassDays[sd.dateStr] ? 'sf2-no-class-day' : ''}`}>
                     {noClassDays[sd.dateStr] ? '—' : dailyFemaleTotals[sd.dateStr] || 0}
                   </td>
                 ))}
@@ -1481,7 +1481,7 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
                   COMBINED | Total Per Day ➡
                 </td>
                 {schoolDays.map((sd) => (
-                  <td key={`comb-tot-${sd.dateStr}`} className={`sf2-subtotal-cell combined ${noClassDays[sd.dateStr] ? 'sf2-no-class-day' : ''}`}>
+                  <td key={`comb-tot-${sd.dateStr}`} className={`sf2-subtotal-cell combined ${sd.dateStr === TODAY ? 'sf2-today' : ''} ${noClassDays[sd.dateStr] ? 'sf2-no-class-day' : ''}`}>
                     {noClassDays[sd.dateStr] ? '—' : dailyCombinedTotals[sd.dateStr] || 0}
                   </td>
                 ))}
@@ -1556,4 +1556,3 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
     </div>
   );
 }
-

@@ -927,6 +927,15 @@
   cursor: default;
 }
 
+.sf2-table th.sf2-today {
+  background-color: #fef08a !important;
+  color: #854d0e !important;
+}
+
+.sf2-table td.sf2-today:not(.sf2-no-class-day) {
+  background-color: #fffbeb !important;
+}
+
 /* Google Docs Style Auto-Save / Offline Indicator for Attendance */
 .gdocs-sync-status {
   display: flex;
@@ -974,4 +983,3 @@
     transform: rotate(360deg);
   }
 }
-
