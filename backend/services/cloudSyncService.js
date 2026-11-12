@@ -805,16 +805,6 @@ async function syncAttendanceFromCloud(timeoutMs = 4000) {
           flat
         ).catch(() => {});
       }
-
-      // Prune deleted sheets
-      const cloudSheetIds = new Set(cloudSheets.map((s) => Number(s.attendance_sheet_id)));
-      const [localSheets] = await db.query('SELECT attendance_sheet_id FROM ATTENDANCE_SHEET');
-      for (const ls of localSheets) {
-        if (!cloudSheetIds.has(Number(ls.attendance_sheet_id))) {
-          await q('DELETE FROM ATTENDANCE WHERE attendance_sheet_id = ?', [ls.attendance_sheet_id]);
-          await q('DELETE FROM ATTENDANCE_SHEET WHERE attendance_sheet_id = ?', [ls.attendance_sheet_id]);
-        }
-      }
     }
 
     // 2. Sync ATTENDANCE
@@ -840,15 +830,6 @@ async function syncAttendanceFromCloud(timeoutMs = 4000) {
              remarks = VALUES(remarks)`,
           flat
         ).catch(() => {});
-      }
-
-      // Prune deleted attendance records
-      const cloudAttIds = new Set(cloudAttendance.map((a) => Number(a.attendance_id)));
-      const [localAtt] = await db.query('SELECT attendance_id FROM ATTENDANCE');
-      for (const la of localAtt) {
-        if (!cloudAttIds.has(Number(la.attendance_id))) {
-          await q('DELETE FROM ATTENDANCE WHERE attendance_id = ?', [la.attendance_id]);
-        }
       }
     }
   })();
@@ -922,15 +903,6 @@ async function syncPhilIriFromCloud(timeoutMs = 3500) {
           flat
         ).catch(() => {});
       }
-
-      // Prune deleted assessments
-      const cloudIds = new Set(cloudAssessments.map((p) => Number(p.phil_iri_id)));
-      const [localAssessments] = await db.query('SELECT phil_iri_id FROM PHIL_IRI_ASSESSMENT');
-      for (const la of localAssessments) {
-        if (!cloudIds.has(Number(la.phil_iri_id))) {
-          await q('DELETE FROM PHIL_IRI_ASSESSMENT WHERE phil_iri_id = ?', [la.phil_iri_id]);
-        }
-      }
     }
 
     // 2. Sync PHIL_IRI_SCREENING
@@ -979,15 +951,6 @@ async function syncPhilIriFromCloud(timeoutMs = 3500) {
              recorded_by = VALUES(recorded_by)`,
           flat
         ).catch(() => {});
-      }
-
-      // Prune deleted screenings
-      const cloudIds = new Set(cloudScreenings.map((s) => Number(s.screening_id)));
-      const [localScreenings] = await db.query('SELECT screening_id FROM PHIL_IRI_SCREENING');
-      for (const ls of localScreenings) {
-        if (!cloudIds.has(Number(ls.screening_id))) {
-          await q('DELETE FROM PHIL_IRI_SCREENING WHERE screening_id = ?', [ls.screening_id]);
-        }
       }
     }
   })();
@@ -1151,17 +1114,96 @@ async function forwardAttendanceSheetNoClassesToCloud(sheetId, reason) {
 async function forwardAttendanceBulkSaveToCloud(records) {
   if (!db.cloudPool || !Array.isArray(records) || records.length === 0) return;
   try {
+    const verifiedSheets = new Set();
     for (const rec of records) {
       const rawId = rec.student_section_id || rec.student_id;
       if (!rec.attendance_sheet_id || !rawId) continue;
-      const status = ['P', 'A', 'L'].includes(rec.status) ? rec.status : 'P';
+      const sheetId = Number(rec.attendance_sheet_id);
+
+      // Ensure target attendance sheet exists on Aiven Cloud before inserting attendance child rows
+      if (!verifiedSheets.has(sheetId)) {
+        try {
+          const [cloudSheet] = await db.cloudPool.query(
+            `SELECT attendance_sheet_id FROM ATTENDANCE_SHEET WHERE attendance_sheet_id = ?`,
+            [sheetId]
+          );
+          if (!cloudSheet || cloudSheet.length === 0) {
+            const [localSheet] = await db.query(
+              `SELECT * FROM ATTENDANCE_SHEET WHERE attendance_sheet_id = ?`,
+              [sheetId]
+            );
+            if (localSheet && localSheet.length > 0) {
+              const ls = localSheet[0];
+              await db.cloudPool.query(
+                `INSERT INTO ATTENDANCE_SHEET (attendance_sheet_id, teacher_assignment_id, adviser_assignment_id, attendance_scope, attendance_date, no_class_reason)
+                 VALUES (?, ?, ?, ?, ?, ?)
+                 ON DUPLICATE KEY UPDATE
+                   teacher_assignment_id = VALUES(teacher_assignment_id),
+                   adviser_assignment_id = VALUES(adviser_assignment_id),
+                   attendance_scope = VALUES(attendance_scope),
+                   attendance_date = VALUES(attendance_date),
+                   no_class_reason = VALUES(no_class_reason)`,
+                [
+                  ls.attendance_sheet_id,
+                  ls.teacher_assignment_id || null,
+                  ls.adviser_assignment_id || null,
+                  ls.attendance_scope || 'SECTION',
+                  formatDate(ls.attendance_date),
+                  ls.no_class_reason || null,
+                ]
+              ).catch(() => {});
+            }
+          }
+          verifiedSheets.add(sheetId);
+        } catch (sheetCheckErr) {
+          console.warn('[CloudAttendance] Could not verify sheet on cloud:', sheetCheckErr.message);
+        }
+      }
+
+      // Resolve student_section_id
+      let finalStudentSecId = Number(rawId);
+      try {
+        const [exact] = await db.query(
+          `SELECT student_section_id FROM STUDENT_SECTION WHERE student_section_id = ?`,
+          [finalStudentSecId]
+        );
+        if (!exact || exact.length === 0) {
+          const [byStu] = await db.query(
+            `SELECT student_section_id FROM STUDENT_SECTION WHERE student_id = ? LIMIT 1`,
+            [finalStudentSecId]
+          );
+          if (byStu && byStu.length > 0) {
+            finalStudentSecId = byStu[0].student_section_id;
+          }
+        }
+      } catch (_) {}
+
       const cleanRemarks = rec.remarks !== undefined && rec.remarks !== null ? String(rec.remarks).trim() || null : null;
-      await db.cloudPool.query(
-        `INSERT INTO ATTENDANCE (attendance_sheet_id, student_section_id, status, remarks)
-         VALUES (?, ?, ?, ?)
-         ON DUPLICATE KEY UPDATE status = VALUES(status), remarks = VALUES(remarks)`,
-        [rec.attendance_sheet_id, rawId, status, cleanRemarks]
-      );
+      const isBlank = !rec.status || rec.status === 'BLANK' || rec.status === 'NONE';
+
+      if (isBlank) {
+        if (cleanRemarks) {
+          await db.cloudPool.query(
+            `INSERT INTO ATTENDANCE (attendance_sheet_id, student_section_id, status, remarks)
+             VALUES (?, ?, 'P', ?)
+             ON DUPLICATE KEY UPDATE remarks = VALUES(remarks)`,
+            [sheetId, finalStudentSecId, cleanRemarks]
+          ).catch(() => {});
+        } else {
+          await db.cloudPool.query(
+            `DELETE FROM ATTENDANCE WHERE attendance_sheet_id = ? AND student_section_id = ?`,
+            [sheetId, finalStudentSecId]
+          ).catch(() => {});
+        }
+      } else {
+        const status = ['P', 'A', 'L'].includes(rec.status) ? rec.status : 'P';
+        await db.cloudPool.query(
+          `INSERT INTO ATTENDANCE (attendance_sheet_id, student_section_id, status, remarks)
+           VALUES (?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE status = VALUES(status), remarks = VALUES(remarks)`,
+          [sheetId, finalStudentSecId, status, cleanRemarks]
+        ).catch(() => {});
+      }
     }
   } catch (err) {
     console.warn('[CloudAttendance] Failed to dual-write bulk attendance to Aiven Cloud:', err.message);

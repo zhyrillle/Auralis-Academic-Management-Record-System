@@ -296,6 +296,9 @@ export default function StudentSectionManagement() {
     };
     if (await mutate(() => createOpen ? createSection(payload) : updateSection(form.id, payload), createOpen ? "Section created successfully." : "Section details updated.")) {
       setCreateOpen(false);
+      if (typeof window !== "undefined" && window.dispatchEvent) {
+        window.dispatchEvent(new Event("auralis-cache-invalidated"));
+      }
       if (!createOpen) setDrawerSection(previous => ({
         ...previous,
         name: form.name.trim()
@@ -971,6 +974,9 @@ export default function StudentSectionManagement() {
                 if (await mutate(() => deleteSection(targetSection.id), "Section removed.")) {
                   setDeleteOpen(false);
                   setDrawerOpen(false);
+                  if (typeof window !== "undefined" && window.dispatchEvent) {
+                    window.dispatchEvent(new Event("auralis-cache-invalidated"));
+                  }
                 }
               }}
             >

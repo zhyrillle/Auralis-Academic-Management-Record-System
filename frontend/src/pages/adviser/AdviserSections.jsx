@@ -32,9 +32,37 @@ export default function AdviserSections({ userRole: propUserRole, isArchivedView
   const normRole = useMemo(() => normalizeRole(storedUser?.role, storedUser), [storedUser]);
   const userRole = propUserRole || (normRole === "adviser" ? "adviser" : "teacher");
 
-  const [classes, setClasses] = useState([]);
+  const [classes, setClasses] = useState(() => {
+    if (isArchived) return [];
+    try {
+      const u = getStoredUser();
+      const uid = u?.user_id || u?.id;
+      if (uid) {
+        const raw = localStorage.getItem(`auralis_assigned_classes_${uid}`);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      }
+    } catch (_) {}
+    return [];
+  });
   const [studentsBySection, setStudentsBySection] = useState({});
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => {
+    if (isArchived) return true;
+    try {
+      const u = getStoredUser();
+      const uid = u?.user_id || u?.id;
+      if (uid) {
+        const raw = localStorage.getItem(`auralis_assigned_classes_${uid}`);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.length > 0) return false;
+        }
+      }
+    } catch (_) {}
+    return true;
+  });
   const [classesError, setClassesError] = useState('');
   const [classesReadVersion, setClassesReadVersion] = useState(0);
   const [recordReadVersion, setRecordReadVersion] = useState(0);
@@ -64,35 +92,79 @@ export default function AdviserSections({ userRole: propUserRole, isArchivedView
   // Fetch sections from backend
   useEffect(() => {
     let cancelled = false;
-    async function fetchAdviserClasses() {
-      setLoading(true);
+    async function fetchAdviserClasses(force = false) {
+      setClasses(prev => {
+        if (!prev || prev.length === 0) setLoading(true);
+        return prev;
+      });
       setClassesError('');
       try {
         const user = getStoredUser();
         const userId = user?.user_id || user?.id;
         if (!userId) throw new Error('Please sign in to view your classes.');
         const fetched = isArchived
-          ? await getArchivedSections(userId)
-          : await getAdviserSections(userId);
+          ? await getArchivedSections(userId, { force })
+          : await getAdviserSections(userId, { force });
         if (cancelled) return;
 
-        if (fetched && Array.isArray(fetched) && fetched.length > 0) {
+        let cachedLocalClasses = null;
+        if (!isArchived && userId) {
+          try {
+            const raw = localStorage.getItem(`auralis_assigned_classes_${userId}`);
+            if (raw) cachedLocalClasses = JSON.parse(raw);
+          } catch (_) {}
+        }
+
+        if (Array.isArray(fetched)) {
           setClasses(fetched);
+        } else if (typeof navigator !== 'undefined' && !navigator.onLine && Array.isArray(cachedLocalClasses) && cachedLocalClasses.length > 0) {
+          setClasses(cachedLocalClasses);
         } else {
           setClasses([]);
         }
       } catch (err) {
         if (cancelled) return;
         console.error("Error fetching adviser sections:", err);
-        setClassesError(err.message || (isArchived ? 'Archived classes could not be loaded.' : 'Assigned classes could not be loaded.'));
-        setClasses([]);
+        const user = getStoredUser();
+        const userId = user?.user_id || user?.id;
+
+        let cachedLocalClasses = null;
+        if (!isArchived && userId) {
+          try {
+            const raw = localStorage.getItem(`auralis_assigned_classes_${userId}`);
+            if (raw) cachedLocalClasses = JSON.parse(raw);
+          } catch (_) {}
+        }
+
+        if (Array.isArray(cachedLocalClasses) && cachedLocalClasses.length > 0) {
+          setClasses(cachedLocalClasses);
+        } else {
+          setClassesError(err.message || (isArchived ? 'Archived classes could not be loaded.' : 'Assigned classes could not be loaded.'));
+          setClasses([]);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
     }
 
-    fetchAdviserClasses();
-    return () => { cancelled = true; };
+    const handleClassesRefreshed = (e) => {
+      const refreshed = e.detail?.sections;
+      if (Array.isArray(refreshed) && !isArchived && !cancelled) {
+        setClasses(refreshed);
+      }
+    };
+    const handleCacheInvalidated = () => {
+      if (!cancelled) fetchAdviserClasses(true);
+    };
+    window.addEventListener('auralis-classes-refreshed', handleClassesRefreshed);
+    window.addEventListener('auralis-cache-invalidated', handleCacheInvalidated);
+
+    fetchAdviserClasses(true);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('auralis-classes-refreshed', handleClassesRefreshed);
+      window.removeEventListener('auralis-cache-invalidated', handleCacheInvalidated);
+    };
   }, [classesReadVersion, isArchived, location.pathname]);
 
   // Navigation View State
@@ -926,9 +998,11 @@ export default function AdviserSections({ userRole: propUserRole, isArchivedView
                   selectable={isSelectionMode}
                   selected={selectedClassIds.includes(cls.id)}
                   onToggleSelect={() => toggleSelectClass(cls.id)}
-                  secondaryActionsDisabled={!(Number.isInteger(Number(cls.subject_offering_id || cls.offering_id))
-                    && Number(cls.subject_offering_id || cls.offering_id) > 0)}
-                  secondaryActionsDisabledReason="No teaching subject is assigned to you for this class. Use View to see the advisory section."
+                  secondaryActionsDisabled={!(
+                    (Number.isInteger(Number(cls.subject_offering_id || cls.offering_id)) && Number(cls.subject_offering_id || cls.offering_id) > 0)
+                    || cls.isAdviser
+                  )}
+                  secondaryActionsDisabledReason="No teaching subject or advisory assignment is associated with this class."
                   onView={(c) => { setactiveSelectedClass(c); setCurrentView("section-details"); }}
                   onGradingSheet={(c) => { setactiveSelectedClass(c); setCurrentView("grading-sheet"); }}
                   onEdit={(c) => { setactiveSelectedClass(c); setCurrentView("class-record"); }}

@@ -7,7 +7,7 @@ const cloudSync = require('../services/cloudSyncService');
 
 router.get('/', async (req, res) => {
   try {
-    await cloudSync.syncAttendanceFromCloud();
+    cloudSync.syncAttendanceFromCloud().catch(() => {});
     const sheets = await AttendanceSheet.findAll();
     res.json(sheets);
   } catch (err) {
@@ -18,7 +18,7 @@ router.get('/', async (req, res) => {
 // GET all sheets for a specific adviser assignment (for building the date grid)
 router.get('/adviser/:adviserAssignmentId', async (req, res) => {
   try {
-    await cloudSync.syncAttendanceFromCloud();
+    cloudSync.syncAttendanceFromCloud().catch(() => {});
     const sheets = await AttendanceSheet.findByAdviserAssignmentId(req.params.adviserAssignmentId);
     res.json(sheets);
   } catch (err) {
@@ -29,7 +29,7 @@ router.get('/adviser/:adviserAssignmentId', async (req, res) => {
 // GET all sheets for a specific teacher assignment (for building the date grid)
 router.get('/teacher/:teacherAssignmentId', async (req, res) => {
   try {
-    await cloudSync.syncAttendanceFromCloud();
+    cloudSync.syncAttendanceFromCloud().catch(() => {});
     const sheets = await AttendanceSheet.findByTeacherAssignmentId(req.params.teacherAssignmentId);
     res.json(sheets);
   } catch (err) {
@@ -40,7 +40,7 @@ router.get('/teacher/:teacherAssignmentId', async (req, res) => {
 // GET all sheets for a specific section, scoped to adviser or subject teacher
 router.get('/section/:sectionId', async (req, res) => {
   try {
-    await cloudSync.syncAttendanceFromCloud();
+    cloudSync.syncAttendanceFromCloud().catch(() => {});
     const schoolYearId = req.query.schoolYearId;
     if (schoolYearId !== undefined && !/^[1-9]\d*$/.test(String(schoolYearId))) return res.status(400).json({ error: 'Invalid school year.' });
 

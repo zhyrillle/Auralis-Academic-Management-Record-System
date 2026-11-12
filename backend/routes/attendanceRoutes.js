@@ -8,7 +8,7 @@ const cloudSync = require('../services/cloudSyncService');
 
 router.get('/', async (req, res) => {
   try {
-    await cloudSync.syncAttendanceFromCloud();
+    cloudSync.syncAttendanceFromCloud().catch(() => {});
     const records = await Attendance.findAll();
     res.json(records);
   } catch (err) {
@@ -19,7 +19,7 @@ router.get('/', async (req, res) => {
 // GET all attendance records for a specific sheet
 router.get('/sheet/:sheetId', async (req, res) => {
   try {
-    await cloudSync.syncAttendanceFromCloud();
+    cloudSync.syncAttendanceFromCloud().catch(() => {});
     const records = await Attendance.findBySheetId(req.params.sheetId);
     res.json(records);
   } catch (err) {
@@ -30,7 +30,7 @@ router.get('/sheet/:sheetId', async (req, res) => {
 // GET all attendance records for a section, scoped to adviser or subject teacher
 router.get('/section/:sectionId', async (req, res) => {
   try {
-    await cloudSync.syncAttendanceFromCloud();
+    cloudSync.syncAttendanceFromCloud().catch(() => {});
     const schoolYearId = req.query.schoolYearId;
     if (schoolYearId !== undefined && !/^[1-9]\d*$/.test(String(schoolYearId))) return res.status(400).json({ error: 'Invalid school year.' });
 
@@ -67,12 +67,13 @@ router.post('/save-remarks', async (req, res) => {
 // POST bulk-save multiple attendance records at once
 router.post('/bulk-save', async (req, res) => {
   try {
-    const { records, section_id, adviser_assignment_id, teacher_assignment_id, attendance_scope, attendance_date } = req.body;
+    const { records, section_id, adviser_assignment_id, teacher_assignment_id, attendance_scope, attendance_date, user_id } = req.body;
     if (!Array.isArray(records) || records.length === 0) {
       return res.status(400).json({ error: 'records array is required' });
     }
 
     const resolvedScope = attendance_scope || (teacher_assignment_id ? 'SUBJECT' : 'SECTION');
+    const effectiveUserId = req.headers['x-auralis-user-id'] || user_id || null;
 
     // Auto-resolve attendance_sheet_id if records were saved offline before sheet creation
     let targetSheetId = records[0]?.attendance_sheet_id;
@@ -83,7 +84,7 @@ router.post('/bulk-save', async (req, res) => {
         teacher_assignment_id: teacher_assignment_id ? Number(teacher_assignment_id) : undefined,
         attendance_scope: resolvedScope,
         attendance_date,
-        user_id: req.headers['x-auralis-user-id'] || null,
+        user_id: effectiveUserId,
       });
       targetSheetId = sheetRes?.attendance_sheet_id;
     }

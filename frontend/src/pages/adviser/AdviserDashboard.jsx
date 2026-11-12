@@ -1,7 +1,7 @@
 import useCachedQuery from '../../services/useCachedQuery';
 import { cacheKey } from '../../services/navigationCache';
 import PageSkeleton, { SkeletonBlock } from '../../components/common/PageSkeleton';
-import React, { useState, useMemo, useRef } from "react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   FileText,
@@ -68,7 +68,14 @@ export default function AdviserDashboard() {
 
   const userId = currentUser?.user_id || currentUser?.id;
   const illustration = getAdviserBannerIllustration(userId);
-  const cacheOptions = { enabled: Boolean(userId), refreshInterval: 0, revalidateOnFocus: false };
+
+  useEffect(() => {
+    if (userId) {
+      getAdviserSections(userId).catch(() => {});
+    }
+  }, [userId]);
+
+  const cacheOptions = { enabled: Boolean(userId), keepPreviousData: true, refreshInterval: 0, revalidateOnFocus: false };
   const overview = useCachedQuery(cacheKey('adviser:dashboard-overview', { userId }), async () => {
     const [role, summary, classes, attendance] = await Promise.all([
       checkAdviserRole(userId), getAdviserSummary(userId), getAssignedClasses(userId), getAttendanceTrend(userId),

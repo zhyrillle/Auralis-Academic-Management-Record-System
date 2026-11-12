@@ -46,7 +46,7 @@ router.get('/coordinator/english', async (req, res) => {
 // GET /api/phil-iri/:sectionId
 router.get('/:sectionId', async (req, res) => {
   try {
-    await cloudSync.syncPhilIriFromCloud();
+    cloudSync.syncPhilIriFromCloud().catch(() => {});
     const { sectionId } = req.params;
     const testType = req.query.testType || 'POST_TEST';
     const subjectOfferingId = req.query.subjectOfferingId || null;

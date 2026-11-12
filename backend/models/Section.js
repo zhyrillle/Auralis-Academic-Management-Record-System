@@ -652,17 +652,44 @@ class Section {
   }
 
   static async archiveClass(userId, input) {
-    return ClassArchiveService.change(userId, input, false, db.cloudPool || db);
+    try {
+      return await ClassArchiveService.change(userId, input, false, db.cloudPool || db);
+    } catch (err) {
+      if (db.cloudPool && (err.code === 'ECONNREFUSED' || err.code === 'ETIMEDOUT' || err.code === 'ENOTFOUND' || /connect|timeout/i.test(err.message))) {
+        return await ClassArchiveService.change(userId, input, false, db);
+      }
+      throw err;
+    }
   }
 
   static async restoreClass(userId, input) {
-    return ClassArchiveService.change(userId, input, true, db.cloudPool || db);
+    try {
+      return await ClassArchiveService.change(userId, input, true, db.cloudPool || db);
+    } catch (err) {
+      if (db.cloudPool && (err.code === 'ECONNREFUSED' || err.code === 'ETIMEDOUT' || err.code === 'ENOTFOUND' || /connect|timeout/i.test(err.message))) {
+        return await ClassArchiveService.change(userId, input, true, db);
+      }
+      throw err;
+    }
   }
 
   static async findAdviserSections(userId, options = {}) {
-    const database = db.cloudPool || db;
+    let database = db.cloudPool || db;
     await ClassArchiveService.ensureSchema(database);
+    if (database !== db && typeof db?.execute === 'function') {
+      await ClassArchiveService.ensureSchema(db).catch(() => {});
+    }
+
+    let localSecIdSet = null;
+    if (database !== db && typeof db?.execute === 'function') {
+      try {
+        const [localSecs] = await db.execute(`SELECT section_id FROM SECTION`);
+        localSecIdSet = new Set((localSecs || []).map(s => Number(s.section_id)));
+      } catch (_) {}
+    }
+
     let advisoryRows = [];
+    let advisoryError = null;
     try {
       // 1. Advisory Sections for user (via SECTION_ADVISER_ASSIGNMENT)
       const [rows] = await database.execute(
@@ -691,12 +718,56 @@ class Section {
          ORDER BY gl.grade_level_id ASC, sec.section_name ASC`,
         [userId]
       );
-      advisoryRows = rows;
+      advisoryRows = rows || [];
     } catch (err) {
+      advisoryError = err;
       console.warn('Advisory sections query error:', err.message);
     }
 
+    if (database !== db && typeof db?.execute === 'function') {
+      try {
+        const [localRows] = await db.execute(
+           `SELECT DISTINCT
+             saa.adviser_assignment_id,
+             sec.section_id,
+             saa.school_year_id,
+             sec.section_name,
+             sec.program_id,
+             p.program_code,
+             p.program_name,
+             COALESCE(p.is_specialized, 0) AS is_specialized,
+             gl.grade_level_id,
+             gl.grade_level_name,
+             'Advisory Class' AS class_type,
+             sy.ends_on AS school_year_end,
+             sy.status AS school_year_status,
+             COALESCE(saa.is_archived, 0) AS is_archived_col,
+             saa.archived_at AS archived_at_col
+           FROM SECTION_ADVISER_ASSIGNMENT saa
+           INNER JOIN SECTION sec ON sec.section_id = saa.section_id
+           LEFT JOIN PROGRAM p ON p.program_id = sec.program_id
+           INNER JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
+           LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = saa.school_year_id
+           WHERE saa.user_id = ?
+           ORDER BY gl.grade_level_id ASC, sec.section_name ASC`,
+          [userId]
+        );
+        if (localSecIdSet && localSecIdSet.size > 0) {
+          advisoryRows = advisoryRows.filter(r => localSecIdSet.has(Number(r.section_id)));
+        }
+        if (Array.isArray(localRows)) {
+          const localKeys = new Set(localRows.map(lr => `${lr.section_id}:${lr.school_year_id}`));
+          advisoryRows = advisoryRows.filter(cr => !localKeys.has(`${cr.section_id}:${cr.school_year_id}`));
+          advisoryRows.push(...localRows);
+        }
+        advisoryError = null;
+      } catch (localErr) {
+        console.warn('Local advisory sections fallback/merge error:', localErr.message);
+      }
+    }
+
     let teacherRows = [];
+    let teacherError = null;
     try {
       // 2. Regular / Teaching Classes for user (via TEACHER_ASSIGNMENT)
       const [rows] = await database.execute(
@@ -730,9 +801,64 @@ class Section {
          ORDER BY gl.grade_level_id ASC, sec.section_name ASC`,
         [userId]
       );
-      teacherRows = rows;
+      teacherRows = rows || [];
     } catch (err) {
+      teacherError = err;
       console.warn('Teacher sections query error:', err.message);
+    }
+
+    if (database !== db && typeof db?.execute === 'function') {
+      try {
+        const [localRows] = await db.execute(
+          `SELECT DISTINCT
+             ta.teacher_assignment_id,
+             so.subject_offering_id,
+             so.subject_id,
+             sec.section_id,
+             so.school_year_id,
+             sec.section_name,
+             sec.program_id,
+             p.program_code,
+             p.program_name,
+             COALESCE(p.is_specialized, 0) AS is_specialized,
+             gl.grade_level_id,
+             gl.grade_level_name,
+             s.subject_name,
+             'Regular Class' AS class_type,
+             sy.ends_on AS school_year_end,
+             sy.status AS school_year_status,
+             COALESCE(ta.is_archived, 0) AS is_archived_col,
+             ta.archived_at AS archived_at_col
+           FROM TEACHER_ASSIGNMENT ta
+           INNER JOIN SUBJECT_OFFERING so ON so.subject_offering_id = ta.subject_offering_id
+           INNER JOIN SECTION sec ON sec.section_id = so.section_id
+           LEFT JOIN PROGRAM p ON p.program_id = sec.program_id
+           INNER JOIN SUBJECT s ON s.subject_id = so.subject_id
+           INNER JOIN GRADE_LEVEL gl ON gl.grade_level_id = sec.grade_level_id
+           LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = so.school_year_id
+           WHERE ta.user_id = ?
+           ORDER BY gl.grade_level_id ASC, sec.section_name ASC`,
+          [userId]
+        );
+        if (localSecIdSet && localSecIdSet.size > 0) {
+          teacherRows = teacherRows.filter(r => localSecIdSet.has(Number(r.section_id)));
+        }
+        if (Array.isArray(localRows)) {
+          const localKeys = new Set(localRows.map(lr => `${lr.section_id}:${lr.subject_offering_id || lr.teacher_assignment_id}`));
+          teacherRows = teacherRows.filter(cr => !localKeys.has(`${cr.section_id}:${cr.subject_offering_id || cr.teacher_assignment_id}`));
+          teacherRows.push(...localRows);
+        }
+        teacherError = null;
+      } catch (localErr) {
+        console.warn('Local teacher sections fallback/merge error:', localErr.message);
+      }
+    }
+
+    if (advisoryError && teacherError) {
+      throw Object.assign(new Error('Unable to connect to the sections database.'), {
+        code: 'SECTIONS_DB_ERROR',
+        statusCode: 503,
+      });
     }
 
     const advisorySections = new Set(advisoryRows.map(row => `${row.section_id}:${row.school_year_id}`));
@@ -757,13 +883,30 @@ class Section {
     if (schoolYearIds.length > 0) {
       try {
         const placeholders = schoolYearIds.map(() => '?').join(', ');
-        const [termRows] = await database.execute(
-          `SELECT term_id, school_year_id, term_name, starts_at, ends_at, grade_submission_deadline_at, status
-           FROM ACADEMIC_TERM
-           WHERE school_year_id IN (${placeholders})
-           ORDER BY starts_at ASC, term_id ASC`,
-          schoolYearIds
-        );
+        let termRows;
+        try {
+          const [rows] = await database.execute(
+            `SELECT term_id, school_year_id, term_name, starts_at, ends_at, grade_submission_deadline_at, status
+             FROM ACADEMIC_TERM
+             WHERE school_year_id IN (${placeholders})
+             ORDER BY starts_at ASC, term_id ASC`,
+            schoolYearIds
+          );
+          termRows = rows;
+        } catch (termErr) {
+          if (database !== db && typeof db?.execute === 'function') {
+            const [rows] = await db.execute(
+              `SELECT term_id, school_year_id, term_name, starts_at, ends_at, grade_submission_deadline_at, status
+               FROM ACADEMIC_TERM
+               WHERE school_year_id IN (${placeholders})
+               ORDER BY starts_at ASC, term_id ASC`,
+              schoolYearIds
+            );
+            termRows = rows;
+          } else {
+            throw termErr;
+          }
+        }
 
         const now = Date.now();
         const normalizeTermCode = (name) => {

@@ -657,6 +657,9 @@ export default function UserManagement() {
       setFormMode(null);
       closeProfile();
       await fetchUsers();
+      if (typeof window !== "undefined" && window.dispatchEvent) {
+        window.dispatchEvent(new Event("auralis-cache-invalidated"));
+      }
     } catch (error) {
       setFormError(error.message || "Failed to save user.");
     } finally {

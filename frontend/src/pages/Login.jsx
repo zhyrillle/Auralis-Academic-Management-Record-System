@@ -45,6 +45,15 @@ export default function Login({ user, onLoginSuccess }) {
       const userObj = data.user || data;
       setStoredUser(userObj);
 
+      if (userObj.role === 'adviser' || userObj.is_adviser || userObj.role === 'subject_teacher' || userObj.role === 'teacher') {
+        const uid = userObj.user_id || userObj.id;
+        if (uid) {
+          import("../services/sectionService.js").then(({ getAdviserSections }) => {
+            getAdviserSections(uid, { force: true }).catch(() => {});
+          }).catch(() => {});
+        }
+      }
+
       if (onLoginSuccess) {
         onLoginSuccess(userObj);
       }
