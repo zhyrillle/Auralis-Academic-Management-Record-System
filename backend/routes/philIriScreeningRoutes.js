@@ -14,7 +14,7 @@ function fail(res, error) {
 
 router.get('/:sectionId', async (req, res) => {
   try {
-    await cloudSync.syncPhilIriFromCloud();
+    cloudSync.syncPhilIriFromCloud().catch(() => {});
     const records = await PhilIriScreening.findBySection(req.params.sectionId, req.query.schoolYearId, req.currentUser);
     res.set('Cache-Control', 'no-store');
     return res.json({ records, tableReady: true });

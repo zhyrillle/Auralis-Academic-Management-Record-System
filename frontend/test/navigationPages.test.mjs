@@ -75,13 +75,25 @@ try {
   globalThis.localStorage = { getItem: key => key === 'user' ? JSON.stringify(signedInUser) : storage.get(key) ?? null,
     setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) };
   clearNavigationCache();
+  const { TEACHER_RISK_VIEW_VERSION } = await server.ssrLoadModule('/src/services/riskInputPolicy.js');
+  const makeAdvisoryPayload = (extra = {}, term = 'T1') => ({
+    viewVersion: TEACHER_RISK_VIEW_VERSION,
+    context: { assignmentType: 'advisory', assignmentId: 9, selectedTerm: { code: term }, riskMode: 'advisory' },
+    summary: { performanceBands: {} },
+    learners: [],
+    ...extra,
+  });
   const originalFetch = globalThis.fetch;
   let reads = 0;
   globalThis.fetch = async (url, options) => {
     if (options?.method === 'PUT') return { ok: true };
     reads++;
-    return { ok: true, json: async () => ({ version: reads, term: new URL(url).searchParams.get('term'),
-      userId: options.headers['X-Auralis-User-Id'] }) };
+    const term = new URL(url).searchParams.get('term') || 'T1';
+    return { ok: true, json: async () => makeAdvisoryPayload({
+      version: reads,
+      term,
+      userId: options.headers['X-Auralis-User-Id'],
+    }, term) };
   };
   try {
     const request = { assignmentType: 'advisory', assignmentId: 9, userId: 10, term: 'T1' };
@@ -106,7 +118,10 @@ try {
     clearNavigationCache();
     globalThis.fetch = async () => ({ ok: false, status: 503, json: async () => ({ message: 'Service unavailable' }) });
     await assert.rejects(getSectionDetails({ ...request, userId: 20 }), /Service unavailable/);
-    globalThis.fetch = async () => ({ ok: true, json: async () => ({ recovered: true }) });
+    globalThis.fetch = async (url) => {
+      const term = new URL(url).searchParams.get('term') || 'T1';
+      return { ok: true, json: async () => makeAdvisoryPayload({ recovered: true }, term) };
+    };
     assert.equal((await getSectionDetails({ ...request, userId: 20 })).recovered, true);
     process.stdout.write('PASS failed adviser reads remain retryable\n');
 

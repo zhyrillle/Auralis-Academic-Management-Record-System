@@ -17,8 +17,11 @@ router.get('/', async (req, res) => {
 });
 
 router.get('/adviser/:userId', async (req, res) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   try {
-    await cloudSync.syncSectionsFromCloud();
+    if (db.cloudPool) {
+      cloudSync.syncSectionsFromCloud(2000).catch(() => {});
+    }
     const options = {
       archived: req.query.archived === 'true' ? true : req.query.archived === 'all' ? 'all' : false,
     };

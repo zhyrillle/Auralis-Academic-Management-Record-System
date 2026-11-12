@@ -71,7 +71,7 @@ function CollapsedSidebarGroup({ item, pathname, active, onNavigate }) {
   </div>;
 }
 
-export default function Sidebar({ user, onLogout, collapsed = false, mobileOpen = false, onCloseMobile }) {
+export default function Sidebar({ user, onLogout, collapsed = false, mobileOpen = false, onCloseMobile, isOffline = false }) {
   const location = useLocation();
   const navigate = useNavigate();
   
@@ -246,6 +246,22 @@ export default function Sidebar({ user, onLogout, collapsed = false, mobileOpen 
                   )}
                   {!collapsed && <span className="sidebar-item-label">{item.title}</span>}
                 </div>
+                {!collapsed && isOffline && item.title === "Sections" && (
+                  <span
+                    style={{
+                      fontSize: "10px",
+                      fontWeight: 700,
+                      padding: "2px 6px",
+                      borderRadius: "4px",
+                      backgroundColor: "#16a34a",
+                      color: "#ffffff",
+                      marginLeft: "auto",
+                      letterSpacing: "0.02em",
+                    }}
+                  >
+                    Offline
+                  </span>
+                )}
               </Link>
             );
           })}

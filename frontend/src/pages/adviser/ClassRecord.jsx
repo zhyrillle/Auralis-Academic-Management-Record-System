@@ -68,7 +68,37 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
 
   // Dynamic Class Context Resolution (from prop or router location state)
   const effectiveClass = useMemo(() => {
-    return activeClass || location.state?.activeClass || {};
+    const rawClass = activeClass || location.state?.activeClass || {};
+    const targetSecId = rawClass?.section_id || rawClass?.sectionId || rawClass?.id;
+    if ((!rawClass?.subject_offering_id && !rawClass?.offering_id) && targetSecId) {
+      try {
+        const storedUser = JSON.parse(localStorage.getItem('user') || 'null');
+        const uid = storedUser?.user_id || storedUser?.id;
+        if (uid) {
+          const raw = localStorage.getItem(`auralis_assigned_classes_${uid}`);
+          if (raw) {
+            const list = JSON.parse(raw);
+            if (Array.isArray(list)) {
+              const match = list.find(c => Number(c.section_id) === Number(targetSecId) && Number(c.subject_offering_id) > 0);
+              if (match) {
+                return {
+                  ...match,
+                  ...rawClass,
+                  subject_offering_id: match.subject_offering_id,
+                  offering_id: match.subject_offering_id,
+                  subject: match.subject || rawClass.subject,
+                  subject_id: match.subject_id || rawClass.subject_id,
+                  subject_name: match.subject_name || match.subject || rawClass.subject_name,
+                  isAdviser: rawClass.isAdviser ?? match.isAdviser,
+                  classType: rawClass.classType || match.classType,
+                };
+              }
+            }
+          }
+        }
+      } catch (_) {}
+    }
+    return rawClass;
   }, [activeClass, location.state]);
 
   // Dynamic Section ID Resolution

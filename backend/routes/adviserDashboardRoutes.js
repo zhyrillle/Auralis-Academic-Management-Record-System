@@ -28,6 +28,10 @@ async function checkIsAdviser(userId) {
   return rows.length > 0;
 }
 
+function extractUserId(req) {
+  return req.query.userId || req.headers['x-auralis-user-id'] || req.headers['x-user-id'] || req.currentUser?.user_id || null;
+}
+
 /**
  * Resolves the currently active academic term from ACADEMIC_TERM
  */
@@ -209,85 +213,125 @@ async function getTeacherAssignedClasses(userId, targetTermId = null) {
   });
 
   const classes = Array.from(classMap.values());
+  const allSectionIds = Array.from(new Set(classes.map((c) => c.section_id).filter(Boolean)));
+  const allOfferingIds = Array.from(new Set(classes.flatMap((c) => c.subject_offering_ids).filter(Boolean)));
 
-  for (const cls of classes) {
-    // 1. Direct enrollee count in this section
-    const [sCount] = await db.execute(
-      `SELECT COUNT(DISTINCT ss.student_id) AS student_count
+  // 1. Batch query enrollee counts across all sections
+  const studentCountMap = new Map();
+  if (allSectionIds.length > 0) {
+    const secPlaceholders = allSectionIds.map(() => '?').join(',');
+    const [sCounts] = await db.execute(
+      `SELECT ss.section_id, COUNT(DISTINCT ss.student_id) AS student_count
        FROM STUDENT_SECTION ss
        INNER JOIN STUDENT s ON s.student_id = ss.student_id
-       WHERE ss.section_id = ? AND (s.status = 'ACTIVE' OR s.status IS NULL)`,
-      [cls.section_id]
-    ).catch(() => [[{ student_count: 0 }]]);
-    cls.studentCount = Number(sCount[0]?.student_count || 0);
+       WHERE ss.section_id IN (${secPlaceholders}) AND (s.status = 'ACTIVE' OR s.status IS NULL)
+       GROUP BY ss.section_id`,
+      allSectionIds
+    ).catch(() => [[]]);
+    (sCounts || []).forEach((r) => studentCountMap.set(r.section_id, Number(r.student_count || 0)));
+  }
 
-    // 2. Grade entry progress & workflow status
+  // 2. Batch query grade sheet status, graded counts, and draft score stats across all offerings
+  const sheetStatusMap = new Map();
+  const gradedCountMap = new Map();
+  const scoreStatsMap = new Map();
+
+  if (allOfferingIds.length > 0) {
+    const offPlaceholders = allOfferingIds.map(() => '?').join(',');
+
+    const [sheetStatuses] = await db.execute(
+      `SELECT subject_offering_id, workflow_status, lock_status
+       FROM GRADE_SHEET
+       WHERE subject_offering_id IN (${offPlaceholders})
+       ORDER BY grade_sheet_id DESC`,
+      allOfferingIds
+    ).catch(() => [[]]);
+    (sheetStatuses || []).forEach((r) => {
+      if (!sheetStatusMap.has(r.subject_offering_id)) {
+        sheetStatusMap.set(r.subject_offering_id, r);
+      }
+    });
+
+    const [gradeCounts] = await db.execute(
+      `SELECT subject_offering_id, COUNT(DISTINCT student_id) AS graded_count
+       FROM STUDENT_GRADE
+       WHERE subject_offering_id IN (${offPlaceholders})
+         AND COALESCE(quarterly_grade, initial_grade) IS NOT NULL
+       GROUP BY subject_offering_id`,
+      allOfferingIds
+    ).catch(() => [[]]);
+    (gradeCounts || []).forEach((r) => gradedCountMap.set(r.subject_offering_id, Number(r.graded_count || 0)));
+
+    const [scoreStats] = await db.execute(
+      `SELECT
+         gs.subject_offering_id,
+         COUNT(DISTINCT sc.student_section_id) AS scored_students,
+         COUNT(sc.score_id) AS encoded_scores,
+         COUNT(DISTINCT ga.activity_id) AS total_activities
+       FROM GRADE_SHEET gs
+       JOIN GRADE_ACTIVITY ga ON ga.grade_sheet_id = gs.grade_sheet_id
+       LEFT JOIN SCORE sc ON sc.activity_id = ga.activity_id AND sc.raw_score IS NOT NULL
+       WHERE gs.subject_offering_id IN (${offPlaceholders})
+         AND (ga.status = 'ACTIVE' OR ga.status IS NULL)
+       GROUP BY gs.subject_offering_id`,
+      allOfferingIds
+    ).catch(() => [[]]);
+    (scoreStats || []).forEach((r) => scoreStatsMap.set(r.subject_offering_id, {
+      scored_students: Number(r.scored_students || 0),
+      encoded_scores: Number(r.encoded_scores || 0),
+      total_activities: Number(r.total_activities || 0),
+    }));
+  }
+
+  // 3. Assemble metrics per class
+  classes.forEach((cls) => {
+    cls.studentCount = studentCountMap.get(cls.section_id) || 0;
+
     if (cls.subject_offering_ids.length > 0) {
-      const placeholders = cls.subject_offering_ids.map(() => '?').join(',');
+      let isSubmitted = false;
+      let totalGraded = 0;
+      let totalScoredStudents = 0;
+      let totalEncodedScores = 0;
+      let totalActivities = 0;
 
-      const [sheetStatus] = await db.execute(
-        `SELECT workflow_status, lock_status
-         FROM GRADE_SHEET
-         WHERE subject_offering_id IN (${placeholders})
-         ORDER BY grade_sheet_id DESC
-         LIMIT 1`,
-        cls.subject_offering_ids
-      ).catch(() => [[]]);
+      for (const offId of cls.subject_offering_ids) {
+        const s = sheetStatusMap.get(offId);
+        if (s && (s.workflow_status === 'SUBMITTED' || s.lock_status === 'TERM_LOCKED')) {
+          isSubmitted = true;
+        }
+        totalGraded += gradedCountMap.get(offId) || 0;
+        const sc = scoreStatsMap.get(offId);
+        if (sc) {
+          totalScoredStudents += sc.scored_students;
+          totalEncodedScores += sc.encoded_scores;
+          totalActivities += sc.total_activities;
+        }
+      }
 
-      const [gradeCount] = await db.execute(
-        `SELECT COUNT(DISTINCT student_id) AS graded_count
-         FROM STUDENT_GRADE
-         WHERE subject_offering_id IN (${placeholders})
-           AND COALESCE(quarterly_grade, initial_grade) IS NOT NULL`,
-        cls.subject_offering_ids
-      ).catch(() => [[{ graded_count: 0 }]]);
-
-      const graded = Number(gradeCount[0]?.graded_count || 0);
-      const s = sheetStatus[0] || null;
-
-      if (s && (s.workflow_status === 'SUBMITTED' || s.lock_status === 'TERM_LOCKED')) {
+      if (isSubmitted) {
         cls.status = 'Submitted';
         cls.entryProgress = 100;
-      } else if (graded > 0 && cls.studentCount > 0) {
-        cls.entryProgress = Math.min(100, Math.round((graded / cls.studentCount) * 100));
+      } else if (totalGraded > 0 && cls.studentCount > 0) {
+        cls.entryProgress = Math.min(100, Math.round((totalGraded / cls.studentCount) * 100));
         cls.status = cls.entryProgress >= 100 ? 'Submitted' : 'In Progress';
-      } else {
-        // Fallback: check draft encoding progress from SCORE table for active activities
-        const [scoreStats] = await db.execute(
-          `SELECT
-             COUNT(DISTINCT sc.student_section_id) AS scored_students,
-             COUNT(sc.score_id) AS encoded_scores,
-             COUNT(DISTINCT ga.activity_id) AS total_activities
-           FROM GRADE_SHEET gs
-           JOIN GRADE_ACTIVITY ga ON ga.grade_sheet_id = gs.grade_sheet_id
-           LEFT JOIN SCORE sc ON sc.activity_id = ga.activity_id AND sc.raw_score IS NOT NULL
-           WHERE gs.subject_offering_id IN (${placeholders})
-             AND (ga.status = 'ACTIVE' OR ga.status IS NULL)`,
-          cls.subject_offering_ids
-        ).catch(() => [[{ scored_students: 0, encoded_scores: 0, total_activities: 0 }]]);
-
-        const scoredStudents = Number(scoreStats[0]?.scored_students || 0);
-        const encodedScores = Number(scoreStats[0]?.encoded_scores || 0);
-        const totalActivities = Number(scoreStats[0]?.total_activities || 0);
-
-        if (totalActivities > 0 && cls.studentCount > 0) {
-          const expectedTotal = totalActivities * cls.studentCount;
-          const cellProgress = Math.min(100, Math.round((encodedScores / expectedTotal) * 100));
-          const studentProgress = Math.min(100, Math.round((scoredStudents / cls.studentCount) * 100));
-          cls.entryProgress = Math.max(cellProgress, studentProgress);
-        } else if (cls.studentCount > 0 && scoredStudents > 0) {
-          cls.entryProgress = Math.min(100, Math.round((scoredStudents / cls.studentCount) * 100));
-        } else {
-          cls.entryProgress = 0;
-        }
-
+      } else if (totalActivities > 0 && cls.studentCount > 0) {
+        const expectedTotal = totalActivities * cls.studentCount;
+        const cellProgress = Math.min(100, Math.round((totalEncodedScores / expectedTotal) * 100));
+        const studentProgress = Math.min(100, Math.round((totalScoredStudents / cls.studentCount) * 100));
+        cls.entryProgress = Math.max(cellProgress, studentProgress);
         cls.status = cls.entryProgress > 0 ? 'In Progress' : 'Pending';
+      } else if (cls.studentCount > 0 && totalScoredStudents > 0) {
+        cls.entryProgress = Math.min(100, Math.round((totalScoredStudents / cls.studentCount) * 100));
+        cls.status = cls.entryProgress > 0 ? 'In Progress' : 'Pending';
+      } else {
+        cls.entryProgress = 0;
+        cls.status = 'In Progress';
       }
     } else {
       cls.status = 'In Progress';
       cls.entryProgress = 0;
     }
-  }
+  });
 
   return classes;
 }
@@ -317,43 +361,132 @@ router.get('/check-role/:userId', async (req, res) => {
  * Retrieves overall KPI counters, section averages, and student counts for the logged-in teacher.
  */
 
+const teacherRiskCache = new Map();
+const inFlightRiskComputations = new Map();
+const RISK_CACHE_TTL_MS = 15 * 60 * 1000;
+
+async function computeTeacherHighRiskStudents(userId, targetTerm, schoolYearStr) {
+  const cacheKey = `${userId}_${targetTerm}_${schoolYearStr}`;
+  if (inFlightRiskComputations.has(cacheKey)) {
+    return inFlightRiskComputations.get(cacheKey);
+  }
+
+  const computation = (async () => {
+    try {
+      const { teachingRows, advisoryRows } = await getTeacherClasses(userId);
+      const sectionMap = new Map();
+
+      (teachingRows || []).forEach((row) => {
+        if (!sectionMap.has(row.section_id)) {
+          sectionMap.set(row.section_id, {
+            sectionId: row.section_id,
+            sectionName: row.section_name,
+            gradeLevel: row.grade_level_name,
+            subjects: new Set(),
+            isAdviser: false,
+          });
+        }
+        if (row.subject_name) {
+          sectionMap.get(row.section_id).subjects.add(row.subject_name);
+        }
+      });
+
+      (advisoryRows || []).forEach((row) => {
+        if (!sectionMap.has(row.section_id)) {
+          sectionMap.set(row.section_id, {
+            sectionId: row.section_id,
+            sectionName: row.section_name,
+            gradeLevel: row.grade_level_name,
+            subjects: new Set(),
+            isAdviser: true,
+          });
+        } else {
+          sectionMap.get(row.section_id).isAdviser = true;
+        }
+      });
+
+      const sectionIds = Array.from(sectionMap.keys());
+      let highRiskStudents = [];
+      let unavailableStudents = [];
+      let totalScored = 0;
+
+      await Promise.all(sectionIds.map(async (secId) => {
+        try {
+          const preview = await AtRiskPrediction.getPreview(
+            { schoolYear: schoolYearStr, term: targetTerm, gradeLevel: 'all' },
+            { database: db, scope: { sectionId: secId } }
+          );
+
+          const secInfo = sectionMap.get(secId);
+          const subList = Array.from(secInfo?.subjects || []);
+          const subDisplay = subList.length > 0
+            ? (secInfo?.isAdviser ? `${subList.join(', ')} / Advisory` : subList.join(', '))
+            : (secInfo?.isAdviser ? 'Advisory Class' : 'General Class');
+
+          if (preview?.students && preview.students.length > 0) {
+            totalScored += preview.students.length;
+            const high = preview.students.filter((s) => s.riskLevel === 'high');
+            for (const s of high) {
+              highRiskStudents.push({
+                student_id: s.studentId,
+                student_section_id: s.studentSectionId,
+                name: s.name,
+                lrn: decryptLrn(s.lrn) || s.lrn,
+                section_id: secId,
+                section_name: s.section || secInfo?.sectionName,
+                grade_level: secInfo?.gradeLevel || `Grade ${s.grade}`,
+                handled_subject: subDisplay,
+                risk_level: 'high',
+                risk_score: s.riskScore,
+                score: s.score,
+                flags: s.flags || [],
+                adviser: s.adviser,
+                source_term: preview.sourceTerm,
+                target_term: preview.targetTerm,
+              });
+            }
+          }
+
+          if (preview?.unavailable && preview.unavailable.length > 0) {
+            unavailableStudents.push(...preview.unavailable.map((u) => ({
+              ...u,
+              lrn: decryptLrn(u.lrn) || u.lrn,
+              handled_subject: subDisplay,
+            })));
+          }
+        } catch (err) {
+          console.warn(`[ML Risk] Section ${secId} preview error:`, err.message);
+        }
+      }));
+
+      const result = {
+        highRiskCount: highRiskStudents.length,
+        students: highRiskStudents,
+        totalScored,
+        unavailableCount: unavailableStudents.length,
+        unavailableStudents,
+        targetTerm,
+        schoolYear: schoolYearStr,
+      };
+      teacherRiskCache.set(cacheKey, { timestamp: Date.now(), data: result });
+      return result;
+    } finally {
+      inFlightRiskComputations.delete(cacheKey);
+    }
+  })();
+
+  inFlightRiskComputations.set(cacheKey, computation);
+  return computation;
+}
+
 /**
  * Retrieves High-Risk only students predicted by the machine learning model
  * across all subject sections handled by the given teacher.
  */
-async function getTeacherHighRiskStudents(userId, activeTermInfo) {
+async function getTeacherHighRiskStudents(userId, activeTermInfo, { allowStale = true } = {}) {
   try {
-    const { teachingRows, advisoryRows } = await getTeacherClasses(userId);
-    const sectionMap = new Map();
-
-    (teachingRows || []).forEach((row) => {
-      if (!sectionMap.has(row.section_id)) {
-        sectionMap.set(row.section_id, {
-          sectionId: row.section_id,
-          sectionName: row.section_name,
-          gradeLevel: row.grade_level_name,
-          subjects: new Set(),
-          isAdviser: false,
-        });
-      }
-      if (row.subject_name) {
-        sectionMap.get(row.section_id).subjects.add(row.subject_name);
-      }
-    });
-
-    (advisoryRows || []).forEach((row) => {
-      if (!sectionMap.has(row.section_id)) {
-        sectionMap.set(row.section_id, {
-          sectionId: row.section_id,
-          sectionName: row.section_name,
-          gradeLevel: row.grade_level_name,
-          subjects: new Set(),
-          isAdviser: true,
-        });
-      } else {
-        sectionMap.get(row.section_id).isAdviser = true;
-      }
-    });
+    const termCode = activeTermInfo?.termCode || 'T2';
+    const targetTerm = termCode === 'T1' ? 'T2' : termCode;
 
     const [activeSyRows] = await db.execute(
       `SELECT school_year_id, starts_on, ends_on FROM SCHOOL_YEAR 
@@ -366,73 +499,19 @@ async function getTeacherHighRiskStudents(userId, activeTermInfo) {
     const syEnd = syRow.ends_on instanceof Date ? syRow.ends_on.getFullYear() : parseInt(syRow.ends_on, 10);
     const schoolYearStr = `${syStart}-${syEnd}`;
 
-    const termCode = activeTermInfo?.termCode || 'T2';
-    const targetTerm = termCode === 'T1' ? 'T2' : termCode;
-
-    const sectionIds = Array.from(sectionMap.keys());
-    let highRiskStudents = [];
-    let unavailableStudents = [];
-    let totalScored = 0;
-
-    for (const secId of sectionIds) {
-      try {
-        const preview = await AtRiskPrediction.getPreview(
-          { schoolYear: schoolYearStr, term: targetTerm, gradeLevel: 'all' },
-          { database: db, scope: { sectionId: secId } }
-        );
-
-        const secInfo = sectionMap.get(secId);
-        const subList = Array.from(secInfo.subjects);
-        const subDisplay = subList.length > 0
-          ? (secInfo.isAdviser ? `${subList.join(', ')} / Advisory` : subList.join(', '))
-          : (secInfo.isAdviser ? 'Advisory Class' : 'General Class');
-
-        if (preview?.students && preview.students.length > 0) {
-          totalScored += preview.students.length;
-          // Filter High-Risk ONLY: riskLevel === 'high' (model probability >= 0.70)
-          const high = preview.students.filter((s) => s.riskLevel === 'high');
-          for (const s of high) {
-            highRiskStudents.push({
-              student_id: s.studentId,
-              student_section_id: s.studentSectionId,
-              name: s.name,
-              lrn: decryptLrn(s.lrn) || s.lrn,
-              section_id: secId,
-              section_name: s.section || secInfo.sectionName,
-              grade_level: secInfo.gradeLevel || `Grade ${s.grade}`,
-              handled_subject: subDisplay,
-              risk_level: 'high',
-              risk_score: s.riskScore,
-              score: s.score,
-              flags: s.flags || [],
-              adviser: s.adviser,
-              source_term: preview.sourceTerm,
-              target_term: preview.targetTerm,
-            });
-          }
-        }
-
-        if (preview?.unavailable && preview.unavailable.length > 0) {
-          unavailableStudents.push(...preview.unavailable.map((u) => ({
-            ...u,
-            lrn: decryptLrn(u.lrn) || u.lrn,
-            handled_subject: subDisplay,
-          })));
-        }
-      } catch (err) {
-        console.warn(`[ML Risk] Section ${secId} preview error:`, err.message);
+    const cacheKey = `${userId}_${targetTerm}_${schoolYearStr}`;
+    const cached = teacherRiskCache.get(cacheKey);
+    if (cached) {
+      if (Date.now() - cached.timestamp < RISK_CACHE_TTL_MS) {
+        return cached.data;
+      }
+      if (allowStale) {
+        computeTeacherHighRiskStudents(userId, targetTerm, schoolYearStr).catch(() => {});
+        return cached.data;
       }
     }
 
-    return {
-      highRiskCount: highRiskStudents.length,
-      students: highRiskStudents,
-      totalScored,
-      unavailableCount: unavailableStudents.length,
-      unavailableStudents,
-      targetTerm,
-      schoolYear: schoolYearStr,
-    };
+    return await computeTeacherHighRiskStudents(userId, targetTerm, schoolYearStr);
   } catch (error) {
     console.error('Error in getTeacherHighRiskStudents:', error);
     return {
@@ -572,7 +651,7 @@ async function getTeacherSubmissionsData(userId, activeTermInfo) {
 
 router.get('/summary', async (req, res) => {
   try {
-    const userId = req.query.userId || req.headers['x-user-id'];
+    const userId = extractUserId(req);
     if (!userId) {
       return res.status(400).json({ error: 'userId query parameter is required' });
     }
@@ -806,7 +885,7 @@ router.get('/submissions', async (req, res) => {
 
 router.get('/assigned-classes', async (req, res) => {
   try {
-    const userId = req.query.userId || req.headers['x-user-id'];
+    const userId = extractUserId(req);
     if (!userId) {
       return res.status(400).json({ error: 'userId is required' });
     }
@@ -825,7 +904,7 @@ router.get('/assigned-classes', async (req, res) => {
  */
 router.get('/subject-performance', async (req, res) => {
   try {
-    const userId = req.query.userId || req.headers['x-user-id'];
+    const userId = extractUserId(req);
     const term = normalizeTerm(req.query.term);
     if (!userId) {
       return res.status(400).json({ error: 'userId is required' });
@@ -927,7 +1006,7 @@ router.get('/subject-performance', async (req, res) => {
  */
 router.get('/grade-distribution', async (req, res) => {
   try {
-    const userId = req.query.userId || req.headers['x-user-id'];
+    const userId = extractUserId(req);
     const sectionParam = req.query.section || 'All';
     const term = normalizeTerm(req.query.term);
     if (!userId) {
@@ -989,7 +1068,7 @@ router.get('/grade-distribution', async (req, res) => {
  */
 router.get('/attendance-trend', async (req, res) => {
   try {
-    const userId = req.query.userId || req.headers['x-user-id'];
+    const userId = extractUserId(req);
     if (!userId) {
       return res.status(400).json({ error: 'userId is required' });
     }
@@ -1054,7 +1133,7 @@ router.get('/attendance-trend', async (req, res) => {
  */
 router.get('/test-exam-results', async (req, res) => {
   try {
-    const userId = req.query.userId || req.headers['x-user-id'];
+    const userId = extractUserId(req);
     const sectionParam = req.query.section || 'All';
     const termParam = req.query.term || 'T1';
 
@@ -1209,7 +1288,7 @@ router.get('/test-exam-results', async (req, res) => {
  */
 router.get('/subject-area-performance', async (req, res) => {
   try {
-    const userId = req.query.userId || req.headers['x-user-id'];
+    const userId = extractUserId(req);
     const rawTerm = req.query.term || 'T1';
     const normTerm = normalizeTerm(rawTerm);
     if (!userId) {
@@ -1287,7 +1366,7 @@ router.get('/subject-area-performance', async (req, res) => {
  */
 router.get('/core-values', async (req, res) => {
   try {
-    const userId = req.query.userId || req.headers['x-user-id'];
+    const userId = extractUserId(req);
     const rawTerm = req.query.term || 'T1';
     const normTerm = normalizeTerm(rawTerm);
 
@@ -1368,7 +1447,7 @@ router.get('/core-values', async (req, res) => {
  */
 router.get('/performance-filters', async (req, res) => {
   try {
-    const userId = req.query.userId || req.headers['x-user-id'];
+    const userId = extractUserId(req);
     let schoolYearId = req.query.schoolYearId;
 
     const [syRows] = await db.execute(
@@ -1511,7 +1590,7 @@ router.get('/performance-filters', async (req, res) => {
  */
 router.get('/grade-range-report', async (req, res) => {
   try {
-    const userId = req.query.userId || req.headers['x-user-id'];
+    const userId = extractUserId(req);
     const rawTerm = String(req.query.term || '1').trim();
     const subjectId = req.query.subjectId;
     const schoolYearId = req.query.schoolYearId;

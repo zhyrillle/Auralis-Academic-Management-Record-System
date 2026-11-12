@@ -656,7 +656,9 @@ async function gradingSummary(input, user, database = db) {
 router.get('/class-record/:subject_offering_id', resolveCurrentUser, async (req, res) => {
   try {
     const subjectOfferingId = Number(req.params.subject_offering_id);
-    await cloudSync.syncClassRecordFromCloud(subjectOfferingId).catch(() => {});
+    if (db.cloudPool) {
+      cloudSync.syncClassRecordFromCloud(subjectOfferingId, 1500).catch(() => {});
+    }
     await GradeTransmutationConfig.getActiveTiers();
     res.set('Cache-Control', 'no-store');
     const requestedSectionId = req.query.section_id ? Number(req.query.section_id) : null;
@@ -2631,7 +2633,9 @@ router.post('/class-record/submit', resolveCurrentUser, async (req, res) => {
 
 router.get('/class-record/grading-summary/:subjectOfferingId', resolveCurrentUser, async (req, res) => {
   try {
-    await cloudSync.syncClassRecordFromCloud(req.params.subjectOfferingId).catch(() => {});
+    if (db.cloudPool) {
+      cloudSync.syncClassRecordFromCloud(req.params.subjectOfferingId, 1500).catch(() => {});
+    }
     const result = await gradingSummary({
       subject_offering_id: req.params.subjectOfferingId, section_id: req.query.section_id, school_year_id: req.query.school_year_id,
     }, req.currentUser);

@@ -265,7 +265,7 @@ export async function cachedApiFetch(input, init = {}) {
     const snapshot = await waitForCachedRead(pending, callerSignal);
     return new Response(snapshot.body, { status: snapshot.status, statusText: snapshot.statusText, headers: snapshot.headers });
   } catch (error) {
-    if (error.response) return error.response.clone();
+    if (error.response) return typeof error.response.clone === 'function' ? error.response.clone() : error.response;
     throw error;
   }
 }
@@ -282,7 +282,13 @@ function waitForCachedRead(pending, signal) {
 }
 
 if (typeof window !== 'undefined') {
-  window.addEventListener(CACHE_INVALIDATED_EVENT, clearMemory);
+  window.addEventListener(CACHE_INVALIDATED_EVENT, () => {
+    generation += 1;
+    for (const [, v] of entries.entries()) {
+      if (v) v.updatedAt = 0; // Age out entries to trigger smooth background revalidation without wiping UI
+    }
+    notify();
+  });
   window.addEventListener(SESSION_CHANGED_EVENT, () => {
     if (requestSessionId !== getSessionScope()?.sessionId) {
       sessionController?.abort();

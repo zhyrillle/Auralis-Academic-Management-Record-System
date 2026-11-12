@@ -74,3 +74,12 @@ test('unassigned teachers and unrelated roles cannot read or save a section', as
   await assert.rejects(otherRole.PhilIriScreening.saveBatch(body(), { ...user, normalized_role: 'principal' }), error => error.status === 403);
   assert.equal(otherRole.calls.length, 0);
 });
+
+test('assigned advisers can authorize and save screening scores for their advisory section', async () => {
+  const adviserUser = { user_id: 2, normalized_role: 'adviser' };
+  const h = harness([[{ allowed: 1 }], [{ student_section_id: 4 }], { affectedRows: 1 }]);
+  const result = await h.PhilIriScreening.saveBatch(body(), adviserUser);
+  assert.equal(result.affectedRows, 1);
+  assert.equal(h.calls[0].params[2], 2);
+});
+

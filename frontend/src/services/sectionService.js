@@ -1,6 +1,7 @@
 import { cachedApiFetch } from "./navigationCache.js";
 import { API_BASE_URL } from "./apiConfig.js";
 import { getStoredUser } from "../utils/auth.js";
+import { getPersistentCache, setPersistentCache } from "../offline/syncManager.js";
 
 const fetch = (url, options = {}) => {
   const user = getStoredUser();
@@ -36,28 +37,110 @@ const checkIsSpecialized = (val) => {
   return false;
 };
 
+const mapSectionItem = (item) => {
+  const isSpecialized = checkIsSpecialized(item.is_specialized)
+    || Boolean(item.classType && String(item.classType).startsWith('Special Program'));
+  const isAdviser = item.isAdviser ?? (item.classType === 'Advisory Class');
+  const program = item.program_code || item.programCode || null;
+  const validProgram = program && String(program).toUpperCase() !== 'EBEC' ? String(program).toUpperCase() : null;
+  const classType = isAdviser
+    ? isSpecialized && validProgram ? `Advisory Class - ${validProgram}` : 'Advisory Class'
+    : isSpecialized ? validProgram ? `Special Program - ${validProgram}` : 'Special Program' : 'Regular Class';
+  return { ...item, gradeLevel: item.gradeLevel || formatGradeLevel(item.grade_level_name),
+    program_code: item.program_code || null, is_specialized: isSpecialized ? 1 : 0,
+    isAdviser, classType };
+};
+
+const safeGetPersistentCache = async (key) => {
+  try {
+    if (typeof getPersistentCache === 'function') {
+      return await getPersistentCache(key);
+    }
+  } catch (_) {}
+  return null;
+};
+
+const safeSetPersistentCache = async (key, val) => {
+  try {
+    if (typeof setPersistentCache === 'function') {
+      return await setPersistentCache(key, val);
+    }
+  } catch (_) {}
+  return null;
+};
+
 export const getAdviserSections = async (userId, options = {}) => {
   if (!userId) return [];
   const archived = options.archived === 'all' ? 'all' : options.archived ? 'true' : 'false';
   const queryParams = new URLSearchParams({ classContextVersion: '3', archived });
-  const response = await fetch(`${API_BASE_URL}/sections/adviser/${userId}?${queryParams}`, { force: true });
-  const data = await parseResponse(response);
+  const cacheKey = `sections:adviser:${userId}:${archived}`;
+
+  // Instant SWR: Return cached sections immediately in 0ms if available
+  if (!options.force) {
+    const cached = await safeGetPersistentCache(cacheKey);
+    if (Array.isArray(cached) && cached.length > 0) {
+      if (typeof navigator !== 'undefined' && navigator.onLine) {
+        fetch(`${API_BASE_URL}/sections/adviser/${userId}?${queryParams}`, { force: true })
+          .then(parseResponse)
+          .then(fresh => {
+            if (Array.isArray(fresh)) {
+              const freshMapped = fresh.map(mapSectionItem);
+              safeSetPersistentCache(cacheKey, freshMapped).catch(() => {});
+              if (archived === 'false') {
+                try {
+                  if (freshMapped.length > 0) {
+                    localStorage.setItem(`auralis_assigned_classes_${userId}`, JSON.stringify(freshMapped));
+                  } else {
+                    localStorage.removeItem(`auralis_assigned_classes_${userId}`);
+                  }
+                } catch (_) {}
+              }
+              if (typeof window !== 'undefined' && window.dispatchEvent) {
+                window.dispatchEvent(new CustomEvent('auralis-classes-refreshed', { detail: { userId, sections: freshMapped } }));
+              }
+            }
+          })
+          .catch(() => {});
+      }
+      return cached;
+    }
+
+    try {
+      if (archived === 'false') {
+        const local = JSON.parse(localStorage.getItem(`auralis_assigned_classes_${userId}`) || 'null');
+        if (Array.isArray(local) && local.length > 0) return local;
+      }
+    } catch (_) {}
+  }
+
+  let data;
+  try {
+    const response = await fetch(`${API_BASE_URL}/sections/adviser/${userId}?${queryParams}`, { force: Boolean(options.force) });
+    data = await parseResponse(response);
+  } catch (err) {
+    if (archived === 'false') {
+      const cached = await safeGetPersistentCache(cacheKey);
+      if (Array.isArray(cached) && cached.length > 0) return cached;
+      try {
+        const local = JSON.parse(localStorage.getItem(`auralis_assigned_classes_${userId}`) || 'null');
+        if (Array.isArray(local) && local.length > 0) return local;
+      } catch (_) {}
+    }
+    throw err;
+  }
   if (!Array.isArray(data)) throw new Error('Assigned classes could not be loaded. Please retry.');
-  // The classes endpoint applies archive and school-year rules. A user-directory
-  // fallback cannot apply those rules and must not replace a failed classes read.
-  return data.map(item => {
-    const isSpecialized = checkIsSpecialized(item.is_specialized)
-      || Boolean(item.classType && String(item.classType).startsWith('Special Program'));
-    const isAdviser = item.isAdviser ?? (item.classType === 'Advisory Class');
-    const program = item.program_code || item.programCode || null;
-    const validProgram = program && String(program).toUpperCase() !== 'EBEC' ? String(program).toUpperCase() : null;
-    const classType = isAdviser
-      ? isSpecialized && validProgram ? `Advisory Class - ${validProgram}` : 'Advisory Class'
-      : isSpecialized ? validProgram ? `Special Program - ${validProgram}` : 'Special Program' : 'Regular Class';
-    return { ...item, gradeLevel: item.gradeLevel || formatGradeLevel(item.grade_level_name),
-      program_code: item.program_code || null, is_specialized: isSpecialized ? 1 : 0,
-      isAdviser, classType };
-  });
+  const mapped = data.map(mapSectionItem);
+  safeSetPersistentCache(cacheKey, mapped).catch(() => {});
+  if (archived === 'false') {
+    try {
+      if (mapped.length > 0) {
+        localStorage.setItem(`auralis_assigned_classes_${userId}`, JSON.stringify(mapped));
+      } else {
+        localStorage.removeItem(`auralis_assigned_classes_${userId}`);
+      }
+    } catch (_) {}
+  }
+  return mapped;
 };
 
 /**
@@ -136,4 +219,14 @@ export const restoreClass = async (payload) => {
     body: JSON.stringify(body),
   });
   return parseResponse(response);
+};
+
+export const invalidateAdviserSectionsCache = async (userId) => {
+  if (!userId) return;
+  try {
+    localStorage.removeItem(`auralis_assigned_classes_${userId}`);
+    await safeSetPersistentCache(`sections:adviser:${userId}:false`, null);
+    await safeSetPersistentCache(`sections:adviser:${userId}:true`, null);
+    await safeSetPersistentCache(`sections:adviser:${userId}:all`, null);
+  } catch (_) {}
 };

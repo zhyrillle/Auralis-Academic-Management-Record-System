@@ -42,19 +42,18 @@ function normalizeBatch(body) {
   });
   return { sectionId, schoolYearId, records };
 }
-
 class PhilIriScreening {
   static async authorize(sectionId, schoolYearId, user) {
-    if (user.normalized_role !== 'subject_teacher') throw Object.assign(new Error('Only an assigned teacher or adviser can access screening scores.'), { status: 403 });
+    const allowedRoles = ['subject_teacher', 'adviser', 'teacher', 'admin', 'system_admin'];
+    if (!allowedRoles.includes(user?.normalized_role)) throw Object.assign(new Error('Only an assigned teacher or adviser can access screening scores.'), { status: 403 });
+    if (['admin', 'system_admin'].includes(user?.normalized_role)) return;
     const [rows] = await db.execute(`
       SELECT 1 FROM SECTION_ADVISER_ASSIGNMENT
       WHERE section_id = ? AND school_year_id = ? AND user_id = ?
       UNION ALL
       SELECT 1 FROM TEACHER_ASSIGNMENT ta
       JOIN SUBJECT_OFFERING so ON so.subject_offering_id = ta.subject_offering_id
-      JOIN SUBJECT s ON s.subject_id = so.subject_id
       WHERE so.section_id = ? AND so.school_year_id = ? AND ta.user_id = ?
-        AND (UPPER(s.subject_code) = 'ENG' OR UPPER(s.subject_name) = 'ENGLISH')
       LIMIT 1`, [sectionId, schoolYearId, user.user_id, sectionId, schoolYearId, user.user_id]);
     if (!rows.length) throw Object.assign(new Error('You are not assigned to this section for the selected school year.'), { status: 403 });
   }

@@ -89,8 +89,15 @@ async function clearObsoleteReadCaches() {
   try {
     await db.transaction('rw', db.cache, async () => {
       const current = getSessionScope();
-      await db.cache.filter(entry => !current || entry.sessionId !== current.sessionId ||
-        entry.cacheVersion !== current.cacheVersion).delete();
+      const now = Date.now();
+      if (!current) {
+        await db.cache.clear();
+      } else {
+        await db.cache.filter(entry =>
+          (entry.ownerIdentity && entry.ownerIdentity !== current.identity) ||
+          (Number.isFinite(entry.expiresAt) && entry.expiresAt <= now)
+        ).delete();
+      }
     });
   } catch (error) { console.warn('[SyncManager] Could not clear old page data:', error.message); }
 }
@@ -109,10 +116,15 @@ export function invalidatePersistentCache() {
   const current = getSessionScope();
   if (current) storeSession({ ...current, cacheVersion: newId() });
   emit(CACHE_INVALIDATED_EVENT);
-  return clearObsoleteReadCaches();
+  // Do not wipe valid unexpired records from IndexedDB; in-memory cache handles SWR
+  // revalidation when online, while IndexedDB remains available as offline fallback.
 }
 
-export const isNetworkError = error => ['TypeError', 'NetworkError'].includes(error?.name);
+export const isNetworkError = error => ['TypeError', 'NetworkError'].includes(error?.name) ||
+  error?.message?.includes?.('Failed to fetch') ||
+  error?.message?.includes?.('NetworkError') ||
+  error?.message?.includes?.('Load failed') ||
+  (typeof navigator !== 'undefined' && navigator.onLine === false);
 
 export function subscribeSyncStatus(listener) {
   listeners.add(listener);
@@ -130,7 +142,9 @@ export async function getSyncSnapshot() {
     const meta = await db.syncMeta.get('lastSyncedAt:' + scope.identity);
     const recoveryNeeded = await db.outbox.where('status').equals('requires-review').count() > 0 ||
       await db.offlineScores.filter(item => !item.ownerId).count() > 0 ||
-      await db.offlineAttendance.filter(item => !item.ownerId).count() > 0;
+      await db.offlineAttendance.filter(item => !item.ownerId).count() > 0 ||
+      await db.offlinePhilIri.filter(item => !item.ownerId).count() > 0 ||
+      await db.offlineScreening.filter(item => !item.ownerId).count() > 0;
     if (!isCurrentSession(scope)) return empty;
     return { ...empty, recoveryNeeded, isSyncing: syncTask?.scope.sessionId === scope.sessionId,
       pendingCount: rows.filter(item => item.status === 'pending').length,
@@ -138,24 +152,31 @@ export async function getSyncSnapshot() {
   } catch { return { ...empty, storageUnavailable: true }; }
 }
 
-const persistentKey = (key, scope) => JSON.stringify([scope.sessionId, scope.cacheVersion, key]);
+const persistentKey = (key, scope) => JSON.stringify([scope.identity, key]);
 
 export async function setPersistentCache(key, data, ttlMs = 24 * 60 * 60 * 1000, scope = getSessionScope()) {
-  if (!isCurrentCacheScope(scope) || !db.constructor.dependencies.indexedDB) return;
+  if (!isCurrentSession(scope) || !db.constructor.dependencies.indexedDB) return;
   try {
     await db.transaction('rw', db.cache, async () => {
-      if (!isCurrentCacheScope(scope)) return;
-      await db.cache.put({ key: persistentKey(key, scope), ...scope, data,
-        updatedAt: Date.now(), expiresAt: Date.now() + ttlMs });
+      if (!isCurrentSession(scope)) return;
+      await db.cache.put({
+        key: persistentKey(key, scope),
+        ownerId: scope.ownerId,
+        ownerIdentity: scope.identity,
+        rawKey: key,
+        data,
+        updatedAt: Date.now(),
+        expiresAt: Date.now() + ttlMs,
+      });
     });
   } catch (error) { console.warn('[SyncManager] Could not cache page data:', error.message); }
 }
 
 export async function getPersistentCacheEntry(key, scope = getSessionScope()) {
-  if (!isCurrentCacheScope(scope) || !db.constructor.dependencies.indexedDB) return undefined;
+  if (!isCurrentSession(scope) || !db.constructor.dependencies.indexedDB) return undefined;
   try {
     const entry = await db.cache.get(persistentKey(key, scope));
-    if (!isCurrentCacheScope(scope) || !entry) return undefined;
+    if (!isCurrentSession(scope) || !entry) return undefined;
     if (!Number.isFinite(entry.expiresAt) || entry.expiresAt <= Date.now()) {
       await db.cache.delete(entry.key);
       return undefined;
@@ -197,8 +218,12 @@ export async function enqueueMutation(options, scope = getSessionScope()) {
 
 export async function processOutbox() {
   const scope = getSessionScope();
-  if (syncTask || !scope || !online()) return;
-  const task = { scope, controller: new AbortController() };
+  if (!scope || !online()) return;
+  if (syncTask) return syncTask.promise;
+
+  let taskResolve;
+  const taskPromise = new Promise(resolve => { taskResolve = resolve; });
+  const task = { scope, controller: new AbortController(), promise: taskPromise };
   syncTask = task;
   notify();
   const flush = async () => {
@@ -206,31 +231,42 @@ export async function processOutbox() {
     const items = await db.outbox.where('ownerId').equals(scope.ownerId)
       .filter(item => item.ownerIdentity === scope.identity && ['pending', 'failed'].includes(item.status)).sortBy('id');
     for (const item of items) {
-      if (!isCurrentSession(scope) || !online() || task.controller.signal.aborted || item.status === 'failed') break;
+      if (!isCurrentSession(scope) || !online() || task.controller.signal.aborted) break;
       if (!await db.outbox.get(item.id)) continue;
       try {
         assertCurrentSession(scope);
-        // Older queued score drafts predate the assignment checks. Replay only as
-        // their matching current owner; never migrate or adopt another user's drafts.
-        const scoreBatch = /\/(?:class-record\/)?scores\/batch(?:\?|$)/.test(item.url);
-        const attendanceBatch = /\/attendance\/bulk-save(?:\?|$)/.test(item.url);
-        const replayHeaders = (scoreBatch || attendanceBatch) ? new Headers(item.headers) : item.headers;
-        if (scoreBatch || attendanceBatch) replayHeaders.set('X-Auralis-User-Id', scope.ownerId);
+        // Older queued drafts predate the assignment checks. Replay only as
+        // their matching current owner; always inject current user ID header.
+        const replayHeaders = new Headers(item.headers || {});
+        replayHeaders.set('X-Auralis-User-Id', String(scope.ownerId));
+        if (item.body && !replayHeaders.has('content-type')) {
+          replayHeaders.set('content-type', 'application/json');
+        }
+
+        console.log(`[SyncManager] Replaying outbox item ${item.id} -> ${item.method} ${item.url}`);
         const response = await fetch(item.url, { method: item.method, headers: replayHeaders,
           body: item.body, credentials: item.credentials, signal: task.controller.signal });
         if (!isCurrentSession(scope)) break;
         if (!response.ok) {
           const error = await response.text().catch(() => '');
-          await db.outbox.update(item.id, { status: response.status < 500 ? 'failed' : 'pending',
-            error, retryCount: item.retryCount + 1 });
+          const nextRetry = (item.retryCount || 0) + 1;
+          const isClientError = response.status >= 400 && response.status < 500;
+          const status = isClientError ? 'requires-review' : 'pending';
+          await db.outbox.update(item.id, { status, error, retryCount: nextRetry });
+          console.warn(`[SyncManager] Outbox item ${item.id} (${item.url}) failed (${response.status}):`, error);
+          if (isClientError) {
+            continue;
+          }
           break;
         }
-        await db.transaction('rw', db.outbox, db.offlineScores, db.offlineAttendance, async () => {
+        await db.transaction('rw', db.outbox, db.offlineScores, db.offlineAttendance, db.offlinePhilIri, db.offlineScreening, async () => {
           assertCurrentSession(scope);
           await db.outbox.delete(item.id);
           // A newer edit to the same cell has a different mutationId and must survive.
           await clearOfflineScores(null, null, { scope, mutationId: item.id });
           await clearOfflineAttendance(null, null, { scope, mutationId: item.id });
+          await clearOfflinePhilIri(null, null, { scope, mutationId: item.id });
+          await clearOfflineScreening(null, null, { scope, mutationId: item.id });
         });
         await db.syncMeta.put({ key: 'lastSyncedAt:' + scope.identity, value: Date.now() });
         if (isCurrentSession(scope)) await invalidatePersistentCache();
@@ -242,7 +278,12 @@ export async function processOutbox() {
       await navigator.locks.request('auralis-outbox-sync', { ifAvailable: true }, lock => lock ? flush() : undefined);
     } else await flush();
   } catch (error) { console.warn('[SyncManager] Sync interrupted:', error.message); }
-  finally { if (syncTask === task) syncTask = null; notify(); }
+  finally {
+    if (syncTask === task) syncTask = null;
+    taskResolve();
+    notify();
+  }
+  return taskPromise;
 }
 
 export async function saveOfflineScores({ subject_offering_id, term, scores, mapeh_component = null, examConfig = null, apiUrl = null }, scope = getSessionScope()) {
@@ -305,6 +346,7 @@ export async function saveOfflineAttendance({ section_id, attendance_date, atten
         adviser_assignment_id: adviser_assignment_id ? Number(adviser_assignment_id) : undefined,
         teacher_assignment_id: teacher_assignment_id ? Number(teacher_assignment_id) : undefined,
         attendance_scope: resolvedScope,
+        user_id: scope.ownerId,
         records,
       },
       label: `Batch Attendance (Section ${secId}, ${cleanDate}, ${resolvedScope}, ${records.length} records)`,
@@ -370,11 +412,188 @@ export async function getPendingOfflineAttendance(section_id, attendance_date = 
 }
 
 export async function clearOfflineAttendance(section_id, attendance_date, { scope = getSessionScope(), mutationId } = {}) {
-  if (!scope || mutationId == null) return;
-  await db.offlineAttendance.where('mutationId').equals(mutationId).filter(record =>
-    record.ownerId === scope.ownerId && record.ownerIdentity === scope.identity &&
-    (section_id == null || record.section_id === Number(section_id)) &&
-    (attendance_date == null || record.attendance_date === attendance_date)).delete();
+  if (!scope) return;
+  if (mutationId != null) {
+    await db.offlineAttendance.where('mutationId').equals(mutationId).filter(record =>
+      record.ownerId === scope.ownerId && record.ownerIdentity === scope.identity &&
+      (section_id == null || record.section_id === Number(section_id)) &&
+      (attendance_date == null || record.attendance_date === attendance_date)).delete();
+  } else if (section_id != null) {
+    await db.offlineAttendance.where('section_id').equals(Number(section_id)).filter(record =>
+      record.ownerId === scope.ownerId && record.ownerIdentity === scope.identity &&
+      (attendance_date == null || record.attendance_date === attendance_date)).delete();
+  }
+}
+
+export async function saveOfflinePhilIri({ sectionId, section_id, subjectOfferingId, subject_offering_id, schoolYearId, school_year_id, userId, testType = 'POST_TEST', test_type, passageWordsCount = 70, totalCompItems = 5, records = [], apiUrl = null }, scope = getSessionScope()) {
+  assertCurrentSession(scope);
+  const secId = Number(sectionId || section_id);
+  const type = testType || test_type || 'POST_TEST';
+  const offeringId = subjectOfferingId || subject_offering_id ? Number(subjectOfferingId || subject_offering_id) : null;
+  const syId = schoolYearId || school_year_id ? Number(schoolYearId || school_year_id) : null;
+  const effectiveUserId = userId || scope.ownerId;
+
+  await db.transaction('rw', db.offlinePhilIri, db.outbox, async () => {
+    assertCurrentSession(scope);
+    const targetUrl = apiUrl || `${API_BASE_URL}/phil-iri/batch`;
+    const mutationId = await db.outbox.add(mutationRecord({
+      url: targetUrl,
+      headers: { 'X-Auralis-User-Id': String(scope.ownerId) },
+      body: {
+        records,
+        sectionId: secId,
+        subjectOfferingId: offeringId,
+        schoolYearId: syId,
+        user_id: effectiveUserId,
+        testType: type,
+        passageWordsCount,
+        totalCompItems,
+      },
+      label: `Batch Phil-Iri (Section ${secId}, ${type}, ${records.length} records)`,
+    }, scope));
+
+    for (const rec of records) {
+      const studentSecId = rec.student_section_id || rec.student_id;
+      const existing = await db.offlinePhilIri.where('[section_id+test_type]').equals([secId, type])
+        .filter(item => item.ownerId === scope.ownerId && item.ownerIdentity === scope.identity &&
+          String(item.student_section_id) === String(studentSecId)).first();
+
+      const record = {
+        section_id: secId,
+        test_type: type,
+        subject_offering_id: offeringId,
+        school_year_id: syId,
+        student_section_id: studentSecId,
+        student_id: rec.student_id || null,
+        words_correct: rec.words_correct,
+        oral_reading_percent: rec.oral_reading_percent,
+        oral_reading_level: rec.oral_reading_level,
+        comp_correct: rec.comp_correct,
+        comp_score_percent: rec.comp_score_percent,
+        comp_reading_level: rec.comp_reading_level,
+        overall_reading_level: rec.overall_reading_level,
+        passage_words_count: passageWordsCount,
+        total_comp_items: totalCompItems,
+        ownerId: scope.ownerId,
+        ownerIdentity: scope.identity,
+        mutationId,
+        timestamp: Date.now(),
+        status: 'pending',
+      };
+
+      if (existing) await db.offlinePhilIri.update(existing.id, record);
+      else await db.offlinePhilIri.add(record);
+    }
+  });
+  notify();
+  return true;
+}
+
+export async function getPendingOfflinePhilIri(sectionId, testType = 'POST_TEST', scope = getSessionScope(), { strict = false } = {}) {
+  if (!isCurrentSession(scope)) return [];
+  try {
+    const secId = Number(sectionId);
+    const type = testType || 'POST_TEST';
+    const records = await db.offlinePhilIri.where('[section_id+test_type]').equals([secId, type])
+      .filter(record => record.ownerId === scope.ownerId && record.ownerIdentity === scope.identity && record.status === 'pending')
+      .toArray();
+    return isCurrentSession(scope) ? records : [];
+  } catch (error) {
+    if (strict) throw error;
+    return [];
+  }
+}
+
+export async function clearOfflinePhilIri(sectionId, testType, { scope = getSessionScope(), mutationId } = {}) {
+  if (!scope) return;
+  if (mutationId != null) {
+    await db.offlinePhilIri.where('mutationId').equals(mutationId).filter(record =>
+      record.ownerId === scope.ownerId && record.ownerIdentity === scope.identity &&
+      (sectionId == null || record.section_id === Number(sectionId)) &&
+      (testType == null || record.test_type === testType)).delete();
+  } else if (sectionId != null) {
+    await db.offlinePhilIri.where('section_id').equals(Number(sectionId)).filter(record =>
+      record.ownerId === scope.ownerId && record.ownerIdentity === scope.identity &&
+      (testType == null || record.test_type === testType)).delete();
+  }
+}
+
+export async function saveOfflineScreening({ sectionId, section_id, schoolYearId, school_year_id, config = {}, records = [], apiUrl = null }, scope = getSessionScope()) {
+  assertCurrentSession(scope);
+  const secId = Number(sectionId || section_id);
+  const syId = Number(schoolYearId || school_year_id);
+  await db.transaction('rw', db.offlineScreening, db.outbox, async () => {
+    assertCurrentSession(scope);
+    const targetUrl = apiUrl || `${API_BASE_URL}/phil-iri/screening/${encodeURIComponent(secId)}?schoolYearId=${encodeURIComponent(syId)}`;
+    const mutationId = await db.outbox.add(mutationRecord({
+      url: targetUrl,
+      headers: { 'X-Auralis-User-Id': String(scope.ownerId) },
+      body: {
+        config,
+        records,
+        sectionId: secId,
+        schoolYearId: syId,
+      },
+      label: `Batch Screening (Section ${secId}, SY ${syId}, ${records.length} records)`,
+    }, scope));
+
+    for (const rec of records) {
+      const studentSecId = rec.student_section_id || rec.student_id;
+      const existing = await db.offlineScreening.where('[section_id+school_year_id]').equals([secId, syId])
+        .filter(item => item.ownerId === scope.ownerId && item.ownerIdentity === scope.identity &&
+          String(item.student_section_id) === String(studentSecId)).first();
+
+      const record = {
+        section_id: secId,
+        school_year_id: syId,
+        student_section_id: studentSecId,
+        test_taken: rec.test_taken,
+        literal_score: rec.literal_score,
+        inferential_score: rec.inferential_score,
+        critical_score: rec.critical_score,
+        config,
+        ownerId: scope.ownerId,
+        ownerIdentity: scope.identity,
+        mutationId,
+        timestamp: Date.now(),
+        status: 'pending',
+      };
+
+      if (existing) await db.offlineScreening.update(existing.id, record);
+      else await db.offlineScreening.add(record);
+    }
+  });
+  notify();
+  return true;
+}
+
+export async function getPendingOfflineScreening(sectionId, schoolYearId, scope = getSessionScope(), { strict = false } = {}) {
+  if (!isCurrentSession(scope)) return [];
+  try {
+    const secId = Number(sectionId);
+    const syId = Number(schoolYearId);
+    const records = await db.offlineScreening.where('[section_id+school_year_id]').equals([secId, syId])
+      .filter(record => record.ownerId === scope.ownerId && record.ownerIdentity === scope.identity && record.status === 'pending')
+      .toArray();
+    return isCurrentSession(scope) ? records : [];
+  } catch (error) {
+    if (strict) throw error;
+    return [];
+  }
+}
+
+export async function clearOfflineScreening(sectionId, schoolYearId, { scope = getSessionScope(), mutationId } = {}) {
+  if (!scope) return;
+  if (mutationId != null) {
+    await db.offlineScreening.where('mutationId').equals(mutationId).filter(record =>
+      record.ownerId === scope.ownerId && record.ownerIdentity === scope.identity &&
+      (sectionId == null || record.section_id === Number(sectionId)) &&
+      (schoolYearId == null || record.school_year_id === Number(schoolYearId))).delete();
+  } else if (sectionId != null) {
+    await db.offlineScreening.where('section_id').equals(Number(sectionId)).filter(record =>
+      record.ownerId === scope.ownerId && record.ownerIdentity === scope.identity &&
+      (schoolYearId == null || record.school_year_id === Number(schoolYearId))).delete();
+  }
 }
 
 if (typeof window !== 'undefined') {
@@ -392,5 +611,7 @@ if (typeof window !== 'undefined') {
 
 export default { subscribeSyncStatus, getSyncSnapshot, setPersistentCache, getPersistentCache,
   enqueueMutation, processOutbox, saveOfflineScores, getPendingOfflineScores, clearOfflineScores,
-  saveOfflineAttendance, getPendingOfflineAttendance, clearOfflineAttendance };
+  saveOfflineAttendance, getPendingOfflineAttendance, clearOfflineAttendance,
+  saveOfflinePhilIri, getPendingOfflinePhilIri, clearOfflinePhilIri,
+  saveOfflineScreening, getPendingOfflineScreening, clearOfflineScreening };
 

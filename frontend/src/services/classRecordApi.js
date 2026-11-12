@@ -2,6 +2,7 @@ import { apiFetch, cachedApiFetch, clearNavigationCache } from "./navigationCach
 import { getStoredUser } from "../utils/auth.js";
 import {
   getPersistentCache,
+  setPersistentCache,
   removePersistentCache,
   saveOfflineScores,
   getPendingOfflineScores,
@@ -10,9 +11,8 @@ import {
   isNetworkError,
 } from "../offline/syncManager.js";
 
-export const API_BASE_URL = (
-  import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api"
-).replace(/\/$/, "");
+import { API_BASE_URL } from "./apiConfig.js";
+export { API_BASE_URL };
 
 const fetch = (url, options = {}) => {
   const user = getStoredUser();
@@ -55,19 +55,63 @@ export const getClassRecord = async (
 
   const cacheKey = `classRecord_v2_${subjectOfferingId}_${term}_${sectionId || ""}_${mapehComponent || ""}_${subjectId || ""}${readOnly ? '_readOnly' : ''}`;
 
+  // Instant SWR: If not forcing a refresh, return cached data immediately (0ms delay)
+  if (!force) {
+    const cached = await getPersistentCache(cacheKey, scope);
+    if (cached?.class_context) {
+      // Revalidate in background quietly if online
+      if (typeof navigator !== 'undefined' && navigator.onLine) {
+        fetch(url, { force: true, throwOnAuthError: false })
+          .then(parseResponse)
+          .then(fresh => {
+            if (fresh?.class_context) {
+              setPersistentCache(cacheKey, fresh, undefined, scope);
+            }
+          })
+          .catch(() => {});
+      }
+      return cached;
+    }
+  }
+
   try {
-    const res = await fetch(url, { force: true, cache: 'no-store', throwOnAuthError: false });
+    const res = await fetch(url, { force: Boolean(force), throwOnAuthError: false });
     const data = await parseResponse(res);
     assertCurrentSession(scope);
+
+    if (data?.class_context) {
+      await setPersistentCache(cacheKey, data, undefined, scope);
+
+      // Quietly pre-fetch other terms in the background while online so they are available offline
+      if (typeof window !== 'undefined' && navigator.onLine) {
+        const otherTerms = ['T1', 'T2', 'T3'].filter(t => t !== term);
+        for (const otherTerm of otherTerms) {
+          const otherKey = `classRecord_v2_${subjectOfferingId}_${otherTerm}_${sectionId || ""}_${mapehComponent || ""}_${subjectId || ""}${readOnly ? '_readOnly' : ''}`;
+          getPersistentCache(otherKey, scope).then(existing => {
+            if (!existing && navigator.onLine) {
+              let otherUrl = `${API_BASE_URL}/class-record/${subjectOfferingId}?term=${encodeURIComponent(otherTerm)}&gradeFlowVersion=2`;
+              if (sectionId) otherUrl += `&section_id=${encodeURIComponent(sectionId)}`;
+              if (mapehComponent) otherUrl += `&mapeh_component=${encodeURIComponent(mapehComponent)}`;
+              if (subjectId) otherUrl += `&subject_id=${encodeURIComponent(subjectId)}`;
+              if (readOnly) otherUrl += '&read_only=1';
+              fetch(otherUrl, { throwOnAuthError: false })
+                .then(r => parseResponse(r))
+                .then(d => {
+                  if (d?.class_context) setPersistentCache(otherKey, d, undefined, scope);
+                })
+                .catch(() => {});
+            }
+          }).catch(() => {});
+        }
+      }
+    }
+
     return data;
   } catch (err) {
-    // Preserve access to an older same-session snapshot made before the shared
-    // read-cache integration. New reads use the shared cache above.
     assertCurrentSession(scope);
     if ([401, 403].includes(err.status)) await removePersistentCache(cacheKey, scope);
-    if (!isNetworkError(err)) throw err;
     const cached = await getPersistentCache(cacheKey, scope);
-    if (cached) {
+    if (cached?.class_context) {
       console.log(`[ClassRecordApi] Serving offline cached record for ${cacheKey}`);
       return cached;
     }

@@ -48,6 +48,15 @@ db.version(4).stores({
   offlineAttendance: '++id, ownerId, mutationId, section_id, [section_id+attendance_date], student_section_id, timestamp, status',
 });
 
+db.version(5).stores({
+  cache: 'key, sessionId, updatedAt, expiresAt',
+  outbox: '++id, ownerId, [ownerId+status], endpoint, method, timestamp, status',
+  syncMeta: 'key',
+  offlineScores: '++id, ownerId, mutationId, [subject_offering_id+term], student_id, assessment_id, timestamp, status',
+  offlineAttendance: '++id, ownerId, mutationId, section_id, [section_id+attendance_date], student_section_id, timestamp, status',
+  offlinePhilIri: '++id, ownerId, mutationId, section_id, [section_id+test_type], student_section_id, timestamp, status',
+  offlineScreening: '++id, ownerId, mutationId, section_id, [section_id+school_year_id], student_section_id, timestamp, status',
+});
 
 export default db;
 

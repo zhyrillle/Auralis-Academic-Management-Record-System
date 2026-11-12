@@ -1,5 +1,6 @@
 const db = require('../config/db');
 const { withWritableSheet } = require('../services/AttendanceDayService');
+const cloudSync = require('../services/cloudSyncService');
 
 class AttendanceSheet {
   static async findAll() {
@@ -49,6 +50,11 @@ class AttendanceSheet {
            VALUES (?, 'SUBJECT', ?)`,
           [targetTeacherAssignmentId, cleanDate]
         );
+        cloudSync.forwardAttendanceSheetToCloud(result.insertId, {
+          teacher_assignment_id: targetTeacherAssignmentId,
+          attendance_scope: 'SUBJECT',
+          attendance_date: cleanDate,
+        }).catch(() => {});
         return { attendance_sheet_id: result.insertId, created: true };
       }
 
@@ -93,6 +99,11 @@ class AttendanceSheet {
          VALUES (?, 'SECTION', ?)`,
         [targetAdviserAssignmentId, cleanDate]
       );
+      cloudSync.forwardAttendanceSheetToCloud(result.insertId, {
+        adviser_assignment_id: targetAdviserAssignmentId,
+        attendance_scope: 'SECTION',
+        attendance_date: cleanDate,
+      }).catch(() => {});
       return { attendance_sheet_id: result.insertId, created: true };
     }
 
@@ -123,6 +134,11 @@ class AttendanceSheet {
          VALUES (?, 'SECTION', ?)`,
         [targetAdviserAssignmentId, cleanDate]
       );
+      cloudSync.forwardAttendanceSheetToCloud(result.insertId, {
+        adviser_assignment_id: targetAdviserAssignmentId,
+        attendance_scope: 'SECTION',
+        attendance_date: cleanDate,
+      }).catch(() => {});
       return { attendance_sheet_id: result.insertId, created: true };
     }
 
