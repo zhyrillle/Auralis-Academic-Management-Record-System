@@ -1008,6 +1008,26 @@ export default function PhilIri({ activeClass: propActiveClass, onBack }) {
         } catch (_) {}
       }
 
+      // Offline Dexie cache fallback
+      if (loadedStudents.length === 0 && sectionId) {
+        try {
+          const { getPersistentCache } = await import("../../offline/syncManager.js");
+          const dexieList = await getPersistentCache(`students:section:${sectionId}`);
+          if (Array.isArray(dexieList) && dexieList.length > 0) {
+            loadedStudents = dexieList.map((st) => ({
+              id: String(st.student_id || st.id),
+              student_id: st.student_id || st.id,
+              student_section_id: st.student_section_id,
+              lrn: st.lrn || st.LRN,
+              firstName: st.first_name || st.firstName,
+              lastName: st.last_name || st.lastName,
+              middleName: st.middle_name || st.middleName,
+              sex: st.sex,
+            }));
+          }
+        } catch (_) {}
+      }
+
       if (!isCurrent) return;
       if (loadedStudents.length > 0) {
         setStudents(loadedStudents);

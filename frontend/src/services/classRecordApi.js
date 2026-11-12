@@ -77,7 +77,7 @@ export const getClassRecord = async (
   try {
     const res = await fetch(url, { force: Boolean(force), throwOnAuthError: false });
     const data = await parseResponse(res);
-    assertCurrentSession(scope);
+    if (scope) assertCurrentSession(scope);
 
     if (data?.class_context) {
       await setPersistentCache(cacheKey, data, undefined, scope);
@@ -108,13 +108,91 @@ export const getClassRecord = async (
 
     return data;
   } catch (err) {
-    assertCurrentSession(scope);
+    if (scope) assertCurrentSession(scope);
     if ([401, 403].includes(err.status)) await removePersistentCache(cacheKey, scope);
     const cached = await getPersistentCache(cacheKey, scope);
     if (cached?.class_context) {
       console.log(`[ClassRecordApi] Serving offline cached record for ${cacheKey}`);
       return cached;
     }
+
+    // Resilient offline fallback 1: Check if another term exists for this class offering
+    const otherTerms = ['T1', 'T2', 'T3'].filter(t => t !== term);
+    for (const otherTerm of otherTerms) {
+      const otherKey = `classRecord_v2_${subjectOfferingId}_${otherTerm}_${sectionId || ""}_${mapehComponent || ""}_${subjectId || ""}${readOnly ? '_readOnly' : ''}`;
+      const otherCached = await getPersistentCache(otherKey, scope);
+      if (otherCached?.class_context && Array.isArray(otherCached.students)) {
+        console.log(`[ClassRecordApi] Synthesizing term ${term} from cached term ${otherTerm}`);
+        const synthesized = {
+          ...otherCached,
+          class_context: {
+            ...otherCached.class_context,
+            term,
+            term_name: `Term ${String(term).replace('T', '')}`,
+          },
+          term,
+          active_term: otherCached.active_term || term,
+          assessments: [],
+          students: otherCached.students.map(st => ({
+            ...st,
+            scores: {},
+            examinations: {},
+            saved_summary: null,
+          })),
+        };
+        await setPersistentCache(cacheKey, synthesized, undefined, scope).catch(() => {});
+        return synthesized;
+      }
+    }
+
+    // Resilient offline fallback 2: Check if section students exist in localStorage or Dexie cache
+    let studentList = null;
+    if (sectionId) {
+      try {
+        const rawLocal = localStorage.getItem(`auralis_students_section_${sectionId}`);
+        if (rawLocal) studentList = JSON.parse(rawLocal);
+      } catch (_) {}
+      if (!Array.isArray(studentList) || studentList.length === 0) {
+        studentList = await getPersistentCache(`students:section:${sectionId}`, scope).catch(() => null);
+      }
+    }
+
+    if (Array.isArray(studentList) && studentList.length > 0) {
+      console.log(`[ClassRecordApi] Synthesizing offline initial record from ${studentList.length} cached students`);
+      const formattedStudents = studentList.map(st => ({
+        student_id: st.student_id || st.id,
+        student_section_id: st.student_section_id || st.id,
+        LRN: st.lrn || st.LRN || "",
+        first_name: st.first_name || st.firstName || "Unknown",
+        last_name: st.last_name || st.lastName || "",
+        middle_name: st.middle_name || st.middleName || "",
+        sex: st.sex || "M",
+        scores: {},
+        examinations: {},
+      }));
+
+      const synthesized = {
+        class_context: {
+          subject_offering_id: subjectOfferingId,
+          section_id: sectionId,
+          term,
+          active_term: term,
+          is_locked: false,
+          term_name: `Term ${String(term).replace('T', '')}`,
+          weights: { written_weight: 40, performance_weight: 40, quarterly_weight: 20 },
+        },
+        term,
+        active_term: term,
+        assessments: [],
+        students: formattedStudents,
+        is_mapeh: Boolean(mapehComponent),
+        mapeh_component: mapehComponent || null,
+      };
+
+      await setPersistentCache(cacheKey, synthesized, undefined, scope).catch(() => {});
+      return synthesized;
+    }
+
     throw err;
   }
 };
@@ -190,7 +268,7 @@ export const saveScoresBatch = async ({ subject_offering_id, term = "T1", scores
     assertCurrentSession(scope);
     return data;
   } catch (err) {
-    assertCurrentSession(scope);
+    if (scope) assertCurrentSession(scope);
     if (!isNetworkError(err)) throw err;
     // Only a network failure can fall back to offline storage, never a server rejection.
     console.warn("[ClassRecordApi] Network error during batch save, storing offline:", err.message);

@@ -117,6 +117,11 @@ export default function AdviserSections({ userRole: propUserRole, isArchivedView
 
         if (Array.isArray(fetched)) {
           setClasses(fetched);
+          if (!isArchived && typeof navigator !== 'undefined' && navigator.onLine) {
+            import("../../services/offlineCacheWarmer.js").then(({ warmUserOfflineData }) => {
+              warmUserOfflineData(userId, fetched).catch(() => {});
+            }).catch(() => {});
+          }
         } else if (typeof navigator !== 'undefined' && !navigator.onLine && Array.isArray(cachedLocalClasses) && cachedLocalClasses.length > 0) {
           setClasses(cachedLocalClasses);
         } else {
@@ -151,6 +156,15 @@ export default function AdviserSections({ userRole: propUserRole, isArchivedView
       const refreshed = e.detail?.sections;
       if (Array.isArray(refreshed) && !isArchived && !cancelled) {
         setClasses(refreshed);
+        if (typeof navigator !== 'undefined' && navigator.onLine) {
+          const user = getStoredUser();
+          const userId = user?.user_id || user?.id;
+          if (userId) {
+            import("../../services/offlineCacheWarmer.js").then(({ warmUserOfflineData }) => {
+              warmUserOfflineData(userId, refreshed).catch(() => {});
+            }).catch(() => {});
+          }
+        }
       }
     };
     const handleCacheInvalidated = () => {
