@@ -170,3 +170,81 @@ export const removeStoredUser = async () => {
   await resetOfflineSession();
   clearNavigationCache({ persistent: false });
 };
+
+/**
+ * Hash credentials securely using Web Crypto SHA-256 for offline verification.
+ */
+export async function hashCredentials(email, password) {
+  const normalized = `${String(email).trim().toLowerCase()}:${String(password)}`;
+  try {
+    if (typeof crypto !== "undefined" && crypto.subtle) {
+      const encoder = new TextEncoder();
+      const data = encoder.encode(normalized);
+      const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+    }
+  } catch (_) {}
+  // Fallback hash for environments without crypto.subtle
+  let hash = 5381;
+  for (let i = 0; i < normalized.length; i++) {
+    hash = ((hash << 5) + hash) + normalized.charCodeAt(i);
+    hash |= 0;
+  }
+  return `fb_${Math.abs(hash).toString(16)}`;
+}
+
+/**
+ * Persist an offline authentication profile upon successful online login.
+ */
+export async function saveOfflineCredentials(userObj, email, password) {
+  if (!email || !password || !userObj) return;
+  try {
+    const cleanEmail = String(email).trim().toLowerCase();
+    const hash = await hashCredentials(cleanEmail, password);
+    const offlineProfile = {
+      user: userObj,
+      hash,
+      email: cleanEmail,
+      savedAt: Date.now(),
+    };
+    localStorage.setItem(`auralis_offline_auth_${cleanEmail}`, JSON.stringify(offlineProfile));
+  } catch (err) {
+    console.warn("Failed to save offline credentials:", err);
+  }
+}
+
+/**
+ * Verify credentials offline against saved local profile.
+ */
+export async function verifyOfflineCredentials(email, password) {
+  if (!email || !password) return null;
+  try {
+    const cleanEmail = String(email).trim().toLowerCase();
+    const raw = localStorage.getItem(`auralis_offline_auth_${cleanEmail}`);
+    if (!raw) return null;
+    const profile = JSON.parse(raw);
+    const hash = await hashCredentials(cleanEmail, password);
+    if (profile.hash === hash && profile.user) {
+      return profile.user;
+    }
+    return null;
+  } catch (err) {
+    console.warn("Failed to verify offline credentials:", err);
+    return null;
+  }
+}
+
+/**
+ * Check if an offline account profile exists for this email.
+ */
+export function hasOfflineAccount(email) {
+  if (!email) return false;
+  try {
+    const cleanEmail = String(email).trim().toLowerCase();
+    return Boolean(localStorage.getItem(`auralis_offline_auth_${cleanEmail}`));
+  } catch (_) {
+    return false;
+  }
+}
+

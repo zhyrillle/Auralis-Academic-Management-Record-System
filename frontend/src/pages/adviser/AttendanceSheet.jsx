@@ -269,6 +269,7 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
       setLoading(true);
     }
     setLoadError('');
+    let enrichedStudents = [];
     try {
       const userId = currentUser?.user_id || currentUser?.id;
       const sectionId = targetSectionId;
@@ -366,7 +367,7 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
       }
 
       // Process students
-      let enrichedStudents = [];
+      enrichedStudents = [];
       if (Array.isArray(stuData) && stuData.length > 0) {
         enrichedStudents = stuData.map(s => ({
           student_section_id: s.student_section_id,
@@ -439,6 +440,21 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
             }
           }
         } catch (_) {}
+        if (enrichedStudents.length === 0) {
+          try {
+            const dexieStudents = await getPersistentCache(`students:section:${sectionId}`);
+            if (Array.isArray(dexieStudents) && dexieStudents.length > 0) {
+              enrichedStudents = dexieStudents.map(s => ({
+                student_section_id: s.student_section_id || s.id,
+                student_id: s.student_id || s.id,
+                first_name: s.first_name || s.firstName || "Unknown",
+                last_name: s.last_name || s.lastName || "",
+                middle_name: s.middle_name || s.middleName || "",
+                sex: s.sex || "M",
+              }));
+            }
+          } catch (_) {}
+        }
       }
 
       enrichedStudents.sort((a, b) => a.last_name.localeCompare(b.last_name) || a.first_name.localeCompare(b.first_name));
@@ -553,12 +569,27 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
 
     } catch (err) {
       console.error("Error loading attendance data:", err);
-      if (isNetworkError(err) && students.length > 0) {
+      const isNet = isNetworkError(err) || (typeof navigator !== 'undefined' && !navigator.onLine);
+      const availableStudents = enrichedStudents.length > 0 ? enrichedStudents : (studentsRef.current?.length > 0 ? studentsRef.current : null);
+      if (isNet && availableStudents && availableStudents.length > 0) {
+        setStudents(availableStudents);
         setSyncStatus("offline");
         setLoadError("");
+      } else if (isNet) {
+        try {
+          const rawLocal = localStorage.getItem(`auralis_students_section_${sectionId}`);
+          const parsed = rawLocal ? JSON.parse(rawLocal) : null;
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setStudents(parsed);
+            setSyncStatus("offline");
+            setLoadError("");
+            return;
+          }
+        } catch (_) {}
+        setLoadError(err.message || 'Attendance could not be loaded.');
       } else {
         setLoadError(err.message || 'Attendance could not be loaded.');
-        triggerToast(isNetworkError(err) ? "Offline mode active." : "Failed to load attendance data.", isNetworkError(err) ? "info" : "error");
+        triggerToast("Failed to load attendance data.", "error");
       }
     } finally {
       setLoading(false);
