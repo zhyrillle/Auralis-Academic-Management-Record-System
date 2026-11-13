@@ -203,7 +203,24 @@ export const createAssessment = async (payload) => {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
-  return parseResponse(res);
+  const data = await parseResponse(res);
+  if (data?.offline && !data.assessment) {
+    const tempId = `offline_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    data.assessment = {
+      assessment_id: tempId,
+      activity_id: tempId,
+      activity_name: payload.activity_name || payload.title,
+      title: payload.activity_name || payload.title,
+      component_code: payload.component_code,
+      type: payload.type,
+      max_score: payload.max_score || payload.highest_possible_score,
+      highest_possible_score: payload.max_score || payload.highest_possible_score,
+      activity_date: payload.activity_date || null,
+      mapeh_component: payload.mapeh_component || null,
+      status: "ACTIVE",
+    };
+  }
+  return data;
 };
 
 export const updateAssessment = async (assessmentId, payload) => {

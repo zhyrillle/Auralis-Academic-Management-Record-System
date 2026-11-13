@@ -39,6 +39,8 @@ import { getStoredUser } from "../../utils/auth";
 import { eligibilityMessages, getGradeSheetReopeningEligibility } from "../../services/gradingPeriodService";
 import {
   getPendingOfflineScores,
+  getPersistentCache,
+  setPersistentCache,
   processOutbox,
   getSessionScope,
   isCurrentSession,
@@ -318,6 +320,85 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
   const gradesRef = useRef(grades);
   gradesRef.current = grades;
 
+  const writtenWorkColumnsRef = useRef(writtenWorkColumns);
+  writtenWorkColumnsRef.current = writtenWorkColumns;
+  const performanceTaskColumnsRef = useRef(performanceTaskColumns);
+  performanceTaskColumnsRef.current = performanceTaskColumns;
+
+  // Persist local column & grade modifications directly into IndexedDB persistent cache
+  const updateOfflineRecordCache = useCallback(
+    async (updater) => {
+      try {
+        const scope = recordSession || getSessionScope();
+        const effectiveComp = (isMapeh || isMapehRef.current) ? (mapehComponent || mapehComponentRef.current || "MA") : "";
+        const keysToTry = [
+          `classRecord_v2_${subjectOfferingId}_${activeTerm}_${sectionId || ""}_${effectiveComp}_${effectiveSubjectId || ""}`,
+          `classRecord_v2_${subjectOfferingId}_${activeTerm}_${sectionId || ""}__${effectiveSubjectId || ""}`,
+          `classRecord_v2_${subjectOfferingId}_${activeTerm}_${sectionId || ""}_${effectiveComp}_`,
+          `classRecord_v2_${subjectOfferingId}_${activeTerm}_${sectionId || ""}__`,
+        ];
+
+        const uniqueKeys = Array.from(new Set(keysToTry));
+        let foundKey = null;
+        let cached = null;
+
+        for (const k of uniqueKeys) {
+          const item = await getPersistentCache(k, scope);
+          if (item?.class_context) {
+            foundKey = k;
+            cached = item;
+            break;
+          }
+        }
+
+        const targetKey = foundKey || uniqueKeys[0];
+        const baseRecord = cached || {
+          class_context: classContextData || {
+            subject_offering_id: subjectOfferingId,
+            section_id: sectionId,
+            term: activeTerm,
+            active_term: activeTerm,
+            is_locked: isLocked,
+          },
+          term: activeTerm,
+          active_term: activeTerm,
+          assessments: [],
+          students: (students || []).map((st) => ({
+            student_id: st.student_id || st.id,
+            student_section_id: st.student_section_id,
+            LRN: st.lrn,
+            first_name: st.firstName,
+            last_name: st.lastName,
+            middle_name: st.middleName,
+            sex: st.sex,
+            scores: {},
+            examinations: {},
+          })),
+          is_mapeh: Boolean(isMapeh),
+          mapeh_component: effectiveComp || null,
+        };
+
+        if (typeof updater === "function") {
+          const updated = updater({ ...baseRecord });
+          if (updated) {
+            await setPersistentCache(targetKey, updated, undefined, scope);
+            for (const k of uniqueKeys) {
+              if (k !== targetKey) {
+                const other = await getPersistentCache(k, scope);
+                if (other?.class_context) {
+                  await setPersistentCache(k, updated, undefined, scope);
+                }
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.warn("[ClassRecord] updateOfflineRecordCache error:", e);
+      }
+    },
+    [recordSession, isMapeh, mapehComponent, subjectOfferingId, activeTerm, sectionId, effectiveSubjectId, classContextData, isLocked, students]
+  );
+
   // Modals for Add & Edit Column
   const [modalState, setModalState] = useState({
     isOpen: false,
@@ -395,6 +476,71 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
       if (pendingQueueRef.current.size === 0) {
         setSyncStatus(res?.offline || !navigator.onLine ? "offline" : "saved");
       }
+
+      // Update Dexie persistent cache so grades remain persisted offline across page navigation
+      updateOfflineRecordCache((record) => {
+        if (!Array.isArray(record.students)) return record;
+        const currentGrades = gradesRef.current;
+        const wwCols = writtenWorkColumnsRef.current || [];
+        const ptCols = performanceTaskColumnsRef.current || [];
+
+        const updatedStudents = record.students.map((st) => {
+          const sId = String(st.student_id);
+          const stGrades = currentGrades[sId];
+          if (!stGrades) return st;
+
+          const updatedScores = { ...(st.scores || {}) };
+          const updatedExams = { ...(st.examinations || {}) };
+
+          if (stGrades.writtenWorks) {
+            Object.entries(stGrades.writtenWorks).forEach(([cId, val]) => {
+              const col = wwCols.find((c) => c.id === cId || String(c.assessment_id) === String(cId));
+              const key = col?.assessment_id || cId;
+              if (val !== "" && val !== null && val !== undefined) {
+                updatedScores[key] = Number(val);
+                if (col?.id) updatedScores[col.id] = Number(val);
+              } else {
+                delete updatedScores[key];
+                if (col?.id) delete updatedScores[col.id];
+              }
+            });
+          }
+
+          if (stGrades.performanceTasks) {
+            Object.entries(stGrades.performanceTasks).forEach(([cId, val]) => {
+              const col = ptCols.find((c) => c.id === cId || String(c.assessment_id) === String(cId));
+              const key = col?.assessment_id || cId;
+              if (val !== "" && val !== null && val !== undefined) {
+                updatedScores[key] = Number(val);
+                if (col?.id) updatedScores[col.id] = Number(val);
+              } else {
+                delete updatedScores[key];
+                if (col?.id) delete updatedScores[col.id];
+              }
+            });
+          }
+
+          if (stGrades.examinations) {
+            if (stGrades.examinations.st1 !== "" && stGrades.examinations.st1 !== undefined && stGrades.examinations.st1 !== null) {
+              updatedExams.st1 = Number(stGrades.examinations.st1);
+            }
+            if (stGrades.examinations.st2 !== "" && stGrades.examinations.st2 !== undefined && stGrades.examinations.st2 !== null) {
+              updatedExams.st2 = Number(stGrades.examinations.st2);
+            }
+            if (stGrades.examinations.te !== "" && stGrades.examinations.te !== undefined && stGrades.examinations.te !== null) {
+              updatedExams.te = Number(stGrades.examinations.te);
+            }
+          }
+
+          return {
+            ...st,
+            scores: updatedScores,
+            examinations: updatedExams,
+          };
+        });
+
+        return { ...record, students: updatedStudents };
+      });
     } catch (err) {
       if (isSessionCancellation(err)) return;
       console.warn("Auto-save sync error:", err.message);
@@ -407,7 +553,7 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
         flushPendingScores();
       }
     }
-  }, [isLocked, subjectOfferingId, activeTerm, isMapeh, mapehComponent, recordSession]);
+  }, [isLocked, subjectOfferingId, activeTerm, isMapeh, mapehComponent, recordSession, updateOfflineRecordCache]);
 
   // Persist the debounce buffer before logout, while its original account is still active.
   useEffect(() => registerLogoutDraftSaver(async () => {
@@ -730,11 +876,11 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
           }
           const sId = String(item.student_id);
           if (newGrades[sId]) {
-            const wwCol = wwCols.find((c) => String(c.assessment_id) === String(item.assessment_id) || c.id === item.assessment_id);
+            const wwCol = wwCols.find((c) => String(c.assessment_id) === String(item.assessment_id) || c.id === item.assessment_id || (item.activity_name && c.activity_name === item.activity_name));
             if (wwCol) {
               newGrades[sId].writtenWorks[wwCol.id] = item.raw_score !== null ? item.raw_score : "";
             }
-            const ptCol = ptCols.find((c) => String(c.assessment_id) === String(item.assessment_id) || c.id === item.assessment_id);
+            const ptCol = ptCols.find((c) => String(c.assessment_id) === String(item.assessment_id) || c.id === item.assessment_id || (item.activity_name && c.activity_name === item.activity_name));
             if (ptCol) {
               newGrades[sId].performanceTasks[ptCol.id] = item.raw_score !== null ? item.raw_score : "";
             }
@@ -868,13 +1014,13 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
                   parsed.grades[sId].quarterlyAssessment = item.raw_score;
                 } else {
                   parsed.writtenWorkColumns.forEach((c) => {
-                    if (c.assessment_id === item.assessment_id || c.id === item.assessment_id) {
+                    if (c.assessment_id === item.assessment_id || c.id === item.assessment_id || (item.activity_name && c.activity_name === item.activity_name)) {
                       if (!parsed.grades[sId].writtenWorks) parsed.grades[sId].writtenWorks = {};
                       parsed.grades[sId].writtenWorks[c.id] = item.raw_score;
                     }
                   });
                   parsed.performanceTaskColumns.forEach((c) => {
-                    if (c.assessment_id === item.assessment_id || c.id === item.assessment_id) {
+                    if (c.assessment_id === item.assessment_id || c.id === item.assessment_id || (item.activity_name && c.activity_name === item.activity_name)) {
                       if (!parsed.grades[sId].performanceTasks) parsed.grades[sId].performanceTasks = {};
                       parsed.grades[sId].performanceTasks[c.id] = item.raw_score;
                     }
@@ -910,12 +1056,12 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
                     merged[sId] = { ...merged[sId], examinations: { ...(merged[sId].examinations || {}), te: item.raw_score }, quarterlyAssessment: item.raw_score };
                   } else {
                     parsed.writtenWorkColumns.forEach((c) => {
-                      if (c.assessment_id === item.assessment_id || c.id === item.assessment_id) {
+                      if (c.assessment_id === item.assessment_id || c.id === item.assessment_id || (item.activity_name && c.activity_name === item.activity_name)) {
                         merged[sId] = { ...merged[sId], writtenWorks: { ...(merged[sId].writtenWorks || {}), [c.id]: item.raw_score } };
                       }
                     });
                     parsed.performanceTaskColumns.forEach((c) => {
-                      if (c.assessment_id === item.assessment_id || c.id === item.assessment_id) {
+                      if (c.assessment_id === item.assessment_id || c.id === item.assessment_id || (item.activity_name && c.activity_name === item.activity_name)) {
                         merged[sId] = { ...merged[sId], performanceTasks: { ...(merged[sId].performanceTasks || {}), [c.id]: item.raw_score } };
                       }
                     });
@@ -1312,7 +1458,13 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
           studentObj.student_id,
           studentObj.student_section_id,
           "",
-          examKey
+          examKey,
+          {
+            activity_name: examKey === "st1" ? "Summative Test 1" : examKey === "st2" ? "Summative Test 2" : "Term Exam",
+            component_code: "QA",
+            max_score: maxAllowed,
+            type: "quarterlyAssessment",
+          }
         );
       }
       return;
@@ -1341,7 +1493,13 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
         studentObj.student_id,
         studentObj.student_section_id,
         value,
-        examKey
+        examKey,
+        {
+          activity_name: examKey === "st1" ? "Summative Test 1" : examKey === "st2" ? "Summative Test 2" : "Term Exam",
+          component_code: "QA",
+          max_score: maxAllowed,
+          type: "quarterlyAssessment",
+        }
       );
     }
   };
@@ -1383,7 +1541,7 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
   // DEBOUNCED QUEUE AUTO-SAVER (Fast, non-blocking, concurrency safe)
   // ============================================================
   const queueScoreChange = useCallback(
-    (assessmentId, studentId, studentSectionId, rawScore, examKey = null) => {
+    (assessmentId, studentId, studentSectionId, rawScore, examKey = null, meta = {}) => {
       if (isLocked) return;
 
       const normalizedExamKey = examKey || (assessmentId === "st1" || assessmentId === "st2" || assessmentId === "te" ? assessmentId : null);
@@ -1396,6 +1554,10 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
         student_section_id: studentSectionId,
         raw_score: rawScore === "" ? null : Number(rawScore),
         mapeh_component: currentComp,
+        activity_name: meta?.activity_name || null,
+        component_code: meta?.component_code || null,
+        max_score: meta?.max_score ? Number(meta.max_score) : null,
+        type: meta?.type || null,
       };
 
       pendingQueueRef.current.set(key, record);
@@ -1419,6 +1581,10 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
 
     if (value !== "" && !isNaN(numVal) && numVal < 0) return;
 
+    const colList = category === "writtenWorks" ? writtenWorkColumns : performanceTaskColumns;
+    const colObj = colList.find((c) => c.id === columnId || String(c.assessment_id) === String(assessmentId));
+    const cleanAssessmentId = assessmentId || colObj?.assessment_id || (columnId ? Number(String(columnId).replace(/^(ww_|pt_)/, '')) : null);
+
     // Feature 1: Exceeded Highest Possible Score (HPS) Validation
     if (value !== "" && !isNaN(numVal) && maxAllowed > 0 && numVal > maxAllowed) {
       showErrorTooltip(cellKey, `Score cannot exceed ${maxAllowed}`);
@@ -1435,14 +1601,20 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
         },
       }));
 
-      const cleanAssessmentId = assessmentId || (columnId ? Number(String(columnId).replace(/^(ww_|pt_)/, '')) : null);
       const studentObj = students.find((s) => s.id === studentId || String(s.student_id) === studentId);
       if (studentObj) {
         queueScoreChange(
           cleanAssessmentId || columnId,
           studentObj.student_id,
           studentObj.student_section_id,
-          ""
+          "",
+          null,
+          {
+            activity_name: colObj?.activity_name || null,
+            component_code: category === "writtenWorks" ? "WW" : "PT",
+            max_score: maxAllowed || colObj?.max_score || null,
+            type: category === "writtenWorks" ? "writtenWork" : "performanceTask",
+          }
         );
       }
       return;
@@ -1463,14 +1635,20 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
       },
     }));
 
-    const cleanAssessmentId = assessmentId || (columnId ? Number(String(columnId).replace(/^(ww_|pt_)/, '')) : null);
     const studentObj = students.find((s) => s.id === studentId || String(s.student_id) === studentId);
     if (studentObj) {
       queueScoreChange(
         cleanAssessmentId || columnId,
         studentObj.student_id,
         studentObj.student_section_id,
-        value
+        value,
+        null,
+        {
+          activity_name: colObj?.activity_name || null,
+          component_code: category === "writtenWorks" ? "WW" : "PT",
+          max_score: maxAllowed || colObj?.max_score || null,
+          type: category === "writtenWorks" ? "writtenWork" : "performanceTask",
+        }
       );
     }
   };
@@ -1613,6 +1791,13 @@ const formatToISODate = (val) => {
       } else if (modalState.examKey === "teWeight") {
         setExamConfig((prev) => ({ ...prev, teWeight: numMax }));
       }
+      updateOfflineRecordCache((record) => {
+        const examCfg = { ...(record.exam_config || {}) };
+        if (modalState.examKey === "st1Weight") examCfg.st1Weight = numMax;
+        else if (modalState.examKey === "st2Weight") examCfg.st2Weight = numMax;
+        else if (modalState.examKey === "teWeight") examCfg.teWeight = numMax;
+        return { ...record, exam_config: examCfg };
+      });
       setModalState((prev) => ({ ...prev, isOpen: false }));
       return;
     }
@@ -1658,6 +1843,14 @@ const formatToISODate = (val) => {
         console.warn("Exam HPS updated locally:", err);
       }
 
+      updateOfflineRecordCache((record) => {
+        const examCfg = { ...(record.exam_config || {}) };
+        if (modalState.examKey === "st1") examCfg.st1HPS = numMax;
+        else if (modalState.examKey === "st2") examCfg.st2HPS = numMax;
+        else if (modalState.examKey === "te") examCfg.teHPS = numMax;
+        return { ...record, exam_config: examCfg };
+      });
+
       setModalState((prev) => ({ ...prev, isOpen: false }));
       return;
     }
@@ -1677,16 +1870,17 @@ const formatToISODate = (val) => {
           mapeh_component: isMapeh ? (mapehComponent || mapehComponentRef.current || "MA") : null,
         });
 
-        const newAss = res.assessment;
+        const newAss = res?.assessment || {};
         const currentComp = isMapeh ? (mapehComponent || mapehComponentRef.current || "MA") : null;
         const activeCols = (category === "WW" ? writtenWorkColumns : performanceTaskColumns).filter(
           (c) => c.status !== "ARCHIVED" && (!isMapeh || !c.mapeh_component || c.mapeh_component === currentComp)
         );
         const colNumber = activeCols.length + 1;
         const safeTitle = title && title.trim() !== "" ? title.trim() : (category === "WW" ? `Written Work ${colNumber}` : `Performance Task ${colNumber}`);
+        const newColAssId = newAss.assessment_id || `offline_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
         const newCol = {
-          id: category === "WW" ? `ww_${newAss.assessment_id}` : `pt_${newAss.assessment_id}`,
-          assessment_id: newAss.assessment_id,
+          id: category === "WW" ? `ww_${newColAssId}` : `pt_${newColAssId}`,
+          assessment_id: newColAssId,
           label: String(colNumber),
           activity_name: safeTitle,
           max_score: numMax,
@@ -1701,6 +1895,31 @@ const formatToISODate = (val) => {
         } else {
           setPerformanceTaskColumns((prev) => [...prev, newCol]);
         }
+
+        updateOfflineRecordCache((record) => {
+          const assessments = Array.isArray(record.assessments) ? [...record.assessments] : [];
+          const exists = assessments.some(
+            (a) =>
+              String(a.assessment_id) === String(newCol.assessment_id) ||
+              (a.activity_name === newCol.activity_name && a.mapeh_component === newCol.mapeh_component)
+          );
+          if (!exists) {
+            assessments.push({
+              assessment_id: newCol.assessment_id,
+              activity_id: newCol.assessment_id,
+              activity_name: newCol.activity_name,
+              title: newCol.activity_name,
+              component_code: category,
+              type: category === "WW" ? "writtenWork" : "performanceTask",
+              max_score: numMax,
+              highest_possible_score: numMax,
+              activity_date: safeDate,
+              mapeh_component: currentComp,
+              status: "ACTIVE",
+            });
+          }
+          return { ...record, assessments };
+        });
       } catch (err) {
         const isWW = category === "WW";
         const currentComp = isMapeh ? (mapehComponent || mapehComponentRef.current || "MA") : null;
@@ -1709,9 +1928,10 @@ const formatToISODate = (val) => {
         );
         const colNumber = activeCols.length + 1;
         const safeTitle = title && title.trim() !== "" ? title.trim() : (isWW ? `Written Work ${colNumber}` : `Performance Task ${colNumber}`);
+        const tempId = `offline_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
         const newCol = {
-          id: isWW ? `ww${colNumber}` : `pt${colNumber}`,
-          assessment_id: Date.now(),
+          id: isWW ? `ww_${tempId}` : `pt_${tempId}`,
+          assessment_id: tempId,
           label: String(colNumber),
           activity_name: safeTitle,
           max_score: numMax,
@@ -1725,6 +1945,24 @@ const formatToISODate = (val) => {
         } else {
           setPerformanceTaskColumns((prev) => [...prev, newCol]);
         }
+
+        updateOfflineRecordCache((record) => {
+          const assessments = Array.isArray(record.assessments) ? [...record.assessments] : [];
+          assessments.push({
+            assessment_id: newCol.assessment_id,
+            activity_id: newCol.assessment_id,
+            activity_name: newCol.activity_name,
+            title: newCol.activity_name,
+            component_code: category,
+            type: category === "WW" ? "writtenWork" : "performanceTask",
+            max_score: numMax,
+            highest_possible_score: numMax,
+            activity_date: safeDate,
+            mapeh_component: currentComp,
+            status: "ACTIVE",
+          });
+          return { ...record, assessments };
+        });
       }
     } else {
       try {
@@ -1751,6 +1989,25 @@ const formatToISODate = (val) => {
             prev.map((c) => (c.id === columnId ? { ...c, activity_name: title, max_score: numMax, date: safeDate } : c))
           );
         }
+
+        updateOfflineRecordCache((record) => {
+          if (!Array.isArray(record.assessments)) return record;
+          const assessments = record.assessments.map((a) => {
+            const matches = String(a.assessment_id) === String(assessmentId) || a.id === columnId;
+            if (matches) {
+              return {
+                ...a,
+                activity_name: title,
+                title: title,
+                max_score: numMax,
+                highest_possible_score: numMax,
+                activity_date: safeDate,
+              };
+            }
+            return a;
+          });
+          return { ...record, assessments };
+        });
       } catch (err) {
         console.error("Error updating column:", err);
       }
@@ -1777,6 +2034,14 @@ const formatToISODate = (val) => {
           prev.filter((c) => c.id !== column.id).map((c, i) => ({ ...c, label: String(i + 1) }))
         );
       }
+
+      updateOfflineRecordCache((record) => {
+        if (!Array.isArray(record.assessments)) return record;
+        const assessments = record.assessments.filter(
+          (a) => String(a.assessment_id) !== String(column.assessment_id) && a.id !== column.id
+        );
+        return { ...record, assessments };
+      });
     } catch (err) {
       console.error("Error deleting column:", err);
     }

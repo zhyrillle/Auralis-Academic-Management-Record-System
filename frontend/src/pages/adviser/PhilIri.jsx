@@ -1916,10 +1916,10 @@ export default function PhilIri({ activeClass: propActiveClass, onBack }) {
 
       {/* 3. DOCUMENT DISPLAY VIEWPORT */}
       <ScreeningTest
-        key={`${sectionId}:${classMeta?.school_year_id || ""}`}
+        key={`${sectionId}:${schoolYearId || ""}`}
         active={screeningActive}
         sectionId={sectionId}
-        schoolYearId={classMeta?.school_year_id}
+        schoolYearId={schoolYearId}
         maleStudents={maleStudents}
         femaleStudents={femaleStudents}
         classMeta={classMeta}

@@ -187,9 +187,10 @@ export async function warmUserOfflineData(userId, classes = null) {
       await new Promise(r => setTimeout(r, 60));
 
       // Warm PHIL-IRI for advisory classes
-      if (cls.isAdviser && sId && syId) {
+      const effSyId = syId || 1;
+      if (cls.isAdviser && sId) {
         try {
-          await getScreeningRecords(sId, syId).catch(() => {});
+          await getScreeningRecords(sId, effSyId).catch(() => {});
           await new Promise(r => setTimeout(r, 60));
         } catch (_) {}
       }

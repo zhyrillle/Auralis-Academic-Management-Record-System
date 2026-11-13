@@ -229,7 +229,7 @@ export async function processOutbox() {
   const flush = async () => {
     // Stop at an unresolved rejection so later edits cannot leapfrog it.
     const items = await db.outbox.where('ownerId').equals(scope.ownerId)
-      .filter(item => item.ownerIdentity === scope.identity && ['pending', 'failed'].includes(item.status)).sortBy('id');
+      .filter(item => item.ownerIdentity === scope.identity && (['pending', 'failed'].includes(item.status) || (item.status === 'requires-review' && (item.retryCount || 0) < 5))).sortBy('id');
     for (const item of items) {
       if (!isCurrentSession(scope) || !online() || task.controller.signal.aborted) break;
       if (!await db.outbox.get(item.id)) continue;
@@ -593,6 +593,35 @@ export async function clearOfflineScreening(sectionId, schoolYearId, { scope = g
     await db.offlineScreening.where('section_id').equals(Number(sectionId)).filter(record =>
       record.ownerId === scope.ownerId && record.ownerIdentity === scope.identity &&
       (schoolYearId == null || record.school_year_id === Number(schoolYearId))).delete();
+  }
+}
+
+export async function retryReviewItems(scope = getSessionScope()) {
+  if (!scope || !db.constructor.dependencies.indexedDB) return;
+  try {
+    await db.transaction('rw', db.outbox, async () => {
+      await db.outbox.where('status').equals('requires-review')
+        .modify(item => {
+          item.status = 'pending';
+          item.retryCount = 0;
+        });
+    });
+    notify();
+    if (online()) processOutbox();
+  } catch (err) {
+    console.warn('[SyncManager] Failed to retry review items:', err);
+  }
+}
+
+export async function dismissReviewItems(scope = getSessionScope()) {
+  if (!scope || !db.constructor.dependencies.indexedDB) return;
+  try {
+    await db.transaction('rw', db.outbox, async () => {
+      await db.outbox.where('status').equals('requires-review').delete();
+    });
+    notify();
+  } catch (err) {
+    console.warn('[SyncManager] Failed to dismiss review items:', err);
   }
 }
 
