@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { WifiOff, RefreshCw, Check, AlertTriangle } from 'lucide-react';
-import { getSyncSnapshot, subscribeSyncStatus, processOutbox } from '../offline/syncManager';
+import { getSyncSnapshot, subscribeSyncStatus, processOutbox, retryReviewItems, dismissReviewItems } from '../offline/syncManager';
 
 export default function SyncStatusBadge() {
   const [syncState, setSyncState] = useState({
@@ -36,13 +36,74 @@ export default function SyncStatusBadge() {
   const { isOnline, isSyncing, pendingCount, failedCount } = syncState;
 
   if (syncState.storageUnavailable || syncState.recoveryNeeded) {
-    return <div className="sync-badge sync-badge-pending" role="status"
-      title={syncState.storageUnavailable ? 'This browser cannot access offline storage. Keep unsent work open and reconnect before saving.'
-        : 'Older offline changes have no recorded account owner. They are preserved, but need administrator review before they can sync.'}
-      style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px',
-        borderRadius: 9999, fontSize: 12, backgroundColor: '#fffbeb', color: '#92400e', border: '1px solid #fde68a' }}>
-      <AlertTriangle size={13} /><span>{syncState.storageUnavailable ? 'Offline storage unavailable' : 'Older offline work needs review'}</span>
-    </div>;
+    return (
+      <div
+        className="sync-badge sync-badge-pending"
+        role="status"
+        title={
+          syncState.storageUnavailable
+            ? 'This browser cannot access offline storage. Keep unsent work open and reconnect before saving.'
+            : 'Older offline changes could not sync automatically.'
+        }
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 6,
+          padding: '4px 10px',
+          borderRadius: 9999,
+          fontSize: 12,
+          backgroundColor: '#fffbeb',
+          color: '#92400e',
+          border: '1px solid #fde68a',
+        }}
+      >
+        <AlertTriangle size={13} />
+        <span>{syncState.storageUnavailable ? 'Offline storage unavailable' : 'Older offline work needs review'}</span>
+        {syncState.recoveryNeeded && !syncState.storageUnavailable && (
+          <div style={{ display: 'inline-flex', gap: 4, marginLeft: 4 }}>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                retryReviewItems();
+              }}
+              style={{
+                background: '#d97706',
+                color: '#fff',
+                border: 'none',
+                borderRadius: 4,
+                padding: '1px 6px',
+                fontSize: 11,
+                cursor: 'pointer',
+                fontWeight: 600,
+              }}
+              title="Retry syncing these items"
+            >
+              Retry
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                dismissReviewItems();
+              }}
+              style={{
+                background: 'transparent',
+                color: '#92400e',
+                border: '1px solid #d97706',
+                borderRadius: 4,
+                padding: '1px 6px',
+                fontSize: 11,
+                cursor: 'pointer',
+              }}
+              title="Dismiss this warning"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+      </div>
+    );
   }
 
   if (failedCount > 0) {

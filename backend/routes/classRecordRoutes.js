@@ -1223,20 +1223,34 @@ async function handleCreateAssessment(req, res) {
 
     const parsedDate = (activity_date && String(activity_date).trim() !== '') ? String(activity_date).trim() : null;
 
-    const [insertResult] = await connection.execute(
-      `INSERT INTO GRADE_ACTIVITY (
-        grade_sheet_id,
-        subj_comp_weight_id,
-        mapeh_component,
-        activity_name,
-        highest_possible_score,
-        activity_date,
-        status
-      ) VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE')`,
-      [gradeSheetId, targetSubjCompWeightId, finalMapehComponent, defaultTitle, numericMaxScore, parsedDate]
+    // Check if an identical active activity already exists for this grade sheet and component
+    const [dupCheck] = await connection.execute(
+      `SELECT activity_id, activity_name, highest_possible_score, mapeh_component
+       FROM GRADE_ACTIVITY
+       WHERE grade_sheet_id = ? AND activity_name = ?
+         AND (mapeh_component = ? OR (mapeh_component IS NULL AND ? IS NULL))
+         AND (status = 'ACTIVE' OR status IS NULL) LIMIT 1`,
+      [gradeSheetId, defaultTitle, finalMapehComponent, finalMapehComponent]
     );
 
-    const activityId = insertResult.insertId;
+    let activityId;
+    if (dupCheck.length > 0) {
+      activityId = dupCheck[0].activity_id;
+    } else {
+      const [insertResult] = await connection.execute(
+        `INSERT INTO GRADE_ACTIVITY (
+          grade_sheet_id,
+          subj_comp_weight_id,
+          mapeh_component,
+          activity_name,
+          highest_possible_score,
+          activity_date,
+          status
+        ) VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE')`,
+        [gradeSheetId, targetSubjCompWeightId, finalMapehComponent, defaultTitle, numericMaxScore, parsedDate]
+      );
+      activityId = insertResult.insertId;
+    }
 
 
     // Fetch updated component total HPS for the active sub-component
@@ -1783,7 +1797,42 @@ async function handleBatchScores(req, res) {
         throw httpError(400, 'INVALID_ENROLLMENT', 'The learner is not enrolled in this section and school year.');
       }
       if (!assessmentId || !Object.hasOwn(hpsByActivityId, assessmentId)) {
-        throw httpError(400, 'INVALID_ASSESSMENT', 'The assessment does not belong to this grade sheet.');
+        // Resilient Fallback 1: Match by activity_name or title
+        const itemActName = item.activity_name || item.title;
+        if (itemActName) {
+          let match = sheetActivities.find((a) =>
+            String(a.activity_name || '').trim().toLowerCase() === String(itemActName).trim().toLowerCase() &&
+            (!isMapeh || !a.mapeh_component || a.mapeh_component === itemComp)
+          );
+          if (match) {
+            assessmentId = match.activity_id;
+          } else {
+            // Resilient Fallback 2: Auto-create the missing activity in DB so offline scores sync seamlessly
+            const compCode = item.component_code || (item.type === 'writtenWork' || rawAssId.startsWith('ww') ? 'WW' : 'PT');
+            const [wRows] = await connection.execute(
+              `SELECT scw.subj_comp_weight_id FROM SUBJECT_COMPONENT_WEIGHT scw
+               JOIN COMPONENT_TYPE ct ON ct.component_type_id = scw.component_type_id
+               WHERE scw.subject_id = ? AND scw.school_year_id = ? AND ct.component_code = ? LIMIT 1`,
+              [subject_id, school_year_id, compCode]
+            );
+            const wId = wRows.length > 0 ? wRows[0].subj_comp_weight_id : null;
+            const hps = Number(item.max_score || 20);
+            const [ins] = await connection.execute(
+              `INSERT INTO GRADE_ACTIVITY (grade_sheet_id, subj_comp_weight_id, mapeh_component, activity_name, highest_possible_score, activity_date, status)
+               VALUES (?, ?, ?, ?, ?, NOW(), 'ACTIVE')`,
+              [gradeSheetId, wId, isMapeh ? itemComp : null, itemActName, hps]
+            );
+            match = { activity_id: ins.insertId, activity_name: itemActName, highest_possible_score: hps, mapeh_component: isMapeh ? itemComp : null };
+            sheetActivities.push(match);
+            hpsByActivityId[match.activity_id] = hps;
+            assessmentId = match.activity_id;
+          }
+        }
+      }
+
+      if (!assessmentId || !Object.hasOwn(hpsByActivityId, assessmentId)) {
+        console.warn(`[BatchScores] Unresolved assessment ID ${item.assessment_id}, skipping item to avoid blocking entire batch`);
+        continue;
       }
 
       const rawScore = item.raw_score !== null && item.raw_score !== undefined && item.raw_score !== ''
