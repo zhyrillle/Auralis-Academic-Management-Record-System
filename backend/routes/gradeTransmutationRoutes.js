@@ -1,20 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const GradeTransmutationConfig = require('../models/GradeTransmutationConfig');
-const AuditEvent = require('../models/AuditEvent');
+const { actorId: getActorId } = require('../services/AuditDetailsService');
 const cloudSync = require('../services/cloudSyncService');
-
-const getActorId = (req) => {
-  if (req.currentUser?.user_id) return req.currentUser.user_id;
-  const headerId = req.headers['x-auralis-user-id'];
-  if (headerId && Number.isInteger(Number(headerId)) && Number(headerId) > 0) {
-    return Number(headerId);
-  }
-  if (req.body?.user_id && Number.isInteger(Number(req.body.user_id))) {
-    return Number(req.body.user_id);
-  }
-  return null;
-};
 
 // GET /api/grade-transmutation
 // Fetches the active grade transmutation settings (custom or DepEd official default)
@@ -44,23 +32,6 @@ router.put('/', async (req, res) => {
 
     await cloudSync.forwardGradeTransmutationToCloud(saved);
 
-    try {
-      await AuditEvent.create({
-        user_id: actorId,
-        actor_context: { source: actorId ? 'user' : 'system', acting_as: 'System Administrator' },
-        event_type: 'GRADE_TRANSMUTATION_UPDATED',
-        module_name: 'GRADE_TRANSMUTATION',
-        entity_type: 'GRADE_TRANSMUTATION_CONFIG',
-        entity_id: 1,
-        previous_state: null,
-        new_state: { is_custom_enabled: saved.is_custom_enabled, rangesCount: saved.ranges.length },
-        summary: saved.is_custom_enabled
-          ? `Updated custom grade transmutation table (${saved.ranges.length} ranges).`
-          : 'Disabled grade transmutation (grades are not transmuted; raw initial grades applied).',
-      });
-    } catch (auditErr) {
-      console.warn('Failed to record audit event for grade transmutation:', auditErr.message);
-    }
 
     return res.json({
       success: true,
@@ -86,21 +57,6 @@ router.post('/reset', async (req, res) => {
 
     await cloudSync.forwardGradeTransmutationToCloud(resetConfig);
 
-    try {
-      await AuditEvent.create({
-        user_id: actorId,
-        actor_context: { source: actorId ? 'user' : 'system', acting_as: 'System Administrator' },
-        event_type: 'GRADE_TRANSMUTATION_RESET',
-        module_name: 'GRADE_TRANSMUTATION',
-        entity_type: 'GRADE_TRANSMUTATION_CONFIG',
-        entity_id: 1,
-        previous_state: null,
-        new_state: { is_custom_enabled: false },
-        summary: 'Reset grade transmutation table to official DepEd SY 2026-2027 default.',
-      });
-    } catch (auditErr) {
-      console.warn('Failed to record audit event for grade transmutation reset:', auditErr.message);
-    }
 
     return res.json({
       success: true,

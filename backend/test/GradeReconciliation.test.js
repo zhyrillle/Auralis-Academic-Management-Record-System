@@ -103,13 +103,17 @@ test('the write step updates only approved grade fields and records their audit 
   const plan = buildPlan(snapshot(), { schoolYearId: 1 }), calls = [];
   const connection = { execute: async (sql, values) => {
     calls.push({ sql, values });
+    if (sql.startsWith('SELECT sg.student_grade_id')) return [[{ grade_id: 1, learner_name: 'Fixture Learner' }]];
+    if (sql.startsWith('SELECT gs.grade_sheet_id')) return [[{ subject: 'English', section: 'Banana', term: '1st', starts_on: 2026, ends_on: 2027 }]];
     assert.match(sql, /^(UPDATE STUDENT_GRADE|INSERT INTO AUDIT_EVENT)/);
     return [{ affectedRows: 1, insertId: 9 }];
   } };
   const audits = await applyPlan(connection, plan, { backupPath: 'reviewed-backup.json', source: 'test-reconciliation' });
   assert.deepEqual(audits, [9]);
   assert.deepEqual(calls[0].values, [81.8, 83, 'Passed', 1]);
-  assert.equal(calls.length, 2);
+  assert.equal(calls.filter(call => !call.sql.startsWith('SELECT')).length, 2);
+  const recorded = calls.find(call => call.sql.startsWith('INSERT INTO AUDIT_EVENT'));
+  assert.equal(JSON.parse(recorded.values[6])[0].learner_name, 'Fixture Learner');
 });
 
 test('shared repair rejects changed source data before any write', async () => {

@@ -8,7 +8,6 @@ export default function OverlayPanel({
   isOpen,
   onClose,
   title,
-  eyebrow,
   description,
   children,
   footer,
@@ -46,7 +45,7 @@ export default function OverlayPanel({
   }}>
       <section className="app-overlay__panel" aria-busy={busy}>
         <header className="app-overlay__header">
-          <div>{eyebrow && <span className="app-overlay__eyebrow">{eyebrow}</span>}
+          <div>
             <h2 id={titleId}>{title}</h2>
             {description && <p id={descriptionId}>{description}</p>}
           </div>

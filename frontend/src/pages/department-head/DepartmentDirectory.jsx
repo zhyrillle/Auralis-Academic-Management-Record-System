@@ -219,9 +219,6 @@ export default function DepartmentDirectory({ mode = "records" }) {
     <div className="dept-monitor-page">
       <header className="dept-monitor-header">
         <div>
-          <p className="dept-monitor-eyebrow">
-            {context.data.department.name} DEPARTMENT
-          </p>
           <h1>{philIri ? "PHIL-IRI Monitoring" : "Class Records"}</h1>
           <p>
             {philIri

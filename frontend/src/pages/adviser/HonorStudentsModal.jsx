@@ -403,17 +403,16 @@ export default function HonorStudentsModal({
     : "";
 
   const title = "Honor Students";
-  const eyebrow = section?.name
+  const sectionContext = section?.name
     ? `${section?.gradeLevel || ""} · ${section.name}${schoolYear?.label ? ` (SY ${schoolYear.label})` : ""}`
-    : "Academic Excellence Awardees";
+    : "";
 
   return (
     <OverlayPanel
       isOpen={isOpen}
       onClose={onClose}
       title={title}
-      eyebrow={eyebrow}
-      description="Official end-of-year academic excellence awardees based on complete term grades from all subjects and general averages."
+      description={`${sectionContext ? `${sectionContext}. ` : ''}Official end-of-year academic excellence awardees based on complete term grades from all subjects and general averages.`}
       variant="modal"
       className="ms-honors-modal"
       footer={

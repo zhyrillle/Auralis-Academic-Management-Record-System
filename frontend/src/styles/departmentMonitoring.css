@@ -5,7 +5,6 @@
 .dept-monitor-heading-with-back > div { min-width:0; }
 .dept-monitor-header h1,.dept-monitor-page .dept-dashboard-title { color:#123062; font-family:var(--font-dm-sans,'DM Sans',sans-serif); font-size:clamp(23px,2.1vw,28px); font-weight:700; letter-spacing:-.025em; margin:0 0 5px; }
 .dept-monitor-header p { margin:0; color:#52657f; }
-.dept-monitor-eyebrow,.dept-monitor-header .dept-monitor-eyebrow { color:#947318; font-size:11px; font-weight:700; letter-spacing:.09em; text-transform:uppercase; margin:0 0 6px; }
 .dept-monitor-readonly { display:inline-flex; align-items:center; gap:7px; color:#405a7b; background:#edf2fa; border-radius:8px; padding:7px 11px; font-size:12px; white-space:nowrap; }
 .dept-monitor-toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:12px; border:1px solid #e1e8f2; border-radius:13px; padding:16px; background:#fff; margin-bottom:18px; }
 .dept-monitor-toolbar .search-bar-container { flex:1 1 240px; }

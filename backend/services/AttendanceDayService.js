@@ -84,8 +84,12 @@ async function setNoClasses({ sheetId, reason, confirmExistingRecords = false, u
     if (reason && retainedRecordCount && confirmExistingRecords !== true) {
       throw error(409, 'DAY_MARKER_CONFIRMATION_REQUIRED', 'Existing attendance will be preserved but excluded from totals. Confirm before marking this day.');
     }
+    const before = { days: sheets.map(sheet => ({ id: sheet.attendance_sheet_id, no_class_reason: sheet.no_class_reason })) };
     await connection.execute(`UPDATE ATTENDANCE_SHEET SET no_class_reason = ?
       WHERE attendance_sheet_id IN (${placeholders})`, [reason, ...ids]);
+    await require('./AuditDetailsService').recordAttendance(connection, sheetId, before,
+      { days: sheets.map(sheet => ({ id: sheet.attendance_sheet_id, no_class_reason: reason })) }, userId,
+      { summary: `${reason ? 'Marked' : 'Removed the no-class marker for'} ${context.attendance_date}${reason ? ` as ${reason.toLowerCase()}` : ''}. Existing learner marks were retained.` });
     return { attendance_date: context.attendance_date, no_class_reason: reason, retainedRecordCount, sheetIds: ids };
   }, database);
 }

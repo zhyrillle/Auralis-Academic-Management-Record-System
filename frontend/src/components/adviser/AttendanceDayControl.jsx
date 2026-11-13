@@ -58,7 +58,6 @@ export default function AttendanceDayControl({ date, reason, disabled, saving, o
         onClose={close}
         variant="modal"
         title={isMarked ? 'Edit No-Class Marker' : 'Mark No Classes'}
-        eyebrow="School Form 2 (SF2)"
         description="Mark the entire section’s day as having no classes. Individual student attendance will be excluded from monthly totals while marked."
         busy={saving}
         error={saveError}

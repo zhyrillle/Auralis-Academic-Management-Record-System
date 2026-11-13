@@ -49,6 +49,13 @@ function fixture(options = {}) {
     async execute(sql, params = []) {
       calls.push({ sql, params: Array.from(params) });
       if (options.failSql && sql.includes(options.failSql)) throw Object.assign(Error('Synthetic database failure'), { code: options.failCode || 'ETIMEDOUT' });
+      if (sql.includes('SELECT first_name, last_name, role FROM USER')) return [[{ ...teacher, role: 'subject_teacher' }]];
+      if (sql.includes('SELECT gs.grade_sheet_id')) return [[{ subject: 'English', section: 'Fixture', term: '2nd', starts_on: 2026, ends_on: 2027 }]];
+      if (sql.includes('SELECT sg.student_grade_id AS grade_id')) {
+        const sheet = state.sheets.find(row => row.grade_sheet_id === params[0]);
+        const term = { 1: 'T1', 3: 'T2', 4: 'T3' }[sheet.term_id];
+        return [state.saved.filter(row => row.term === term).map((row, i) => ({ ...row, grade_id: i + 1, learner_name: 'Fixture Learner', term_grade: row.quarterly_grade }))];
+      }
       if (sql.includes('SELECT UTC_TIMESTAMP')) return [[{ submitted_at: '2026-10-23T06:00:00Z' }]];
       if (sql.includes('s.department_id = COALESCE(')) {
         assert.match(sql, /dh\.appointed_from <= CURDATE\(\)/);
@@ -62,6 +69,14 @@ function fixture(options = {}) {
       if (sql.includes('FROM TEACHER_ASSIGNMENT WHERE')) return [params[0] === 131 && params[1] === 3 ? [{ teacher_assignment_id: 21 }] : []];
       if (sql.includes('FROM STUDENT_SECTION WHERE')) return [state.students];
       if (sql.includes('SELECT score_id FROM SCORE')) return [state.scores.filter(s => s.activity_id === params[0] && s.student_section_id === params[1])];
+      if (sql.includes('AS score_key')) return [state.scores.map(row => ({ ...row, score_key: `${row.activity_id}:${row.student_section_id}`,
+        activity_name: state.activities.find(activity => activity.activity_id === row.activity_id)?.activity_name, learner_name: 'Fixture Learner' }))];
+      if (sql.includes('UPDATE GRADE_ACTIVITY SET highest_possible_score')) {
+        state.activities.find(row => row.activity_id === params.at(-1)).highest_possible_score = params[0]; return [{ affectedRows: 1 }];
+      }
+      if (sql === 'SELECT * FROM GRADE_ACTIVITY WHERE activity_id = ?') return [state.activities.filter(row => row.activity_id === params[0])];
+      if (sql === 'DELETE FROM SCORE WHERE activity_id = ?') { state.scores = state.scores.filter(row => row.activity_id !== params[0]); return [{ affectedRows: 1 }]; }
+      if (sql === 'DELETE FROM GRADE_ACTIVITY WHERE activity_id = ?') { state.activities = state.activities.filter(row => row.activity_id !== params[0]); return [{ affectedRows: 1 }]; }
       if (/UPDATE SCORE\s/.test(sql)) { Object.assign(state.scores.find(s => s.score_id === params[2]), { raw_score: params[0], score_status: params[1] }); return [{ affectedRows: 1 }]; }
       if (sql.includes('FROM ACADEMIC_TERM')) return [state.terms];
       if (sql.includes('SELECT * FROM GRADE_SHEET') && !sql.includes('WHERE grade_sheet_id')) return [structuredClone(params.length === 1 ? state.sheets : state.sheets.filter(s => s.subject_offering_id === params[0] && s.term_id === params[1]))];
@@ -107,19 +122,21 @@ function fixture(options = {}) {
   const router = Object.fromEntries(['get', 'post', 'put', 'patch', 'delete'].map(method =>
     [method, (url, ...handlers) => routes.set(method + ' ' + url, handlers)]));
   const database = { getConnection: async () => connection, execute: (...args) => connection.execute(...args), cloudPool: options.cloudPool };
+  const auditModel = { async create(record, cx) { assert.equal(cx, connection); await cx.execute('INSERT INTO AUDIT_EVENT fixture', [record]); } };
   load('../routes/classRecordRoutes.js', {
     express: { Router: () => router }, '../config/db': database,
     '../models/GradeSheet': sheets,
     '../models/StudentGrade': load('../models/StudentGrade.js', { '../config/db': noDb }),
     '../models/GradeTransmutationConfig': { getActiveTiers: async () => [], isCustomEnabledSync: () => false, getActiveTiersSync: () => [] },
     '../middleware/resolveCurrentUser': { resolveCurrentUser: auth },
-    '../models/AuditEvent': { async create(record, cx) { assert.equal(cx, connection); await cx.execute('INSERT INTO AUDIT_EVENT fixture', [record]); } },
+    '../models/AuditEvent': auditModel,
+    '../services/AuditDetailsService': load('../services/AuditDetailsService.js', { '../models/AuditEvent': auditModel }),
     '../services/NotificationService': {
       async prepareGradePublicationNotifications(record, cx) { assert.equal(cx, connection); await cx.execute('INSERT INTO NOTIFICATION fixture', [record]); return [{ user_id: 28, record }]; },
       emitCommittedGradePublications(records) { assert.equal(transactionEvents.at(-1), 'commit'); if (options.emitFailure) throw Error('SSE unavailable'); emitted.push(...records); },
     },
     '../services/GradeComputationService': calculator,
-    '../services/cloudSyncService': { syncClassRecordFromCloud: async () => {} },
+    '../services/cloudSyncService': { syncClassRecordFromCloud: async () => {}, markClassRecordLocalWrite() {} },
     '../utils/depedTransmutation': require('../utils/depedTransmutation'), '../utils/encryption': { decryptLrn: value => value },
     '../services/GradingSheetWorkbookService': {},
   });
@@ -156,6 +173,36 @@ test('T2 submission uses server scores and preserves T1/T3, identifiers and both
 test('repeat submissions are idempotent and do not replace dates or emit duplicate notifications', async () => {
   const f = fixture(); await f.submit(); const snapshot = structuredClone(f.state);
   assert.equal((await f.submit()).alreadySubmitted, true); assert.deepEqual(f.state, snapshot); assert.equal(f.emitted.length, 1);
+});
+test('autosave captures actual score changes once and rolls back scores when audit persistence fails', async () => {
+  const f = fixture();
+  const edit = [{ assessment_id: 10, student_id: 195, raw_score: 20 }];
+  const saved = await f.autosave(edit);
+  assert.equal(saved.statusCode, 200, JSON.stringify(saved.body));
+  assert.equal(f.state.audits.length, 1);
+  assert.equal(f.state.audits[0].before_data.scores[0].raw_score, 39);
+  assert.equal(f.state.audits[0].after_data.scores[0].raw_score, 20);
+  assert.equal((await f.autosave(edit)).statusCode, 200);
+  assert.equal(f.state.audits.length, 1);
+  const broken = fixture({ failSql: 'INSERT INTO AUDIT_EVENT' });
+  assert.equal((await broken.autosave(edit)).statusCode, 500);
+  assert.equal(broken.state.scores[0].raw_score, 39);
+  assert.equal(broken.state.audits.length, 0);
+});
+test('assessment HPS edits and deletions retain activity details without deleted learner scores', async () => {
+  const f = fixture();
+  const response = () => ({ statusCode: 200, status(code) { this.statusCode = code; return this; }, json(value) { this.body = value; return this; } });
+  const req = { params: { id: '10' }, currentUser: teacher, body: { max_score: 45 } };
+  const updated = response(); await f.routes.get('put /assessments/:id').at(-1)(req, updated);
+  assert.equal(updated.statusCode, 200, JSON.stringify(updated.body));
+  assert.equal(f.state.audits[0].before_data.activities[0].highest_possible_score, 40);
+  assert.equal(f.state.audits[0].after_data.activities[0].highest_possible_score, 45);
+  const removed = response(); await f.routes.get('delete /assessments/:id').at(-1)({ ...req, body: {} }, removed);
+  assert.equal(removed.statusCode, 200);
+  assert.equal(f.state.audits[1].before_data.activities[0].highest_possible_score, 45);
+  assert.equal(f.state.audits[1].after_data.activities.length, 0);
+  assert.equal(f.state.audits[1].before_data.scores, undefined);
+  assert.equal(f.state.audits[1].after_data.scores, undefined);
 });
 test('saved transmutation On/Off is applied without changing the shared cache', async () => {
   const f = fixture({ state: { config: { is_custom_enabled: 1, ranges_json: JSON.stringify([{ min: 0, max: 100, transmuted: 82 }]) } } });
@@ -283,18 +330,23 @@ test('autosave persists only SCORE; accepted STUDENT_GRADE changes only on a suc
   assert.equal((await f.summary()).students[0].term2, 83, 'Teacher sees the current saved-score preview');
   await f.submit(); assert.equal(f.state.saved.find(g => g.term === 'T2').quarterly_grade, 83);
 });
-test('autosave rejects wrong enrollment, cross-sheet assessments, invalid numbers and caller-supplied teacher assignment', async () => {
+test('autosave rejects wrong enrollment, invalid numbers and caller-supplied teacher assignment', async () => {
   for (const item of [
     { assessment_id: 10, student_id: 195, student_section_id: 999, raw_score: 20 },
-    { assessment_id: 999, student_id: 195, raw_score: 20 },
     { assessment_id: 10, student_id: 195, raw_score: 'NaN' },
   ]) {
     const f = fixture(), before = structuredClone(f.state);
-    const response = await f.autosave([item]); assert.equal(response.statusCode, 400);
+    const response = await f.autosave([item]); assert.equal(response.statusCode, 400, JSON.stringify(response.body));
     assert.deepEqual(f.state, before);
   }
   const f = fixture(), denied = await f.autosave([{ assessment_id: 10, student_id: 195, raw_score: 20 }], { user_id: 99 });
   assert.equal(denied.statusCode, 403);
+});
+test('unresolved offline assessment IDs are skipped without score changes or audit events', async () => {
+  const f = fixture(), before = structuredClone(f.state);
+  const response = await f.autosave([{ assessment_id: 999, student_id: 195, raw_score: 20 }]);
+  assert.equal(response.statusCode, 200, JSON.stringify(response.body));
+  assert.deepEqual(f.state, before);
 });
 test('failure writing learner five rolls back the first four learners too', async () => {
   const f = fixture();

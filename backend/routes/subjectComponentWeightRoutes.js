@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const SubjectComponentWeight = require('../models/SubjectComponentWeight');
 const SchoolYear = require('../models/SchoolYear');
-const AuditEvent = require('../models/AuditEvent');
+const { actorId } = require('../services/AuditDetailsService');
 const cloudSync = require('../services/cloudSyncService');
 
 const isPositiveInteger = (value) => Number.isInteger(Number(value)) && Number(value) > 0;
@@ -71,7 +71,7 @@ router.post('/configuration/:schoolYearId/inherit', async (req, res) => {
 
   try {
     const result = await SubjectComponentWeight.inheritFromPreviousSchoolYear(
-      Number(req.params.schoolYearId)
+      Number(req.params.schoolYearId), actorId(req)
     );
 
     if (result.inserted_count > 0) {
@@ -83,22 +83,6 @@ router.post('/configuration/:schoolYearId/inherit', async (req, res) => {
       }));
       await cloudSync.forwardSubjectWeightsToCloud(Number(req.params.schoolYearId), weights);
     }
-
-    const actorId = req.headers['x-auralis-user-id'] ? Number(req.headers['x-auralis-user-id']) : null;
-    await AuditEvent.create({
-      user_id: actorId,
-      actor_context: { source: actorId ? 'user' : 'system', acting_as: 'System Administrator' },
-      event_type: 'SUBJECT_WEIGHTS_INHERITED',
-      module_name: 'WS_CONFIGURATION',
-      entity_type: 'SUBJECT_COMPONENT_WEIGHT',
-      entity_id: Number(req.params.schoolYearId),
-      after_data: { school_year_id: Number(req.params.schoolYearId), inserted_count: result.inserted_count },
-      metadata: {
-        school_year: `SY ${req.params.schoolYearId}`,
-        summary: 'Inherited component weights from previous school year.',
-        impact: 'Medium',
-      },
-    }).catch((err) => console.error('Failed to log weight inherit audit:', err.message));
 
     res.json({
       message:
@@ -146,26 +130,10 @@ router.put('/configuration/:schoolYearId', async (req, res) => {
 
     const rows = await SubjectComponentWeight.saveConfiguration(
       Number(req.params.schoolYearId),
-      sanitizedWeights
+      sanitizedWeights, actorId(req)
     );
 
     await cloudSync.forwardSubjectWeightsToCloud(Number(req.params.schoolYearId), sanitizedWeights);
-
-    const actorId = req.headers['x-auralis-user-id'] ? Number(req.headers['x-auralis-user-id']) : null;
-    await AuditEvent.create({
-      user_id: actorId,
-      actor_context: { source: actorId ? 'user' : 'system', acting_as: 'System Administrator' },
-      event_type: 'SUBJECT_WEIGHTS_UPDATED',
-      module_name: 'WS_CONFIGURATION',
-      entity_type: 'SUBJECT_COMPONENT_WEIGHT',
-      entity_id: Number(req.params.schoolYearId),
-      after_data: { school_year_id: Number(req.params.schoolYearId), count: rows.length },
-      metadata: {
-        school_year: `SY ${req.params.schoolYearId}`,
-        summary: 'Updated subject component weights configuration.',
-        impact: 'Medium',
-      },
-    }).catch((err) => console.error('Failed to log weight update audit:', err.message));
 
     res.json({
       message: 'Component weights saved successfully.',
@@ -198,7 +166,7 @@ router.get('/:id', async (req, res) => {
 
 router.post('/', async (req, res) => {
   try {
-    const id = await SubjectComponentWeight.create(req.body);
+    const id = await SubjectComponentWeight.create(req.body, actorId(req));
     res.status(201).json({ message: 'Component weight configured successfully', subj_comp_weight_id: id });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -207,7 +175,7 @@ router.post('/', async (req, res) => {
 
 router.put('/:id', async (req, res) => {
   try {
-    const updated = await SubjectComponentWeight.update(req.params.id, req.body);
+    const updated = await SubjectComponentWeight.update(req.params.id, req.body, actorId(req));
     res.json(updated);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -216,7 +184,7 @@ router.put('/:id', async (req, res) => {
 
 router.delete('/:id', async (req, res) => {
   try {
-    const success = await SubjectComponentWeight.delete(req.params.id);
+    const success = await SubjectComponentWeight.delete(req.params.id, actorId(req));
     if (!success) return res.status(404).json({ message: 'Weight configuration not found' });
     res.json({ message: 'Component weight deleted successfully' });
   } catch (err) {

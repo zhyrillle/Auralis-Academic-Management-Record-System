@@ -4,6 +4,7 @@ const db = require('../config/db');
 const GradeSheet = require('../models/GradeSheet');
 const StudentGrade = require('../models/StudentGrade');
 const AuditEvent = require('../models/AuditEvent');
+const AuditDetails = require('../services/AuditDetailsService');
 const NotificationService = require('../services/NotificationService');
 const GradeComputationService = require('../services/GradeComputationService');
 const { termCode, problem } = GradeComputationService;
@@ -534,6 +535,7 @@ async function submitClassGrades(input, user, database = db) {
     const grades = GradeComputationService.calculateGrades(data);
     const [clocks] = await connection.execute('SELECT UTC_TIMESTAMP(6) AS submitted_at');
     const submittedAt = clocks[0].submitted_at;
+    const auditGradesBefore = await AuditDetails.gradeSnapshot(connection, sheet.grade_sheet_id);
     for (const grade of grades) await StudentGrade.upsert({
       subject_offering_id: offering.subject_offering_id, student_id: grade.studentId, student_section_id: grade.studentSectionId,
       term: input.term, mapeh_component: grade.mapehComponent, initial_grade: grade.initialGrade, quarterly_grade: grade.termGrade,
@@ -544,9 +546,10 @@ async function submitClassGrades(input, user, database = db) {
     await AuditEvent.create({ user_id: user.user_id,
       event_type: sheet.submitted_at ? 'GRADE_SHEET_CORRECTION_RESUBMITTED' : 'GRADE_SHEET_SUBMITTED',
       module_name: 'GRADING', entity_type: 'GRADE_SHEET', entity_id: sheet.grade_sheet_id,
-      before_data: { workflow_status: sheet.workflow_status, submitted_at: sheet.submitted_at },
-      after_data: { workflow_status: 'SUBMITTED', submitted_at: submittedAt, term: input.term },
-      metadata: { subject: offering.subject_name, section: offering.section_name, term: input.term,
+      actor_context: await AuditDetails.actorContext(connection, user.user_id),
+      before_data: { workflow_status: sheet.workflow_status, submitted_at: sheet.submitted_at, grades: auditGradesBefore },
+      after_data: { workflow_status: 'SUBMITTED', submitted_at: submittedAt, grades: await AuditDetails.gradeSnapshot(connection, sheet.grade_sheet_id) },
+      metadata: { ...await AuditDetails.sheetContext(connection, sheet.grade_sheet_id), subject: offering.subject_name, section: offering.section_name, term: input.term,
         school_year_id: offering.school_year_id, learner_count: data.students.length } }, connection);
     const notifications = await NotificationService.prepareGradePublicationNotifications({
       offering, sheetId: sheet.grade_sheet_id, term: input.term, correction: Boolean(sheet.submitted_at),
@@ -1153,6 +1156,7 @@ async function handleCreateAssessment(req, res) {
       });
     }
 
+    const auditBefore = await AuditDetails.classSnapshot(connection, gradeSheetId);
     let targetSubjCompWeightId = null;
     let targetComponentTypeId = component_type_id;
 
@@ -1286,6 +1290,8 @@ async function handleCreateAssessment(req, res) {
       }
     });
 
+    await AuditDetails.recordClass(connection, { sheetId: gradeSheetId, actor: req.currentUser.user_id, before: auditBefore,
+      eventType: 'GRADE_ACTIVITY_CREATED', summary: `Added assessment ${defaultTitle}.` });
     await connection.commit();
     committed = true;
     cloudSync.markClassRecordLocalWrite();
@@ -1401,6 +1407,7 @@ async function handleUpdateAssessment(req, res) {
       }
     }
 
+    const auditBefore = await AuditDetails.classSnapshot(connection, actSheetRows[0].grade_sheet_id);
     const newMaxScore = max_score !== undefined ? max_score : highest_possible_score;
     const updateFields = [];
     const updateValues = [];
@@ -1457,6 +1464,8 @@ async function handleUpdateAssessment(req, res) {
       return res.status(404).json({ error: 'Assessment not found.' });
     }
 
+    await AuditDetails.recordClass(connection, { sheetId: actSheetRows[0].grade_sheet_id, actor: req.currentUser.user_id, before: auditBefore,
+      eventType: 'GRADE_ACTIVITY_UPDATED', summary: 'Updated assessment details.' });
     await connection.commit();
     committed = true;
     cloudSync.markClassRecordLocalWrite();
@@ -1530,6 +1539,7 @@ router.delete('/assessments/:id', resolveCurrentUser, async (req, res) => {
       }
     }
 
+    const auditBefore = await AuditDetails.classSnapshot(connection, actSheetRows[0].grade_sheet_id);
     await connection.execute('DELETE FROM SCORE WHERE activity_id = ?', [assessmentId]);
     const [result] = await connection.execute('DELETE FROM GRADE_ACTIVITY WHERE activity_id = ?', [assessmentId]);
     if (result.affectedRows === 0) {
@@ -1537,6 +1547,8 @@ router.delete('/assessments/:id', resolveCurrentUser, async (req, res) => {
     }
 
 
+    await AuditDetails.recordClass(connection, { sheetId: actSheetRows[0].grade_sheet_id, actor: req.currentUser.user_id, before: auditBefore,
+      eventType: 'GRADE_ACTIVITY_DELETED', summary: 'Deleted an assessment and its recorded scores.' });
     await connection.commit();
     committed = true;
     cloudSync.markClassRecordLocalWrite();
@@ -1625,6 +1637,8 @@ async function handleBatchScores(req, res) {
     if (!await GradeSheet.canEdit({ gradeSheetId }, req.currentUser, connection, { lock: true })) {
       throw httpError(403, 'SHEET_CLOSED', 'This grade sheet is no longer open for editing. Reload its submission status.');
     }
+
+    const auditBefore = await AuditDetails.classSnapshot(connection, gradeSheetId);
 
     // Normalize scores input (handles flat array, student-keyed object, or nested categories)
     let scoreEntries = [];
@@ -1951,6 +1965,8 @@ async function handleBatchScores(req, res) {
       // Incomplete grading configuration must not discard valid autosaved scores.
     }
 
+    await AuditDetails.recordClass(connection, { sheetId: gradeSheetId, actor: req.currentUser.user_id, before: auditBefore,
+      eventType: 'GRADE_SCORES_UPDATED', summary: 'Saved class-record scores.' });
     await connection.commit();
     cloudSync.markClassRecordLocalWrite();
 

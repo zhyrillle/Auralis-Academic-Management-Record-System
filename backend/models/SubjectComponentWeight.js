@@ -1,8 +1,21 @@
 const db = require('../config/db');
+const AuditDetails = require('../services/AuditDetailsService');
+
+async function logWeights(connection, schoolYearId, before, after, actor, inheritedFrom = null) {
+  const [years] = await connection.execute('SELECT school_year_id, starts_on, ends_on FROM SCHOOL_YEAR WHERE school_year_id IN (?, ?)', [schoolYearId, inheritedFrom || schoolYearId]);
+  const schoolYear = AuditDetails.yearLabel(years.find(row => Number(row.school_year_id) === Number(schoolYearId)));
+  await AuditDetails.record(connection, { actor, before: AuditDetails.weightSnapshot(before), after: AuditDetails.weightSnapshot(after),
+    actor_context: actor ? { acting_as: 'System Administrator' } : {},
+    event_type: inheritedFrom ? 'SUBJECT_WEIGHTS_INHERITED' : 'SUBJECT_WEIGHTS_UPDATED', module_name: 'WS_CONFIGURATION',
+    entity_type: 'SUBJECT_COMPONENT_WEIGHT', entity_id: schoolYearId, metadata: {
+      target: schoolYear ? `Subject weights · ${schoolYear}` : 'Subject weights', school_year: schoolYear,
+      inherited_from: inheritedFrom ? AuditDetails.yearLabel(years.find(row => Number(row.school_year_id) === Number(inheritedFrom))) : null,
+      summary: inheritedFrom ? 'Inherited subject component weights from the previous school year.' : 'Updated subject component weights.' } });
+}
 
 class SubjectComponentWeight {
-  static async findConfiguration(schoolYearId) {
-    const [rows] = await db.execute(
+  static async findConfiguration(schoolYearId, executor = db) {
+    const [rows] = await executor.execute(
       `SELECT
          s.subject_id,
          s.subject_name,
@@ -24,7 +37,7 @@ class SubjectComponentWeight {
     return rows;
   }
 
-  static async inheritFromPreviousSchoolYear(schoolYearId) {
+  static async inheritFromPreviousSchoolYear(schoolYearId, actor = null) {
     const connection = await db.getConnection();
 
     try {
@@ -53,6 +66,7 @@ class SubjectComponentWeight {
         throw statusError;
       }
 
+      const before = await this.findConfiguration(schoolYearId, connection);
       const [previousRows] = await connection.execute(
         `SELECT sy.school_year_id
          FROM SCHOOL_YEAR AS sy
@@ -115,6 +129,7 @@ class SubjectComponentWeight {
         [schoolYearId, sourceSchoolYearId, schoolYearId]
       );
 
+      await logWeights(connection, schoolYearId, before, await this.findConfiguration(schoolYearId, connection), actor, sourceSchoolYearId);
       await connection.commit();
       return {
         inherited_from_school_year_id: Number(sourceSchoolYearId),
@@ -128,12 +143,14 @@ class SubjectComponentWeight {
     }
   }
 
-  static async saveConfiguration(schoolYearId, weights) {
+  static async saveConfiguration(schoolYearId, weights, actor = null) {
     const connection = await db.getConnection();
 
     try {
       await connection.beginTransaction();
 
+      await connection.execute('SELECT school_year_id FROM SCHOOL_YEAR WHERE school_year_id = ? FOR UPDATE', [schoolYearId]);
+      const before = await this.findConfiguration(schoolYearId, connection);
       for (const weight of weights) {
         const [existingRows] = await connection.execute(
           `SELECT subj_comp_weight_id
@@ -178,6 +195,7 @@ class SubjectComponentWeight {
         }
       }
 
+      await logWeights(connection, schoolYearId, before, await this.findConfiguration(schoolYearId, connection), actor);
       await connection.commit();
     } catch (error) {
       await connection.rollback();
@@ -199,28 +217,40 @@ class SubjectComponentWeight {
     return rows[0];
   }
 
-  static async create(data) {
-    const { subject_id, component_type_id, school_year_id, percentage } = data;
-    const [result] = await db.execute(
-      `INSERT INTO SUBJECT_COMPONENT_WEIGHT (subject_id, component_type_id, school_year_id, percentage) 
-       VALUES (?, ?, ?, ?)`,
-      [subject_id, component_type_id, school_year_id, percentage]
-    );
-    return result.insertId;
+  static async mutateRecord(id, data, actor = null, remove = false) {
+    const connection = await db.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [old] = id ? await connection.execute('SELECT * FROM SUBJECT_COMPONENT_WEIGHT WHERE subj_comp_weight_id = ? FOR UPDATE', [id]) : [[]];
+      if (id && !old[0]) { await connection.commit(); return remove ? false : null; }
+      const years = [...new Set([old[0]?.school_year_id, data?.school_year_id].filter(Boolean).map(Number))];
+      const snapshots = new Map();
+      for (const year of years.sort((a, b) => a - b)) {
+        await connection.execute('SELECT school_year_id FROM SCHOOL_YEAR WHERE school_year_id = ? FOR UPDATE', [year]);
+        snapshots.set(year, await this.findConfiguration(year, connection));
+      }
+      let resultId = id;
+      if (remove) await connection.execute('DELETE FROM SUBJECT_COMPONENT_WEIGHT WHERE subj_comp_weight_id = ?', [id]);
+      else if (id) {
+        const keys = Object.keys(data).filter(key => ['subject_id', 'component_type_id', 'school_year_id', 'percentage'].includes(key));
+        if (keys.length) await connection.execute(`UPDATE SUBJECT_COMPONENT_WEIGHT SET ${keys.map(key => `${key} = ?`).join(', ')} WHERE subj_comp_weight_id = ?`, [...keys.map(key => data[key]), id]);
+      } else {
+        const [result] = await connection.execute('INSERT INTO SUBJECT_COMPONENT_WEIGHT (subject_id, component_type_id, school_year_id, percentage) VALUES (?, ?, ?, ?)',
+          [data.subject_id, data.component_type_id, data.school_year_id, data.percentage]);
+        resultId = result.insertId;
+      }
+      for (const year of years) await logWeights(connection, year, snapshots.get(year), await this.findConfiguration(year, connection), actor);
+      const [rows] = remove ? [[]] : await connection.execute('SELECT * FROM SUBJECT_COMPONENT_WEIGHT WHERE subj_comp_weight_id = ?', [resultId]);
+      await connection.commit();
+      return remove ? true : id ? rows[0] : resultId;
+    } catch (error) { await connection.rollback(); throw error; }
+    finally { connection.release(); }
   }
 
-  static async update(id, data) {
-    const keys = Object.keys(data);
-    const values = Object.values(data);
-    const setClause = keys.map(key => `${key} = ?`).join(', ');
-    await db.execute(`UPDATE SUBJECT_COMPONENT_WEIGHT SET ${setClause} WHERE subj_comp_weight_id = ?`, [...values, id]);
-    return this.findById(id);
-  }
+  static async create(data, actor = null) { return this.mutateRecord(null, data, actor); }
+  static async update(id, data, actor = null) { return this.mutateRecord(id, data, actor); }
+  static async delete(id, actor = null) { return this.mutateRecord(id, null, actor, true); }
 
-  static async delete(id) {
-    const [result] = await db.execute('DELETE FROM SUBJECT_COMPONENT_WEIGHT WHERE subj_comp_weight_id = ?', [id]);
-    return result.affectedRows > 0;
-  }
 }
 
 module.exports = SubjectComponentWeight;

@@ -165,9 +165,6 @@ export default function AcademicTimeline({
     <section className="grade-lock-settings-panel academic-timeline">
       <div className="grade-lock-settings-panel__heading">
         <div>
-          <span className="grade-lock-settings-panel__eyebrow">
-            School-wide schedule
-          </span>
           <h2>Academic Timeline</h2>
           <p>
             Review the three regular terms and configure their grading
@@ -206,7 +203,6 @@ export default function AcademicTimeline({
         <div className="academic-period-editor">
           <div className="academic-period-editor__heading">
             <div>
-              <span>Term details</span>
               <h3>{selectedPeriod?.label}</h3>
             </div>
             {selectedPeriod && (

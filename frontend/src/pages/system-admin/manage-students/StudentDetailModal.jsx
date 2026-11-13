@@ -25,7 +25,7 @@ export default function StudentDetailModal({
     title: "Residential address",
     fields: [["Complete address", address]]
   }];
-  return <OverlayPanel isOpen={isOpen} onClose={onClose} title="Student profile" eyebrow="Learner details" description="A read-only view of the learner’s recorded information." className="student-profile-drawer" footer={<><button type="button" className="student-admin-button" onClick={onClose}>Close</button>{onEdit && <button type="button" className="student-admin-button student-admin-button--primary" onClick={onEdit}><Pencil size={15} />Edit profile</button>}</>}>
+  return <OverlayPanel isOpen={isOpen} onClose={onClose} title="Student profile" description="A read-only view of the learner’s recorded information." className="student-profile-drawer" footer={<><button type="button" className="student-admin-button" onClick={onClose}>Close</button>{onEdit && <button type="button" className="student-admin-button student-admin-button--primary" onClick={onEdit}><Pencil size={15} />Edit profile</button>}</>}>
     <div className="student-profile-identity"><span><UserRound size={25} /></span><div><h3>{fullName}</h3><p>{student?.program_code || "EBEC"} · {student?.section || student?.section_name || "No section assigned"}</p></div></div>
     {groups.map(group => <section className="student-profile-group" key={group.title}><h3>{group.title}</h3><dl>{group.fields.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value || "Not provided"}</dd></div>)}</dl></section>)}
   </OverlayPanel>;

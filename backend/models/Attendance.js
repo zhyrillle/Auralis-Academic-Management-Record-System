@@ -1,5 +1,15 @@
 const db = require('../config/db');
+const AuditDetails = require('../services/AuditDetailsService');
 const { withWritableSheet } = require('../services/AttendanceDayService');
+
+async function auditedSheet(sheetId, actor, operation) {
+  return withWritableSheet(sheetId, async connection => {
+    const before = await AuditDetails.attendanceSnapshot(connection, sheetId);
+    const result = await operation(connection);
+    await AuditDetails.recordAttendance(connection, sheetId, before, await AuditDetails.attendanceSnapshot(connection, sheetId), actor);
+    return result;
+  });
+}
 
 class Attendance {
   static async findAll() {
@@ -151,7 +161,7 @@ class Attendance {
   }
 
   // Upsert a single attendance record (or delete if status is empty AND no remarks)
-  static async upsert(sheetId, rawStudentSectionId, status = 'P', remarks = null) {
+  static async upsert(sheetId, rawStudentSectionId, status = 'P', remarks = null, actor = null, activeConnection = null) {
     if (!sheetId || !rawStudentSectionId) {
       throw new Error(`attendance_sheet_id (${sheetId}) and student_section_id (${rawStudentSectionId}) are required`);
     }
@@ -160,7 +170,7 @@ class Attendance {
       throw new Error(`Could not resolve student_section_id for ${rawStudentSectionId}`);
     }
 
-    return withWritableSheet(sheetId, async (connection) => {
+    const operation = async (connection) => {
       const cleanRemarks = remarks !== undefined && remarks !== null ? String(remarks).trim() || null : null;
 
       if (!status || status === 'BLANK' || status === 'NONE') {
@@ -205,11 +215,12 @@ class Attendance {
         [sheetId, studentSectionId]
       );
       return row[0]?.attendance_id;
-    });
+    };
+    return activeConnection ? operation(activeConnection) : auditedSheet(sheetId, actor, operation);
   }
 
   // Save/update remarks directly for a student's attendance record
-  static async saveRemarks(sheetId, rawStudentSectionId, remarks, defaultStatus = 'P') {
+  static async saveRemarks(sheetId, rawStudentSectionId, remarks, defaultStatus = 'P', actor = null) {
     if (!sheetId || !rawStudentSectionId) {
       throw new Error('attendance_sheet_id and student_section_id are required');
     }
@@ -218,7 +229,7 @@ class Attendance {
       throw new Error(`Could not resolve student_section_id for ${rawStudentSectionId}`);
     }
 
-    return withWritableSheet(sheetId, async (connection) => {
+    return auditedSheet(sheetId, actor, async (connection) => {
       const cleanRemarks = remarks !== undefined && remarks !== null ? String(remarks).trim() || null : null;
 
       const [existing] = await connection.execute(
@@ -245,30 +256,29 @@ class Attendance {
     });
   }
 
-  // Bulk save multiple attendance records
-  static async bulkUpsert(records) {
+  // One event per saved daily sheet, with all changed learners in that transaction.
+  static async bulkUpsert(records, actor = null) {
     if (!Array.isArray(records) || records.length === 0) return [];
-    const results = [];
+    const groups = new Map(), results = [];
     for (const rec of records) {
-      const rawId = rec.student_section_id || rec.student_id || rec.id;
-      if (!rec.attendance_sheet_id || !rawId) continue;
-      const id = await this.upsert(
-        rec.attendance_sheet_id,
-        rawId,
-        rec.status || null,
-        rec.remarks !== undefined ? rec.remarks : null
-      );
-      results.push(id);
+      if (!rec.attendance_sheet_id || !(rec.student_section_id || rec.student_id || rec.id)) continue;
+      const key = Number(rec.attendance_sheet_id);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(rec);
     }
+    for (const [sheetId, rows] of groups) await auditedSheet(sheetId, actor, async connection => {
+      for (const rec of rows) results.push(await this.upsert(sheetId, rec.student_section_id || rec.student_id || rec.id,
+        rec.status || null, rec.remarks !== undefined ? rec.remarks : null, actor, connection));
+    });
     return results;
   }
 
-  static async create(data) {
+  static async create(data, actor = null) {
     const { attendance_sheet_id, student_section_id, status = 'P', remarks = null } = data;
-    return await this.upsert(attendance_sheet_id, student_section_id, status, remarks);
+    return await this.upsert(attendance_sheet_id, student_section_id, status, remarks, actor);
   }
 
-  static async update(id, data) {
+  static async update(id, data, actor = null) {
     const record = await this.findById(id);
     if (!record) return null;
     const keys = Object.keys(data);
@@ -280,15 +290,15 @@ class Attendance {
     }
     const values = Object.values(data);
     const setClause = keys.map(key => `${key} = ?`).join(', ');
-    await withWritableSheet(record.attendance_sheet_id, connection =>
+    await auditedSheet(record.attendance_sheet_id, actor, connection =>
       connection.execute(`UPDATE ATTENDANCE SET ${setClause} WHERE attendance_id = ?`, [...values, id]));
     return this.findById(id);
   }
 
-  static async delete(id) {
+  static async delete(id, actor = null) {
     const record = await this.findById(id);
     if (!record) return false;
-    const [result] = await withWritableSheet(record.attendance_sheet_id, connection =>
+    const [result] = await auditedSheet(record.attendance_sheet_id, actor, connection =>
       connection.execute('DELETE FROM ATTENDANCE WHERE attendance_id = ?', [id]));
     return result.affectedRows > 0;
   }
