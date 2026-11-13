@@ -1,0 +1,25 @@
+.adviser-dashboard__stat-card.risk-carousel { display: flex; flex-direction: row; align-items: center; gap: 14px; min-width: 0; }
+/* clip prevents focus restoration from scrolling the translated slides internally. */
+.risk-carousel__viewport { height: 96px; flex: 1; min-width: 0; overflow: hidden; overflow: clip; }
+.risk-carousel__slides { transition: transform 550ms cubic-bezier(.65,0,.35,1); }
+.risk-carousel__slide { height: 96px; }
+.risk-carousel__slide--high { --risk-color: #c62828; }
+.risk-carousel__slide--medium { --risk-color: #b45309; }
+.risk-carousel__slide--low { --risk-color: #15803d; }
+.risk-carousel__open { display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 6px; height: 100%; width: 100%; border: 0; border-radius: 6px; background: none; padding: 4px; font: inherit; text-align: left; cursor: pointer; }
+.risk-carousel__open:disabled { cursor: default; opacity: 1; }
+.risk-carousel__label { display: flex; align-items: center; gap: 7px; color: #4a5b76; font-size: .85rem; font-weight: 500; }
+.risk-carousel__label .risk-carousel__dot { width: 7px; height: 7px; }
+.risk-carousel__value { font-size: 1.65rem; line-height: 1.1; font-weight: 700; color: var(--risk-color); }
+.risk-carousel__note { font-size: .78rem; color: var(--risk-color); }
+.risk-carousel__selectors { border-left: 1px solid #e8edf4; padding-left: 14px; display: flex; flex-direction: column; gap: 0; }
+.risk-carousel__selector { display: grid; place-items: center; width: 32px; height: 32px; border: 0; border-radius: 50%; background: none; cursor: pointer; padding: 0; }
+.risk-carousel__dot { display: block; width: 12px; height: 12px; border-radius: 50%; background: var(--risk-color); flex-shrink: 0; }
+.risk-carousel__selector .risk-carousel__dot { transition: transform 200ms, box-shadow 200ms; }
+.risk-carousel__selector[aria-pressed="true"] .risk-carousel__dot { transform: scale(1.15); box-shadow: 0 0 0 2px white, 0 0 0 3.5px #14284b; }
+.risk-carousel__selector:focus-visible, .risk-carousel__open:focus-visible { outline: 2px solid #14284b; outline-offset: -2px; }
+.risk-carousel__announcement { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.risk-carousel__loading { display: flex; flex-direction: column; justify-content: center; height: 100%; gap: 10px; }
+.risk-carousel__error { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; height: 100%; gap: 10px; color: #4a5b76; font-size: 13px; }
+.risk-carousel__error button { padding: 4px 10px; border: 1px solid #cbd5e1; border-radius: 6px; background: white; color: #14284b; font: inherit; cursor: pointer; }
+@media (prefers-reduced-motion: reduce) { .risk-carousel__slides, .risk-carousel__selector .risk-carousel__dot { transition: none; } }

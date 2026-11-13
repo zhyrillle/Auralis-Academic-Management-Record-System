@@ -1,0 +1,40 @@
+/* Screen layout only. The official PDF uses its existing isolated print styles. */
+@media screen {
+  .phil-iri-page-container { min-width: 0; max-width: 100%; container: philiri / inline-size; }
+  .phil-iri-page-container .phil-iri-subheader { flex-wrap: wrap; }
+  .phil-iri-page-container .phil-iri-subheader-info { min-width: 0; flex-shrink: 1; }
+  .phil-iri-page-container .phil-iri-controls-group { min-width: 0; max-width: 100%; flex-shrink: 1; }
+  .phil-iri-page-container .phil-iri-controls-subrow { max-width: 100%; flex-wrap: wrap; }
+  .phil-iri-page-container .phil-iri-document-scroll { min-width: 0; justify-content: flex-start; }
+  .phil-iri-page-container .phil-iri-sheet { min-width: 0; flex: 1 1 100%; }
+  .phil-iri-page-container .screening-tables, .phil-iri-page-container .post-test-table-scroll { max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; }
+  .phil-iri-page-container .screening-tables:focus-visible { outline: 2px solid #183e6c; outline-offset: 2px; }
+  .phil-iri-page-container .screening-table { min-width: 900px; }
+  .phil-iri-page-container .post-test-table-scroll table { min-width: 940px; }
+  .phil-iri-page-container .phil-iri-sheet-meta-row, .phil-iri-page-container .phil-iri-sheet-meta-subrow { flex-wrap: wrap; gap: 8px 20px; }
+  .phil-iri-page-container .screening-metadata-input { max-width: 100%; }
+}
+@container philiri (max-width: 1050px) {
+  .phil-iri-controls-group { width: 100%; align-items: flex-start; }
+  .phil-iri-page-container .phil-iri-controls-subrow { justify-content: flex-start; }
+  .phil-iri-page-header { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 12px; }
+  .phil-iri-header-tabs { grid-column: 2; justify-self: start; margin-left: 0; }
+  .phil-iri-page-container .phil-iri-sheet { padding: 20px; }
+}
+@container philiri (max-width: 600px) {
+  .phil-iri-page-container .phil-iri-subheader { padding: 14px; gap: 12px; }
+  .phil-iri-page-title { font-size: 20px; }
+  .phil-iri-page-title-row { gap: 8px; }
+  .phil-iri-page-container .phil-iri-header-tabs { grid-column: 1 / -1; width: 100%; box-sizing: border-box; margin-left: 0; }
+  .phil-iri-tab-button { flex: 1; padding: 8px 10px; }
+  .phil-iri-page-container .phil-iri-params-bar { flex-wrap: wrap; max-width: 100%; }
+  .phil-iri-page-container .screening-edit-controls { flex-wrap: wrap; }
+  .phil-iri-page-container .phil-iri-sheet { padding: 12px; }
+  .phil-iri-page-container .screening-signature-grid { grid-template-columns: 1fr; }
+  .phil-iri-page-container .screening-signature { border-right: 0; border-bottom: 1px solid #dbe1e8; }
+  .phil-iri-page-container .screening-signature:last-child { border-bottom: 0; }
+  .phil-iri-page-container .phil-iri-sheet-footer { flex-wrap: wrap; gap: 10px; }
+  .phil-iri-page-container .phil-iri-gold-seal { width: 100%; justify-content: center; }
+  .phil-iri-page-container .phil-iri-skeleton-row { grid-template-columns: 20px 1.5fr repeat(3, 1fr); }
+  .phil-iri-skeleton-row > :nth-child(n+6) { display: none; }
+}
