@@ -332,7 +332,98 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
   const performanceTaskColumnsRef = useRef(performanceTaskColumns);
   performanceTaskColumnsRef.current = performanceTaskColumns;
 
-  // Persist local column & grade modifications directly into IndexedDB persistent cache
+  const buildCurrentAssessmentsSnapshot = useCallback((effectiveComp) => {
+    const comp = effectiveComp || null;
+    const wwCols = writtenWorkColumnsRef.current || [];
+    const ptCols = performanceTaskColumnsRef.current || [];
+    const exCfg = examConfigRef.current || {};
+    const list = [];
+
+    wwCols.forEach((col, idx) => {
+      const aId = col.assessment_id || col.id || `ww_default_${idx + 1}${comp ? `_${comp}` : ""}`;
+      list.push({
+        assessment_id: aId,
+        activity_id: aId,
+        component_code: "WW",
+        type: "writtenWork",
+        assessment_type: "writtenWork",
+        title: col.activity_name || `Written Work ${idx + 1}`,
+        activity_name: col.activity_name || `Written Work ${idx + 1}`,
+        max_score: Number(col.max_score || 20),
+        highest_possible_score: Number(col.max_score || 20),
+        activity_date: col.date || null,
+        mapeh_component: comp,
+        status: col.status || "ACTIVE",
+      });
+    });
+
+    ptCols.forEach((col, idx) => {
+      const aId = col.assessment_id || col.id || `pt_default_${idx + 1}${comp ? `_${comp}` : ""}`;
+      list.push({
+        assessment_id: aId,
+        activity_id: aId,
+        component_code: "PT",
+        type: "performanceTask",
+        assessment_type: "performanceTask",
+        title: col.activity_name || `Performance Task ${idx + 1}`,
+        activity_name: col.activity_name || `Performance Task ${idx + 1}`,
+        max_score: Number(col.max_score || 50),
+        highest_possible_score: Number(col.max_score || 50),
+        activity_date: col.date || null,
+        mapeh_component: comp,
+        status: col.status || "ACTIVE",
+      });
+    });
+
+    const st1Id = exCfg.st1Id || `st1_default${comp ? `_${comp}` : ""}`;
+    const st2Id = exCfg.st2Id || `st2_default${comp ? `_${comp}` : ""}`;
+    const teId = exCfg.teId || quarterlyAssessmentId || `te_default${comp ? `_${comp}` : ""}`;
+    list.push(
+      {
+        assessment_id: st1Id,
+        activity_id: st1Id,
+        component_code: "QA",
+        type: "quarterlyAssessment",
+        assessment_type: "quarterlyAssessment",
+        title: "Summative Test 1",
+        activity_name: "Summative Test 1",
+        max_score: Number(exCfg.st1HPS || (comp ? 25 : 30)),
+        highest_possible_score: Number(exCfg.st1HPS || (comp ? 25 : 30)),
+        mapeh_component: comp,
+        status: "ACTIVE",
+      },
+      {
+        assessment_id: st2Id,
+        activity_id: st2Id,
+        component_code: "QA",
+        type: "quarterlyAssessment",
+        assessment_type: "quarterlyAssessment",
+        title: "Summative Test 2",
+        activity_name: "Summative Test 2",
+        max_score: Number(exCfg.st2HPS || (comp ? 25 : 30)),
+        highest_possible_score: Number(exCfg.st2HPS || (comp ? 25 : 30)),
+        mapeh_component: comp,
+        status: "ACTIVE",
+      },
+      {
+        assessment_id: teId,
+        activity_id: teId,
+        component_code: "QA",
+        type: "quarterlyAssessment",
+        assessment_type: "quarterlyAssessment",
+        title: "Term Exam",
+        activity_name: "Term Exam",
+        max_score: Number(exCfg.teHPS || quarterlyAssessmentHPS || (comp ? 25 : 40)),
+        highest_possible_score: Number(exCfg.teHPS || quarterlyAssessmentHPS || (comp ? 25 : 40)),
+        mapeh_component: comp,
+        status: "ACTIVE",
+      }
+    );
+
+    return list;
+  }, [quarterlyAssessmentId, quarterlyAssessmentHPS]);
+
+  // Persist local column & grade modifications directly into IndexedDB persistent cache and localStorage mirror
   const updateOfflineRecordCache = useCallback(
     async (updater) => {
       try {
@@ -360,47 +451,79 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
           }
         }
 
+        if (!cached && typeof localStorage !== "undefined") {
+          const lsKey = `auralis_cr_v2_${subjectOfferingId}_${activeTerm}_${effectiveComp || "ALL"}`;
+          try {
+            const raw = localStorage.getItem(lsKey) || localStorage.getItem(`auralis_cr_v2_${subjectOfferingId}_${activeTerm}_ALL`);
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              if (parsed?.class_context) cached = parsed;
+            }
+          } catch (_) {}
+        }
+
         const targetKey = foundKey || uniqueKeys[0];
-        const baseRecord = cached || {
-          class_context: classContextData || {
-            subject_offering_id: subjectOfferingId,
-            section_id: sectionId,
-            term: activeTerm,
-            active_term: activeTerm,
-            is_locked: isLocked,
-          },
-          term: activeTerm,
-          active_term: activeTerm,
-          assessments: [],
-          students: (students || []).map((st) => ({
-            student_id: st.student_id || st.id,
-            student_section_id: st.student_section_id,
-            LRN: st.lrn,
-            first_name: st.firstName,
-            last_name: st.lastName,
-            middle_name: st.middleName,
-            sex: st.sex,
-            scores: {},
-            examinations: {},
-          })),
-          is_mapeh: Boolean(isMapeh),
-          mapeh_component: effectiveComp || null,
-        };
+        const currentAssessments = buildCurrentAssessmentsSnapshot(effectiveComp || null);
+        const cachedHasRealAssessments =
+          Array.isArray(cached?.assessments) &&
+          cached.assessments.length > 0 &&
+          !cached.assessments.some((a) => String(a.assessment_id || a.activity_id || "").includes("_default"));
+
+        const baseRecord = cached
+          ? {
+              ...cached,
+              assessments: cachedHasRealAssessments
+                ? cached.assessments
+                : currentAssessments.length > 0
+                  ? currentAssessments
+                  : cached.assessments,
+            }
+          : {
+              class_context: classContextData || {
+                subject_offering_id: subjectOfferingId,
+                section_id: sectionId,
+                term: activeTerm,
+                active_term: activeTerm,
+                is_locked: isLocked,
+              },
+              term: activeTerm,
+              active_term: activeTerm,
+              assessments: currentAssessments,
+              students: (students || []).map((st) => ({
+                student_id: st.student_id || st.id,
+                student_section_id: st.student_section_id,
+                LRN: st.lrn,
+                first_name: st.firstName,
+                last_name: st.lastName,
+                middle_name: st.middleName,
+                sex: st.sex,
+                scores: {},
+                examinations: {},
+              })),
+              is_mapeh: Boolean(isMapeh),
+              mapeh_component: effectiveComp || null,
+            };
 
         if (typeof updater === "function") {
           const updated = updater({ ...baseRecord });
           if (updated) {
-            await setPersistentCache(targetKey, updated, undefined, scope);
-            const canonicalKeys = [
-              `classRecord_v2_${subjectOfferingId}_${activeTerm}_${sectionId || ""}_${effectiveComp}_${effectiveSubjectId || ""}`,
-              `classRecord_v2_${subjectOfferingId}_${activeTerm}_${sectionId || ""}_${effectiveComp}_`,
-            ];
-            for (const k of Array.from(new Set([...uniqueKeys, ...canonicalKeys]))) {
-              if (k !== targetKey) {
-                const other = await getPersistentCache(k, scope);
-                if (other?.class_context || canonicalKeys.includes(k)) {
-                  await setPersistentCache(k, updated, undefined, scope);
+            const stamped = {
+              ...updated,
+              _synthesizedFromFallback: false,
+              _cachedAt: Date.now(),
+            };
+            if (typeof localStorage !== "undefined") {
+              try {
+                localStorage.setItem(`auralis_cr_v2_${subjectOfferingId}_${activeTerm}_${effectiveComp || "ALL"}`, JSON.stringify(stamped));
+                if (!effectiveComp) {
+                  localStorage.setItem(`auralis_cr_v2_${subjectOfferingId}_${activeTerm}_ALL`, JSON.stringify(stamped));
                 }
+              } catch (_) {}
+            }
+            await setPersistentCache(targetKey, stamped, undefined, scope);
+            for (const k of uniqueKeys) {
+              if (k !== targetKey) {
+                await setPersistentCache(k, stamped, undefined, scope);
               }
             }
           }
@@ -409,7 +532,101 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
         console.warn("[ClassRecord] updateOfflineRecordCache error:", e);
       }
     },
-    [recordSession, isMapeh, mapehComponent, subjectOfferingId, activeTerm, sectionId, effectiveSubjectId, classContextData, isLocked, students]
+    [recordSession, isMapeh, mapehComponent, subjectOfferingId, activeTerm, sectionId, effectiveSubjectId, classContextData, isLocked, students, buildCurrentAssessmentsSnapshot]
+  );
+
+  const syncGradesToRecordCache = useCallback(
+    (gradesSnapshot = gradesRef.current) => {
+      updateOfflineRecordCache((record) => {
+        if (!Array.isArray(record.students)) return record;
+        const currentGrades = gradesSnapshot || gradesRef.current || {};
+        const wwCols = writtenWorkColumnsRef.current || [];
+        const ptCols = performanceTaskColumnsRef.current || [];
+
+        const updatedStudents = record.students.map((st) => {
+          const sId = String(st.student_id);
+          const stGrades = currentGrades[sId];
+          if (!stGrades) return st;
+
+          const updatedScores = { ...(st.scores || {}) };
+          const updatedExams = { ...(st.examinations || {}) };
+
+          if (stGrades.writtenWorks) {
+            Object.entries(stGrades.writtenWorks).forEach(([cId, val]) => {
+              const colIdx = wwCols.findIndex((c) => c.id === cId || String(c.assessment_id) === String(cId));
+              const col = colIdx >= 0 ? wwCols[colIdx] : null;
+              const key = col?.assessment_id || cId;
+              if (val !== "" && val !== null && val !== undefined) {
+                const num = Number(val);
+                updatedScores[key] = num;
+                if (col?.id) updatedScores[col.id] = num;
+                if (col?.activity_name) updatedScores[col.activity_name] = num;
+                if (colIdx >= 0) updatedScores[`__ww_idx_${colIdx}`] = num;
+              } else {
+                delete updatedScores[key];
+                if (col?.id) delete updatedScores[col.id];
+                if (col?.activity_name) delete updatedScores[col.activity_name];
+                if (colIdx >= 0) delete updatedScores[`__ww_idx_${colIdx}`];
+              }
+            });
+          }
+
+          if (stGrades.performanceTasks) {
+            Object.entries(stGrades.performanceTasks).forEach(([cId, val]) => {
+              const colIdx = ptCols.findIndex((c) => c.id === cId || String(c.assessment_id) === String(cId));
+              const col = colIdx >= 0 ? ptCols[colIdx] : null;
+              const key = col?.assessment_id || cId;
+              if (val !== "" && val !== null && val !== undefined) {
+                const num = Number(val);
+                updatedScores[key] = num;
+                if (col?.id) updatedScores[col.id] = num;
+                if (col?.activity_name) updatedScores[col.activity_name] = num;
+                if (colIdx >= 0) updatedScores[`__pt_idx_${colIdx}`] = num;
+              } else {
+                delete updatedScores[key];
+                if (col?.id) delete updatedScores[col.id];
+                if (col?.activity_name) delete updatedScores[col.activity_name];
+                if (colIdx >= 0) delete updatedScores[`__pt_idx_${colIdx}`];
+              }
+            });
+          }
+
+          if (stGrades.examinations) {
+            if (stGrades.examinations.st1 !== "" && stGrades.examinations.st1 !== undefined && stGrades.examinations.st1 !== null) {
+              updatedExams.st1 = Number(stGrades.examinations.st1);
+            } else {
+              delete updatedExams.st1;
+            }
+            if (stGrades.examinations.st2 !== "" && stGrades.examinations.st2 !== undefined && stGrades.examinations.st2 !== null) {
+              updatedExams.st2 = Number(stGrades.examinations.st2);
+            } else {
+              delete updatedExams.st2;
+            }
+            if (stGrades.examinations.te !== "" && stGrades.examinations.te !== undefined && stGrades.examinations.te !== null) {
+              updatedExams.te = Number(stGrades.examinations.te);
+            } else {
+              delete updatedExams.te;
+            }
+          }
+
+          return {
+            ...st,
+            scores: updatedScores,
+            examinations: updatedExams,
+          };
+        });
+
+        const effectiveComp = (isMapeh || isMapehRef.current) ? (mapehComponent || mapehComponentRef.current || "MA") : null;
+        const currentAssessments = buildCurrentAssessmentsSnapshot(effectiveComp);
+
+        return {
+          ...record,
+          assessments: currentAssessments.length > 0 ? currentAssessments : record.assessments,
+          students: updatedStudents,
+        };
+      });
+    },
+    [updateOfflineRecordCache, isMapeh, mapehComponent, buildCurrentAssessmentsSnapshot]
   );
 
   // Modals for Add & Edit Column
@@ -490,70 +707,8 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
         setSyncStatus(res?.offline || !navigator.onLine ? "offline" : "saved");
       }
 
-      // Update Dexie persistent cache so grades remain persisted offline across page navigation
-      updateOfflineRecordCache((record) => {
-        if (!Array.isArray(record.students)) return record;
-        const currentGrades = gradesRef.current;
-        const wwCols = writtenWorkColumnsRef.current || [];
-        const ptCols = performanceTaskColumnsRef.current || [];
-
-        const updatedStudents = record.students.map((st) => {
-          const sId = String(st.student_id);
-          const stGrades = currentGrades[sId];
-          if (!stGrades) return st;
-
-          const updatedScores = { ...(st.scores || {}) };
-          const updatedExams = { ...(st.examinations || {}) };
-
-          if (stGrades.writtenWorks) {
-            Object.entries(stGrades.writtenWorks).forEach(([cId, val]) => {
-              const col = wwCols.find((c) => c.id === cId || String(c.assessment_id) === String(cId));
-              const key = col?.assessment_id || cId;
-              if (val !== "" && val !== null && val !== undefined) {
-                updatedScores[key] = Number(val);
-                if (col?.id) updatedScores[col.id] = Number(val);
-              } else {
-                delete updatedScores[key];
-                if (col?.id) delete updatedScores[col.id];
-              }
-            });
-          }
-
-          if (stGrades.performanceTasks) {
-            Object.entries(stGrades.performanceTasks).forEach(([cId, val]) => {
-              const col = ptCols.find((c) => c.id === cId || String(c.assessment_id) === String(cId));
-              const key = col?.assessment_id || cId;
-              if (val !== "" && val !== null && val !== undefined) {
-                updatedScores[key] = Number(val);
-                if (col?.id) updatedScores[col.id] = Number(val);
-              } else {
-                delete updatedScores[key];
-                if (col?.id) delete updatedScores[col.id];
-              }
-            });
-          }
-
-          if (stGrades.examinations) {
-            if (stGrades.examinations.st1 !== "" && stGrades.examinations.st1 !== undefined && stGrades.examinations.st1 !== null) {
-              updatedExams.st1 = Number(stGrades.examinations.st1);
-            }
-            if (stGrades.examinations.st2 !== "" && stGrades.examinations.st2 !== undefined && stGrades.examinations.st2 !== null) {
-              updatedExams.st2 = Number(stGrades.examinations.st2);
-            }
-            if (stGrades.examinations.te !== "" && stGrades.examinations.te !== undefined && stGrades.examinations.te !== null) {
-              updatedExams.te = Number(stGrades.examinations.te);
-            }
-          }
-
-          return {
-            ...st,
-            scores: updatedScores,
-            examinations: updatedExams,
-          };
-        });
-
-        return { ...record, students: updatedStudents };
-      });
+      // Update Dexie persistent cache and localStorage mirror so grades remain persisted offline across page navigation
+      syncGradesToRecordCache(gradesRef.current);
     } catch (err) {
       if (isSessionCancellation(err)) return;
       console.warn("Auto-save sync error:", err.message);
@@ -566,7 +721,7 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
         flushPendingScores();
       }
     }
-  }, [isLocked, subjectOfferingId, activeTerm, isMapeh, mapehComponent, recordSession, updateOfflineRecordCache]);
+  }, [isLocked, subjectOfferingId, activeTerm, isMapeh, mapehComponent, recordSession, syncGradesToRecordCache]);
 
   // Persist the debounce buffer before logout, while its original account is still active.
   useEffect(() => registerLogoutDraftSaver(async () => {
@@ -883,13 +1038,27 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
         const ptGrades = {};
         const exGrades = { st1: "", st2: "", te: "" };
 
-        wwCols.forEach((col) => {
-          const val = rawScores[col.assessment_id] !== undefined ? rawScores[col.assessment_id] : rawScores[col.id];
+        wwCols.forEach((col, colIdx) => {
+          const val =
+            rawScores[col.assessment_id] !== undefined
+              ? rawScores[col.assessment_id]
+              : rawScores[col.id] !== undefined
+                ? rawScores[col.id]
+                : col.activity_name && rawScores[col.activity_name] !== undefined
+                  ? rawScores[col.activity_name]
+                  : rawScores[`__ww_idx_${colIdx}`];
           wwGrades[col.id] = val !== undefined && val !== null ? val : "";
         });
 
-        ptCols.forEach((col) => {
-          const val = rawScores[col.assessment_id] !== undefined ? rawScores[col.assessment_id] : rawScores[col.id];
+        ptCols.forEach((col, colIdx) => {
+          const val =
+            rawScores[col.assessment_id] !== undefined
+              ? rawScores[col.assessment_id]
+              : rawScores[col.id] !== undefined
+                ? rawScores[col.id]
+                : col.activity_name && rawScores[col.activity_name] !== undefined
+                  ? rawScores[col.activity_name]
+                  : rawScores[`__pt_idx_${colIdx}`];
           ptGrades[col.id] = val !== undefined && val !== null ? val : "";
         });
 
@@ -1138,19 +1307,23 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
             console.warn("Failed to merge offline scores:", offlineErr);
           }
 
+          writtenWorkColumnsRef.current = parsed.writtenWorkColumns;
+          performanceTaskColumnsRef.current = parsed.performanceTaskColumns;
           setWrittenWorkColumns(parsed.writtenWorkColumns);
           setPerformanceTaskColumns(parsed.performanceTaskColumns);
           setQuarterlyAssessmentHPS(parsed.quarterlyAssessmentHPS);
           setQuarterlyAssessmentId(parsed.quarterlyAssessmentId);
-          setExamConfig((prev) => ({
-            ...prev,
-            ...parsed.examConfig,
-          }));
+          setExamConfig((prev) => {
+            const nextCfg = { ...prev, ...parsed.examConfig };
+            examConfigRef.current = nextCfg;
+            return nextCfg;
+          });
 
           if (!silent) {
             setStudents(parsed.students);
             setGrades(parsed.grades);
             gradesRef.current = parsed.grades;
+            syncGradesToRecordCache(parsed.grades);
           } else {
             setStudents(parsed.students);
             setGrades((prev) => {
@@ -1180,6 +1353,7 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
                 });
               }
               gradesRef.current = merged;
+              syncGradesToRecordCache(merged);
               return merged;
             });
           }
@@ -1594,17 +1768,22 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
       setErrorTooltip(null);
     }
 
-    setGrades((prev) => ({
-      ...prev,
-      [studentId]: {
-        ...prev[studentId],
-        examinations: {
-          ...(prev[studentId]?.examinations || {}),
-          [examKey]: value,
+    setGrades((prev) => {
+      const next = {
+        ...prev,
+        [studentId]: {
+          ...prev[studentId],
+          examinations: {
+            ...(prev[studentId]?.examinations || {}),
+            [examKey]: value,
+          },
+          quarterlyAssessment: examKey === "te" ? value : prev[studentId]?.quarterlyAssessment,
         },
-        quarterlyAssessment: examKey === "te" ? value : prev[studentId]?.quarterlyAssessment,
-      },
-    }));
+      };
+      gradesRef.current = next;
+      syncGradesToRecordCache(next);
+      return next;
+    });
 
     const studentObj = students.find((s) => s.id === studentId || String(s.student_id) === studentId);
     if (studentObj) {
@@ -1744,16 +1923,21 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
       setErrorTooltip(null);
     }
 
-    setGrades((prev) => ({
-      ...prev,
-      [studentId]: {
-        ...prev[studentId],
-        [category]: {
-          ...(prev[studentId]?.[category] || {}),
-          [columnId]: value,
+    setGrades((prev) => {
+      const next = {
+        ...prev,
+        [studentId]: {
+          ...prev[studentId],
+          [category]: {
+            ...(prev[studentId]?.[category] || {}),
+            [columnId]: value,
+          },
         },
-      },
-    }));
+      };
+      gradesRef.current = next;
+      syncGradesToRecordCache(next);
+      return next;
+    });
 
     const studentObj = students.find((s) => s.id === studentId || String(s.student_id) === studentId);
     if (studentObj) {

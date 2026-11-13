@@ -191,10 +191,13 @@ export async function warmUserOfflineData(userId, classes = null) {
 
       // Warm Class Record (T1, T2, T3) if subject_offering_id is available
       if (offId && !String(offId).startsWith('sec-')) {
-        try {
-          await getClassRecord(offId, 'T1', sId, null, null, { force: false }).catch(() => {});
-          await new Promise(r => setTimeout(r, 80));
-        } catch (_) {}
+        const subjId = cls.subject_id || null;
+        for (const term of ['T1', 'T2', 'T3']) {
+          try {
+            await getClassRecord(offId, term, sId, null, subjId, { force: false }).catch(() => {});
+            await new Promise(r => setTimeout(r, 60));
+          } catch (_) {}
+        }
       }
 
       // Warm Attendance

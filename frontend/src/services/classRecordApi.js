@@ -143,14 +143,92 @@ function buildDefaultOfflineAssessments(isMapeh = false, mapehComponent = null) 
   ];
 }
 
+function countEncodedScores(record) {
+  if (!record || !Array.isArray(record.students)) return 0;
+  let count = 0;
+  for (const st of record.students) {
+    if (st?.scores && typeof st.scores === "object") {
+      for (const v of Object.values(st.scores)) {
+        if (v !== "" && v !== null && v !== undefined) count += 1;
+      }
+    }
+    if (st?.examinations && typeof st.examinations === "object") {
+      for (const v of Object.values(st.examinations)) {
+        if (v !== "" && v !== null && v !== undefined) count += 1;
+      }
+    }
+  }
+  return count;
+}
+
+function mergeRecordStudentScores(primary, secondary) {
+  if (!primary?.class_context) return secondary;
+  if (!secondary?.class_context || !Array.isArray(secondary.students)) return primary;
+  if (!Array.isArray(primary.students) || primary.students.length === 0) return secondary;
+
+  const secByStudentId = new Map();
+  secondary.students.forEach((st) => {
+    if (st?.student_id != null) secByStudentId.set(String(st.student_id), st);
+  });
+
+  const mergedStudents = primary.students.map((st) => {
+    const other = secByStudentId.get(String(st.student_id));
+    if (!other) return st;
+    const mergedScores = { ...(other.scores || {}) };
+    if (st.scores && typeof st.scores === "object") {
+      Object.entries(st.scores).forEach(([k, v]) => {
+        if (v !== "" && v !== null && v !== undefined) {
+          mergedScores[k] = v;
+        }
+      });
+    }
+    const mergedExams = { ...(other.examinations || {}) };
+    if (st.examinations && typeof st.examinations === "object") {
+      Object.entries(st.examinations).forEach(([k, v]) => {
+        if (v !== "" && v !== null && v !== undefined) {
+          mergedExams[k] = v;
+        }
+      });
+    }
+    return {
+      ...st,
+      scores: mergedScores,
+      examinations: mergedExams,
+    };
+  });
+
+  const primaryHasRealAssessments =
+    Array.isArray(primary.assessments) &&
+    primary.assessments.length > 0 &&
+    !primary.assessments.some((a) => String(a.assessment_id || a.activity_id || "").includes("_default"));
+  const secondaryHasRealAssessments =
+    Array.isArray(secondary.assessments) &&
+    secondary.assessments.length > 0 &&
+    !secondary.assessments.some((a) => String(a.assessment_id || a.activity_id || "").includes("_default"));
+
+  return {
+    ...primary,
+    assessments: primaryHasRealAssessments
+      ? primary.assessments
+      : secondaryHasRealAssessments
+        ? secondary.assessments
+        : primary.assessments,
+    students: mergedStudents,
+  };
+}
+
 function sanitizeCachedRecord(record, subjectOfferingId, subjectId, mapehComponent) {
   if (!record || !record.class_context) return record;
   const offlineMeta = detectOfflineClassMeta(subjectOfferingId, subjectId);
   const ctxName = record.class_context?.subject_name || record.subject_name || offlineMeta.subject_name || "";
   const ctxCode = record.class_context?.subject_code || record.subject_code || offlineMeta.subject_code || "";
   const hasKnownSubject = Boolean(ctxName || ctxCode);
+  const hasDefaultAssessments =
+    Array.isArray(record.assessments) &&
+    record.assessments.some((a) => String(a.assessment_id || a.activity_id || "").includes("_default"));
   const isSynthesized = Boolean(
     record._synthesizedFromFallback ||
+    (hasDefaultAssessments && countEncodedScores(record) === 0) ||
     (!record.grade_sheet_id && !record.grade_sheet?.grade_sheet_id && !record.class_context?.subject_name)
   );
   const realIsMapeh = hasKnownSubject
@@ -194,8 +272,20 @@ function getCandidateCacheKeys(subjectOfferingId, term, sectionId, mapehComponen
   );
 }
 
+function getLocalStorageMirrorKeys(subjectOfferingId, term, mapehComponent) {
+  const comp = mapehComponent || "ALL";
+  return Array.from(
+    new Set([
+      `auralis_cr_v2_${subjectOfferingId}_${term}_${comp}`,
+      `auralis_cr_v2_${subjectOfferingId}_${term}_ALL`,
+    ])
+  );
+}
+
 async function findCachedClassRecord(subjectOfferingId, term, sectionId, mapehComponent, subjectId, readOnly, scope) {
   const keys = getCandidateCacheKeys(subjectOfferingId, term, sectionId, mapehComponent, subjectId, readOnly);
+  const candidates = [];
+
   for (const k of keys) {
     const item = await getPersistentCache(k, scope);
     if (item?.class_context) {
@@ -203,27 +293,80 @@ async function findCachedClassRecord(subjectOfferingId, term, sectionId, mapehCo
       if (sanitized.is_mapeh && mapehComponent && sanitized.mapeh_component && sanitized.mapeh_component !== mapehComponent) {
         continue;
       }
-      return sanitized;
+      candidates.push(sanitized);
     }
   }
-  return null;
+
+  if (typeof localStorage !== "undefined") {
+    for (const lsKey of getLocalStorageMirrorKeys(subjectOfferingId, term, mapehComponent)) {
+      try {
+        const raw = localStorage.getItem(lsKey);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed?.class_context) {
+            const sanitized = sanitizeCachedRecord(parsed, subjectOfferingId, subjectId, mapehComponent);
+            if (!sanitized.is_mapeh || !mapehComponent || !sanitized.mapeh_component || sanitized.mapeh_component === mapehComponent) {
+              candidates.push(sanitized);
+            }
+          }
+        }
+      } catch (_) {}
+    }
+  }
+
+  if (candidates.length === 0) return null;
+
+  candidates.sort((a, b) => {
+    const scoresA = countEncodedScores(a);
+    const scoresB = countEncodedScores(b);
+    if (scoresA !== scoresB) return scoresB - scoresA;
+    const synthA = a._synthesizedFromFallback ? 1 : 0;
+    const synthB = b._synthesizedFromFallback ? 1 : 0;
+    if (synthA !== synthB) return synthA - synthB;
+    return (b._cachedAt || 0) - (a._cachedAt || 0);
+  });
+
+  let best = candidates[0];
+  for (let i = 1; i < candidates.length; i += 1) {
+    best = mergeRecordStudentScores(best, candidates[i]);
+  }
+  return best;
 }
 
 async function saveClassRecordToCache(subjectOfferingId, term, sectionId, mapehComponent, subjectId, readOnly, data, scope) {
   if (!data?.class_context) return;
-  const suffix = readOnly ? "_readOnly" : "";
   const sec = sectionId || data.class_context?.section_id || "";
   const subj = subjectId || data.class_context?.subject_id || "";
   const realComp = data.is_mapeh ? (data.mapeh_component || mapehComponent || "MA") : "";
+
+  if (data._synthesizedFromFallback) {
+    const existing = await findCachedClassRecord(subjectOfferingId, term, sec, realComp, subj, readOnly, scope);
+    if (existing && (!existing._synthesizedFromFallback || countEncodedScores(existing) > 0)) {
+      return;
+    }
+  }
+
+  const recordToSave = {
+    ...data,
+    _cachedAt: Date.now(),
+  };
+
   const keysToWrite = Array.from(
     new Set([
-      `classRecord_v2_${subjectOfferingId}_${term}_${sectionId || ""}_${mapehComponent || ""}_${subjectId || ""}${suffix}`,
-      `classRecord_v2_${subjectOfferingId}_${term}_${sec}_${realComp}_${subj}${suffix}`,
-      `classRecord_v2_${subjectOfferingId}_${term}_${sec}_${realComp}_${suffix}`,
+      ...getCandidateCacheKeys(subjectOfferingId, term, sectionId, mapehComponent, subjectId, readOnly),
+      ...getCandidateCacheKeys(subjectOfferingId, term, sec, realComp, subj, readOnly),
     ])
   );
   for (const k of keysToWrite) {
-    await setPersistentCache(k, data, undefined, scope).catch(() => {});
+    await setPersistentCache(k, recordToSave, undefined, scope).catch(() => {});
+  }
+
+  if (typeof localStorage !== "undefined" && !readOnly) {
+    for (const lsKey of getLocalStorageMirrorKeys(subjectOfferingId, term, realComp)) {
+      try {
+        localStorage.setItem(lsKey, JSON.stringify(recordToSave));
+      } catch (_) {}
+    }
   }
 }
 
@@ -250,11 +393,12 @@ export const getClassRecord = async (
 
   const cacheKey = `classRecord_v2_${subjectOfferingId}_${term}_${sectionId || ""}_${mapehComponent || ""}_${subjectId || ""}${readOnly ? '_readOnly' : ''}`;
 
-  // Instant SWR: If not forcing a refresh, return cached data immediately (0ms delay)
+  // Instant SWR: If not forcing a refresh, return cached data immediately when offline or when cached record already has encoded scores
   if (!force) {
     const cached = await findCachedClassRecord(subjectOfferingId, term, sectionId, mapehComponent, subjectId, readOnly, scope);
     const isOnlineNow = typeof navigator === 'undefined' || navigator.onLine !== false;
-    if (cached?.class_context && (!cached._synthesizedFromFallback || !isOnlineNow)) {
+    const hasScores = countEncodedScores(cached) > 0;
+    if (cached?.class_context && (!isOnlineNow || (!cached._synthesizedFromFallback && hasScores))) {
       // Revalidate in background quietly if online
       if (typeof navigator !== 'undefined' && navigator.onLine) {
         fetch(url, { force: true, throwOnAuthError: false })
@@ -281,9 +425,14 @@ export const getClassRecord = async (
 
     if (isOfflineFallback) {
       const cached = await findCachedClassRecord(subjectOfferingId, term, sectionId, mapehComponent, subjectId, readOnly, scope);
-      if (cached?.class_context) {
-        return cached;
+      const sanitizedData = data?.class_context ? sanitizeCachedRecord(data, subjectOfferingId, subjectId, mapehComponent) : null;
+      if (cached?.class_context && sanitizedData?.class_context) {
+        const primary = countEncodedScores(cached) >= countEncodedScores(sanitizedData) ? cached : sanitizedData;
+        const secondary = primary === cached ? sanitizedData : cached;
+        return mergeRecordStudentScores(primary, secondary);
       }
+      if (cached?.class_context) return cached;
+      if (sanitizedData?.class_context) return sanitizedData;
     }
 
     if (data?.class_context) {
@@ -296,13 +445,13 @@ export const getClassRecord = async (
         const otherTerms = ['T1', 'T2', 'T3'].filter(t => t !== term);
         for (const otherTerm of otherTerms) {
           findCachedClassRecord(subjectOfferingId, otherTerm, sectionId, mapehComponent, subjectId, readOnly, scope).then(existing => {
-            if ((!existing || existing._synthesizedFromFallback) && navigator.onLine) {
+            if ((!existing || existing._synthesizedFromFallback || countEncodedScores(existing) === 0) && navigator.onLine) {
               let otherUrl = `${API_BASE_URL}/class-record/${subjectOfferingId}?term=${encodeURIComponent(otherTerm)}&gradeFlowVersion=2`;
               if (sectionId) otherUrl += `&section_id=${encodeURIComponent(sectionId)}`;
               if (mapehComponent) otherUrl += `&mapeh_component=${encodeURIComponent(mapehComponent)}`;
               if (subjectId) otherUrl += `&subject_id=${encodeURIComponent(subjectId)}`;
               if (readOnly) otherUrl += '&read_only=1';
-              fetch(otherUrl, { throwOnAuthError: false })
+              fetch(otherUrl, { force: true, throwOnAuthError: false })
                 .then(r => {
                   if (r?.headers?.get('x-auralis-offline-fallback') === '1') return null;
                   return parseResponse(r);
