@@ -229,14 +229,68 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
   const loadAllRef = useRef(null);
   const pendingSheetPromisesRef = useRef({});
   const studentsRef = useRef(students);
-  useEffect(() => {
-    studentsRef.current = students;
-  }, [students]);
+  const sheetsByDateRef = useRef(sheetsByDate);
+  const noClassDaysRef = useRef(noClassDays);
+  const attendanceMapRef = useRef(attendanceMap);
+  const remarksMapRef = useRef(remarksMap);
+  const adviserAssignmentRef = useRef(adviserAssignment);
+  const teacherAssignmentRef = useRef(teacherAssignment);
+
+  useEffect(() => { studentsRef.current = students; }, [students]);
+  useEffect(() => { sheetsByDateRef.current = sheetsByDate; }, [sheetsByDate]);
+  useEffect(() => { noClassDaysRef.current = noClassDays; }, [noClassDays]);
+  useEffect(() => { attendanceMapRef.current = attendanceMap; }, [attendanceMap]);
+  useEffect(() => { remarksMapRef.current = remarksMap; }, [remarksMap]);
+  useEffect(() => { adviserAssignmentRef.current = adviserAssignment; }, [adviserAssignment]);
+  useEffect(() => { teacherAssignmentRef.current = teacherAssignment; }, [teacherAssignment]);
 
   const cacheKey = useMemo(() => {
     const uid = currentUser?.user_id || currentUser?.id || 'anon';
+    const subId = isSubjectAttendance
+      ? (activeClass?.subject_offering_id || activeClass?.offering_id || activeClass?.subject_id || '')
+      : '';
+    return `attendance_sheet_${targetSectionId}_${isSubjectAttendance ? `subject_${subId}` : 'section'}_${uid}`;
+  }, [targetSectionId, isSubjectAttendance, activeClass?.subject_offering_id, activeClass?.offering_id, activeClass?.subject_id, currentUser?.user_id, currentUser?.id]);
+
+  const legacyCacheKey = useMemo(() => {
+    const uid = currentUser?.user_id || currentUser?.id || 'anon';
     return `attendance_sheet_${targetSectionId}_${isSubjectAttendance ? 'subject' : 'section'}_${uid}`;
   }, [targetSectionId, isSubjectAttendance, currentUser?.user_id, currentUser?.id]);
+
+  const readCachedAttendanceBundle = useCallback(async () => {
+    try {
+      const fromDexie = (await getPersistentCache(cacheKey)) || (await getPersistentCache(legacyCacheKey));
+      if (fromDexie && typeof fromDexie === 'object') return fromDexie;
+    } catch (_) {}
+    try {
+      const raw = localStorage.getItem(cacheKey) || localStorage.getItem(legacyCacheKey);
+      if (raw) return JSON.parse(raw);
+    } catch (_) {}
+    return null;
+  }, [cacheKey, legacyCacheKey]);
+
+  const persistAttendanceBundle = useCallback(async (overrides = {}) => {
+    const existing = (await readCachedAttendanceBundle()) || {};
+    const bundle = {
+      students: overrides.students ?? (studentsRef.current?.length ? studentsRef.current : existing.students || []),
+      sheetsByDate: overrides.sheetsByDate ?? sheetsByDateRef.current ?? existing.sheetsByDate ?? {},
+      noClassDays: overrides.noClassDays ?? noClassDaysRef.current ?? existing.noClassDays ?? {},
+      attendanceMap: overrides.attendanceMap ?? attendanceMapRef.current ?? existing.attendanceMap ?? {},
+      remarksMap: overrides.remarksMap ?? remarksMapRef.current ?? existing.remarksMap ?? {},
+      adviserAssignment: overrides.adviserAssignment ?? adviserAssignmentRef.current ?? existing.adviserAssignment ?? null,
+      teacherAssignment: overrides.teacherAssignment ?? teacherAssignmentRef.current ?? existing.teacherAssignment ?? null,
+    };
+    try {
+      localStorage.setItem(cacheKey, JSON.stringify(bundle));
+      if (legacyCacheKey !== cacheKey) {
+        localStorage.setItem(legacyCacheKey, JSON.stringify(bundle));
+      }
+    } catch (_) {}
+    setPersistentCache(cacheKey, bundle).catch(() => {});
+    if (legacyCacheKey !== cacheKey) {
+      setPersistentCache(legacyCacheKey, bundle).catch(() => {});
+    }
+  }, [cacheKey, legacyCacheKey, readCachedAttendanceBundle]);
 
   // ── Load all data on mount and whenever section changes ──
   useEffect(() => {
@@ -244,16 +298,37 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
     if (!targetSectionId) return;
 
     // Load persistent cache immediately for 0ms SWR render
-    getPersistentCache(cacheKey).then(cached => {
+    readCachedAttendanceBundle().then(cached => {
       if (!isMounted || !cached) return;
       if (Array.isArray(cached.students) && cached.students.length > 0) {
         setStudents(cached.students);
-        if (cached.sheetsByDate) setSheetsByDate(cached.sheetsByDate);
-        if (cached.noClassDays) setNoClassDays(cached.noClassDays);
-        if (cached.attendanceMap) setAttendanceMap(cached.attendanceMap);
-        if (cached.remarksMap) setRemarksMap(cached.remarksMap);
-        if (cached.adviserAssignment) setAdviserAssignment(cached.adviserAssignment);
-        if (cached.teacherAssignment) setTeacherAssignment(cached.teacherAssignment);
+        studentsRef.current = cached.students;
+      }
+      if (cached.sheetsByDate && Object.keys(cached.sheetsByDate).length > 0) {
+        setSheetsByDate(cached.sheetsByDate);
+        sheetsByDateRef.current = cached.sheetsByDate;
+      }
+      if (cached.noClassDays && Object.keys(cached.noClassDays).length > 0) {
+        setNoClassDays(cached.noClassDays);
+        noClassDaysRef.current = cached.noClassDays;
+      }
+      if (cached.attendanceMap && Object.keys(cached.attendanceMap).length > 0) {
+        setAttendanceMap(cached.attendanceMap);
+        attendanceMapRef.current = cached.attendanceMap;
+      }
+      if (cached.remarksMap && Object.keys(cached.remarksMap).length > 0) {
+        setRemarksMap(cached.remarksMap);
+        remarksMapRef.current = cached.remarksMap;
+      }
+      if (cached.adviserAssignment) {
+        setAdviserAssignment(cached.adviserAssignment);
+        adviserAssignmentRef.current = cached.adviserAssignment;
+      }
+      if (cached.teacherAssignment) {
+        setTeacherAssignment(cached.teacherAssignment);
+        teacherAssignmentRef.current = cached.teacherAssignment;
+      }
+      if (Array.isArray(cached.students) && cached.students.length > 0) {
         setLoading(false);
       }
     }).catch(() => {});
@@ -265,6 +340,15 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
 
   const loadAll = async (force = false) => {
     loadAllRef.current = loadAll;
+    const cachedBundle = await readCachedAttendanceBundle();
+    if (cachedBundle && Array.isArray(cachedBundle.students) && cachedBundle.students.length > 0 && (!studentsRef.current || studentsRef.current.length === 0)) {
+      setStudents(cachedBundle.students);
+      studentsRef.current = cachedBundle.students;
+      if (cachedBundle.sheetsByDate) { setSheetsByDate(cachedBundle.sheetsByDate); sheetsByDateRef.current = cachedBundle.sheetsByDate; }
+      if (cachedBundle.noClassDays) { setNoClassDays(cachedBundle.noClassDays); noClassDaysRef.current = cachedBundle.noClassDays; }
+      if (cachedBundle.attendanceMap) { setAttendanceMap(cachedBundle.attendanceMap); attendanceMapRef.current = cachedBundle.attendanceMap; }
+      if (cachedBundle.remarksMap) { setRemarksMap(cachedBundle.remarksMap); remarksMapRef.current = cachedBundle.remarksMap; }
+    }
     if (!studentsRef.current || studentsRef.current.length === 0) {
       setLoading(true);
     }
@@ -304,13 +388,16 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
       let assignment = null;
       let teachAssignment = null;
       let targetTeacherAssignmentId = activeClass?.teacher_assignment_id ||
-        (activeClass?.assignmentType === "teaching" ? activeClass?.assignmentId : null);
+        (activeClass?.assignmentType === "teaching" ? activeClass?.assignmentId : null) ||
+        cachedBundle?.teacherAssignment?.teacher_assignment_id ||
+        teacherAssignmentRef.current?.teacher_assignment_id ||
+        null;
 
       if (isSubjectAttendance) {
-        let targetOfferingId = activeClass?.subject_offering_id || activeClass?.offering_id || null;
-        let targetSubjectId = activeClass?.subject_id || null;
-        let targetSubjectName = activeClass?.subject_name || activeClass?.subjectName || activeClass?.subject || "";
-        let targetSchoolYearId = activeClass?.school_year_id || activeClass?.schoolYearId || null;
+        let targetOfferingId = activeClass?.subject_offering_id || activeClass?.offering_id || cachedBundle?.teacherAssignment?.subject_offering_id || null;
+        let targetSubjectId = activeClass?.subject_id || cachedBundle?.teacherAssignment?.subject_id || null;
+        let targetSubjectName = activeClass?.subject_name || activeClass?.subjectName || activeClass?.subject || cachedBundle?.teacherAssignment?.subject_name || "";
+        let targetSchoolYearId = activeClass?.school_year_id || activeClass?.schoolYearId || cachedBundle?.teacherAssignment?.school_year_id || null;
 
         if (Array.isArray(assignmentsData) && assignmentsData.length > 0) {
           teachAssignment = assignmentsData.find(item =>
@@ -319,6 +406,8 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
             (Number(item.section_id) === Number(sectionId) && targetSubjectId && Number(item.subject_id) === Number(targetSubjectId)) ||
             (Number(item.section_id) === Number(sectionId) && (!targetSchoolYearId || Number(item.school_year_id) === Number(targetSchoolYearId)))
           ) || assignmentsData.find(item => Number(item.section_id) === Number(sectionId));
+        } else if (cachedBundle?.teacherAssignment || teacherAssignmentRef.current) {
+          teachAssignment = cachedBundle?.teacherAssignment || teacherAssignmentRef.current;
         }
 
         if (teachAssignment) {
@@ -331,7 +420,7 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
           gradeLevelName = teachAssignment.grade_level_name || gradeLevelName;
         }
 
-        setTeacherAssignment({
+        const resolvedTeachAssignment = {
           teacher_assignment_id: targetTeacherAssignmentId ? Number(targetTeacherAssignmentId) : null,
           subject_offering_id: targetOfferingId ? Number(targetOfferingId) : null,
           subject_id: targetSubjectId ? Number(targetSubjectId) : null,
@@ -340,7 +429,10 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
           section_id: Number(sectionId),
           section_name: sectionName,
           grade_level_name: gradeLevelName,
-        });
+        };
+        teachAssignment = resolvedTeachAssignment;
+        setTeacherAssignment(resolvedTeachAssignment);
+        teacherAssignmentRef.current = resolvedTeachAssignment;
       } else {
         if (Array.isArray(assignmentsData) && assignmentsData.length > 0) {
           const requestedId = activeClass?.adviser_assignment_id || activeClass?.assignmentId;
@@ -352,18 +444,23 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
             || assignmentsData[0];
         } else if (assignmentsData && assignmentsData.adviser_assignment_id) {
           assignment = assignmentsData;
+        } else if (cachedBundle?.adviserAssignment || adviserAssignmentRef.current) {
+          assignment = cachedBundle?.adviserAssignment || adviserAssignmentRef.current;
         }
 
         sectionName = secData?.section_name || assignment?.section_name || activeClass?.sectionName || activeClass?.section_name || sectionName;
         gradeLevelName = secData?.grade_level_name || assignment?.grade_level_name || activeClass?.gradeLevel || activeClass?.grade_level_name || gradeLevelName;
 
-        setAdviserAssignment({
+        const resolvedAdviserAssignment = {
           section_id: Number(sectionId),
-          adviser_assignment_id: assignment?.adviser_assignment_id || null,
-          school_year_id: assignment?.school_year_id || null,
+          adviser_assignment_id: assignment?.adviser_assignment_id || activeClass?.adviser_assignment_id || null,
+          school_year_id: assignment?.school_year_id || activeClass?.school_year_id || activeClass?.schoolYearId || null,
           section_name: sectionName,
           grade_level_name: gradeLevelName,
-        });
+        };
+        assignment = resolvedAdviserAssignment;
+        setAdviserAssignment(resolvedAdviserAssignment);
+        adviserAssignmentRef.current = resolvedAdviserAssignment;
       }
 
       // Process students
@@ -377,6 +474,10 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
           middle_name: s.middleName || s.middle_name || "",
           sex: s.sex || "M",
         }));
+      }
+
+      if (enrichedStudents.length === 0 && Array.isArray(cachedBundle?.students) && cachedBundle.students.length > 0) {
+        enrichedStudents = cachedBundle.students;
       }
 
       if (enrichedStudents.length === 0) {
@@ -460,6 +561,7 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
       enrichedStudents.sort((a, b) => a.last_name.localeCompare(b.last_name) || a.first_name.localeCompare(b.first_name));
       if (enrichedStudents.length > 0) {
         setStudents(enrichedStudents);
+        studentsRef.current = enrichedStudents;
       }
 
       // Parallel fetch Phase 2: sheets and attendance records
@@ -473,25 +575,40 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
         : (assignment?.adviser_assignment_id ? `&adviserAssignmentId=${assignment.adviser_assignment_id}` : '');
       const filterParams = `?${scopeQuery}${assignmentQuery}${yearQuery}&userId=${userId}`;
 
+      let sheetsLoadedFromNet = false;
+      let attLoadedFromNet = false;
+      let sheetsIsOfflineFallback = false;
+      let attIsOfflineFallback = false;
+
       const sheetsPromise = fetch(`${BASE_URL}/attendance-sheets/section/${sectionId}${filterParams}`, { force: Boolean(force) })
-        .then(r => (r?.ok ? r.json() : []))
+        .then(async r => {
+          if (!r?.ok) return [];
+          sheetsIsOfflineFallback = r.headers?.get('x-auralis-offline-fallback') === '1' || (typeof navigator !== 'undefined' && navigator.onLine === false);
+          sheetsLoadedFromNet = !sheetsIsOfflineFallback;
+          return r.json();
+        })
         .catch(e => { console.warn("[AttendanceSheet] Could not load sheets from network:", e); return []; });
 
       const attPromise = fetch(`${BASE_URL}/attendance/section/${sectionId}${filterParams}`, { force: Boolean(force) })
-        .then(r => (r?.ok ? r.json() : []))
+        .then(async r => {
+          if (!r?.ok) return [];
+          attIsOfflineFallback = r.headers?.get('x-auralis-offline-fallback') === '1' || (typeof navigator !== 'undefined' && navigator.onLine === false);
+          attLoadedFromNet = !attIsOfflineFallback;
+          return r.json();
+        })
         .catch(e => { console.warn("[AttendanceSheet] Could not load attendance records from network:", e); return []; });
 
       const [sheets, attRows] = await Promise.all([sheetsPromise, attPromise]);
 
-      const byDate = {};
-      let noClassDaysMap = {};
-      if (Array.isArray(sheets)) {
+      let byDate = { ...(cachedBundle?.sheetsByDate || sheetsByDateRef.current || {}) };
+      let noClassDaysMap = { ...(cachedBundle?.noClassDays || noClassDaysRef.current || {}) };
+      if (sheetsLoadedFromNet && Array.isArray(sheets) && (sheets.length > 0 || navigator.onLine)) {
+        byDate = {};
         sheets.forEach(sh => {
           const d = sh.attendance_date?.split("T")[0] || sh.attendance_date;
           byDate[d] = sh.attendance_sheet_id;
         });
         noClassDaysMap = noClassDaysFromSheets(sheets);
-        setNoClassDays(noClassDaysMap);
 
         // If the current selected date's month has no sheets at all, but there are existing recorded sheets:
         const currentMonthPrefix = (selectedDate || TODAY).slice(0, 7);
@@ -503,12 +620,25 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
             setSelectedDate(latestDate);
           }
         }
+      } else if (sheetsIsOfflineFallback && Array.isArray(sheets) && sheets.length > 0) {
+        const fallbackByDate = {};
+        sheets.forEach(sh => {
+          const d = sh.attendance_date?.split("T")[0] || sh.attendance_date;
+          fallbackByDate[d] = sh.attendance_sheet_id;
+        });
+        byDate = { ...fallbackByDate, ...byDate };
+        noClassDaysMap = { ...noClassDaysFromSheets(sheets), ...noClassDaysMap };
       }
+      setNoClassDays(noClassDaysMap);
+      noClassDaysRef.current = noClassDaysMap;
       setSheetsByDate(byDate);
+      sheetsByDateRef.current = byDate;
 
-      const attMap = {};
-      const remMap = {};
-      if (Array.isArray(attRows)) {
+      let attMap = { ...(cachedBundle?.attendanceMap || attendanceMapRef.current || {}) };
+      let remMap = { ...(cachedBundle?.remarksMap || remarksMapRef.current || {}) };
+      if (attLoadedFromNet && Array.isArray(attRows) && (attRows.length > 0 || navigator.onLine)) {
+        attMap = {};
+        remMap = {};
         attRows.forEach(row => {
           const d = row.attendance_date?.split("T")[0] || row.attendance_date;
           const key = `${row.student_section_id}-${d}`;
@@ -521,15 +651,35 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
             if (row.student_id) remMap[row.student_id] = row.remarks;
           }
         });
+      } else if (attIsOfflineFallback && Array.isArray(attRows) && attRows.length > 0) {
+        const fallbackAtt = {};
+        const fallbackRem = {};
+        attRows.forEach(row => {
+          const d = row.attendance_date?.split("T")[0] || row.attendance_date;
+          const key = `${row.student_section_id}-${d}`;
+          fallbackAtt[key] = row.status;
+          if (row.student_id) fallbackAtt[`${row.student_id}-${d}`] = row.status;
+          if (row.remarks) {
+            fallbackRem[row.student_section_id] = row.remarks;
+            if (row.student_id) fallbackRem[row.student_id] = row.remarks;
+          }
+        });
+        attMap = { ...fallbackAtt, ...attMap };
+        remMap = { ...fallbackRem, ...remMap };
       }
 
       // Merge any pending offline attendance records scoped to adviser or subject teacher
       try {
-        const pendingOffline = await getPendingOfflineAttendance(sectionId, null, undefined, {
+        let pendingOffline = await getPendingOfflineAttendance(sectionId, null, undefined, {
           attendance_scope: isSubjectAttendance ? 'SUBJECT' : 'SECTION',
           teacher_assignment_id: isSubjectAttendance ? targetTeacherAssignmentId : null,
           adviser_assignment_id: !isSubjectAttendance ? assignment?.adviser_assignment_id : null,
         });
+        if ((!Array.isArray(pendingOffline) || pendingOffline.length === 0) && (targetTeacherAssignmentId || assignment?.adviser_assignment_id)) {
+          pendingOffline = await getPendingOfflineAttendance(sectionId, null, undefined, {
+            attendance_scope: isSubjectAttendance ? 'SUBJECT' : 'SECTION',
+          });
+        }
         if (Array.isArray(pendingOffline) && pendingOffline.length > 0) {
           console.log(`[AttendanceSheet] Restoring ${pendingOffline.length} pending offline attendance records`);
           pendingOffline.forEach(p => {
@@ -553,11 +703,13 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
         console.warn("Failed to merge offline attendance records:", offErr);
       }
 
-      setAttendanceMap(prev => (attRows.length === 0 && Object.keys(attMap).length === 0 ? prev : attMap));
-      setRemarksMap(prev => (attRows.length === 0 && Object.keys(remMap).length === 0 ? prev : remMap));
+      setAttendanceMap(attMap);
+      attendanceMapRef.current = attMap;
+      setRemarksMap(remMap);
+      remarksMapRef.current = remMap;
 
-      // Persist full bundle to Dexie persistent cache
-      setPersistentCache(cacheKey, {
+      // Persist full bundle to Dexie persistent cache and localStorage
+      await persistAttendanceBundle({
         students: enrichedStudents,
         sheetsByDate: byDate,
         noClassDays: noClassDaysMap,
@@ -565,7 +717,7 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
         remarksMap: remMap,
         adviserAssignment: assignment,
         teacherAssignment: teachAssignment,
-      }).catch(() => {});
+      });
 
     } catch (err) {
       console.error("Error loading attendance data:", err);
@@ -711,18 +863,18 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
     else if (oldStatus === "L") newStatus = "A";
     else if (oldStatus === "A") newStatus = null;
 
-    // Optimistic update
-    setAttendanceMap(prev => {
-      const next = { ...prev };
-      if (newStatus) {
-        next[key] = newStatus;
-        if (altKey) next[altKey] = newStatus;
-      } else {
-        delete next[key];
-        if (altKey) delete next[altKey];
-      }
-      return next;
-    });
+    // Optimistic update + immediate persistent bundle cache write
+    const nextAttMap = { ...(attendanceMapRef.current || attendanceMap) };
+    if (newStatus) {
+      nextAttMap[key] = newStatus;
+      if (altKey) nextAttMap[altKey] = newStatus;
+    } else {
+      delete nextAttMap[key];
+      if (altKey) delete nextAttMap[altKey];
+    }
+    attendanceMapRef.current = nextAttMap;
+    setAttendanceMap(nextAttMap);
+    persistAttendanceBundle({ attendanceMap: nextAttMap });
 
     const recordPayload = {
       attendance_sheet_id: sheetsByDate[dateStr] || null,
@@ -821,8 +973,12 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
         };
       });
 
-      setAttendanceMap(prev => ({ ...prev, ...newMapUpdates }));
+      const nextAttMap = { ...(attendanceMapRef.current || attendanceMap), ...newMapUpdates };
+      attendanceMapRef.current = nextAttMap;
+      setAttendanceMap(nextAttMap);
+      persistAttendanceBundle({ attendanceMap: nextAttMap });
 
+      persistAttendanceBundle({ attendanceMap: attendanceMapRef.current || attendanceMap });
       const payloadCtx = getSavePayloadContext();
 
       if (typeof navigator !== "undefined" && !navigator.onLine) {
@@ -906,6 +1062,7 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
         };
       });
 
+      persistAttendanceBundle({ attendanceMap: attendanceMapRef.current || attendanceMap });
       const payloadCtx = getSavePayloadContext();
 
       if (typeof navigator !== "undefined" && !navigator.onLine) {
@@ -969,11 +1126,11 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
 
   // ── Handle remarks input change ──
   const handleRemarksChange = (studentSectionId, val, studentId = null) => {
-    setRemarksMap(prev => {
-      const next = { ...prev, [studentSectionId]: val };
-      if (studentId) next[studentId] = val;
-      return next;
-    });
+    const nextRem = { ...(remarksMapRef.current || remarksMap), [studentSectionId]: val };
+    if (studentId) nextRem[studentId] = val;
+    remarksMapRef.current = nextRem;
+    setRemarksMap(nextRem);
+    persistAttendanceBundle({ remarksMap: nextRem });
   };
 
   // ── Save remarks on blur or Enter ──

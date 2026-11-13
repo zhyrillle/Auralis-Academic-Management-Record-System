@@ -29,10 +29,11 @@ function normalizeStudentList(list) {
 /**
  * Pre-cache student roster for a specific section into localStorage and Dexie cache
  */
-async function warmSectionStudents(sectionId) {
+async function warmSectionStudents(sectionId, userId) {
   if (!sectionId) return [];
   try {
-    const res = await fetch(`${API_BASE_URL}/sections/${sectionId}/students`);
+    const headers = userId ? { 'X-Auralis-User-Id': String(userId) } : {};
+    const res = await fetch(`${API_BASE_URL}/sections/${sectionId}/students`, { headers });
     if (res.ok) {
       const raw = await res.json();
       const students = normalizeStudentList(raw);
@@ -53,15 +54,16 @@ async function warmSectionStudents(sectionId) {
 /**
  * Pre-cache attendance sheets and records for a section
  */
-async function warmAttendance(sectionId, isSubject, userId, schoolYearId, teacherAssignmentId, adviserAssignmentId, students) {
+async function warmAttendance(sectionId, isSubject, userId, schoolYearId, teacherAssignmentId, adviserAssignmentId, students, offeringId = null) {
   if (!sectionId || !userId) return;
-  const scopeTag = isSubject ? 'subject' : 'section';
+  const scopeTag = isSubject && offeringId ? `subject_${offeringId}` : (isSubject ? 'subject' : 'section');
   const cacheKey = `attendance_sheet_${sectionId}_${scopeTag}_${userId}`;
+  const legacyCacheKey = `attendance_sheet_${sectionId}_${isSubject ? 'subject' : 'section'}_${userId}`;
 
   try {
     const existing = await getPersistentCache(cacheKey);
-    if (existing && Array.isArray(existing.students) && existing.students.length > 0) {
-      return; // Already cached
+    if (existing && Array.isArray(existing.students) && existing.students.length > 0 && existing.attendanceMap && Object.keys(existing.attendanceMap).length > 0) {
+      return; // Already cached with attendance records
     }
 
     const scopeQuery = isSubject ? 'scope=SUBJECT' : 'scope=SECTION';
@@ -70,14 +72,19 @@ async function warmAttendance(sectionId, isSubject, userId, schoolYearId, teache
       : (adviserAssignmentId ? `&adviserAssignmentId=${adviserAssignmentId}` : '');
     const yearQuery = schoolYearId ? `&schoolYearId=${schoolYearId}` : '';
     const filterParams = `?${scopeQuery}${assignmentQuery}${yearQuery}&userId=${userId}`;
+    const reqHeaders = { 'X-Auralis-User-Id': String(userId) };
 
     const [sheetsRes, attRes] = await Promise.all([
-      fetch(`${API_BASE_URL}/attendance-sheets/section/${sectionId}${filterParams}`).catch(() => null),
-      fetch(`${API_BASE_URL}/attendance/section/${sectionId}${filterParams}`).catch(() => null),
+      fetch(`${API_BASE_URL}/attendance-sheets/section/${sectionId}${filterParams}`, { headers: reqHeaders }).catch(() => null),
+      fetch(`${API_BASE_URL}/attendance/section/${sectionId}${filterParams}`, { headers: reqHeaders }).catch(() => null),
     ]);
 
-    const sheets = sheetsRes?.ok ? await sheetsRes.json().catch(() => []) : [];
-    const attRows = attRes?.ok ? await attRes.json().catch(() => []) : [];
+    if (!sheetsRes?.ok || !attRes?.ok) {
+      return; // Never overwrite valid attendance cache with empty {} when request fails or is unauthorized
+    }
+
+    const sheets = await sheetsRes.json().catch(() => []);
+    const attRows = await attRes.json().catch(() => []);
 
     const byDate = {};
     const noClassDaysMap = {};
@@ -111,15 +118,26 @@ async function warmAttendance(sectionId, isSubject, userId, schoolYearId, teache
       });
     }
 
-    await setPersistentCache(cacheKey, {
-      students: students || [],
-      sheetsByDate: byDate,
-      noClassDays: noClassDaysMap,
-      attendanceMap: attMap,
-      remarksMap: remMap,
-      adviserAssignment: adviserAssignmentId ? { adviser_assignment_id: adviserAssignmentId, section_id: sectionId } : null,
-      teacherAssignment: teacherAssignmentId ? { teacher_assignment_id: teacherAssignmentId, section_id: sectionId } : null,
-    }).catch(() => {});
+    const bundlePayload = {
+      students: (students && students.length > 0) ? students : (existing?.students || []),
+      sheetsByDate: Object.keys(byDate).length > 0 ? byDate : (existing?.sheetsByDate || {}),
+      noClassDays: Object.keys(noClassDaysMap).length > 0 ? noClassDaysMap : (existing?.noClassDays || {}),
+      attendanceMap: Object.keys(attMap).length > 0 ? attMap : (existing?.attendanceMap || {}),
+      remarksMap: Object.keys(remMap).length > 0 ? remMap : (existing?.remarksMap || {}),
+      adviserAssignment: adviserAssignmentId ? { adviser_assignment_id: adviserAssignmentId, section_id: sectionId } : (existing?.adviserAssignment || null),
+      teacherAssignment: teacherAssignmentId ? { teacher_assignment_id: teacherAssignmentId, section_id: sectionId } : (existing?.teacherAssignment || null),
+    };
+
+    await setPersistentCache(cacheKey, bundlePayload).catch(() => {});
+    if (legacyCacheKey !== cacheKey) {
+      await setPersistentCache(legacyCacheKey, bundlePayload).catch(() => {});
+    }
+    try {
+      localStorage.setItem(`auralis_att_bundle_${cacheKey}`, JSON.stringify(bundlePayload));
+      if (legacyCacheKey !== cacheKey) {
+        localStorage.setItem(`auralis_att_bundle_${legacyCacheKey}`, JSON.stringify(bundlePayload));
+      }
+    } catch (_) {}
   } catch (err) {
     console.debug(`[CacheWarmer] attendance warm skipped for section ${sectionId}:`, err?.message);
   }
@@ -158,7 +176,7 @@ export async function warmUserOfflineData(userId, classes = null) {
     const sectionStudentsMap = {};
 
     for (const sId of sectionIds) {
-      const students = await warmSectionStudents(sId);
+      const students = await warmSectionStudents(sId, userId);
       sectionStudentsMap[sId] = students;
       // Brief pause between requests to keep the main thread snappy
       await new Promise(r => setTimeout(r, 60));
@@ -183,7 +201,7 @@ export async function warmUserOfflineData(userId, classes = null) {
       const syId = cls.school_year_id || cls.schoolYearId;
       const tAssignId = cls.teacher_assignment_id;
       const aAssignId = cls.adviser_assignment_id;
-      await warmAttendance(sId, isSubj, userId, syId, tAssignId, aAssignId, students);
+      await warmAttendance(sId, isSubj, userId, syId, tAssignId, aAssignId, students, offId);
       await new Promise(r => setTimeout(r, 60));
 
       // Warm PHIL-IRI for advisory classes

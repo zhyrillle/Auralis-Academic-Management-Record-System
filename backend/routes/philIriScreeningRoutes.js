@@ -23,6 +23,7 @@ router.get('/:sectionId', async (req, res) => {
 
 router.post('/:sectionId', async (req, res) => {
   try {
+    cloudSync.markPhilIriLocalWrite();
     const payload = { ...req.body, sectionId: req.params.sectionId };
     const result = await PhilIriScreening.saveBatch(payload, req.currentUser);
     cloudSync.forwardPhilIriScreeningBatchToCloud(payload, req.currentUser?.user_id).catch(() => {});

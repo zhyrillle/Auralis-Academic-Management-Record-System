@@ -50,10 +50,26 @@ class PhilIriAssessment {
       return { affectedRows: 0 };
     }
 
+    const clearedRecords = validRecords.filter(r => r._cleared);
+    const activeRecords = validRecords.filter(r => !r._cleared);
+    let totalAffected = 0;
+
+    for (const rec of clearedRecords) {
+      const [delRes] = await db.execute(
+        `DELETE FROM PHIL_IRI_ASSESSMENT WHERE student_section_id = ? AND test_type = ?`,
+        [Number(rec.student_section_id), rec.test_type === 'POST_TEST' ? 'POST_TEST' : 'PRE_TEST']
+      );
+      totalAffected += delRes?.affectedRows || 0;
+    }
+
+    if (activeRecords.length === 0) {
+      return { affectedRows: totalAffected };
+    }
+
     const valueClauses = [];
     const params = [];
 
-    for (const rec of validRecords) {
+    for (const rec of activeRecords) {
       valueClauses.push('(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
       const oralPct = Number(rec.oral_reading_percent);
       const compPct = Number(rec.comp_score_percent);

@@ -109,6 +109,7 @@ router.get('/:sectionId', async (req, res) => {
 // POST /api/phil-iri/batch
 router.post('/batch', async (req, res) => {
   try {
+    cloudSync.markPhilIriLocalWrite();
     let { records, sectionId, subjectOfferingId, schoolYearId, user_id } = req.body;
     if (!Array.isArray(records)) {
       return res.status(400).json({ success: false, error: 'records array is required' });

@@ -233,6 +233,12 @@ export async function processOutbox() {
     for (const item of items) {
       if (!isCurrentSession(scope) || !online() || task.controller.signal.aborted) break;
       if (!await db.outbox.get(item.id)) continue;
+      if (item.status === 'failed') break;
+      // Automatically prune obsolete/invalid non-numeric assessment IDs (e.g. ww_default_1, offline_...)
+      if ((item.method === 'PUT' || item.method === 'DELETE') && /\/assessments\/(?!\d+(?:$|[/?]))[^/?]+/.test(item.url)) {
+        await db.outbox.delete(item.id);
+        continue;
+      }
       try {
         assertCurrentSession(scope);
         // Older queued drafts predate the assignment checks. Replay only as
@@ -250,13 +256,25 @@ export async function processOutbox() {
         if (!response.ok) {
           const error = await response.text().catch(() => '');
           const nextRetry = (item.retryCount || 0) + 1;
-          const isClientError = response.status >= 400 && response.status < 500;
-          const status = isClientError ? 'requires-review' : 'pending';
-          await db.outbox.update(item.id, { status, error, retryCount: nextRetry });
           console.warn(`[SyncManager] Outbox item ${item.id} (${item.url}) failed (${response.status}):`, error);
+          if (response.status === 409) {
+            await db.outbox.update(item.id, { status: 'failed', error, retryCount: nextRetry });
+            break;
+          }
+          const isClientError = response.status >= 400 && response.status < 500;
           if (isClientError) {
+            // Drop unrecoverable 4xx client errors (e.g. 400/403/404 from stale or synthetic offline IDs)
+            // so they never block the queue or trigger persistent "Older offline work needs review" banners.
+            await db.transaction('rw', db.outbox, db.offlineScores, db.offlineAttendance, db.offlinePhilIri, db.offlineScreening, async () => {
+              await db.outbox.delete(item.id);
+              await clearOfflineScores(null, null, { scope, mutationId: item.id });
+              await clearOfflineAttendance(null, null, { scope, mutationId: item.id });
+              await clearOfflinePhilIri(null, null, { scope, mutationId: item.id });
+              await clearOfflineScreening(null, null, { scope, mutationId: item.id });
+            });
             continue;
           }
+          await db.outbox.update(item.id, { status: 'pending', error, retryCount: nextRetry });
           break;
         }
         await db.transaction('rw', db.outbox, db.offlineScores, db.offlineAttendance, db.offlinePhilIri, db.offlineScreening, async () => {
@@ -599,15 +617,24 @@ export async function clearOfflineScreening(sectionId, schoolYearId, { scope = g
 export async function retryReviewItems(scope = getSessionScope()) {
   if (!scope || !db.constructor.dependencies.indexedDB) return;
   try {
-    await db.transaction('rw', db.outbox, async () => {
-      await db.outbox.where('status').equals('requires-review')
+    await db.transaction('rw', db.outbox, db.offlineScores, db.offlineAttendance, db.offlinePhilIri, db.offlineScreening, async () => {
+      // Adopt or reset review/failed items so they can be replayed cleanly, and remove unrecoverable ownerless rows
+      await db.outbox.filter(item => item.status === 'requires-review' || item.status === 'failed')
         .modify(item => {
+          if (!item.ownerId) {
+            item.ownerId = scope.ownerId;
+            item.ownerIdentity = scope.identity;
+          }
           item.status = 'pending';
           item.retryCount = 0;
         });
+      await db.offlineScores.filter(item => !item.ownerId).delete();
+      await db.offlineAttendance.filter(item => !item.ownerId).delete();
+      await db.offlinePhilIri.filter(item => !item.ownerId).delete();
+      await db.offlineScreening.filter(item => !item.ownerId).delete();
     });
     notify();
-    if (online()) processOutbox();
+    if (online()) await processOutbox();
   } catch (err) {
     console.warn('[SyncManager] Failed to retry review items:', err);
   }
@@ -616,8 +643,12 @@ export async function retryReviewItems(scope = getSessionScope()) {
 export async function dismissReviewItems(scope = getSessionScope()) {
   if (!scope || !db.constructor.dependencies.indexedDB) return;
   try {
-    await db.transaction('rw', db.outbox, async () => {
-      await db.outbox.where('status').equals('requires-review').delete();
+    await db.transaction('rw', db.outbox, db.offlineScores, db.offlineAttendance, db.offlinePhilIri, db.offlineScreening, async () => {
+      await db.outbox.filter(item => item.status === 'requires-review' || item.status === 'failed' || !item.ownerId).delete();
+      await db.offlineScores.filter(item => !item.ownerId).delete();
+      await db.offlineAttendance.filter(item => !item.ownerId).delete();
+      await db.offlinePhilIri.filter(item => !item.ownerId).delete();
+      await db.offlineScreening.filter(item => !item.ownerId).delete();
     });
     notify();
   } catch (err) {

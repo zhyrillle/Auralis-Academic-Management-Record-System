@@ -16,6 +16,8 @@ import {
 const getScreeningDraftKey = (sectionId, schoolYearId, scope) =>
   accountDraftKey(`phil_iri_screening_${sectionId}_sy_${schoolYearId}`, scope);
 
+let lastScreeningSaveTimestamp = 0;
+
 /**
  * Merge pending offline screening records onto baseline records.
  */
@@ -51,16 +53,19 @@ export async function getScreeningRecords(sectionId, schoolYearId, force = false
 
   if (cachedPayload && Array.isArray(cachedPayload.records) && !force) {
     const mergedRecords = mergeOfflineScreeningRecords(cachedPayload.records, pendingOffline);
+    const cacheAge = Date.now() - (cachedPayload.updatedAt || 0);
 
-    // Revalidate in background if online
-    if (typeof navigator !== 'undefined' && navigator.onLine) {
+    // Revalidate in background if online, cache is older than 5s, and no recent save is in progress
+    if (typeof navigator !== 'undefined' && navigator.onLine && pendingOffline.length === 0 && cacheAge > 5000 && Date.now() - lastScreeningSaveTimestamp > 5000) {
+      const swrStartedAt = Date.now();
       const user = getStoredUser();
       apiFetch(`${API_BASE_URL}/phil-iri/screening/${encodeURIComponent(sectionId)}?schoolYearId=${encodeURIComponent(schoolYearId)}`, {
         headers: { 'Content-Type': 'application/json', 'X-Auralis-User-Id': String(user?.user_id || user?.id || '') },
         force: true,
       })
-        .then(r => (r.ok ? r.json() : null))
+        .then(r => (r.ok && r.headers?.get('x-auralis-offline-fallback') !== '1' ? r.json() : null))
         .then(data => {
+          if (lastScreeningSaveTimestamp > swrStartedAt) return;
           if (data?.records && Array.isArray(data.records)) {
             setPersistentCache(cacheKey, {
               records: data.records,
@@ -89,15 +94,29 @@ export async function getScreeningRecords(sectionId, schoolYearId, force = false
       headers: { 'Content-Type': 'application/json', 'X-Auralis-User-Id': String(user?.user_id || user?.id || '') },
       force: Boolean(force),
     });
+    const isOfflineFallback = response.headers?.get('x-auralis-offline-fallback') === '1' || (typeof navigator !== 'undefined' && navigator.onLine === false);
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.message || 'Screening scores could not be loaded.');
 
+    if (isOfflineFallback && cachedPayload && Array.isArray(cachedPayload.records)) {
+      const mergedRecords = mergeOfflineScreeningRecords(cachedPayload.records, pendingOffline);
+      return {
+        records: mergedRecords,
+        config: cachedPayload.config || data.config || null,
+        tableReady: true,
+        source: "cache",
+        pendingCount: pendingOffline.length,
+      };
+    }
+
     if (data.records && Array.isArray(data.records)) {
-      await setPersistentCache(cacheKey, {
-        records: data.records,
-        config: data.config || null,
-        updatedAt: Date.now(),
-      }, undefined, scope).catch(() => {});
+      if (!isOfflineFallback) {
+        await setPersistentCache(cacheKey, {
+          records: data.records,
+          config: data.config || null,
+          updatedAt: Date.now(),
+        }, undefined, scope).catch(() => {});
+      }
 
       const mergedRecords = mergeOfflineScreeningRecords(data.records, pendingOffline);
       return {
@@ -159,14 +178,18 @@ export async function getScreeningRecords(sectionId, schoolYearId, force = false
 export async function saveScreeningRecords(sectionId, schoolYearId, body) {
   const scope = getSessionScope();
   assertCurrentSession(scope);
+  lastScreeningSaveTimestamp = Date.now();
   const cacheKey = `phil_iri_screening_${sectionId}_sy_${schoolYearId}`;
   const draftKey = getScreeningDraftKey(sectionId, schoolYearId, scope);
   const user = getStoredUser();
 
-  // Always update persistent cache + localStorage immediately
+  // Always update persistent cache + localStorage immediately (enriching records with config fields)
+  const recordsWithConfig = Array.isArray(body.records)
+    ? body.records.map(r => ({ ...(body.config || {}), ...r }))
+    : [];
   try {
     await setPersistentCache(cacheKey, {
-      records: body.records,
+      records: recordsWithConfig,
       config: body.config,
       updatedAt: Date.now(),
     }, undefined, scope);
@@ -175,7 +198,7 @@ export async function saveScreeningRecords(sectionId, schoolYearId, body) {
   if (draftKey) {
     try {
       localStorage.setItem(draftKey, JSON.stringify({
-        records: body.records,
+        records: recordsWithConfig,
         config: body.config,
         updatedAt: Date.now(),
       }));
@@ -203,10 +226,12 @@ export async function saveScreeningRecords(sectionId, schoolYearId, body) {
   try {
     const response = await apiFetch(`${API_BASE_URL}/phil-iri/screening/${encodeURIComponent(sectionId)}?schoolYearId=${encodeURIComponent(schoolYearId)}`, {
       method: 'POST',
+      queueOffline: false,
       headers: { 'Content-Type': 'application/json', 'X-Auralis-User-Id': String(user?.user_id || user?.id || '') },
       body: JSON.stringify({ ...body, sectionId: Number(sectionId), schoolYearId: Number(schoolYearId) }),
     });
     const data = await response.json().catch(() => ({}));
+    lastScreeningSaveTimestamp = Date.now();
     if (!response.ok) throw new Error(data.message || 'Screening scores could not be saved to server.');
 
     // Clear offline records since cloud sync succeeded

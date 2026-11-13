@@ -263,7 +263,11 @@ export async function cachedApiFetch(input, init = {}) {
   try {
     const pending = loadCached(key, read, { force: force || refreshingReads > 0 });
     const snapshot = await waitForCachedRead(pending, callerSignal);
-    return new Response(snapshot.body, { status: snapshot.status, statusText: snapshot.statusText, headers: snapshot.headers });
+    const isOfflineFallback = Boolean(entries.get(key)?.offline) || (typeof navigator !== 'undefined' && navigator.onLine === false);
+    const headers = isOfflineFallback
+      ? [...(snapshot.headers || []), ['x-auralis-offline-fallback', '1']]
+      : snapshot.headers;
+    return new Response(snapshot.body, { status: snapshot.status, statusText: snapshot.statusText, headers });
   } catch (error) {
     if (error.response) return typeof error.response.clone === 'function' ? error.response.clone() : error.response;
     throw error;

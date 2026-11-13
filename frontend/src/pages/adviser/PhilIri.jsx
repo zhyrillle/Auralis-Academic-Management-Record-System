@@ -23,6 +23,7 @@ import {
   screeningTotal,
 } from "../../utils/philIriScreening";
 import {
+  accountDraftKey,
   processOutbox,
   subscribeSyncStatus,
   getSyncSnapshot,
@@ -154,7 +155,9 @@ function ScreeningTest({
 }) {
   const [config, setConfig] = useState(() => {
     try {
-      const raw = localStorage.getItem(`account_${userId || 'current'}_draft_phil_iri_screening_${sectionId}_sy_${schoolYearId}`) ||
+      const draftKey = accountDraftKey(`phil_iri_screening_${sectionId}_sy_${schoolYearId}`);
+      const raw = (draftKey && localStorage.getItem(draftKey)) ||
+                  localStorage.getItem(`account_${userId || 'current'}_draft_phil_iri_screening_${sectionId}_sy_${schoolYearId}`) ||
                   localStorage.getItem(`phil_iri_screening_${sectionId}_sy_${schoolYearId}`);
       if (raw) {
         const parsed = JSON.parse(raw);
@@ -177,7 +180,9 @@ function ScreeningTest({
   const [editing, setEditing] = useState(false);
   const [scores, setScores] = useState(() => {
     try {
-      const raw = localStorage.getItem(`account_${userId || 'current'}_draft_phil_iri_screening_${sectionId}_sy_${schoolYearId}`) ||
+      const draftKey = accountDraftKey(`phil_iri_screening_${sectionId}_sy_${schoolYearId}`);
+      const raw = (draftKey && localStorage.getItem(draftKey)) ||
+                  localStorage.getItem(`account_${userId || 'current'}_draft_phil_iri_screening_${sectionId}_sy_${schoolYearId}`) ||
                   localStorage.getItem(`phil_iri_screening_${sectionId}_sy_${schoolYearId}`);
       if (raw) {
         const parsed = JSON.parse(raw);
@@ -215,40 +220,46 @@ function ScreeningTest({
   useEffect(() => {
     if (!active || rosterLoading || !sectionId || !schoolYearId) return;
     let current = true;
+    const startEdit = latestEdit.current;
     getScreeningRecords(sectionId, schoolYearId)
       .then((data) => {
         if (!current) return;
         const rows = data.records || [];
-        if (rows.length) {
-          const first = rows[0];
-          setConfig(
-            Object.fromEntries(
-              Object.keys(SCREENING_DEFAULTS).map((key) => [
-                key,
-                key === "assessed_on"
-                  ? String(first[key] || "").slice(0, 10)
-                  : (first[key] ?? SCREENING_DEFAULTS[key]),
-              ]),
-            ),
+        const loadedScores = Object.fromEntries(
+          rows.map((row) => [String(row.student_section_id), row]),
+        );
+        if (latestEdit.current === startEdit) {
+          const first = data.config || rows[0];
+          if (first) {
+            setConfig(
+              Object.fromEntries(
+                Object.keys(SCREENING_DEFAULTS).map((key) => [
+                  key,
+                  key === "assessed_on"
+                    ? String(first[key] || "").slice(0, 10)
+                    : (first[key] ?? SCREENING_DEFAULTS[key]),
+                ]),
+              ),
+            );
+          }
+          setScores(loadedScores);
+          onStatus(
+            data.offline || !navigator.onLine
+              ? "Saved to device storage"
+              : (rows.length ? "Screening scores saved" : "No screening scores yet")
           );
+        } else {
+          setScores((prev) => ({ ...loadedScores, ...prev }));
         }
-        setScores(
-          Object.fromEntries(
-            rows.map((row) => [String(row.student_section_id), row]),
-          ),
-        );
         setReady(true);
-        onStatus(
-          data.offline || !navigator.onLine
-            ? "Saved to device storage"
-            : (rows.length ? "Screening scores saved" : "No screening scores yet")
-        );
       })
       .catch((err) => {
         if (!current) return;
         console.warn("[PHIL-IRI screening]", err.message);
         setReady(true);
-        onStatus(typeof navigator !== "undefined" && !navigator.onLine ? "Saved to device storage" : "Screening scores unavailable");
+        if (latestEdit.current === startEdit) {
+          onStatus(typeof navigator !== "undefined" && !navigator.onLine ? "Saved to device storage" : "Screening scores unavailable");
+        }
       })
       .finally(() => {
         if (current) {
@@ -265,12 +276,15 @@ function ScreeningTest({
     if (!active || !sectionId || !schoolYearId) return;
 
     const syncScreening = async () => {
+      const startEdit = latestEdit.current;
       try {
         await processOutbox();
+        if (latestEdit.current !== startEdit) return;
         const data = await getScreeningRecords(sectionId, schoolYearId, true);
+        if (latestEdit.current !== startEdit) return;
         const rows = data.records || [];
         if (rows.length) {
-          const first = rows[0];
+          const first = data.config || rows[0];
           setConfig(prev => ({
             ...prev,
             ...Object.fromEntries(
@@ -301,11 +315,9 @@ function ScreeningTest({
     };
 
     window.addEventListener("online", handleOnline);
-    window.addEventListener(CACHE_INVALIDATED_EVENT, syncScreening);
 
     return () => {
       window.removeEventListener("online", handleOnline);
-      window.removeEventListener(CACHE_INVALIDATED_EVENT, syncScreening);
     };
   }, [active, sectionId, schoolYearId, onStatus]);
 
@@ -325,7 +337,13 @@ function ScreeningTest({
     if (loading || !sectionId || !schoolYearId) return;
     setScores((previous) => {
       const row = { ...previous[id], [key]: value };
-      if (key.endsWith("_score") && value !== "") row.test_taken = 1;
+      if (key.endsWith("_score")) {
+        if (value !== "") {
+          row.test_taken = 1;
+        } else if (SCREENING_PARTS.every((part) => row[`${part}_score`] === "" || row[`${part}_score`] == null)) {
+          row.test_taken = null;
+        }
+      }
       if (key === "test_taken" && value !== 1)
         SCREENING_PARTS.forEach((part) => {
           row[`${part}_score`] = null;
@@ -764,8 +782,9 @@ export default function PhilIri({ activeClass: propActiveClass, onBack }) {
   const [scores, setScores] = useState(() => {
     if (!sectionId) return {};
     try {
+      const scopedDraftKey = accountDraftKey(`phil_iri_${sectionId}_${testType}_sy_1`) || accountDraftKey(`phil_iri_${sectionId}_${testType}`);
       const draftKey = `account_${currentUser?.user_id || currentUser?.id || "current"}_draft_phil_iri_${sectionId}_${testType}`;
-      const raw = localStorage.getItem(draftKey) || localStorage.getItem(`phil_iri_${sectionId}_${testType}`);
+      const raw = (scopedDraftKey && localStorage.getItem(scopedDraftKey)) || localStorage.getItem(draftKey) || localStorage.getItem(`phil_iri_${sectionId}_${testType}`);
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed.records)) {
@@ -818,6 +837,9 @@ export default function PhilIri({ activeClass: propActiveClass, onBack }) {
   const pdfRef = useRef(null);
   const isLoadedRef = useRef(false);
   const debounceTimerRef = useRef(null);
+  const postTestEditRef = useRef(0);
+  const postTestSaveQueueRef = useRef(Promise.resolve());
+  const clearedStudentsRef = useRef(new Set());
 
   // Manage online/offline synchronization for PHIL-IRI
   useEffect(() => {
@@ -840,11 +862,14 @@ export default function PhilIri({ activeClass: propActiveClass, onBack }) {
     const unsubscribe = subscribeSyncStatus(() => updateSync());
 
     const handleOnline = async () => {
+      const startEdit = postTestEditRef.current;
       setSyncStatus("saving");
       try {
         await processOutbox();
+        if (postTestEditRef.current !== startEdit || debounceTimerRef.current) return;
         if (sectionId && schoolYearId) {
           const res = await getPhilIriRecords(sectionId, testType, subjectOfferingId, schoolYearId, true);
+          if (postTestEditRef.current !== startEdit || debounceTimerRef.current) return;
           if (res && Array.isArray(res.records)) {
             const newScores = {};
             res.records.forEach((r) => {
@@ -876,13 +901,11 @@ export default function PhilIri({ activeClass: propActiveClass, onBack }) {
 
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
-    window.addEventListener(CACHE_INVALIDATED_EVENT, handleOnline);
 
     return () => {
       unsubscribe();
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
-      window.removeEventListener(CACHE_INVALIDATED_EVENT, handleOnline);
     };
   }, [sectionId, schoolYearId, subjectOfferingId, testType]);
 
@@ -1056,13 +1079,17 @@ export default function PhilIri({ activeClass: propActiveClass, onBack }) {
       isLoadedRef.current = true;
       return;
     }
+    clearedStudentsRef.current.clear();
+    const startEdit = postTestEditRef.current;
     if (sectionId) {
       getPhilIriRecords(sectionId, testType, subjectOfferingId, schoolYearId)
         .then((res) => {
           if (!isCurrent) return;
-          if (res.passageWordsCount)
-            setPassageWordsCount(res.passageWordsCount);
-          if (res.totalCompItems) setTotalCompItems(res.totalCompItems);
+          if (postTestEditRef.current === startEdit) {
+            if (res.passageWordsCount)
+              setPassageWordsCount(res.passageWordsCount);
+            if (res.totalCompItems) setTotalCompItems(res.totalCompItems);
+          }
           if (res.coordinator) {
             setCoordinatorInfo(res.coordinator);
           }
@@ -1083,11 +1110,11 @@ export default function PhilIri({ activeClass: propActiveClass, onBack }) {
               };
             });
           }
-          setScores(newScores);
+          setScores((prev) =>
+            postTestEditRef.current !== startEdit ? { ...newScores, ...prev } : newScores
+          );
           setSyncStatus(res.tableReady ? "saved" : "offline");
-          setTimeout(() => {
-            if (isCurrent) isLoadedRef.current = true;
-          }, 400);
+          isLoadedRef.current = true;
         })
         .catch((err) => {
           console.warn("Error fetching PHIL-IRI scores:", err);
@@ -1138,13 +1165,24 @@ export default function PhilIri({ activeClass: propActiveClass, onBack }) {
 
   // Handle score cell input
   const handleScoreChange = (studentSecId, field, value) => {
-    setScores((prev) => ({
-      ...prev,
-      [studentSecId]: {
+    postTestEditRef.current += 1;
+    setScores((prev) => {
+      const nextRow = {
         ...(prev[studentSecId] || {}),
         [field]: value,
-      },
-    }));
+      };
+      const wc = nextRow.wordsCorrect ?? "";
+      const ca = nextRow.correctAnswers ?? "";
+      if (wc === "" && ca === "") {
+        clearedStudentsRef.current.add(String(studentSecId));
+      } else {
+        clearedStudentsRef.current.delete(String(studentSecId));
+      }
+      return {
+        ...prev,
+        [studentSecId]: nextRow,
+      };
+    });
   };
 
   // Compile computed student data
@@ -1270,6 +1308,17 @@ export default function PhilIri({ activeClass: propActiveClass, onBack }) {
           overall_reading_level: computed.overallLevel || "FRUSTRATION",
           user_id: effectiveUserId,
         });
+      } else if (clearedStudentsRef.current.has(secId)) {
+        recordsToSave.push({
+          student_section_id: st.student_section_id || Number(st.student_id),
+          subject_offering_id: effectiveSubjectOfferingId,
+          test_type: testType,
+          passage_words_count: Number(passageWordsCount),
+          words_correct: null,
+          comp_correct: null,
+          user_id: effectiveUserId,
+          _cleared: true,
+        });
       }
     });
 
@@ -1278,23 +1327,35 @@ export default function PhilIri({ activeClass: propActiveClass, onBack }) {
       return;
     }
 
-    try {
-      const res = await savePhilIriBatch({
-        sectionId,
-        subjectOfferingId: effectiveSubjectOfferingId,
-        schoolYearId,
-        userId: effectiveUserId,
-        testType,
-        records: recordsToSave,
-        passageWordsCount,
-        totalCompItems,
-      });
+    const saveEditVersion = postTestEditRef.current;
+    postTestSaveQueueRef.current = postTestSaveQueueRef.current
+      .catch(() => {})
+      .then(async () => {
+        if (postTestEditRef.current !== saveEditVersion) return;
+        try {
+          const res = await savePhilIriBatch({
+            sectionId,
+            subjectOfferingId: effectiveSubjectOfferingId,
+            schoolYearId,
+            userId: effectiveUserId,
+            testType,
+            records: recordsToSave,
+            passageWordsCount,
+            totalCompItems,
+          });
 
-      setSyncStatus(res.offline || !navigator.onLine ? "offline" : (res.tableReady ? "saved" : "offline"));
-    } catch (err) {
-      console.warn("Save error:", err);
-      setSyncStatus("offline");
-    }
+          if (postTestEditRef.current === saveEditVersion) {
+            clearedStudentsRef.current.clear();
+            setSyncStatus(res.offline || !navigator.onLine ? "offline" : (res.tableReady ? "saved" : "offline"));
+          }
+        } catch (err) {
+          console.warn("Save error:", err);
+          if (postTestEditRef.current === saveEditVersion) {
+            setSyncStatus("offline");
+          }
+        }
+      });
+    return postTestSaveQueueRef.current;
   };
 
   const handleInputBlur = () => {
@@ -1916,7 +1977,7 @@ export default function PhilIri({ activeClass: propActiveClass, onBack }) {
 
       {/* 3. DOCUMENT DISPLAY VIEWPORT */}
       <ScreeningTest
-        key={`${sectionId}:${schoolYearId || ""}`}
+        key={String(sectionId || "default")}
         active={screeningActive}
         sectionId={sectionId}
         schoolYearId={schoolYearId}

@@ -15,6 +15,8 @@ import {
 const getStorageKey = (sectionId, testType, schoolYearId, scope) =>
   accountDraftKey(`phil_iri_${sectionId}_${testType}${schoolYearId ? `_sy_${schoolYearId}` : ""}`, scope);
 
+let lastPhilIriSaveTimestamp = 0;
+
 /**
  * Helper to overlay pending offline PHIL-IRI records onto server/cached records.
  */
@@ -29,6 +31,10 @@ function mergeOfflinePhilIriRecords(baseRecords = [], pendingOffline = []) {
   // Overlay pending offline records
   pendingOffline.forEach(p => {
     const key = String(p.student_section_id || p.student_id);
+    if (p._cleared || (p.words_correct === null && p.comp_correct === null)) {
+      mergedMap.delete(key);
+      return;
+    }
     const existing = mergedMap.get(key) || {};
     mergedMap.set(key, {
       ...existing,
@@ -63,21 +69,26 @@ export async function getPhilIriRecords(sectionId, testType = "POST_TEST", subje
 
   if (cachedPayload && Array.isArray(cachedPayload.records) && !force) {
     const mergedRecords = mergeOfflinePhilIriRecords(cachedPayload.records, pendingOffline);
-    // Background revalidate if online
-    if (typeof navigator !== 'undefined' && navigator.onLine) {
+    const cacheAge = Date.now() - (cachedPayload.updatedAt || (cachedPayload.savedAt ? new Date(cachedPayload.savedAt).getTime() : 0));
+    // Background revalidate if online, cache is older than 5s, and no recent save is in progress
+    if (typeof navigator !== 'undefined' && navigator.onLine && pendingOffline.length === 0 && cacheAge > 5000 && Date.now() - lastPhilIriSaveTimestamp > 5000) {
+      const swrStartedAt = Date.now();
       let url = `${API_BASE_URL}/phil-iri/${encodeURIComponent(sectionId)}?testType=${encodeURIComponent(testType)}`;
       if (subjectOfferingId) url += `&subjectOfferingId=${encodeURIComponent(subjectOfferingId)}`;
       if (schoolYearId) url += `&schoolYearId=${encodeURIComponent(schoolYearId)}`;
 
       fetch(url, { force: true })
-        .then(r => (r.ok ? r.json() : null))
+        .then(r => (r.ok && r.headers?.get('x-auralis-offline-fallback') !== '1' ? r.json() : null))
         .then(data => {
+          if (lastPhilIriSaveTimestamp > swrStartedAt) return;
           if (data?.tableReady && Array.isArray(data.records)) {
             const freshPayload = {
               records: data.records,
               coordinator: data.coordinator || cachedPayload.coordinator || null,
               passageWordsCount: data.passageWordsCount || cachedPayload.passageWordsCount,
               totalCompItems: data.totalCompItems || cachedPayload.totalCompItems,
+              updatedAt: Date.now(),
+              savedAt: new Date().toISOString(),
             };
             setPersistentCache(cacheKey, freshPayload, undefined, scope).catch(() => {});
           }
@@ -104,17 +115,33 @@ export async function getPhilIriRecords(sectionId, testType = "POST_TEST", subje
 
     const res = await fetch(url, { force: Boolean(force) });
     if (res.ok) {
+      const isOfflineFallback = res.headers?.get('x-auralis-offline-fallback') === '1' || (typeof navigator !== 'undefined' && navigator.onLine === false);
       const data = await res.json();
       assertCurrentSession(scope);
+      if (isOfflineFallback && cachedPayload && Array.isArray(cachedPayload.records)) {
+        const mergedRecords = mergeOfflinePhilIriRecords(cachedPayload.records, pendingOffline);
+        return {
+          records: mergedRecords,
+          coordinator: cachedPayload.coordinator || data.coordinator || null,
+          passageWordsCount: cachedPayload.passageWordsCount || data.passageWordsCount,
+          totalCompItems: cachedPayload.totalCompItems || data.totalCompItems,
+          source: "cache",
+          tableReady: true,
+          pendingCount: pendingOffline.length,
+        };
+      }
       if (data.tableReady) {
         const payloadToCache = {
           records: Array.isArray(data.records) ? data.records : [],
           coordinator: data.coordinator || null,
           passageWordsCount: data.passageWordsCount,
           totalCompItems: data.totalCompItems,
+          updatedAt: Date.now(),
           savedAt: new Date().toISOString(),
         };
-        await setPersistentCache(cacheKey, payloadToCache, undefined, scope).catch(() => {});
+        if (!isOfflineFallback) {
+          await setPersistentCache(cacheKey, payloadToCache, undefined, scope).catch(() => {});
+        }
 
         const mergedRecords = mergeOfflinePhilIriRecords(payloadToCache.records, pendingOffline);
         return {
@@ -197,24 +224,27 @@ export async function savePhilIriBatch({
 }) {
   const scope = getSessionScope();
   assertCurrentSession(scope);
+  lastPhilIriSaveTimestamp = Date.now();
   const cacheKey = `phil_iri_${sectionId}_${testType}_${schoolYearId || 'all'}`;
   const storageKey = getStorageKey(sectionId, testType, schoolYearId, scope);
+  const nonClearedRecords = records.filter(r => !r._cleared);
 
   // Always update persistent cache + localStorage immediately
   try {
     const existingCache = (await getPersistentCache(cacheKey, scope)) || {};
     await setPersistentCache(cacheKey, {
       ...existingCache,
-      records,
+      records: nonClearedRecords,
       passageWordsCount,
       totalCompItems,
+      updatedAt: Date.now(),
       savedAt: new Date().toISOString(),
     }, undefined, scope);
   } catch (_) {}
 
   try {
     localStorage.setItem(storageKey, JSON.stringify({
-      records,
+      records: nonClearedRecords,
       passageWordsCount,
       totalCompItems,
       savedAt: new Date().toISOString(),
@@ -244,6 +274,7 @@ export async function savePhilIriBatch({
   try {
     const res = await fetch(`${API_BASE_URL}/phil-iri/batch`, {
       method: "POST",
+      queueOffline: false,
       headers: {
         "Content-Type": "application/json",
         "X-Auralis-User-Id": String(userId || scope?.ownerId || ""),
@@ -259,8 +290,9 @@ export async function savePhilIriBatch({
 
     const data = await res.json().catch(() => ({}));
     assertCurrentSession(scope);
+    lastPhilIriSaveTimestamp = Date.now();
 
-    if (res.ok && data.success) {
+    if (res.ok && data.success && !data.offline) {
       await clearOfflinePhilIri(sectionId, testType).catch(() => {});
       return { success: true, tableReady: true, source: "database" };
     } else {

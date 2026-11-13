@@ -32,6 +32,201 @@ const parseResponse = async (response) => {
   return data;
 };
 
+function isMapehText(name = "", code = "") {
+  const str = `${name} ${code}`.toLowerCase();
+  return (
+    str.includes("mapeh") ||
+    str.includes("music") ||
+    str.includes("arts") ||
+    str.includes("physical education") ||
+    str.includes("pe &") ||
+    str.includes("health")
+  );
+}
+
+function detectOfflineClassMeta(subjectOfferingId, subjectId) {
+  try {
+    const user = getStoredUser();
+    const uid = user?.user_id || user?.id;
+    const raw =
+      (uid && localStorage.getItem(`auralis_assigned_classes_${uid}`)) ||
+      localStorage.getItem("cachedAssignedClasses");
+    if (raw) {
+      const list = JSON.parse(raw);
+      if (Array.isArray(list)) {
+        const match = list.find(
+          (c) =>
+            String(c.subject_offering_id || c.offering_id || "") === String(subjectOfferingId) ||
+            (subjectId && String(c.subject_id) === String(subjectId))
+        );
+        if (match) {
+          const subjName = match.subject_name || match.subjectName || match.subject || "";
+          const subjCode = match.subject_code || match.subjectCode || "";
+          return {
+            subject_name: subjName,
+            subject_code: subjCode,
+            section_name: match.section_name || match.sectionName || match.section || "",
+            grade_level: match.grade_level || match.gradeLevel || match.grade || "",
+            is_mapeh: isMapehText(subjName, subjCode),
+          };
+        }
+      }
+    }
+  } catch (_) {}
+  return { subject_name: "", subject_code: "", section_name: "", grade_level: "", is_mapeh: false };
+}
+
+function buildDefaultOfflineAssessments(isMapeh = false, mapehComponent = null) {
+  const comp = isMapeh ? (mapehComponent || "MA") : null;
+  const suffix = comp ? `_${comp}` : "";
+  return [
+    {
+      assessment_id: `ww_default_1${suffix}`,
+      activity_id: `ww_default_1${suffix}`,
+      activity_name: "Written Work 1",
+      title: "Written Work 1",
+      component_code: "WW",
+      type: "writtenWork",
+      max_score: 20,
+      highest_possible_score: 20,
+      mapeh_component: comp,
+      status: "ACTIVE",
+    },
+    {
+      assessment_id: `pt_default_1${suffix}`,
+      activity_id: `pt_default_1${suffix}`,
+      activity_name: "Performance Task 1",
+      title: "Performance Task 1",
+      component_code: "PT",
+      type: "performanceTask",
+      max_score: 50,
+      highest_possible_score: 50,
+      mapeh_component: comp,
+      status: "ACTIVE",
+    },
+    {
+      assessment_id: `st1_default${suffix}`,
+      activity_id: `st1_default${suffix}`,
+      activity_name: "Summative Test 1",
+      title: "Summative Test 1",
+      component_code: "QA",
+      type: "quarterlyAssessment",
+      max_score: isMapeh ? 25 : 30,
+      highest_possible_score: isMapeh ? 25 : 30,
+      mapeh_component: comp,
+      status: "ACTIVE",
+    },
+    {
+      assessment_id: `st2_default${suffix}`,
+      activity_id: `st2_default${suffix}`,
+      activity_name: "Summative Test 2",
+      title: "Summative Test 2",
+      component_code: "QA",
+      type: "quarterlyAssessment",
+      max_score: isMapeh ? 25 : 30,
+      highest_possible_score: isMapeh ? 25 : 30,
+      mapeh_component: comp,
+      status: "ACTIVE",
+    },
+    {
+      assessment_id: `te_default${suffix}`,
+      activity_id: `te_default${suffix}`,
+      activity_name: "Term Exam",
+      title: "Term Exam",
+      component_code: "QA",
+      type: "quarterlyAssessment",
+      max_score: isMapeh ? 25 : 40,
+      highest_possible_score: isMapeh ? 25 : 40,
+      mapeh_component: comp,
+      status: "ACTIVE",
+    },
+  ];
+}
+
+function sanitizeCachedRecord(record, subjectOfferingId, subjectId, mapehComponent) {
+  if (!record || !record.class_context) return record;
+  const offlineMeta = detectOfflineClassMeta(subjectOfferingId, subjectId);
+  const ctxName = record.class_context?.subject_name || record.subject_name || offlineMeta.subject_name || "";
+  const ctxCode = record.class_context?.subject_code || record.subject_code || offlineMeta.subject_code || "";
+  const hasKnownSubject = Boolean(ctxName || ctxCode);
+  const isSynthesized = Boolean(
+    record._synthesizedFromFallback ||
+    (!record.grade_sheet_id && !record.grade_sheet?.grade_sheet_id && !record.class_context?.subject_name)
+  );
+  const realIsMapeh = hasKnownSubject
+    ? isMapehText(ctxName, ctxCode)
+    : Boolean(record.is_mapeh && !isSynthesized);
+  const realComp = realIsMapeh ? (record.mapeh_component || mapehComponent || "MA") : null;
+  const assessments =
+    Array.isArray(record.assessments) && record.assessments.length > 0
+      ? record.assessments.map((a) => (realIsMapeh ? a : { ...a, mapeh_component: null }))
+      : buildDefaultOfflineAssessments(realIsMapeh, realComp);
+
+  return {
+    ...record,
+    class_context: {
+      ...record.class_context,
+      subject_name: record.class_context.subject_name || offlineMeta.subject_name || undefined,
+      subject_code: record.class_context.subject_code || offlineMeta.subject_code || undefined,
+      is_mapeh: realIsMapeh,
+    },
+    assessments,
+    is_mapeh: realIsMapeh,
+    mapeh_component: realComp,
+    _synthesizedFromFallback: isSynthesized,
+  };
+}
+
+function getCandidateCacheKeys(subjectOfferingId, term, sectionId, mapehComponent, subjectId, readOnly) {
+  const suffix = readOnly ? "_readOnly" : "";
+  const sec = sectionId || "";
+  const comp = mapehComponent || "";
+  const subj = subjectId || "";
+  return Array.from(
+    new Set([
+      `classRecord_v2_${subjectOfferingId}_${term}_${sec}_${comp}_${subj}${suffix}`,
+      `classRecord_v2_${subjectOfferingId}_${term}_${sec}_${comp}_${suffix}`,
+      `classRecord_v2_${subjectOfferingId}_${term}_${sec}__${subj}${suffix}`,
+      `classRecord_v2_${subjectOfferingId}_${term}_${sec}__${suffix}`,
+      `classRecord_v2_${subjectOfferingId}_${term}__${comp}_${subj}${suffix}`,
+      `classRecord_v2_${subjectOfferingId}_${term}___${suffix}`,
+    ])
+  );
+}
+
+async function findCachedClassRecord(subjectOfferingId, term, sectionId, mapehComponent, subjectId, readOnly, scope) {
+  const keys = getCandidateCacheKeys(subjectOfferingId, term, sectionId, mapehComponent, subjectId, readOnly);
+  for (const k of keys) {
+    const item = await getPersistentCache(k, scope);
+    if (item?.class_context) {
+      const sanitized = sanitizeCachedRecord(item, subjectOfferingId, subjectId, mapehComponent);
+      if (sanitized.is_mapeh && mapehComponent && sanitized.mapeh_component && sanitized.mapeh_component !== mapehComponent) {
+        continue;
+      }
+      return sanitized;
+    }
+  }
+  return null;
+}
+
+async function saveClassRecordToCache(subjectOfferingId, term, sectionId, mapehComponent, subjectId, readOnly, data, scope) {
+  if (!data?.class_context) return;
+  const suffix = readOnly ? "_readOnly" : "";
+  const sec = sectionId || data.class_context?.section_id || "";
+  const subj = subjectId || data.class_context?.subject_id || "";
+  const realComp = data.is_mapeh ? (data.mapeh_component || mapehComponent || "MA") : "";
+  const keysToWrite = Array.from(
+    new Set([
+      `classRecord_v2_${subjectOfferingId}_${term}_${sectionId || ""}_${mapehComponent || ""}_${subjectId || ""}${suffix}`,
+      `classRecord_v2_${subjectOfferingId}_${term}_${sec}_${realComp}_${subj}${suffix}`,
+      `classRecord_v2_${subjectOfferingId}_${term}_${sec}_${realComp}_${suffix}`,
+    ])
+  );
+  for (const k of keysToWrite) {
+    await setPersistentCache(k, data, undefined, scope).catch(() => {});
+  }
+}
+
 export const getClassRecord = async (
   subjectOfferingId,
   term = "T1",
@@ -57,15 +252,19 @@ export const getClassRecord = async (
 
   // Instant SWR: If not forcing a refresh, return cached data immediately (0ms delay)
   if (!force) {
-    const cached = await getPersistentCache(cacheKey, scope);
-    if (cached?.class_context) {
+    const cached = await findCachedClassRecord(subjectOfferingId, term, sectionId, mapehComponent, subjectId, readOnly, scope);
+    const isOnlineNow = typeof navigator === 'undefined' || navigator.onLine !== false;
+    if (cached?.class_context && (!cached._synthesizedFromFallback || !isOnlineNow)) {
       // Revalidate in background quietly if online
       if (typeof navigator !== 'undefined' && navigator.onLine) {
         fetch(url, { force: true, throwOnAuthError: false })
-          .then(parseResponse)
+          .then(async r => {
+            if (r?.headers?.get('x-auralis-offline-fallback') === '1') return null;
+            return parseResponse(r);
+          })
           .then(fresh => {
             if (fresh?.class_context) {
-              setPersistentCache(cacheKey, fresh, undefined, scope);
+              saveClassRecordToCache(subjectOfferingId, term, sectionId, mapehComponent, subjectId, readOnly, fresh, scope);
             }
           })
           .catch(() => {});
@@ -76,28 +275,42 @@ export const getClassRecord = async (
 
   try {
     const res = await fetch(url, { force: Boolean(force), throwOnAuthError: false });
+    const isOfflineFallback = res?.headers?.get('x-auralis-offline-fallback') === '1' || (typeof navigator !== 'undefined' && navigator.onLine === false);
     const data = await parseResponse(res);
     if (scope) assertCurrentSession(scope);
 
+    if (isOfflineFallback) {
+      const cached = await findCachedClassRecord(subjectOfferingId, term, sectionId, mapehComponent, subjectId, readOnly, scope);
+      if (cached?.class_context) {
+        return cached;
+      }
+    }
+
     if (data?.class_context) {
-      await setPersistentCache(cacheKey, data, undefined, scope);
+      if (!isOfflineFallback) {
+        await saveClassRecordToCache(subjectOfferingId, term, sectionId, mapehComponent, subjectId, readOnly, data, scope);
+      }
 
       // Quietly pre-fetch other terms in the background while online so they are available offline
-      if (typeof window !== 'undefined' && navigator.onLine) {
+      if (typeof window !== 'undefined' && navigator.onLine && !isOfflineFallback) {
         const otherTerms = ['T1', 'T2', 'T3'].filter(t => t !== term);
         for (const otherTerm of otherTerms) {
-          const otherKey = `classRecord_v2_${subjectOfferingId}_${otherTerm}_${sectionId || ""}_${mapehComponent || ""}_${subjectId || ""}${readOnly ? '_readOnly' : ''}`;
-          getPersistentCache(otherKey, scope).then(existing => {
-            if (!existing && navigator.onLine) {
+          findCachedClassRecord(subjectOfferingId, otherTerm, sectionId, mapehComponent, subjectId, readOnly, scope).then(existing => {
+            if ((!existing || existing._synthesizedFromFallback) && navigator.onLine) {
               let otherUrl = `${API_BASE_URL}/class-record/${subjectOfferingId}?term=${encodeURIComponent(otherTerm)}&gradeFlowVersion=2`;
               if (sectionId) otherUrl += `&section_id=${encodeURIComponent(sectionId)}`;
               if (mapehComponent) otherUrl += `&mapeh_component=${encodeURIComponent(mapehComponent)}`;
               if (subjectId) otherUrl += `&subject_id=${encodeURIComponent(subjectId)}`;
               if (readOnly) otherUrl += '&read_only=1';
               fetch(otherUrl, { throwOnAuthError: false })
-                .then(r => parseResponse(r))
+                .then(r => {
+                  if (r?.headers?.get('x-auralis-offline-fallback') === '1') return null;
+                  return parseResponse(r);
+                })
                 .then(d => {
-                  if (d?.class_context) setPersistentCache(otherKey, d, undefined, scope);
+                  if (d?.class_context) {
+                    saveClassRecordToCache(subjectOfferingId, otherTerm, sectionId, mapehComponent, subjectId, readOnly, d, scope);
+                  }
                 })
                 .catch(() => {});
             }
@@ -110,7 +323,7 @@ export const getClassRecord = async (
   } catch (err) {
     if (scope) assertCurrentSession(scope);
     if ([401, 403].includes(err.status)) await removePersistentCache(cacheKey, scope);
-    const cached = await getPersistentCache(cacheKey, scope);
+    const cached = await findCachedClassRecord(subjectOfferingId, term, sectionId, mapehComponent, subjectId, readOnly, scope);
     if (cached?.class_context) {
       console.log(`[ClassRecordApi] Serving offline cached record for ${cacheKey}`);
       return cached;
@@ -119,10 +332,11 @@ export const getClassRecord = async (
     // Resilient offline fallback 1: Check if another term exists for this class offering
     const otherTerms = ['T1', 'T2', 'T3'].filter(t => t !== term);
     for (const otherTerm of otherTerms) {
-      const otherKey = `classRecord_v2_${subjectOfferingId}_${otherTerm}_${sectionId || ""}_${mapehComponent || ""}_${subjectId || ""}${readOnly ? '_readOnly' : ''}`;
-      const otherCached = await getPersistentCache(otherKey, scope);
+      const otherCached = await findCachedClassRecord(subjectOfferingId, otherTerm, sectionId, mapehComponent, subjectId, readOnly, scope);
       if (otherCached?.class_context && Array.isArray(otherCached.students)) {
         console.log(`[ClassRecordApi] Synthesizing term ${term} from cached term ${otherTerm}`);
+        const realIsMapeh = Boolean(otherCached.is_mapeh);
+        const realComp = realIsMapeh ? (otherCached.mapeh_component || mapehComponent || "MA") : null;
         const synthesized = {
           ...otherCached,
           class_context: {
@@ -132,15 +346,21 @@ export const getClassRecord = async (
           },
           term,
           active_term: otherCached.active_term || term,
-          assessments: [],
+          assessments:
+            Array.isArray(otherCached.assessments) && otherCached.assessments.length > 0
+              ? otherCached.assessments
+              : buildDefaultOfflineAssessments(realIsMapeh, realComp),
           students: otherCached.students.map(st => ({
             ...st,
             scores: {},
             examinations: {},
             saved_summary: null,
           })),
+          is_mapeh: realIsMapeh,
+          mapeh_component: realComp,
+          _synthesizedFromFallback: true,
         };
-        await setPersistentCache(cacheKey, synthesized, undefined, scope).catch(() => {});
+        await saveClassRecordToCache(subjectOfferingId, term, sectionId, realComp, subjectId, readOnly, synthesized, scope);
         return synthesized;
       }
     }
@@ -159,6 +379,9 @@ export const getClassRecord = async (
 
     if (Array.isArray(studentList) && studentList.length > 0) {
       console.log(`[ClassRecordApi] Synthesizing offline initial record from ${studentList.length} cached students`);
+      const offlineMeta = detectOfflineClassMeta(subjectOfferingId, subjectId);
+      const realIsMapeh = Boolean(offlineMeta.is_mapeh);
+      const realComp = realIsMapeh ? (mapehComponent || "MA") : null;
       const formattedStudents = studentList.map(st => ({
         student_id: st.student_id || st.id,
         student_section_id: st.student_section_id || st.id,
@@ -175,21 +398,27 @@ export const getClassRecord = async (
         class_context: {
           subject_offering_id: subjectOfferingId,
           section_id: sectionId,
+          subject_name: offlineMeta.subject_name || undefined,
+          subject_code: offlineMeta.subject_code || undefined,
+          section_name: offlineMeta.section_name || undefined,
+          grade_level: offlineMeta.grade_level || undefined,
           term,
           active_term: term,
           is_locked: false,
+          is_mapeh: realIsMapeh,
           term_name: `Term ${String(term).replace('T', '')}`,
           weights: { written_weight: 40, performance_weight: 40, quarterly_weight: 20 },
         },
         term,
         active_term: term,
-        assessments: [],
+        assessments: buildDefaultOfflineAssessments(realIsMapeh, realComp),
         students: formattedStudents,
-        is_mapeh: Boolean(mapehComponent),
-        mapeh_component: mapehComponent || null,
+        is_mapeh: realIsMapeh,
+        mapeh_component: realComp,
+        _synthesizedFromFallback: true,
       };
 
-      await setPersistentCache(cacheKey, synthesized, undefined, scope).catch(() => {});
+      await saveClassRecordToCache(subjectOfferingId, term, sectionId, realComp, subjectId, readOnly, synthesized, scope);
       return synthesized;
     }
 
@@ -224,6 +453,9 @@ export const createAssessment = async (payload) => {
 };
 
 export const updateAssessment = async (assessmentId, payload) => {
+  if (!assessmentId || isNaN(Number(assessmentId))) {
+    return { success: true, offline: true };
+  }
   const res = await fetch(`${API_BASE_URL}/assessments/${assessmentId}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
@@ -233,6 +465,9 @@ export const updateAssessment = async (assessmentId, payload) => {
 };
 
 export const deleteAssessment = async (assessmentId) => {
+  if (!assessmentId || isNaN(Number(assessmentId))) {
+    return { success: true, offline: true };
+  }
   const res = await fetch(`${API_BASE_URL}/assessments/${assessmentId}`, {
     method: "DELETE",
   });

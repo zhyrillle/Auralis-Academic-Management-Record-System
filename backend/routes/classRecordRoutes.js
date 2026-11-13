@@ -1216,9 +1216,11 @@ async function handleCreateAssessment(req, res) {
 
     const nextActivityIndex = componentActivityCount + 1;
     let defaultTitle = activity_name || title;
-    const genericPattern = new RegExp(`^${defaultTypeName}\\s*\\d*$`, 'i');
+    const genericPattern = new RegExp(`^${defaultTypeName}$`, 'i');
     if (!defaultTitle || String(defaultTitle).trim() === '' || genericPattern.test(String(defaultTitle).trim())) {
       defaultTitle = `${defaultTypeName} ${nextActivityIndex}`;
+    } else {
+      defaultTitle = String(defaultTitle).trim();
     }
 
     const parsedDate = (activity_date && String(activity_date).trim() !== '') ? String(activity_date).trim() : null;
@@ -1236,6 +1238,12 @@ async function handleCreateAssessment(req, res) {
     let activityId;
     if (dupCheck.length > 0) {
       activityId = dupCheck[0].activity_id;
+      if (numericMaxScore > Number(dupCheck[0].highest_possible_score || 0)) {
+        await connection.execute(
+          `UPDATE GRADE_ACTIVITY SET highest_possible_score = ?, updated_at = NOW(6) WHERE activity_id = ?`,
+          [numericMaxScore, activityId]
+        );
+      }
     } else {
       const [insertResult] = await connection.execute(
         `INSERT INTO GRADE_ACTIVITY (
@@ -1280,6 +1288,7 @@ async function handleCreateAssessment(req, res) {
 
     await connection.commit();
     committed = true;
+    cloudSync.markClassRecordLocalWrite();
     if (db.cloudPool) {
       db.cloudPool.query(
         `INSERT INTO GRADE_ACTIVITY (
@@ -1450,6 +1459,7 @@ async function handleUpdateAssessment(req, res) {
 
     await connection.commit();
     committed = true;
+    cloudSync.markClassRecordLocalWrite();
     if (db.cloudPool) {
       db.cloudPool.query(
         `UPDATE GRADE_ACTIVITY SET ${updateFields.join(', ')}, updated_at = NOW(6) WHERE activity_id = ?`,
@@ -1529,6 +1539,7 @@ router.delete('/assessments/:id', resolveCurrentUser, async (req, res) => {
 
     await connection.commit();
     committed = true;
+    cloudSync.markClassRecordLocalWrite();
     if (db.cloudPool) {
       db.cloudPool.query('DELETE FROM SCORE WHERE activity_id = ?', [assessmentId]).catch(() => {});
       db.cloudPool.query('DELETE FROM GRADE_ACTIVITY WHERE activity_id = ?', [assessmentId]).catch(() => {});
@@ -1767,7 +1778,9 @@ async function handleBatchScores(req, res) {
       const cleanNumericStr = rawAssId.replace(/^(ww_|pt_)/, '');
       let assessmentId = !isNaN(Number(cleanNumericStr)) && cleanNumericStr !== '' ? Number(cleanNumericStr) : null;
 
-      const itemComp = item.mapeh_component ? normalizeMapehComponent(item.mapeh_component) : (isMapeh ? activeMapehComponent : null);
+      const itemComp = isMapeh
+        ? (item.mapeh_component ? normalizeMapehComponent(item.mapeh_component) : activeMapehComponent)
+        : null;
       const cKey = isMapeh ? (itemComp || 'MA') : 'ALL';
       const cMap = compExamMap[cKey] || compExamMap['ALL'] || { st1: null, st2: null, te: null, qa: null };
 
@@ -1806,6 +1819,16 @@ async function handleBatchScores(req, res) {
           );
           if (match) {
             assessmentId = match.activity_id;
+            const incomingHps = Number(item.max_score || 0);
+            if (incomingHps > Number(hpsByActivityId[assessmentId] || 0)) {
+              await connection.execute(
+                `UPDATE GRADE_ACTIVITY SET highest_possible_score = ?, updated_at = NOW(6) WHERE activity_id = ?`,
+                [incomingHps, assessmentId]
+              );
+              hpsByActivityId[assessmentId] = incomingHps;
+              match.highest_possible_score = incomingHps;
+              match._cloudSyncNeeded = true;
+            }
           } else {
             // Resilient Fallback 2: Auto-create the missing activity in DB so offline scores sync seamlessly
             const compCode = item.component_code || (item.type === 'writtenWork' || rawAssId.startsWith('ww') ? 'WW' : 'PT');
@@ -1822,7 +1845,15 @@ async function handleBatchScores(req, res) {
                VALUES (?, ?, ?, ?, ?, NOW(), 'ACTIVE')`,
               [gradeSheetId, wId, isMapeh ? itemComp : null, itemActName, hps]
             );
-            match = { activity_id: ins.insertId, activity_name: itemActName, highest_possible_score: hps, mapeh_component: isMapeh ? itemComp : null };
+            match = {
+              activity_id: ins.insertId,
+              grade_sheet_id: gradeSheetId,
+              subj_comp_weight_id: wId,
+              activity_name: itemActName,
+              highest_possible_score: hps,
+              mapeh_component: isMapeh ? itemComp : null,
+              _cloudSyncNeeded: true,
+            };
             sheetActivities.push(match);
             hpsByActivityId[match.activity_id] = hps;
             assessmentId = match.activity_id;
@@ -1847,7 +1878,21 @@ async function handleBatchScores(req, res) {
             error: `Score cannot be negative (received: ${rawScore}).`,
           });
         }
-        const maxHPS = hpsByActivityId[assessmentId];
+        let maxHPS = hpsByActivityId[assessmentId];
+        const incomingItemMax = Number(item.max_score || 0);
+        if (maxHPS !== undefined && rawScore > maxHPS && incomingItemMax >= rawScore) {
+          await connection.execute(
+            `UPDATE GRADE_ACTIVITY SET highest_possible_score = ?, updated_at = NOW(6) WHERE activity_id = ?`,
+            [incomingItemMax, assessmentId]
+          );
+          hpsByActivityId[assessmentId] = incomingItemMax;
+          maxHPS = incomingItemMax;
+          const actObj = sheetActivities.find((a) => Number(a.activity_id) === Number(assessmentId));
+          if (actObj) {
+            actObj.highest_possible_score = incomingItemMax;
+            actObj._cloudSyncNeeded = true;
+          }
+        }
         if (maxHPS !== undefined && maxHPS > 0 && rawScore > maxHPS) {
           await connection.rollback();
           return res.status(400).json({
@@ -1907,9 +1952,40 @@ async function handleBatchScores(req, res) {
     }
 
     await connection.commit();
+    cloudSync.markClassRecordLocalWrite();
 
-    // Keep existing raw-score mirroring separate from accepted grade submission.
-    forwardScoresToCloud(scoresToForward);
+    // Dual-write any auto-created or HPS-updated GRADE_ACTIVITY rows to Aiven Cloud before forwarding scores
+    const activitiesToForward = sheetActivities.filter((a) => a._cloudSyncNeeded);
+    if (db.cloudPool && activitiesToForward.length > 0) {
+      (async () => {
+        for (const act of activitiesToForward) {
+          try {
+            await db.cloudPool.query(
+              `INSERT INTO GRADE_ACTIVITY (activity_id, grade_sheet_id, subj_comp_weight_id, mapeh_component, activity_name, highest_possible_score, activity_date, status)
+               VALUES (?, ?, ?, ?, ?, ?, CURRENT_DATE, 'ACTIVE')
+               ON DUPLICATE KEY UPDATE
+                 activity_name = VALUES(activity_name),
+                 highest_possible_score = VALUES(highest_possible_score),
+                 status = VALUES(status)`,
+              [
+                act.activity_id,
+                act.grade_sheet_id || gradeSheetId,
+                act.subj_comp_weight_id || null,
+                act.mapeh_component || null,
+                act.activity_name,
+                act.highest_possible_score,
+              ]
+            );
+          } catch (e) {
+            console.warn('[CloudDualWrite] Failed to forward auto-synced GRADE_ACTIVITY to Aiven Cloud:', e.message);
+          }
+        }
+        await forwardScoresToCloud(scoresToForward);
+      })();
+    } else {
+      // Keep existing raw-score mirroring separate from accepted grade submission.
+      forwardScoresToCloud(scoresToForward);
+    }
 
     res.json({
       message: 'Scores saved. Grades remain a preview until submission.',

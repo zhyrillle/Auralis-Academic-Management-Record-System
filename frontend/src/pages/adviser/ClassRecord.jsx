@@ -136,7 +136,7 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
     return effectiveClass?.subject_id || params.subjectId || null;
   }, [effectiveClass, params]);
 
-  // Term state (defaults to stored session term or T1, synchronized with DB active term on load)
+  // Term state (defaults to stored session term or activeClass.active_term or T1, synchronized with DB active term on load)
   const [activeTerm, setActiveTerm] = useState(() => {
     try {
       const stored = sessionStorage.getItem(`classRecord_activeTerm_${subjectOfferingId}`);
@@ -144,6 +144,10 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
         return stored;
       }
     } catch (_) {}
+    const clsTerm = effectiveClass?.active_term || effectiveClass?.term;
+    if (clsTerm && ["T1", "T2", "T3"].includes(clsTerm)) {
+      return clsTerm;
+    }
     return "T1";
   });
   const userSelectedTermRef = useRef(false);
@@ -179,19 +183,22 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
   });
 
   const isMapeh = useMemo(() => {
-    if (isMapehSubject) return true;
-    if (classContextData?.is_mapeh === true || classContextData?.is_mapeh === 1 || classContextData?.is_mapeh === "1") return true;
     const name = classContextData?.subject_name || effectiveClass?.subject_name || effectiveClass?.subjectName || effectiveClass?.subject || "";
     const code = classContextData?.subject_code || effectiveClass?.subject_code || effectiveClass?.subjectCode || "";
-    const str = `${name} ${code}`.toLowerCase();
-    return (
-      str.includes("mapeh") ||
-      str.includes("music") ||
-      str.includes("arts") ||
-      str.includes("physical education") ||
-      str.includes("pe &") ||
-      str.includes("health")
-    );
+    const str = `${name} ${code}`.toLowerCase().trim();
+    if (str) {
+      return (
+        str.includes("mapeh") ||
+        str.includes("music") ||
+        str.includes("arts") ||
+        str.includes("physical education") ||
+        str.includes("pe &") ||
+        str.includes("health")
+      );
+    }
+    if (isMapehSubject) return true;
+    if (classContextData?.is_mapeh === true || classContextData?.is_mapeh === 1 || classContextData?.is_mapeh === "1") return true;
+    return false;
   }, [classContextData, effectiveClass, isMapehSubject]);
 
   const isMapehRef = useRef(isMapeh);
@@ -213,7 +220,7 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
   const [loadedSheet, setLoadedSheet] = useState(null);
   const [requestEligibility, setRequestEligibility] = useState(null);
   const [reopeningNow, setReopeningNow] = useState(() => Date.now());
-  const recordSelectionKey = `${subjectOfferingId}:${sectionId}:${effectiveSubjectId}:${activeTerm}:${mapehComponent}`;
+  const recordSelectionKey = `${subjectOfferingId}:${sectionId}:${effectiveSubjectId}:${activeTerm}:${isMapeh ? mapehComponent : ""}`;
   const [recordLoad, setRecordLoad] = useState({ key: "", status: "loading", error: "" });
   const [termSwitchError, setTermSwitchError] = useState("");
   const recordRequestRef = useRef(0);
@@ -329,13 +336,15 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
   const updateOfflineRecordCache = useCallback(
     async (updater) => {
       try {
-        const scope = recordSession || getSessionScope();
+        const scope = getSessionScope() || recordSession;
         const effectiveComp = (isMapeh || isMapehRef.current) ? (mapehComponent || mapehComponentRef.current || "MA") : "";
         const keysToTry = [
           `classRecord_v2_${subjectOfferingId}_${activeTerm}_${sectionId || ""}_${effectiveComp}_${effectiveSubjectId || ""}`,
           `classRecord_v2_${subjectOfferingId}_${activeTerm}_${sectionId || ""}__${effectiveSubjectId || ""}`,
           `classRecord_v2_${subjectOfferingId}_${activeTerm}_${sectionId || ""}_${effectiveComp}_`,
           `classRecord_v2_${subjectOfferingId}_${activeTerm}_${sectionId || ""}__`,
+          `classRecord_v2_${subjectOfferingId}_${activeTerm}__${effectiveComp}_${effectiveSubjectId || ""}`,
+          `classRecord_v2_${subjectOfferingId}_${activeTerm}___`,
         ];
 
         const uniqueKeys = Array.from(new Set(keysToTry));
@@ -382,10 +391,14 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
           const updated = updater({ ...baseRecord });
           if (updated) {
             await setPersistentCache(targetKey, updated, undefined, scope);
-            for (const k of uniqueKeys) {
+            const canonicalKeys = [
+              `classRecord_v2_${subjectOfferingId}_${activeTerm}_${sectionId || ""}_${effectiveComp}_${effectiveSubjectId || ""}`,
+              `classRecord_v2_${subjectOfferingId}_${activeTerm}_${sectionId || ""}_${effectiveComp}_`,
+            ];
+            for (const k of Array.from(new Set([...uniqueKeys, ...canonicalKeys]))) {
               if (k !== targetKey) {
                 const other = await getPersistentCache(k, scope);
-                if (other?.class_context) {
+                if (other?.class_context || canonicalKeys.includes(k)) {
                   await setPersistentCache(k, updated, undefined, scope);
                 }
               }
@@ -574,15 +587,26 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
 
   // Online / Offline window listeners & auto-sync
   useEffect(() => {
-    const handleOnline = () => {
+    const handleOnline = async () => {
       setIsOnline(true);
       if (!isLocked) {
         setSyncStatus("saving");
-        flushPendingScores();
-        processOutbox()
-          .then(getSyncSnapshot)
-          .then(snapshot => setSyncStatus(snapshot.failedCount ? "error" : snapshot.pendingCount ? "offline" : "saved"))
-          .catch(() => setSyncStatus("error"));
+        try {
+          await flushPendingScoresRef.current();
+          await processOutbox();
+          const snapshot = await getSyncSnapshot();
+          setSyncStatus(snapshot.failedCount ? "error" : snapshot.pendingCount ? "offline" : "saved");
+          if (subjectOfferingId) {
+            await loadClassRecordRef.current(
+              activeTerm,
+              isMapehRef.current ? mapehComponentRef.current : null,
+              true,
+              true
+            );
+          }
+        } catch {
+          setSyncStatus("error");
+        }
       }
     };
 
@@ -600,7 +624,7 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
     };
-  }, [isLocked, flushPendingScores]);
+  }, [isLocked, flushPendingScores, subjectOfferingId, activeTerm]);
 
   // Flush pending saves on unmount / navigation
   useEffect(() => {
@@ -674,10 +698,22 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
     const lockReason = data.lock_reason || (isSheetLocked ? "CLOSED_TERM" : "");
     const loadedTermName = data.current_term_name || data.term_name;
     const activeTermName = data.active_term_name;
-    const effectiveIsMapeh = Boolean(data?.is_mapeh ?? isMapeh);
+    const rawSubjName = data?.class_context?.subject_name || data?.subject_name || effectiveClass?.subject_name || effectiveClass?.subjectName || effectiveClass?.subject || "";
+    const rawSubjCode = data?.class_context?.subject_code || data?.subject_code || effectiveClass?.subject_code || effectiveClass?.subjectCode || "";
+    const subjStr = `${rawSubjName} ${rawSubjCode}`.toLowerCase().trim();
+    const effectiveIsMapeh = subjStr
+      ? (
+          subjStr.includes("mapeh") ||
+          subjStr.includes("music") ||
+          subjStr.includes("arts") ||
+          subjStr.includes("physical education") ||
+          subjStr.includes("pe &") ||
+          subjStr.includes("health")
+        )
+      : Boolean(data?.is_mapeh ?? isMapeh);
     const weights = data.component_weights || null;
 
-    const targetComp = data.mapeh_component || (effectiveIsMapeh ? (mapehComponentRef.current || "MA") : null);
+    const targetComp = effectiveIsMapeh ? (data.mapeh_component || mapehComponentRef.current || "MA") : null;
 
     const wwCols = [];
     const ptCols = [];
@@ -737,7 +773,7 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
             date: ass.activity_date,
             status: ass.status || "ACTIVE",
             subj_comp_weight_id: ass.subj_comp_weight_id,
-            mapeh_component: ass.mapeh_component || targetComp,
+            mapeh_component: effectiveIsMapeh ? (ass.mapeh_component || targetComp) : null,
           });
         } else if (isPT) {
           ptCols.push({
@@ -749,7 +785,7 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
             date: ass.activity_date,
             status: ass.status || "ACTIVE",
             subj_comp_weight_id: ass.subj_comp_weight_id,
-            mapeh_component: ass.mapeh_component || targetComp,
+            mapeh_component: effectiveIsMapeh ? (ass.mapeh_component || targetComp) : null,
           });
         } else if (isQA) {
           if (/\b(st1|summative\s*test\s*1|summative\s*1)\b/i.test(name)) {
@@ -771,9 +807,37 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
             date: ass.activity_date,
             status: ass.status || "ACTIVE",
             subj_comp_weight_id: ass.subj_comp_weight_id,
-            mapeh_component: ass.mapeh_component || targetComp,
+            mapeh_component: effectiveIsMapeh ? (ass.mapeh_component || targetComp) : null,
           });
         }
+      });
+    }
+
+    if (wwCols.length === 0) {
+      const defWwId = `ww_default_1${targetComp ? `_${targetComp}` : ""}`;
+      wwCols.push({
+        id: `ww_${defWwId}`,
+        assessment_id: defWwId,
+        label: "1",
+        activity_name: "Written Work 1",
+        max_score: 20,
+        date: null,
+        status: "ACTIVE",
+        mapeh_component: targetComp,
+      });
+    }
+
+    if (ptCols.length === 0) {
+      const defPtId = `pt_default_1${targetComp ? `_${targetComp}` : ""}`;
+      ptCols.push({
+        id: `pt_${defPtId}`,
+        assessment_id: defPtId,
+        label: "1",
+        activity_name: "Performance Task 1",
+        max_score: 50,
+        date: null,
+        status: "ACTIVE",
+        mapeh_component: targetComp,
       });
     }
 
@@ -914,19 +978,19 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
       quarterlyAssessmentId: qaId,
       students: loadedStudents,
       grades: newGrades,
-      isMapeh: Boolean(data.is_mapeh),
-      mapehComponent: data.mapeh_component,
+      isMapeh: effectiveIsMapeh,
+      mapehComponent: effectiveIsMapeh ? (data.mapeh_component || targetComp) : null,
     };
-  }, []);
+  }, [effectiveClass, isMapeh]);
 
   // ============================================================
   // LOAD DATA FROM BACKEND
   // ============================================================
   const loadClassRecord = useCallback(
     async (termToLoad, targetComp = null, force = false, silent = false) => {
-      const activeComp = targetComp || (isMapehRef.current ? mapehComponentRef.current : "MA");
+      const activeComp = isMapehRef.current ? (targetComp || mapehComponentRef.current || "MA") : null;
       const requestId = ++recordRequestRef.current;
-      const selectionKey = `${subjectOfferingId}:${sectionId}:${effectiveSubjectId}:${termToLoad}:${activeComp}`;
+      const selectionKey = `${subjectOfferingId}:${sectionId}:${effectiveSubjectId}:${termToLoad}:${activeComp || ""}`;
       if (!silent) {
         setRecordLoad({ key: selectionKey, status: "loading", error: "" });
         setModalState(previous => ({ ...previous, isOpen: false }));
@@ -945,10 +1009,9 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
         if (data && data.class_context) {
           const parsed = parseRecordPayload(data);
 
-          const isCurrentMapeh = Boolean(parsed.isMapeh || data.is_mapeh || isMapeh);
-          if (isCurrentMapeh) {
-            setIsMapehSubject(true);
-          }
+          const isCurrentMapeh = Boolean(parsed.isMapeh);
+          setIsMapehSubject(isCurrentMapeh);
+          isMapehRef.current = isCurrentMapeh;
 
           setClassContextData({
             ...parsed.classContextData,
@@ -983,22 +1046,13 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
             setWeights(parsed.weights);
           }
 
-          setWrittenWorkColumns(parsed.writtenWorkColumns);
-          setPerformanceTaskColumns(parsed.performanceTaskColumns);
-          setQuarterlyAssessmentHPS(parsed.quarterlyAssessmentHPS);
-          setQuarterlyAssessmentId(parsed.quarterlyAssessmentId);
-          setExamConfig((prev) => ({
-            ...prev,
-            ...parsed.examConfig,
-          }));
-
           // Merge any pending offline scores entered in previous sessions
           try {
             const pendingOffline = await getPendingOfflineScores(subjectOfferingId, termToLoad);
             if (Array.isArray(pendingOffline) && pendingOffline.length > 0) {
               console.log(`[ClassRecord] Restoring ${pendingOffline.length} pending offline scores from IndexedDB`);
               pendingOffline.forEach((item) => {
-                if ((item.mapeh_component || null) !== (isCurrentMapeh ? (activeComp || "MA") : null)) return;
+                if (isCurrentMapeh && (item.mapeh_component || "MA") !== (activeComp || mapehComponentRef.current || "MA")) return;
                 const sId = String(item.student_id);
                 if (!parsed.grades[sId]) return;
 
@@ -1013,18 +1067,66 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
                   parsed.grades[sId].examinations.te = item.raw_score;
                   parsed.grades[sId].quarterlyAssessment = item.raw_score;
                 } else {
+                  let matchedCol = false;
+                  const normActName = String(item.activity_name || "").trim().toLowerCase();
                   parsed.writtenWorkColumns.forEach((c) => {
-                    if (c.assessment_id === item.assessment_id || c.id === item.assessment_id || (item.activity_name && c.activity_name === item.activity_name)) {
+                    if (
+                      String(c.assessment_id) === String(item.assessment_id) ||
+                      c.id === item.assessment_id ||
+                      (normActName && String(c.activity_name || "").trim().toLowerCase() === normActName)
+                    ) {
+                      matchedCol = true;
+                      if (item.max_score && Number(item.max_score) > Number(c.max_score || 0)) {
+                        c.max_score = Number(item.max_score);
+                      }
                       if (!parsed.grades[sId].writtenWorks) parsed.grades[sId].writtenWorks = {};
                       parsed.grades[sId].writtenWorks[c.id] = item.raw_score;
                     }
                   });
                   parsed.performanceTaskColumns.forEach((c) => {
-                    if (c.assessment_id === item.assessment_id || c.id === item.assessment_id || (item.activity_name && c.activity_name === item.activity_name)) {
+                    if (
+                      String(c.assessment_id) === String(item.assessment_id) ||
+                      c.id === item.assessment_id ||
+                      (normActName && String(c.activity_name || "").trim().toLowerCase() === normActName)
+                    ) {
+                      matchedCol = true;
+                      if (item.max_score && Number(item.max_score) > Number(c.max_score || 0)) {
+                        c.max_score = Number(item.max_score);
+                      }
                       if (!parsed.grades[sId].performanceTasks) parsed.grades[sId].performanceTasks = {};
                       parsed.grades[sId].performanceTasks[c.id] = item.raw_score;
                     }
                   });
+
+                  if (!matchedCol && item.activity_name) {
+                    const isPT =
+                      String(item.component_code || "").toUpperCase() === "PT" ||
+                      String(item.type || "").toLowerCase().includes("performance") ||
+                      /\b(performance|task|pt)\b/i.test(item.activity_name);
+                    const targetCols = isPT ? parsed.performanceTaskColumns : parsed.writtenWorkColumns;
+                    const newAssId = item.assessment_id || `${isPT ? "pt" : "ww"}_offline_${targetCols.length + 1}`;
+                    const newColId = String(newAssId).startsWith(isPT ? "pt_" : "ww_")
+                      ? String(newAssId)
+                      : `${isPT ? "pt" : "ww"}_${newAssId}`;
+                    const newCol = {
+                      id: newColId,
+                      assessment_id: newAssId,
+                      label: String(targetCols.length + 1),
+                      activity_name: item.activity_name,
+                      max_score: Number(item.max_score || (isPT ? 50 : 20)),
+                      date: null,
+                      status: "ACTIVE",
+                      mapeh_component: isCurrentMapeh ? (activeComp || "MA") : null,
+                    };
+                    targetCols.push(newCol);
+                    if (isPT) {
+                      if (!parsed.grades[sId].performanceTasks) parsed.grades[sId].performanceTasks = {};
+                      parsed.grades[sId].performanceTasks[newCol.id] = item.raw_score;
+                    } else {
+                      if (!parsed.grades[sId].writtenWorks) parsed.grades[sId].writtenWorks = {};
+                      parsed.grades[sId].writtenWorks[newCol.id] = item.raw_score;
+                    }
+                  }
                 }
               });
 
@@ -1035,6 +1137,15 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
           } catch (offlineErr) {
             console.warn("Failed to merge offline scores:", offlineErr);
           }
+
+          setWrittenWorkColumns(parsed.writtenWorkColumns);
+          setPerformanceTaskColumns(parsed.performanceTaskColumns);
+          setQuarterlyAssessmentHPS(parsed.quarterlyAssessmentHPS);
+          setQuarterlyAssessmentId(parsed.quarterlyAssessmentId);
+          setExamConfig((prev) => ({
+            ...prev,
+            ...parsed.examConfig,
+          }));
 
           if (!silent) {
             setStudents(parsed.students);
@@ -1117,7 +1228,9 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
           const hasOfflinePending = (await getPendingOfflineScores(subjectOfferingId, termToLoad).catch(() => []))?.length > 0;
           setSyncStatus(parsed.isLocked ? "locked" : (!navigator.onLine || hasOfflinePending ? "offline" : "saved"));
           if (!silent) {
-            setRecordLoad({ key: selectionKey, status: "ready", error: "" });
+            const resolvedComp = isCurrentMapeh ? (activeComp || mapehComponentRef.current || "MA") : "";
+            const resolvedKey = `${subjectOfferingId}:${sectionId}:${effectiveSubjectId}:${termToLoad}:${resolvedComp}`;
+            setRecordLoad({ key: resolvedKey, status: "ready", error: "" });
           }
         }
       } catch (err) {
@@ -1145,7 +1258,12 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
       if (pendingQueueRef.current.size > 0 || isFlushingRef.current) return;
       isPolling = true;
       try {
-        await loadClassRecordRef.current(activeTerm, mapehComponentRef.current, true, true);
+        await loadClassRecordRef.current(
+          activeTerm,
+          isMapehRef.current ? mapehComponentRef.current : null,
+          true,
+          true
+        );
       } catch (_) {
       } finally {
         isPolling = false;
@@ -1182,13 +1300,15 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
       str.includes("physical education") ||
       str.includes("pe &") ||
       str.includes("health");
-    if (matches) {
-      setIsMapehSubject(true);
-    }
+    setIsMapehSubject(matches);
+    isMapehRef.current = matches;
   }, [subjectOfferingId, effectiveClass]);
 
   useEffect(() => {
-    loadClassRecordRef.current(activeTerm, mapehComponentRef.current);
+    loadClassRecordRef.current(
+      activeTerm,
+      isMapehRef.current ? mapehComponentRef.current : null
+    );
     return () => { recordRequestRef.current += 1; };
   }, [subjectOfferingId, sectionId, effectiveSubjectId, activeTerm]);
 
@@ -1812,7 +1932,7 @@ const formatToISODate = (val) => {
       }
 
       try {
-        if (assessmentId) {
+        if (assessmentId && !isNaN(Number(assessmentId))) {
           await updateAssessment(assessmentId, {
             activity_name: title,
             title: title,
@@ -1856,27 +1976,28 @@ const formatToISODate = (val) => {
     }
 
     if (mode === "add") {
+      const currentComp = isMapeh ? (mapehComponent || mapehComponentRef.current || "MA") : null;
+      const activeCols = (category === "WW" ? writtenWorkColumns : performanceTaskColumns).filter(
+        (c) => c.status !== "ARCHIVED" && (!isMapeh || !c.mapeh_component || c.mapeh_component === currentComp)
+      );
+      const colNumber = activeCols.length + 1;
+      const safeTitle = title && title.trim() !== "" ? title.trim() : (category === "WW" ? `Written Work ${colNumber}` : `Performance Task ${colNumber}`);
+
       try {
         const res = await createAssessment({
           subject_offering_id: subjectOfferingId,
           term: activeTerm,
           component_code: category,
           type: category === "WW" ? "writtenWork" : "performanceTask",
-          activity_name: title,
-          title: title,
+          activity_name: safeTitle,
+          title: safeTitle,
           max_score: numMax,
           highest_possible_score: numMax,
           activity_date: safeDate,
-          mapeh_component: isMapeh ? (mapehComponent || mapehComponentRef.current || "MA") : null,
+          mapeh_component: currentComp,
         });
 
         const newAss = res?.assessment || {};
-        const currentComp = isMapeh ? (mapehComponent || mapehComponentRef.current || "MA") : null;
-        const activeCols = (category === "WW" ? writtenWorkColumns : performanceTaskColumns).filter(
-          (c) => c.status !== "ARCHIVED" && (!isMapeh || !c.mapeh_component || c.mapeh_component === currentComp)
-        );
-        const colNumber = activeCols.length + 1;
-        const safeTitle = title && title.trim() !== "" ? title.trim() : (category === "WW" ? `Written Work ${colNumber}` : `Performance Task ${colNumber}`);
         const newColAssId = newAss.assessment_id || `offline_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
         const newCol = {
           id: category === "WW" ? `ww_${newColAssId}` : `pt_${newColAssId}`,
@@ -1966,7 +2087,7 @@ const formatToISODate = (val) => {
       }
     } else {
       try {
-        if (assessmentId) {
+        if (assessmentId && !isNaN(Number(assessmentId))) {
           const updatePayload = {
             activity_name: title,
             title: title,
@@ -1988,6 +2109,20 @@ const formatToISODate = (val) => {
           setPerformanceTaskColumns((prev) =>
             prev.map((c) => (c.id === columnId ? { ...c, activity_name: title, max_score: numMax, date: safeDate } : c))
           );
+        }
+
+        // Keep any queued in-memory score mutations synced with the updated HPS & title
+        if (pendingQueueRef.current) {
+          for (const [qKey, qItem] of Object.entries(pendingQueueRef.current)) {
+            if (String(qItem.assessment_id) === String(assessmentId) || qKey.endsWith(`_${columnId}`)) {
+              pendingQueueRef.current[qKey] = {
+                ...qItem,
+                max_score: numMax,
+                activity_name: title || qItem.activity_name,
+                title: title || qItem.title,
+              };
+            }
+          }
         }
 
         updateOfflineRecordCache((record) => {
@@ -2021,7 +2156,7 @@ const formatToISODate = (val) => {
     if (!window.confirm(`Delete column "${column.activity_name || column.label}"?`)) return;
 
     try {
-      if (column.assessment_id) {
+      if (column.assessment_id && !isNaN(Number(column.assessment_id))) {
         await deleteAssessment(column.assessment_id);
       }
 
@@ -2328,7 +2463,7 @@ const formatToISODate = (val) => {
           <h3>Unable to load Term {activeTerm.replace("T", "")} record</h3>
           <p>{recordError}</p>
           <button type="button" className="class-record-request-btn"
-            onClick={() => loadClassRecordRef.current(activeTerm, mapehComponentRef.current, true)}>Retry</button>
+            onClick={() => loadClassRecordRef.current(activeTerm, isMapehRef.current ? mapehComponentRef.current : null, true)}>Retry</button>
         </div>
       ) : (
         <div className="class-record-content">

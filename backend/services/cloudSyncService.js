@@ -841,11 +841,31 @@ async function syncAttendanceFromCloud(timeoutMs = 4000) {
   }
 }
 
+let lastPhilIriLocalWriteAt = 0;
+let activePhilIriForwardPromise = null;
+let lastClassRecordLocalWriteAt = 0;
+
+function markPhilIriLocalWrite() {
+  lastPhilIriLocalWriteAt = Date.now();
+}
+
+function markClassRecordLocalWrite() {
+  lastClassRecordLocalWriteAt = Date.now();
+}
+
 /**
  * Automatically sync Phil-IRI assessments and screenings from Aiven Cloud.
  */
 async function syncPhilIriFromCloud(timeoutMs = 3500) {
   if (!db.cloudPool) return;
+  if (activePhilIriForwardPromise) {
+    try {
+      await activePhilIriForwardPromise;
+    } catch (_) {}
+  }
+  if (Date.now() - lastPhilIriLocalWriteAt < 15000) {
+    return;
+  }
 
   const timeoutPromise = new Promise((_, reject) =>
     setTimeout(() => reject(new Error('Cloud Phil-IRI sync timeout exceeded')), timeoutMs)
@@ -859,9 +879,11 @@ async function syncPhilIriFromCloud(timeoutMs = 3500) {
       `SELECT phil_iri_id, student_section_id, subject_offering_id, test_type, passage_words_count, words_correct, oral_reading_percent, oral_reading_level, total_comp_items, comp_correct, comp_score_percent, comp_reading_level, overall_reading_level, user_id
        FROM PHIL_IRI_ASSESSMENT`
     );
+    if (Date.now() - lastPhilIriLocalWriteAt < 15000) return;
     if (cloudAssessments) {
       const CHUNK_SIZE = 50;
       for (let i = 0; i < cloudAssessments.length; i += CHUNK_SIZE) {
+        if (Date.now() - lastPhilIriLocalWriteAt < 15000) return;
         const chunk = cloudAssessments.slice(i, i + CHUNK_SIZE);
         const placeholders = chunk.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
         const flat = [];
@@ -910,9 +932,11 @@ async function syncPhilIriFromCloud(timeoutMs = 3500) {
       `SELECT screening_id, student_section_id, assessed_on, test_level, literal_max, inferential_max, critical_max, score_threshold, test_taken, literal_score, inferential_score, critical_score, recorded_by
        FROM PHIL_IRI_SCREENING`
     );
+    if (Date.now() - lastPhilIriLocalWriteAt < 15000) return;
     if (cloudScreenings) {
       const CHUNK_SIZE = 50;
       for (let i = 0; i < cloudScreenings.length; i += CHUNK_SIZE) {
+        if (Date.now() - lastPhilIriLocalWriteAt < 15000) return;
         const chunk = cloudScreenings.slice(i, i + CHUNK_SIZE);
         const placeholders = chunk.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
         const flat = [];
@@ -1230,77 +1254,151 @@ async function forwardAttendanceSaveRemarksToCloud(sheetId, studentSectionId, re
  * Forward Phil-IRI batch to Aiven Cloud.
  */
 async function forwardPhilIriBatchToCloud(records) {
+  lastPhilIriLocalWriteAt = Date.now();
   if (!db.cloudPool || !Array.isArray(records) || records.length === 0) return;
-  try {
-    const validRecords = records.filter((r) => r && r.student_section_id);
-    if (validRecords.length === 0) return;
+  const work = (async () => {
+    try {
+      const validRecords = records.filter((r) => r && r.student_section_id);
+      if (validRecords.length === 0) return;
 
-    for (const rec of validRecords) {
-      const oralPct = Number(rec.oral_reading_percent) || 0.0;
-      const compPct = Number(rec.comp_score_percent) || 0.0;
-      await db.cloudPool.query(
-        `INSERT INTO PHIL_IRI_ASSESSMENT (
-          student_section_id, subject_offering_id, test_type, passage_words_count, words_correct,
-          oral_reading_percent, oral_reading_level, total_comp_items, comp_correct, comp_score_percent,
-          comp_reading_level, overall_reading_level, user_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON DUPLICATE KEY UPDATE
-          subject_offering_id = COALESCE(VALUES(subject_offering_id), subject_offering_id),
-          passage_words_count = VALUES(passage_words_count),
-          words_correct = VALUES(words_correct),
-          oral_reading_percent = VALUES(oral_reading_percent),
-          oral_reading_level = VALUES(oral_reading_level),
-          total_comp_items = VALUES(total_comp_items),
-          comp_correct = VALUES(comp_correct),
-          comp_score_percent = VALUES(comp_score_percent),
-          comp_reading_level = VALUES(comp_reading_level),
-          overall_reading_level = VALUES(overall_reading_level),
-          user_id = COALESCE(VALUES(user_id), user_id),
-          updated_at = CURRENT_TIMESTAMP`,
-        [
-          Number(rec.student_section_id),
-          rec.subject_offering_id ? Number(rec.subject_offering_id) : null,
-          rec.test_type === 'POST_TEST' ? 'POST_TEST' : 'PRE_TEST',
-          Number(rec.passage_words_count) || 70,
-          Number(rec.words_correct) || 0,
-          oralPct,
-          rec.oral_reading_level || 'FRUSTRATION',
-          Number(rec.total_comp_items) || 5,
-          Number(rec.comp_correct) || 0,
-          compPct,
-          rec.comp_reading_level || 'FRUSTRATION',
-          rec.overall_reading_level || 'FRUSTRATION',
-          rec.user_id ? Number(rec.user_id) : (rec.recorded_by ? Number(rec.recorded_by) : null),
-        ]
-      );
+      const clearedRecords = validRecords.filter((r) => r._cleared);
+      const activeRecords = validRecords.filter((r) => !r._cleared);
+
+      for (const rec of clearedRecords) {
+        await db.cloudPool.query(
+          `DELETE FROM PHIL_IRI_ASSESSMENT WHERE student_section_id = ? AND test_type = ?`,
+          [Number(rec.student_section_id), rec.test_type === 'POST_TEST' ? 'POST_TEST' : 'PRE_TEST']
+        ).catch(() => {});
+      }
+
+      if (activeRecords.length > 0) {
+        const valueClauses = [];
+        const params = [];
+        for (const rec of activeRecords) {
+          valueClauses.push('(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+          const oralPct = Number(rec.oral_reading_percent) || 0.0;
+          const compPct = Number(rec.comp_score_percent) || 0.0;
+          params.push(
+            Number(rec.student_section_id),
+            rec.subject_offering_id ? Number(rec.subject_offering_id) : null,
+            rec.test_type === 'POST_TEST' ? 'POST_TEST' : 'PRE_TEST',
+            Number(rec.passage_words_count) || 70,
+            Number(rec.words_correct) || 0,
+            oralPct,
+            rec.oral_reading_level || 'FRUSTRATION',
+            Number(rec.total_comp_items) || 5,
+            Number(rec.comp_correct) || 0,
+            compPct,
+            rec.comp_reading_level || 'FRUSTRATION',
+            rec.overall_reading_level || 'FRUSTRATION',
+            rec.user_id ? Number(rec.user_id) : (rec.recorded_by ? Number(rec.recorded_by) : null)
+          );
+        }
+
+        await db.cloudPool.query(
+          `INSERT INTO PHIL_IRI_ASSESSMENT (
+            student_section_id, subject_offering_id, test_type, passage_words_count, words_correct,
+            oral_reading_percent, oral_reading_level, total_comp_items, comp_correct, comp_score_percent,
+            comp_reading_level, overall_reading_level, user_id
+          ) VALUES ${valueClauses.join(', ')}
+          ON DUPLICATE KEY UPDATE
+            subject_offering_id = COALESCE(VALUES(subject_offering_id), subject_offering_id),
+            passage_words_count = VALUES(passage_words_count),
+            words_correct = VALUES(words_correct),
+            oral_reading_percent = VALUES(oral_reading_percent),
+            oral_reading_level = VALUES(oral_reading_level),
+            total_comp_items = VALUES(total_comp_items),
+            comp_correct = VALUES(comp_correct),
+            comp_score_percent = VALUES(comp_score_percent),
+            comp_reading_level = VALUES(comp_reading_level),
+            overall_reading_level = VALUES(overall_reading_level),
+            user_id = COALESCE(VALUES(user_id), user_id),
+            updated_at = CURRENT_TIMESTAMP`,
+          params
+        );
+      }
+      lastPhilIriLocalWriteAt = Date.now();
+    } catch (err) {
+      console.warn('[CloudPhilIri] Failed to dual-write Phil-IRI batch to Aiven Cloud:', err.message);
     }
-  } catch (err) {
-    console.warn('[CloudPhilIri] Failed to dual-write Phil-IRI batch to Aiven Cloud:', err.message);
-  }
+  })();
+  activePhilIriForwardPromise = work;
+  return work;
 }
 
 /**
  * Forward Phil-IRI screening batch to Aiven Cloud.
  */
 async function forwardPhilIriScreeningBatchToCloud(body, userId) {
+  lastPhilIriLocalWriteAt = Date.now();
   if (!db.cloudPool || !body || !Array.isArray(body.records)) return;
-  try {
-    const config = body.config || {};
-    const date = formatDate(config.assessed_on);
-    const testLevel = config.test_level ? String(config.test_level).trim() : null;
-    const litMax = Number(config.literal_max) || 0;
-    const infMax = Number(config.inferential_max) || 0;
-    const critMax = Number(config.critical_max) || 0;
-    const thresh = Number(config.score_threshold) || 0;
+  const work = (async () => {
+    try {
+      const config = body.config || {};
+      const date = formatDate(config.assessed_on);
+      const testLevel = config.test_level ? String(config.test_level).trim() : null;
+      const litMax = Number(config.literal_max) || 0;
+      const infMax = Number(config.inferential_max) || 0;
+      const critMax = Number(config.critical_max) || 0;
+      const thresh = Number(config.score_threshold) || 0;
 
-    for (const rec of body.records) {
-      const ssId = Number(rec.student_section_id);
-      if (!ssId) continue;
+      const validRecords = body.records.filter((rec) => rec && Number(rec.student_section_id));
+      if (validRecords.length === 0) return;
+
+      const clearedIds = [];
+      const upsertRecords = [];
+      for (const rec of validRecords) {
+        const isCleared =
+          rec.test_taken === null &&
+          (rec.literal_score === null || rec.literal_score === undefined) &&
+          (rec.inferential_score === null || rec.inferential_score === undefined) &&
+          (rec.critical_score === null || rec.critical_score === undefined);
+        if (isCleared) {
+          clearedIds.push(Number(rec.student_section_id));
+        } else {
+          upsertRecords.push(rec);
+        }
+      }
+
+      if (clearedIds.length > 0) {
+        const placeholders = clearedIds.map(() => '?').join(', ');
+        await db.cloudPool.query(
+          `DELETE FROM PHIL_IRI_SCREENING WHERE student_section_id IN (${placeholders})`,
+          clearedIds
+        );
+      }
+
+      if (upsertRecords.length === 0) {
+        lastPhilIriLocalWriteAt = Date.now();
+        return;
+      }
+
+      const valueClauses = [];
+      const params = [];
+      for (const rec of upsertRecords) {
+        const ssId = Number(rec.student_section_id);
+        valueClauses.push('(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+        params.push(
+          ssId,
+          date,
+          testLevel,
+          litMax,
+          infMax,
+          critMax,
+          thresh,
+          rec.test_taken !== undefined ? rec.test_taken : null,
+          rec.literal_score !== undefined ? rec.literal_score : null,
+          rec.inferential_score !== undefined ? rec.inferential_score : null,
+          rec.critical_score !== undefined ? rec.critical_score : null,
+          userId || null
+        );
+      }
+
       await db.cloudPool.query(
         `INSERT INTO PHIL_IRI_SCREENING
           (student_section_id, assessed_on, test_level, literal_max, inferential_max, critical_max,
            score_threshold, test_taken, literal_score, inferential_score, critical_score, recorded_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         VALUES ${valueClauses.join(', ')}
          ON DUPLICATE KEY UPDATE
            assessed_on = VALUES(assessed_on),
            test_level = VALUES(test_level),
@@ -1313,25 +1411,15 @@ async function forwardPhilIriScreeningBatchToCloud(body, userId) {
            inferential_score = VALUES(inferential_score),
            critical_score = VALUES(critical_score),
            recorded_by = VALUES(recorded_by)`,
-        [
-          ssId,
-          date,
-          testLevel,
-          litMax,
-          infMax,
-          critMax,
-          thresh,
-          rec.test_taken || 0,
-          rec.literal_score !== undefined ? rec.literal_score : null,
-          rec.inferential_score !== undefined ? rec.inferential_score : null,
-          rec.critical_score !== undefined ? rec.critical_score : null,
-          userId || null,
-        ]
+        params
       );
+      lastPhilIriLocalWriteAt = Date.now();
+    } catch (err) {
+      console.warn('[CloudPhilIriScreening] Failed to dual-write screening batch to Aiven Cloud:', err.message);
     }
-  } catch (err) {
-    console.warn('[CloudPhilIriScreening] Failed to dual-write screening batch to Aiven Cloud:', err.message);
-  }
+  })();
+  activePhilIriForwardPromise = work;
+  return work;
 }
 
 /**
@@ -1692,6 +1780,7 @@ async function forwardFeedbackDeleteToCloud(id) {
  */
 async function syncClassRecordFromCloud(subjectOfferingId, timeoutMs = 4500) {
   if (!db.cloudPool || !subjectOfferingId || isNaN(Number(subjectOfferingId))) return;
+  if (Date.now() - lastClassRecordLocalWriteAt < 15000) return;
   const offId = Number(subjectOfferingId);
 
   const timeoutPromise = new Promise((_, reject) =>
@@ -1771,7 +1860,8 @@ async function syncClassRecordFromCloud(subjectOfferingId, timeoutMs = 4500) {
             ).catch(() => {});
           }
 
-          // Prune local activities for these sheets not in cloud
+          // Prune local activities for these sheets not in cloud (skip if local write happened recently)
+          if (Date.now() - lastClassRecordLocalWriteAt < 15000) return;
           const cloudActIds = new Set(cloudActivities.map((a) => Number(a.activity_id)));
           const [localActivities] = await db.query(
             `SELECT activity_id FROM GRADE_ACTIVITY WHERE grade_sheet_id IN (${sheetPlaceholders})`,
@@ -1892,6 +1982,8 @@ module.exports = {
   forwardAttendanceSaveRemarksToCloud,
   forwardPhilIriBatchToCloud,
   forwardPhilIriScreeningBatchToCloud,
+  markPhilIriLocalWrite,
+  markClassRecordLocalWrite,
   syncGradeReopenRequestsFromCloud,
   syncFeedbackFromCloud,
   syncClassRecordFromCloud,

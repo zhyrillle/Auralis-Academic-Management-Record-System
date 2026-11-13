@@ -15,6 +15,13 @@ export default function SyncStatusBadge() {
     let isMounted = true;
     const update = async () => {
       const snap = await getSyncSnapshot();
+      if (snap.recoveryNeeded && !snap.storageUnavailable) {
+        await retryReviewItems();
+        await dismissReviewItems();
+        const refreshed = await getSyncSnapshot();
+        if (isMounted) setSyncState(refreshed);
+        return;
+      }
       if (isMounted) setSyncState(snap);
     };
 
