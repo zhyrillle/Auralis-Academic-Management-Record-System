@@ -106,7 +106,7 @@ export default function StudentFormModal({
     });
   };
   const input = (field, label, props = {}) => <InputField key={field} field={field} label={label} value={state.values[field]} onChange={change} disabled={isSaving} error={state.errors[field]} {...props} />;
-  return <OverlayPanel isOpen={isOpen} onClose={onClose} busy={isSaving} title={isEdit ? "Edit student" : "Add student"} eyebrow="Learner profile" description="Maintain the student’s profile here. Grade and section assignments are handled separately." className="student-profile-drawer" footer={<><button type="button" className="student-admin-button" disabled={isSaving} onClick={onClose}>Cancel</button>
+  return <OverlayPanel isOpen={isOpen} onClose={onClose} busy={isSaving} title={isEdit ? "Edit student" : "Add student"} description="Maintain the student’s profile here. Grade and section assignments are handled separately." className="student-profile-drawer" footer={<><button type="button" className="student-admin-button" disabled={isSaving} onClick={onClose}>Cancel</button>
       <button type="submit" form={formId} className="student-admin-button student-admin-button--primary" aria-busy={isSaving} disabled={isSaving}>{isSaving && <Loader2 size={15} className="student-admin-spinner" aria-hidden="true" />}{isSaving ? "Saving…" : isEdit ? "Update student" : "Save student"}</button></>}>
     {errorMessage && <p role="alert" className="student-admin-field-error">{errorMessage}</p>}
     <form id={formId} onSubmit={submit} noValidate className="student-admin-form student-profile-form">

@@ -31,6 +31,9 @@ function harness({ marked = null, date = '2026-10-12', owner = 9, count = 3 } = 
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../services/AttendanceDayService.js'), 'utf8'), {
     module, Intl, Date, require: name => {
       if (name === '../config/db') return database;
+      if (name === './AuditDetailsService') return { recordAttendance: async (active, sheet, before, after) => {
+        assert.equal(active, connection); state.audit = { sheet, before, after };
+      } };
       throw new Error(`Unexpected dependency: ${name}`);
     },
   });
@@ -52,6 +55,8 @@ test('marking and unmarking preserve learner records and update every sheet for 
   assert.equal(state.records, 3);
   assert.ok(state.calls.every(call => !/DELETE|UPDATE ATTENDANCE SET/.test(call.sql)));
   assert.ok(state.committed && state.released);
+  assert.equal(state.audit.sheet, 11);
+  assert.equal(state.audit.after.days[0].no_class_reason, null);
 });
 
 test('existing entries require explicit confirmation before a no-class marker is saved', async () => {

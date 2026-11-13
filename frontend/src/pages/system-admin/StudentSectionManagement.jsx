@@ -908,7 +908,6 @@ export default function StudentSectionManagement() {
         onClose={() => setCreateOpen(false)}
         variant="modal"
         title="Create Section"
-        eyebrow="New section"
         description="Set the grade level and curriculum before assigning students."
         busy={busy}
         error={toast?.type === "error" ? toast.message : ""}
@@ -994,7 +993,6 @@ export default function StudentSectionManagement() {
         onClose={() => setAssignmentOpen(false)}
         variant="modal"
         title="Assign students to a section"
-        eyebrow="Review assignment"
         busy={busy}
         error={toast?.type === "error" ? toast.message : ""}
         description={`${assignmentStudents.length} ${assignmentStudents.length === 1 ? "student" : "students"} selected. Select a grade level and section below.`}
@@ -1089,7 +1087,6 @@ export default function StudentSectionManagement() {
         onClose={() => setAddSubjectModalOpen(false)}
         variant="modal"
         title="Add Subject to Grade Level"
-        eyebrow="Curriculum Allocation"
         className="add-subject-modal"
         busy={addSubjectBusy}
         error={addSubjectError}
@@ -1266,7 +1263,6 @@ export default function StudentSectionManagement() {
         onClose={() => setPendingDropSubject(null)}
         variant="modal"
         title="Drop subject from grade level?"
-        eyebrow="Confirm Removal"
         busy={dropSubjectBusy}
         error={dropSubjectError}
         description={`This will remove '${pendingDropSubject?.subject_name}' from all sections offering it in ${formatSectionGrade(pendingDropSubject?.grade_level_name || `G${pendingDropSubject?.grade_level_id + 6}`, pendingDropSubject?.grade_level_id)}.`}

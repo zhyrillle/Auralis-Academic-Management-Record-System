@@ -1,6 +1,30 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const Module = require('node:module');
+// This legacy suite must never change the application's configured database.
+let config = { config_id: 1, is_custom_enabled: 0, ranges_json: null };
+let saved;
+const fixture = {
+  beginTransaction: async () => { saved = structuredClone(config); },
+  commit: async () => {}, rollback: async () => { config = structuredClone(saved); }, release() {},
+  getConnection: async () => fixture,
+  execute: async (sql, params = []) => {
+    if (sql.includes('SELECT config_id')) return [[{ config_id: 1 }]];
+    if (sql.includes('SELECT gtc.*')) return [[structuredClone(config)]];
+    if (sql.includes('INSERT INTO GRADE_TRANSMUTATION_CONFIG')) {
+      config = { ...config, is_custom_enabled: params[0], ranges_json: params[1] };
+      return [{ affectedRows: 1 }];
+    }
+    if (sql.includes('CREATE TABLE') || sql.includes('INSERT INTO AUDIT_EVENT')) return [{ insertId: 1 }];
+    throw Error('Unexpected transmutation fixture query: ' + sql);
+  },
+};
+const originalLoad = Module._load;
+Module._load = function (name, parent, main) {
+  return name === '../config/db' ? fixture : originalLoad.call(this, name, parent, main);
+};
 const GradeTransmutationConfig = require('../models/GradeTransmutationConfig');
+test.after(() => { Module._load = originalLoad; });
 
 test('GradeTransmutationConfig official table conforms to DepEd SY 2026-2027 policy briefer', () => {
   const table = GradeTransmutationConfig.OFFICIAL_TABLE;

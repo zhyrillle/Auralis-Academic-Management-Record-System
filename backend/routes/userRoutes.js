@@ -8,6 +8,7 @@ const User = require("../models/User");
 const UserManagementOptions = require("../models/UserManagementOptions");
 const UserClassAssignments = require("../services/UserClassAssignments");
 const AuditEvent = require("../models/AuditEvent");
+const AuditDetails = require("../services/AuditDetailsService");
 const OtpStore = require("../services/otpStore");
 const { sendPasswordResetOtpEmail } = require("../services/emailService");
 const {
@@ -828,33 +829,14 @@ router.post("/reset-password", async (req, res) => {
       return res.status(400).json({ error: "Invalid or expired reset session. Please request a new code." });
     }
 
+    const [targets] = await db.execute('SELECT user_id, first_name, last_name FROM USER WHERE LOWER(email) = LOWER(?)', [cleanEmail]);
+    const user = targets[0];
+    if (!user) return res.status(404).json({ error: 'User account not found.' });
     const hashedPassword = await hashPassword(cleanPassword);
 
-    const [result] = await db.execute(
-      "UPDATE `USER` SET password = ? WHERE LOWER(email) = LOWER(?)",
-      [hashedPassword, cleanEmail]
-    );
-
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ error: "User account not found." });
-    }
-
+    await AuditDetails.saveCredential(db, { userId: user.user_id, hash: hashedPassword, actor: user.user_id,
+      eventType: 'USER_PASSWORD_RESET', target: `${user.first_name || ''} ${user.last_name || ''}`.trim() || cleanEmail });
     OtpStore.invalidate(cleanEmail);
-
-    await AuditEvent.create({
-      user_id: user.user_id,
-      actor_context: { source: 'user', acting_as: 'User' },
-      event_type: 'USER_PASSWORD_RESET',
-      module_name: 'ACCOUNT_MANAGEMENT',
-      entity_type: 'USER',
-      entity_id: user.user_id,
-      after_data: { email: cleanEmail },
-      metadata: {
-        target: `${user.first_name || ''} ${user.last_name || ''}`.trim() || cleanEmail,
-        summary: `Reset password for ${cleanEmail}.`,
-        impact: 'High',
-      },
-    }).catch((err) => console.error('Failed to log password reset audit:', err.message));
 
     res.json({
       success: true,
@@ -1003,6 +985,8 @@ router.put("/:id/profile", async (req, res) => {
   if (!isValidUserId(req.params.id)) {
     return res.status(400).json({ error: "Invalid user ID." });
   }
+  let connection;
+  let committed = false;
   try {
     const userId = Number(req.params.id);
     const {
@@ -1023,6 +1007,12 @@ router.put("/:id/profile", async (req, res) => {
       return res.status(400).json({ error: "Required fields missing." });
     }
 
+    connection = await db.getConnection();
+    await connection.beginTransaction();
+    await connection.execute('SELECT user_id FROM USER WHERE user_id = ? FOR UPDATE', [userId]);
+    const auditBefore = await AuditDetails.accountSnapshot(connection, userId);
+    if (!auditBefore) return res.status(404).json({ error: 'User not found.' });
+    let profilePasswordHash = null;
     const nxtPwd = newPassword || new_password || password;
     if (nxtPwd && String(nxtPwd).trim()) {
       const cleanNewPwd = String(nxtPwd).trim();
@@ -1031,7 +1021,7 @@ router.put("/:id/profile", async (req, res) => {
       }
       const curPwd = currentPassword || current_password;
       if (curPwd) {
-        const [existing] = await db.execute("SELECT password FROM `USER` WHERE user_id = ?", [userId]);
+        const [existing] = await connection.execute("SELECT password FROM `USER` WHERE user_id = ?", [userId]);
         if (existing.length > 0) {
           const isValid = await verifyPassword(String(curPwd), existing[0].password);
           if (!isValid) {
@@ -1040,10 +1030,9 @@ router.put("/:id/profile", async (req, res) => {
         }
       }
       const hashed = await hashPassword(cleanNewPwd);
-      await db.execute("UPDATE `USER` SET password = ? WHERE user_id = ?", [hashed, userId]);
-      if (db.cloudPool) {
-        db.cloudPool.query("UPDATE `USER` SET password = ? WHERE user_id = ?", [hashed, userId]).catch(() => {});
-      }
+      profilePasswordHash = hashed;
+      await connection.execute("UPDATE `USER` SET password = ? WHERE user_id = ?", [hashed, userId]);
+
     }
 
     const profileData = {
@@ -1054,7 +1043,21 @@ router.put("/:id/profile", async (req, res) => {
       credentials: toNullable(credentials),
       email: email.trim().toLowerCase(),
     };
-    const updated = await User.updateProfile(userId, profileData);
+    await connection.execute(`UPDATE USER SET first_name = ?, middle_name = ?, last_name = ?, extension_name = ?, credentials = ?, email = ? WHERE user_id = ?`,
+      [profileData.first_name, profileData.middle_name, profileData.last_name, profileData.extension_name, profileData.credentials, profileData.email, userId]);
+    const actor = AuditDetails.actorId(req, userId);
+    await AuditDetails.record(connection, { actor, actor_context: { acting_as: 'User' },
+      event_type: 'USER_PROFILE_UPDATED', module_name: 'ACCOUNT_MANAGEMENT', entity_type: 'USER', entity_id: userId,
+      before: auditBefore, after: await AuditDetails.accountSnapshot(connection, userId),
+      metadata: { target: `${profileData.first_name} ${profileData.last_name}`, summary: 'Updated profile details.' } });
+    if (nxtPwd && String(nxtPwd).trim()) await AuditEvent.create({ user_id: actor,
+      actor_context: await AuditDetails.actorContext(connection, actor, { acting_as: 'User' }),
+      event_type: 'USER_PASSWORD_CHANGED', module_name: 'ACCOUNT_MANAGEMENT', entity_type: 'USER', entity_id: userId,
+      metadata: { target: `${profileData.first_name} ${profileData.last_name}`, summary: 'Changed the account password. No password values are retained.' } }, connection);
+    await connection.commit();
+    committed = true;
+    if (profilePasswordHash && db.cloudPool) db.cloudPool.query('UPDATE USER SET password = ? WHERE user_id = ?', [profilePasswordHash, userId]).catch(() => {});
+    const updated = await User.findById(userId);
 
     if (db.cloudPool) {
       db.cloudPool.query(
@@ -1063,28 +1066,11 @@ router.put("/:id/profile", async (req, res) => {
       ).catch((err) => console.warn('[CloudUser] Failed to dual-write profile update to cloud:', err.message));
     }
 
-    await AuditEvent.create({
-      user_id: userId,
-      actor_context: { source: 'user', acting_as: 'User' },
-      event_type: 'USER_PROFILE_UPDATED',
-      module_name: 'ACCOUNT_MANAGEMENT',
-      entity_type: 'USER',
-      entity_id: userId,
-      after_data: {
-        first_name: first_name.trim(),
-        last_name: last_name.trim(),
-        email: email.trim().toLowerCase(),
-      },
-      metadata: {
-        target: `${first_name.trim()} ${last_name.trim()}`,
-        summary: `Updated profile details for ${first_name.trim()} ${last_name.trim()}.`,
-        impact: 'Low',
-      },
-    }).catch((err) => console.error('Failed to log profile update audit:', err.message));
-
     res.json({ message: "Profile updated successfully.", user: updated });
   } catch (err) {
     sendDatabaseError(res, err);
+  } finally {
+    if (connection) { if (!committed) await connection.rollback().catch(() => {}); connection.release(); }
   }
 });
 
@@ -1143,27 +1129,13 @@ const handlePasswordChangeRoute = async (req, res) => {
     }
 
     const hashedPassword = await hashPassword(cleanNewPwd);
-    await db.execute("UPDATE `USER` SET password = ? WHERE user_id = ?", [hashedPassword, userId]);
+    await AuditDetails.saveCredential(db, { userId, hash: hashedPassword, actor: AuditDetails.actorId(req, userId),
+      eventType: 'USER_PASSWORD_CHANGED', target: `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email });
 
     if (db.cloudPool) {
       db.cloudPool.query("UPDATE `USER` SET password = ? WHERE user_id = ?", [hashedPassword, userId])
         .catch((err) => console.warn('[CloudUser] Failed to dual-write password change to cloud:', err.message));
     }
-
-    await AuditEvent.create({
-      user_id: userId,
-      actor_context: { source: 'user', acting_as: 'User' },
-      event_type: 'USER_PASSWORD_CHANGED',
-      module_name: 'ACCOUNT_MANAGEMENT',
-      entity_type: 'USER',
-      entity_id: userId,
-      after_data: { user_id: userId, email: user.email },
-      metadata: {
-        target: `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email,
-        summary: `Changed password for ${user.email}.`,
-        impact: 'High',
-      },
-    }).catch((err) => console.error('Failed to log password change audit:', err.message));
 
     res.json({ message: "Password updated successfully." });
   } catch (err) {
@@ -1196,10 +1168,18 @@ router.put("/:id/profile-picture", async (req, res) => {
     }
 
     const uploadResult = await uploadProfilePicture(buffer, userId);
-    await db.execute("UPDATE `USER` SET pfp_url = ? WHERE user_id = ?", [
-      uploadResult.secureUrl,
-      userId,
-    ]);
+    const connection = await db.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [rows] = await connection.execute('SELECT pfp_url FROM USER WHERE user_id = ? FOR UPDATE', [userId]);
+      await connection.execute('UPDATE USER SET pfp_url = ? WHERE user_id = ?', [uploadResult.secureUrl, userId]);
+      await AuditDetails.record(connection, { actor: AuditDetails.actorId(req, userId),
+        event_type: 'USER_PROFILE_UPDATED', module_name: 'ACCOUNT_MANAGEMENT', entity_type: 'USER', entity_id: userId,
+        before: { profile_picture: rows[0]?.pfp_url || null }, after: { profile_picture: uploadResult.secureUrl },
+        metadata: { target: `User #${userId}`, summary: 'Updated the profile picture.' } });
+      await connection.commit();
+    } catch (error) { await connection.rollback(); throw error; }
+    finally { connection.release(); }
 
     if (db.cloudPool) {
       db.cloudPool.query("UPDATE USER SET pfp_url = ? WHERE user_id = ?", [
@@ -1363,26 +1343,13 @@ router.post("/", async (req, res) => {
 
     await saveRoleAssignments(connection, userId, req.body, schoolYear);
 
-    await AuditEvent.create({
-      user_id: req.headers['x-auralis-user-id'] ? Number(req.headers['x-auralis-user-id']) : null,
-      actor_context: { source: 'user', acting_as: 'System Administrator' },
-      event_type: 'USER_ACCOUNT_CREATED',
-      module_name: 'ACCOUNT_MANAGEMENT',
-      entity_type: 'USER',
-      entity_id: userId,
-      after_data: {
-        role,
-        email: email.trim().toLowerCase(),
-        first_name: first_name.trim(),
-        last_name: last_name.trim(),
-        account_status: account_status || status || "active",
-      },
-      metadata: {
-        target: `${first_name.trim()} ${last_name.trim()}`,
-        summary: `Created a ${role} account for ${first_name.trim()} ${last_name.trim()}.`,
-        impact: 'Medium',
-      },
-    }, connection);
+    await AuditDetails.record(connection, {
+      actor: AuditDetails.actorId(req), actor_context: { acting_as: 'System Administrator' },
+      event_type: 'USER_ACCOUNT_CREATED', module_name: 'ACCOUNT_MANAGEMENT', entity_type: 'USER', entity_id: userId,
+      before: null, after: await AuditDetails.accountSnapshot(connection, userId, schoolYear.school_year_id),
+      metadata: { target: `${first_name.trim()} ${last_name.trim()}`, school_year: AuditDetails.yearLabel(schoolYear),
+        summary: `Created a ${role} account for ${first_name.trim()} ${last_name.trim()}.` },
+    });
 
     await connection.commit();
 
@@ -1438,6 +1405,9 @@ router.put("/:id", async (req, res) => {
 
     const effectiveDepartmentId = role === "principal" ? null : (department_id ? Number(department_id) : null);
 
+    await connection.execute('SELECT user_id FROM USER WHERE user_id = ? FOR UPDATE', [userId]);
+    const auditBefore = await AuditDetails.accountSnapshot(connection, userId, schoolYear.school_year_id);
+
     // 1 Department Head per department
     if (role === "department head" && effectiveDepartmentId) {
       await validateSingleDepartmentHead(connection, effectiveDepartmentId, userId, schoolYear);
@@ -1461,36 +1431,17 @@ router.put("/:id", async (req, res) => {
 
     await saveRoleAssignments(connection, userId, req.body, schoolYear);
 
-    const isStatusChanged = existingUser.account_status !== (account_status || status || "active");
-    await AuditEvent.create({
-      user_id: req.headers['x-auralis-user-id'] ? Number(req.headers['x-auralis-user-id']) : null,
-      actor_context: { source: 'user', acting_as: 'System Administrator' },
-      event_type: isStatusChanged ? 'USER_STATUS_UPDATED' : 'USER_ACCOUNT_UPDATED',
-      module_name: 'ACCOUNT_MANAGEMENT',
-      entity_type: 'USER',
-      entity_id: userId,
-      before_data: {
-        role: existingUser.role,
-        email: existingUser.email,
-        first_name: existingUser.first_name,
-        last_name: existingUser.last_name,
-        account_status: existingUser.account_status,
-      },
-      after_data: {
-        role,
-        email: email.trim().toLowerCase(),
-        first_name: first_name.trim(),
-        last_name: last_name.trim(),
-        account_status: account_status || status || "active",
-      },
-      metadata: {
-        target: `${first_name.trim()} ${last_name.trim()}`,
-        summary: isStatusChanged
-          ? `Changed account status to ${account_status || status || 'active'} for ${first_name.trim()} ${last_name.trim()}.`
-          : `Updated account details for ${first_name.trim()} ${last_name.trim()}.`,
-        impact: 'Medium',
-      },
-    }, connection);
+    const auditAfter = await AuditDetails.accountSnapshot(connection, userId, schoolYear.school_year_id);
+    const isStatusChanged = auditBefore.account_status !== auditAfter.account_status;
+    await AuditDetails.record(connection, { actor: AuditDetails.actorId(req), actor_context: { acting_as: 'System Administrator' },
+      event_type: isStatusChanged ? 'USER_STATUS_UPDATED' : 'USER_ACCOUNT_UPDATED', module_name: 'ACCOUNT_MANAGEMENT',
+      entity_type: 'USER', entity_id: userId, before: auditBefore, after: auditAfter,
+      metadata: { target: `${first_name.trim()} ${last_name.trim()}`, school_year: AuditDetails.yearLabel(schoolYear),
+        summary: `Updated account details for ${first_name.trim()} ${last_name.trim()}.` } });
+    if (hashedPassword) await AuditEvent.create({ user_id: AuditDetails.actorId(req),
+      actor_context: await AuditDetails.actorContext(connection, AuditDetails.actorId(req), { acting_as: 'System Administrator' }),
+      event_type: 'USER_PASSWORD_RESET', module_name: 'ACCOUNT_MANAGEMENT', entity_type: 'USER', entity_id: userId,
+      metadata: { target: `${first_name.trim()} ${last_name.trim()}`, summary: 'Reset the account password. No password values are retained.' } }, connection);
 
     await connection.commit();
 

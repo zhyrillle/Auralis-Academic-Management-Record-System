@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const AuditDetails = require('./AuditDetailsService');
 const AcademicTerm = require('../models/AcademicTerm');
 const GradeSheet = require('../models/GradeSheet');
 const GradeReopenRequest = require('../models/GradeReopenRequest');
@@ -136,6 +137,26 @@ async function recordAudit(connection, {
   afterData = null,
   metadata = null,
 }) {
+  if (beforeData && afterData && AuditDetails.same(beforeData, afterData)) return;
+  let context = {};
+  if (['GRADE_REOPEN_REQUEST', 'TEMPORARY_REOPENING'].includes(entityType)) {
+    const [requests] = await connection.execute(`SELECT grr.grade_sheet_id, grr.reason,
+      CONCAT_WS(' ', u.first_name, u.last_name) AS requester, grr.requested_at
+      FROM GRADE_REOPEN_REQUEST grr JOIN TEACHER_ASSIGNMENT ta ON ta.teacher_assignment_id = grr.teacher_assignment_id
+      JOIN USER u ON u.user_id = ta.user_id
+      ${entityType === 'TEMPORARY_REOPENING' ? 'JOIN TEMPORARY_REOPENING tr ON tr.request_id = grr.request_id' : ''}
+      WHERE ${entityType === 'TEMPORARY_REOPENING' ? 'tr.temporary_reopening_id' : 'grr.request_id'} = ?`, [entityId]);
+    if (requests[0]) context = { ...await AuditDetails.sheetContext(connection, requests[0].grade_sheet_id),
+      reason: requests[0].reason, requester: requests[0].requester, requested_at: requests[0].requested_at };
+  } else {
+    const yearId = afterData?.school_year_id || beforeData?.school_year_id || (entityType === 'SCHOOL_YEAR' ? entityId : null);
+    if (yearId) {
+      const [years] = await connection.execute('SELECT starts_on, ends_on FROM SCHOOL_YEAR WHERE school_year_id = ?', [yearId]);
+      context = { school_year: AuditDetails.yearLabel(years[0]), term: afterData?.term_name || beforeData?.term_name };
+    }
+  }
+  metadata = { ...context, ...metadata, details_version: 1 };
+  const actor = await AuditDetails.actorContext(connection, userId);
   await connection.execute(
     `INSERT INTO AUDIT_EVENT (
       user_id, actor_context, event_type, module_name, entity_type,
@@ -143,7 +164,7 @@ async function recordAudit(connection, {
     ) VALUES (?, ?, ?, 'GRADING_PERIOD', ?, ?, ?, ?, ?)`,
     [
       userId || null,
-      JSON.stringify({ source: userId ? 'user' : 'system' }),
+      JSON.stringify(actor),
       eventType,
       entityType,
       entityId,
@@ -180,6 +201,7 @@ async function expireTemporaryReopenings() {
         eventType: 'TEMPORARY_REOPENING_EXPIRED',
         entityType: 'TEMPORARY_REOPENING',
         entityId: row.temporary_reopening_id,
+        beforeData: { status: 'ACTIVE' },
         afterData: { status: 'EXPIRED', grade_sheet_id: row.grade_sheet_id },
       });
     }
@@ -802,13 +824,16 @@ async function approveRequest(requestId, data, actor) {
         request_status: request.status,
         workflow_status: request.workflow_status,
         lock_status: request.lock_status,
+        expires_at: null,
       },
       afterData: {
         request_status: 'APPROVED',
         workflow_status: 'DRAFT',
         lock_status: 'TEMPORARILY_REOPENED',
+        expires_at: expiresAt.toISOString(),
       },
       metadata: {
+        summary: 'Approved temporary correction access for the grade sheet.',
         admin_note: data.admin_note || null,
         expires_at: expiresAt.toISOString(),
         request_type: requestType,
@@ -848,7 +873,7 @@ async function denyRequest(requestId, data, actor) {
       entityId: requestId,
       beforeData: { status: 'PENDING' },
       afterData: { status: 'DENIED' },
-      metadata: { admin_note: data.admin_note || null },
+      metadata: { admin_note: data.admin_note || null, summary: `Denied grade reopening request #${requestId}.` },
     });
     await connection.commit();
     return { request_id: Number(requestId), status: 'DENIED' };
@@ -972,7 +997,7 @@ async function createReopeningRequest(gradeSheetId, reason, actor, attachments =
       userId: actor.user_id, eventType: 'GRADE_REOPEN_REQUEST_SUBMITTED',
       entityType: 'GRADE_REOPEN_REQUEST', entityId: requestId,
       afterData: { status: 'PENDING', grade_sheet_id: Number(gradeSheetId) },
-      metadata: { request_type: eligibility.request_type },
+      metadata: { request_type: eligibility.request_type, reason: reason.trim() },
     });
     const request = await GradeReopenRequest.findById(requestId, connection);
     await connection.commit();

@@ -32,6 +32,7 @@ function routeHarness(sections) {
     '../models/User', '../models/AuditEvent', '../services/otpStore',
     '../services/emailService', '../utils/passwordUtils',
     '../services/profilePictureStorage',
+    '../services/AuditDetailsService',
   ]);
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../routes/userRoutes.js'), 'utf8'), {
     module: { exports: {} }, console: { error() {} },

@@ -1,4 +1,5 @@
 import { cachedApiFetch as fetch } from "./navigationCache.js";
+import { auditModuleGroup } from '../utils/auditModules.js';
 const API_BASE_URL = (
   import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api"
 ).replace(/\/$/, "");
@@ -57,14 +58,7 @@ export const getAuditEvents = async () => {
     return data
       .map((event) => {
         const actingAs = event.actingAs || event.acting_as || event.actorRole || "System";
-        const isAdviser =
-          String(event.actorRole || "").toLowerCase() === "adviser" ||
-          String(actingAs).toLowerCase().includes("adviser") ||
-          String(event.eventType || event.event_type || "").startsWith("ATTENDANCE_") ||
-          String(event.eventType || event.event_type || "").startsWith("SF9_") ||
-          String(event.eventType || event.event_type || "") === "LEARNER_OBSERVED_VALUES_UPDATED" ||
-          String(event.eventType || event.event_type || "") === "SECTION_RECORDS_FINALIZED";
-        const actorRole = isAdviser ? "Adviser" : (event.actorRole || event.actor_role || "System");
+        const actorRole = event.actorRole || event.actor_role || 'System';
 
         return {
           id: String(event.id || event.audit_event_id || ""),
@@ -75,7 +69,8 @@ export const getAuditEvents = async () => {
           actingAs,
         eventType: event.eventType || event.event_type || "SYSTEM_EVENT",
         eventLabel: event.eventLabel || event.event_label || event.eventType || "System Event",
-        module: event.module || event.module_name || "System",
+        module: auditModuleGroup(event),
+        recordedModule: event.module || event.module_name || "System",
         entityType: event.entityType || event.entity_type || "Record",
         entityId: event.entityId ? String(event.entityId) : (event.entity_id ? String(event.entity_id) : null),
         target: event.target || null,
@@ -85,8 +80,8 @@ export const getAuditEvents = async () => {
         term: event.term || null,
         subject: event.subject || null,
         section: event.section || null,
-        beforeData: typeof event.beforeData === "object" && event.beforeData !== null ? event.beforeData : {},
-        afterData: typeof event.afterData === "object" && event.afterData !== null ? event.afterData : {},
+        beforeData: event.beforeData ?? event.before_data ?? null,
+        afterData: event.afterData ?? event.after_data ?? null,
         metadata: typeof event.metadata === "object" && event.metadata !== null ? event.metadata : {},
       };
     })

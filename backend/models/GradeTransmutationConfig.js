@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const AuditDetails = require('../services/AuditDetailsService');
 
 // DepEd MATATAG (SY 2026-2027) Official Transmutation Table (42 Tiers)
 const OFFICIAL_DEPED_TABLE = [
@@ -139,9 +140,9 @@ class GradeTransmutationConfig {
     return null;
   }
 
-  static async getConfig() {
-    await this.initTable();
-    const [rows] = await db.execute(
+  static async getConfig(executor = db) {
+    if (executor === db) await this.initTable();
+    const [rows] = await executor.execute(
       `SELECT gtc.*, u.first_name, u.last_name, u.email
        FROM GRADE_TRANSMUTATION_CONFIG gtc
        LEFT JOIN USER u ON u.user_id = gtc.updated_by
@@ -172,17 +173,19 @@ class GradeTransmutationConfig {
     }
 
     const isEnabled = Boolean(row.is_custom_enabled);
-    cachedIsCustomEnabled = isEnabled;
-    cachedActiveConfig = (isEnabled && customRanges)
-      ? customRanges.map((r) => ({
-          min: Number(r.min),
-          max: Number(r.max),
-          grade: Number(r.transmuted),
-          transmuted: Number(r.transmuted),
-          label: r.label || null,
-        }))
-      : null;
-    lastCacheTime = Date.now();
+    if (executor === db) {
+      cachedIsCustomEnabled = isEnabled;
+      cachedActiveConfig = (isEnabled && customRanges)
+        ? customRanges.map((r) => ({
+            min: Number(r.min),
+            max: Number(r.max),
+            grade: Number(r.transmuted),
+            transmuted: Number(r.transmuted),
+            label: r.label || null,
+          }))
+        : null;
+      lastCacheTime = Date.now();
+    }
 
     return {
       is_custom_enabled: isEnabled,
@@ -197,7 +200,7 @@ class GradeTransmutationConfig {
     };
   }
 
-  static async saveConfig({ is_custom_enabled, ranges, updated_by = null }) {
+  static async saveConfig({ is_custom_enabled, ranges, updated_by = null }, eventType = 'GRADE_TRANSMUTATION_UPDATED') {
     await this.initTable();
 
     const enabled = Boolean(is_custom_enabled);
@@ -222,16 +225,32 @@ class GradeTransmutationConfig {
       serializedRanges = JSON.stringify(formatted);
     }
 
-    await db.execute(
-      `INSERT INTO GRADE_TRANSMUTATION_CONFIG (config_id, is_custom_enabled, ranges_json, updated_by, updated_at)
-       VALUES (1, ?, ?, ?, NOW())
-       ON DUPLICATE KEY UPDATE
-         is_custom_enabled = VALUES(is_custom_enabled),
-         ranges_json = VALUES(ranges_json),
-         updated_by = VALUES(updated_by),
-         updated_at = NOW()`,
-      [enabled ? 1 : 0, serializedRanges, updated_by]
-    );
+    const connection = await db.getConnection();
+    try {
+      await connection.beginTransaction();
+      await connection.execute('SELECT config_id FROM GRADE_TRANSMUTATION_CONFIG WHERE config_id = 1 FOR UPDATE');
+      const before = AuditDetails.transmutationSnapshot(await this.getConfig(connection));
+      await connection.execute(
+        `INSERT INTO GRADE_TRANSMUTATION_CONFIG (config_id, is_custom_enabled, ranges_json, updated_by, updated_at)
+         VALUES (1, ?, ?, ?, NOW())
+         ON DUPLICATE KEY UPDATE
+           is_custom_enabled = VALUES(is_custom_enabled),
+           ranges_json = VALUES(ranges_json),
+           updated_by = VALUES(updated_by),
+           updated_at = NOW()`,
+        [enabled ? 1 : 0, serializedRanges, updated_by]
+      );
+
+      const after = AuditDetails.transmutationSnapshot(await this.getConfig(connection));
+      await AuditDetails.record(connection, { actor: updated_by, before, after, event_type: eventType,
+        module_name: 'GRADE_TRANSMUTATION', entity_type: 'GRADE_TRANSMUTATION_CONFIG', entity_id: 1,
+        actor_context: updated_by ? { acting_as: 'System Administrator' } : {},
+        metadata: { target: 'Grade transmutation', summary: eventType === 'GRADE_TRANSMUTATION_RESET'
+          ? 'Reset grade transmutation settings to defaults.'
+          : enabled ? 'Updated grade transmutation ranges.' : 'Turned off grade transmutation.' } });
+      await connection.commit();
+    } catch (error) { await connection.rollback(); throw error; }
+    finally { connection.release(); }
 
     // Invalidate cache
     cachedActiveConfig = null;
@@ -242,20 +261,7 @@ class GradeTransmutationConfig {
   }
 
   static async resetToDefault({ updated_by = null }) {
-    await this.initTable();
-    await db.execute(
-      `UPDATE GRADE_TRANSMUTATION_CONFIG
-       SET is_custom_enabled = 0, ranges_json = NULL, updated_by = ?, updated_at = NOW()
-       WHERE config_id = 1`,
-      [updated_by]
-    );
-
-    // Invalidate cache
-    cachedActiveConfig = null;
-    cachedIsCustomEnabled = false;
-    lastCacheTime = 0;
-
-    return this.getConfig();
+    return this.saveConfig({ is_custom_enabled: false, updated_by }, 'GRADE_TRANSMUTATION_RESET');
   }
 
   static async getActiveTiers() {

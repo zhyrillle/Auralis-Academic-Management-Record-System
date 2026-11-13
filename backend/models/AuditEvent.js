@@ -296,7 +296,7 @@ function normalizeAuditEvent(row) {
   const metadata = safeParseJson(row.metadata);
 
   const actorFullName = [row.first_name, row.last_name].filter(Boolean).join(' ');
-  const actorName = actorFullName || actorContext.actor_name || metadata.actor_name || 'Auralis System';
+  const actorName = actorContext.actor_name || actorFullName || metadata.actor_name || 'Auralis System';
 
   // Explicit role attribution (e.g. subject teacher acting as Section Adviser)
   const explicitRole =
@@ -438,8 +438,8 @@ class AuditEvent {
     const moduleName = data.module_name || data.moduleName;
     const entityType = data.entity_type || data.entityType;
     const entityId = data.entity_id || data.entityId || null;
-    const beforeData = data.before_data || data.beforeData || null;
-    const afterData = data.after_data || data.afterData || null;
+    const beforeData = data.before_data ?? data.beforeData ?? null;
+    const afterData = data.after_data ?? data.afterData ?? null;
     const metadata = data.metadata || null;
 
     const [result] = await executor.execute(

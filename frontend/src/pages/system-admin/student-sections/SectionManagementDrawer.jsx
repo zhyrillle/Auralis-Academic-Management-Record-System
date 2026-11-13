@@ -216,7 +216,6 @@ export default function SectionManagementDrawer({
       isOpen={isOpen}
       onClose={onClose}
       title={section?.name || "Manage section"}
-      eyebrow="Section workspace"
       description={section && `${formatSectionGrade(section.level, section.grade_level_id)} · Section details, subjects, and student membership`}
       className="section-management-drawer"
       busy={busy || subjectActionBusy}

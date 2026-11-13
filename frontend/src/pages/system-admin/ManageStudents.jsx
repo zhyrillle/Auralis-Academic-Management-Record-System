@@ -217,7 +217,7 @@ export default function ManageStudents() {
       setDetailOpen(false);
       openForm(selectedStudent);
     }} />
-    <OverlayPanel isOpen={deleteOpen} onClose={() => setDeleteOpen(false)} title="Delete student" eyebrow="Student record" busy={saving} error={toast?.type === "error" ? toast.message : ""} description="Review this action carefully. This deletes a learner profile, not just a section assignment." footer={<><button type="button" className="student-admin-button" disabled={saving} onClick={() => setDeleteOpen(false)}>Cancel</button><button type="button" className="student-admin-button student-admin-button--danger" disabled={saving} onClick={confirmDelete}>{saving ? "Deleting…" : "Delete student"}</button></>}>
+    <OverlayPanel isOpen={deleteOpen} onClose={() => setDeleteOpen(false)} title="Delete student" busy={saving} error={toast?.type === "error" ? toast.message : ""} description="Review this action carefully. This deletes a learner profile, not just a section assignment." footer={<><button type="button" className="student-admin-button" disabled={saving} onClick={() => setDeleteOpen(false)}>Cancel</button><button type="button" className="student-admin-button student-admin-button--danger" disabled={saving} onClick={confirmDelete}>{saving ? "Deleting…" : "Delete student"}</button></>}>
       <div className="student-admin-form-note"><strong>{deletingStudent && studentName(deletingStudent)}</strong><p>Academic records or other linked information may prevent deletion.</p></div>
     </OverlayPanel>
     <Toast className="app-toast--bottom-tray" message={toast?.message} variant={toast?.type} icon={toast?.type === "error" ? AlertCircle : undefined} onDismiss={() => setToast(null)} />

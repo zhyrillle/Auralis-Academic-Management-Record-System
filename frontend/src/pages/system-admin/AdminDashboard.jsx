@@ -13,6 +13,7 @@ import {
 } from "../../services/adminDashboardService";
 import { getUserProfile } from "../../services/userService";
 import { getStoredUser, setStoredUser } from "../../utils/auth";
+import { AUDIT_MODULES, isAuditEventVisible } from '../../utils/auditModules.js';
 import "../../styles/adminDashboard.css";
 
 const emptySummary = {
@@ -32,9 +33,12 @@ const EMPTY_LIST = [];
 export default function AdminDashboard() {
   const [adminUser, setAdminUser] = useState(() => getStoredUser());
   const summaryQuery = useCachedQuery(cacheKey('admin:account-summary'), getAccountSummary);
-  const auditQuery = useCachedQuery(cacheKey('admin:audit-events'), getAuditEvents);
+  const auditQuery = useCachedQuery(cacheKey('admin:audit-events:four-modules-v1'), getAuditEvents);
   const summary = summaryQuery.data || emptySummary;
-  const auditEvents = auditQuery.data || EMPTY_LIST;
+  const auditEvents = useMemo(
+    () => (auditQuery.data || EMPTY_LIST).filter(isAuditEventVisible),
+    [auditQuery.data],
+  );
   const isSummaryLoading = summaryQuery.loading;
   const hasLoadedSummary = summaryQuery.data !== undefined;
   const isAuditLoading = auditQuery.loading;
@@ -102,13 +106,7 @@ export default function AdminDashboard() {
     return Array.from(new Set([...standardOrder, ...fromEvents]));
   }, [auditEvents]);
 
-  const modules = useMemo(
-    () =>
-      Array.from(new Set(auditEvents.map((event) => event.module)))
-        .filter(Boolean)
-        .sort(),
-    [auditEvents],
-  );
+  const modules = AUDIT_MODULES;
 
   const schoolYears = useMemo(
     () =>
@@ -120,13 +118,15 @@ export default function AdminDashboard() {
 
   const eventTypes = useMemo(() => {
     const labelsByType = new Map(
-      auditEvents.map((event) => [event.eventType, event.eventLabel]),
+      auditEvents
+        .filter((event) => !moduleFilter || event.module === moduleFilter)
+        .map((event) => [event.eventType, event.eventLabel]),
     );
 
     return Array.from(labelsByType, ([value, label]) => ({ value, label })).sort(
       (first, second) => first.label.localeCompare(second.label),
     );
-  }, [auditEvents]);
+  }, [auditEvents, moduleFilter]);
 
   const filteredEvents = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -141,6 +141,7 @@ export default function AdminDashboard() {
           event.summary,
           event.target,
           event.eventLabel,
+          event.recordedModule,
         ]
           .filter(Boolean)
           .some((value) => value.toLowerCase().includes(query));
@@ -220,6 +221,11 @@ export default function AdminDashboard() {
 
   const handleModuleChange = (value) => {
     setModuleFilter(value);
+    if (eventTypeFilter && value && !auditEvents.some(
+      (event) => event.module === value && event.eventType === eventTypeFilter,
+    )) {
+      setEventTypeFilter("");
+    }
   };
 
   const handleSchoolYearChange = (value) => {

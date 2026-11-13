@@ -116,13 +116,17 @@ async function applyPlan(connection, plan, { backupPath, source }) {
   }
   const bySheet = index(plan.updates, row => row.sheetId);
   const auditIds = [];
-  for (const [sheetId, changes] of bySheet) auditIds.push(await require('../models/AuditEvent').create({
+  for (const [sheetId, changes] of bySheet) {
+    const AuditDetails = require('./AuditDetailsService');
+    const names = new Map((await AuditDetails.gradeSnapshot(connection, sheetId)).map(row => [Number(row.grade_id), row.learner_name]));
+    auditIds.push(await require('../models/AuditEvent').create({
     event_type: 'GRADE_SHEET_DATA_RECONCILED', module_name: 'GRADING', entity_type: 'GRADE_SHEET', entity_id: sheetId,
     actor_context: { role: 'system', source },
-    before_data: changes.map(row => ({ gradeId: row.gradeId, initial: row.before.initial_grade, final: row.before.quarterly_grade })),
-    after_data: changes.map(row => ({ gradeId: row.gradeId, ...row.after })),
-    metadata: { school_year_id: plan.schoolYearId, backup_file: backupPath, changed_records: changes.length },
+    before_data: changes.map(row => ({ gradeId: row.gradeId, learner_name: names.get(row.gradeId), initial: row.before.initial_grade, final: row.before.quarterly_grade })),
+    after_data: changes.map(row => ({ gradeId: row.gradeId, learner_name: names.get(row.gradeId), ...row.after })),
+    metadata: { ...await AuditDetails.sheetContext(connection, sheetId), school_year_id: plan.schoolYearId, backup_file: backupPath, changed_records: changes.length },
   }, connection));
+  }
   return auditIds;
 }
 

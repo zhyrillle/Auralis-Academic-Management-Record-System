@@ -183,7 +183,6 @@ function LearnerDetails({ student, context, onClose }) {
       <div className="sm-dialog-content">
         <header>
           <div>
-            <span className="sm-eyebrow">Learner review</span>
             <h2 id="monitoring-learner-name">{student.name}</h2>
             <div className="sm-review-meta">
               <p>

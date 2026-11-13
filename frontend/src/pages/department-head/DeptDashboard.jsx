@@ -133,7 +133,6 @@ export default function DeptDashboard() {
     <div className="dept-dashboard-page dept-monitor-page">
       <div className="dept-dashboard-header">
         <div>
-          <p className="dept-monitor-eyebrow">DEPARTMENT OVERVIEW</p>
           <h1 className="dept-dashboard-title">{departmentName ? `${departmentName} Department` : "Department Dashboard"}</h1>
           <p className="dept-dashboard-subtitle">Monitor submissions, performance, and grade distribution.</p>
         </div>

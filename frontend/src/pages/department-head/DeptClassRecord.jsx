@@ -584,7 +584,7 @@ export default function DeptClassRecord({ selection, onBack }) {
       />
 
       <header className="dept-monitor-header">
-        <div className="dept-monitor-heading-with-back"><BackButton onClick={onBack} /><div><p className="dept-monitor-eyebrow">{departmentName} DEPARTMENT</p><h1>Class Records</h1>
+        <div className="dept-monitor-heading-with-back"><BackButton onClick={onBack} /><div><h1>Class Records</h1>
           <div className="dept-monitor-record-meta"><span><strong>{currentSectionMeta.sectionName}</strong> · {currentSectionMeta.gradeLevel}</span>
             <span>SY {selection.context.schoolYears.find(year => String(year.id) === selectedSchoolYearId)?.label}</span>
             <span>{effectiveSubjectName}</span></div>

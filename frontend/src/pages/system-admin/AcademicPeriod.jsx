@@ -197,10 +197,6 @@ export default function AcademicPeriod({ user }) {
       {/* Academic Period page header */}
       <header className="grade-lock-header">
         <div className="grade-lock-header__copy">
-          <div className="grade-lock-eyebrow">
-            <CalendarRange size={14} aria-hidden="true" />
-            Academic timeline and submission governance
-          </div>
           <h1>Academic Periods &amp; Deadlines</h1>
           <p>
             Configure the academic timeline, monitor submissions, and manage
@@ -314,7 +310,6 @@ export default function AcademicPeriod({ user }) {
 
             <article className="timeline-skeleton__panel" aria-hidden="true">
               <header className="timeline-skeleton__heading">
-                <SkeletonBlock className="grading-period-skeleton__block timeline-skeleton__eyebrow" />
                 <SkeletonBlock className="grading-period-skeleton__block grading-period-skeleton__heading" />
                 <SkeletonBlock className="grading-period-skeleton__block grading-period-skeleton__subheading" />
               </header>

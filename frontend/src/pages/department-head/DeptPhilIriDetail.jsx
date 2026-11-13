@@ -102,7 +102,7 @@ export default function DeptPhilIriDetail({ section, schoolYearId, context, onBa
   if (!rows.length) rows.push(<tr key="empty"><td colSpan={9} className="dept-monitor-empty-cell">No learners match this search.</td></tr>);
 
   return <div className="dept-monitor-page">
-    <header className="dept-monitor-header"><div className="dept-monitor-heading-with-back"><BackButton onClick={onBack} /><div><p className="dept-monitor-eyebrow">READING ASSESSMENT RECORDS</p><h1>{section.sectionName}</h1>
+    <header className="dept-monitor-header"><div className="dept-monitor-heading-with-back"><BackButton onClick={onBack} /><div><h1>{section.sectionName}</h1>
       <p>{section.gradeLevelName} · SY {yearLabel} · English PHIL-IRI</p></div></div></header>
     <FilterToolbar className="dept-phil-navigation" label="Assessment navigation" end={<SearchBar query={search} setQuery={setSearch} placeholder="Search learner name…" />}>
       <SegmentedControl label="Assessment stage" value={tab} options={[{ value: 'screening', label: 'Screening' }, { value: 'postTest', label: 'Post-Test' }]}

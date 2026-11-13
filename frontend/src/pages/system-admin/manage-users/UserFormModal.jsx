@@ -111,7 +111,7 @@ export default function UserFormModal({
     }
     return true;
   });
-  return <OverlayPanel isOpen={isOpen} onClose={onClose} busy={saving} title={isEdit ? "Edit User" : "Add New User"} eyebrow="Account management" description="Manage account details, access, and class assignments." className="user-management-overlay user-form-drawer" footer={<>
+  return <OverlayPanel isOpen={isOpen} onClose={onClose} busy={saving} title={isEdit ? "Edit User" : "Add New User"} description="Manage account details, access, and class assignments." className="user-management-overlay user-form-drawer" footer={<>
         <span className="user-form-footer-note">{saving ? "Saving account…" : "Review account details before saving."}</span>
         <div className="user-form-footer-actions">
           <button type="button" className="user-form-cancel" disabled={saving} onClick={onClose}>Cancel</button>
