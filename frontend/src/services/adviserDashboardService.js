@@ -69,7 +69,7 @@ export async function getAdviserSummary(userId) {
   const effectiveId = getEffectiveUserId(userId);
   try {
     const url = effectiveId
-      ? `${API_BASE_URL}/adviser/dashboard/summary?userId=${encodeURIComponent(effectiveId)}`
+      ? `${API_BASE_URL}/adviser/dashboard/summary?viewVersion=teacher-dashboard-risk-v2&userId=${encodeURIComponent(effectiveId)}`
       : `${API_BASE_URL}/adviser/dashboard/summary`;
     const response = await fetch(url);
     return await parseResponse(response);
@@ -236,29 +236,18 @@ export async function getCoreValuesComparison(term = "T1", userId) {
 }
 /**
  * REST Route: GET /api/adviser/dashboard/at-risk-students?userId=:userId
- * Retrieves High-Risk only students predicted by machine learning model
- * for the sections and subjects handled by this teacher.
+ * Retrieves current-term monitoring or optional English predictions for assigned subjects.
  */
-export async function getAtRiskStudents(userId) {
-  const effectiveId = getEffectiveUserId(userId);
-  try {
-    const url = effectiveId
-      ? `${API_BASE_URL}/adviser/dashboard/at-risk-students?userId=${encodeURIComponent(effectiveId)}`
-      : `${API_BASE_URL}/adviser/dashboard/at-risk-students`;
-    const response = await fetch(url);
-    return await parseResponse(response);
-  } catch (error) {
-    console.warn("getAtRiskStudents fallback:", error.message);
-    return {
-      highRiskCount: 0,
-      students: [],
-      totalScored: 0,
-      unavailableCount: 0,
-      targetTerm: "T2",
-    };
+export async function getAtRiskStudents(userId, { mode = "monitoring", force = false } = {}) {
+  const params = new URLSearchParams({ userId: getEffectiveUserId(userId) || "", mode,
+    viewVersion: "teacher-dashboard-risk-v2" });
+  const response = await fetch(`${API_BASE_URL}/adviser/dashboard/at-risk-students?${params}`, { force });
+  const result = await parseResponse(response);
+  if (result.version !== "teacher-dashboard-risk-v2" || result.mode !== mode || !result.counts || !Array.isArray(result.students)) {
+    throw new Error("Refresh the page to load the updated risk overview.");
   }
+  return result;
 }
-
 /**
  * REST Route: GET /api/adviser/dashboard/submissions?userId=:userId
  * Retrieves handled sections and subjects and their grade submission status.

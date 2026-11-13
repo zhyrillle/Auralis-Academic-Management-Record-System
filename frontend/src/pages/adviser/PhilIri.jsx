@@ -32,6 +32,7 @@ import {
 import "../../styles/PhilIriPage.css";
 import "../../styles/philIriPostTest.css";
 import "../../styles/philIriScreening.css";
+import "../../styles/philIriResponsive.css";
 import screeningPrintStyles from "../../styles/philIriScreening.css?inline";
 
 // DepEd PHIL-IRI Evaluation Functions
@@ -668,7 +669,7 @@ function ScreeningTest({
               onChange={(event) => changeConfig("test_level", event.target.value)}
             /></span>
           </div>
-          <div className="screening-tables">
+          <div className="screening-tables" role="region" aria-label="Screening scores; scroll horizontally to see all columns" tabIndex={0}>
             {rosterTable()}
           </div>
           {!students.length && (

@@ -2,8 +2,8 @@ const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
 const { calculateStudentGrades, TRANSMUTATION_TABLE, weightsFromRows } = require('../utils/depedTransmutation');
-const AtRiskPrediction = require('../models/AtRiskPrediction');
-const { decryptLrn } = require('../utils/encryption');
+const { getRiskOverview } = require('../services/TeacherDashboardRiskService');
+
 
 /**
  * Normalizes term string ('T1', 'term-1', 'Quarter 1', 1) to standard term code ('T1', 'T2', 'T3')
@@ -357,176 +357,6 @@ router.get('/check-role/:userId', async (req, res) => {
 });
 
 /**
- * GET /api/adviser/dashboard/summary
- * Retrieves overall KPI counters, section averages, and student counts for the logged-in teacher.
- */
-
-const teacherRiskCache = new Map();
-const inFlightRiskComputations = new Map();
-const RISK_CACHE_TTL_MS = 15 * 60 * 1000;
-
-async function computeTeacherHighRiskStudents(userId, targetTerm, schoolYearStr) {
-  const cacheKey = `${userId}_${targetTerm}_${schoolYearStr}`;
-  if (inFlightRiskComputations.has(cacheKey)) {
-    return inFlightRiskComputations.get(cacheKey);
-  }
-
-  const computation = (async () => {
-    try {
-      const { teachingRows, advisoryRows } = await getTeacherClasses(userId);
-      const sectionMap = new Map();
-
-      (teachingRows || []).forEach((row) => {
-        if (!sectionMap.has(row.section_id)) {
-          sectionMap.set(row.section_id, {
-            sectionId: row.section_id,
-            sectionName: row.section_name,
-            gradeLevel: row.grade_level_name,
-            subjects: new Set(),
-            isAdviser: false,
-          });
-        }
-        if (row.subject_name) {
-          sectionMap.get(row.section_id).subjects.add(row.subject_name);
-        }
-      });
-
-      (advisoryRows || []).forEach((row) => {
-        if (!sectionMap.has(row.section_id)) {
-          sectionMap.set(row.section_id, {
-            sectionId: row.section_id,
-            sectionName: row.section_name,
-            gradeLevel: row.grade_level_name,
-            subjects: new Set(),
-            isAdviser: true,
-          });
-        } else {
-          sectionMap.get(row.section_id).isAdviser = true;
-        }
-      });
-
-      const sectionIds = Array.from(sectionMap.keys());
-      let highRiskStudents = [];
-      let unavailableStudents = [];
-      let totalScored = 0;
-
-      await Promise.all(sectionIds.map(async (secId) => {
-        try {
-          const preview = await AtRiskPrediction.getPreview(
-            { schoolYear: schoolYearStr, term: targetTerm, gradeLevel: 'all' },
-            { database: db, scope: { sectionId: secId } }
-          );
-
-          const secInfo = sectionMap.get(secId);
-          const subList = Array.from(secInfo?.subjects || []);
-          const subDisplay = subList.length > 0
-            ? (secInfo?.isAdviser ? `${subList.join(', ')} / Advisory` : subList.join(', '))
-            : (secInfo?.isAdviser ? 'Advisory Class' : 'General Class');
-
-          if (preview?.students && preview.students.length > 0) {
-            totalScored += preview.students.length;
-            const high = preview.students.filter((s) => s.riskLevel === 'high');
-            for (const s of high) {
-              highRiskStudents.push({
-                student_id: s.studentId,
-                student_section_id: s.studentSectionId,
-                name: s.name,
-                lrn: decryptLrn(s.lrn) || s.lrn,
-                section_id: secId,
-                section_name: s.section || secInfo?.sectionName,
-                grade_level: secInfo?.gradeLevel || `Grade ${s.grade}`,
-                handled_subject: subDisplay,
-                risk_level: 'high',
-                risk_score: s.riskScore,
-                score: s.score,
-                flags: s.flags || [],
-                adviser: s.adviser,
-                source_term: preview.sourceTerm,
-                target_term: preview.targetTerm,
-              });
-            }
-          }
-
-          if (preview?.unavailable && preview.unavailable.length > 0) {
-            unavailableStudents.push(...preview.unavailable.map((u) => ({
-              ...u,
-              lrn: decryptLrn(u.lrn) || u.lrn,
-              handled_subject: subDisplay,
-            })));
-          }
-        } catch (err) {
-          console.warn(`[ML Risk] Section ${secId} preview error:`, err.message);
-        }
-      }));
-
-      const result = {
-        highRiskCount: highRiskStudents.length,
-        students: highRiskStudents,
-        totalScored,
-        unavailableCount: unavailableStudents.length,
-        unavailableStudents,
-        targetTerm,
-        schoolYear: schoolYearStr,
-      };
-      teacherRiskCache.set(cacheKey, { timestamp: Date.now(), data: result });
-      return result;
-    } finally {
-      inFlightRiskComputations.delete(cacheKey);
-    }
-  })();
-
-  inFlightRiskComputations.set(cacheKey, computation);
-  return computation;
-}
-
-/**
- * Retrieves High-Risk only students predicted by the machine learning model
- * across all subject sections handled by the given teacher.
- */
-async function getTeacherHighRiskStudents(userId, activeTermInfo, { allowStale = true } = {}) {
-  try {
-    const termCode = activeTermInfo?.termCode || 'T2';
-    const targetTerm = termCode === 'T1' ? 'T2' : termCode;
-
-    const [activeSyRows] = await db.execute(
-      `SELECT school_year_id, starts_on, ends_on FROM SCHOOL_YEAR 
-       WHERE LOWER(status) IN ('ongoing', 'active') 
-       ORDER BY starts_on DESC LIMIT 1`
-    ).catch(() => [[]]);
-
-    const syRow = activeSyRows[0] || { starts_on: 2026, ends_on: 2027, school_year_id: 1 };
-    const syStart = syRow.starts_on instanceof Date ? syRow.starts_on.getFullYear() : parseInt(syRow.starts_on, 10);
-    const syEnd = syRow.ends_on instanceof Date ? syRow.ends_on.getFullYear() : parseInt(syRow.ends_on, 10);
-    const schoolYearStr = `${syStart}-${syEnd}`;
-
-    const cacheKey = `${userId}_${targetTerm}_${schoolYearStr}`;
-    const cached = teacherRiskCache.get(cacheKey);
-    if (cached) {
-      if (Date.now() - cached.timestamp < RISK_CACHE_TTL_MS) {
-        return cached.data;
-      }
-      if (allowStale) {
-        computeTeacherHighRiskStudents(userId, targetTerm, schoolYearStr).catch(() => {});
-        return cached.data;
-      }
-    }
-
-    return await computeTeacherHighRiskStudents(userId, targetTerm, schoolYearStr);
-  } catch (error) {
-    console.error('Error in getTeacherHighRiskStudents:', error);
-    return {
-      highRiskCount: 0,
-      students: [],
-      totalScored: 0,
-      unavailableCount: 0,
-      unavailableStudents: [],
-      targetTerm: 'T2',
-      schoolYear: '2026-2027',
-    };
-  }
-}
-
-/**
  * Retrieves handled sections and subjects for a teacher along with submission status,
  * student counts, and grading progress for the given term.
  */
@@ -812,13 +642,9 @@ router.get('/summary', async (req, res) => {
       }
     }
 
-    // 5. At-risk students count (High-Risk ONLY from the team's Machine Learning model)
-    const highRiskData = await getTeacherHighRiskStudents(userId, activeTermInfo);
-    const atRiskStudentsCount = highRiskData.highRiskCount;
-    const atRiskStudentsNote = atRiskStudentsCount > 0
-      ? `${atRiskStudentsCount} high-risk student${atRiskStudentsCount === 1 ? '' : 's'}`
-      : (highRiskData.unavailableCount > 0 ? 'No high-risk students flagged' : 'No students at risk');
-
+    const riskOverview = await getRiskOverview(db, userId, activeTermInfo);
+    const atRiskStudentsCount = riskOverview.counts.high;
+    const atRiskStudentsNote = `${atRiskStudentsCount} high-risk students from current-term monitoring`;
     res.json({
       isAdviser,
       role: isAdviser ? 'adviser' : 'subject teacher',
@@ -831,6 +657,7 @@ router.get('/summary', async (req, res) => {
       lowestPerformingSectionNote,
       atRiskStudentsCount,
       atRiskStudentsNote,
+      riskOverview,
       entryProgress,
       totalClasses,
       totalStudents,
@@ -852,12 +679,12 @@ router.get('/at-risk-students', async (req, res) => {
     }
 
     const activeTermInfo = await resolveCurrentActiveTerm();
-    const data = await getTeacherHighRiskStudents(userId, activeTermInfo);
+    const data = await getRiskOverview(db, userId, activeTermInfo, { mode: req.query.mode || 'monitoring' });
 
     res.json(data);
   } catch (err) {
     console.error('Error in /at-risk-students endpoint:', err);
-    res.status(500).json({ error: err.message });
+    res.status(err.status || err.statusCode || 500).json({ error: err.message });
   }
 });
 

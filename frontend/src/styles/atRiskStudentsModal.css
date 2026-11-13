@@ -1,0 +1,61 @@
+.at-risk-modal__card.risk-review { max-width: 780px; height: min(88dvh, 850px); max-height: min(88dvh, 850px); color: #14284b; font-family: var(--font-family, 'Outfit', system-ui, sans-serif); }
+.risk-review > .at-risk-modal__header, .risk-review > .risk-review__toolbar, .risk-review > .at-risk-modal__footer { flex-shrink: 0; }
+.risk-review .at-risk-modal__footer-note { color: #4a5b76; }
+.risk-review__context { margin: 6px 0 0; font-size: 12px; color: #4a5b76; }
+.risk-review__toolbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 16px 28px; }
+.risk-review__toolbar p { margin: 0; font-size: 13px; line-height: 1.5; color: #4a5b76; }
+.risk-review__predict { display: inline-flex; align-items: center; gap: 8px; padding: 9px 12px; flex-shrink: 0; border: 1px solid #dbe4ef; border-radius: 9px; background: white; color: #14284b; font: inherit; font-size: 13px; cursor: pointer; }
+.risk-review__switch { width: 28px; height: 16px; border-radius: 20px; background: #68788e; padding: 2px; box-sizing: border-box; }
+.risk-review__switch::after { content: ''; display: block; width: 12px; height: 12px; border-radius: 50%; background: white; }
+.risk-review__predict[aria-checked="true"] .risk-review__switch { background: #14284b; }
+.risk-review__predict[aria-checked="true"] .risk-review__switch::after { margin-left: 12px; }
+.risk-review__english { font-size: 11px; color: #4a5b76; }
+.risk-review__content { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow-y: auto; padding: 0 28px 20px; }
+.risk-review__content > * { flex-shrink: 0; }
+.risk-review__prediction-control { position: relative; display: inline-flex; flex-shrink: 0; border-radius: 9px; }
+.risk-review__prediction-control:focus-visible { outline: 2px solid #173968; outline-offset: 3px; }
+.risk-review__predict-tooltip { position: absolute; z-index: 30; right: 0; bottom: calc(100% + 8px); width: min(280px, 75vw); box-sizing: border-box; padding: 12px 14px; border: 1px solid #dbe5f3; border-radius: 10px; background: #fff; box-shadow: 0 6px 20px rgba(18, 46, 88, .14); color: #173968; font-size: 12px; line-height: 1.5; visibility: hidden; opacity: 0; pointer-events: none; }
+.risk-review__predict-tooltip strong { display: block; margin-bottom: 4px; font-size: 13px; }
+.risk-review__predict-tooltip > span { display: block; color: #60738f; }
+.risk-review__prediction-control:hover .risk-review__predict-tooltip, .risk-review__prediction-control:focus-within .risk-review__predict-tooltip { visibility: visible; opacity: 1; }
+.risk-review__predict:disabled { opacity: .65; cursor: not-allowed; }
+.risk-review__bands { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.risk-review__band--high { --band-color: #c62828; --band-bg: #fff1f2; }
+.risk-review__band--medium { --band-color: #b45309; --band-bg: #fff8e7; }
+.risk-review__band--low { --band-color: #15803d; --band-bg: #edf8f0; }
+.risk-review__band { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 14px; background: #fff; border: 1px solid #dbe4ef; border-radius: 10px; color: var(--band-color); cursor: pointer; font: inherit; font-size: 13px; }
+.risk-review__band strong { font-size: 24px; }
+.risk-review__band[aria-pressed="true"] { background: var(--band-bg); border-color: var(--band-color); }
+.risk-review__filters { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; }
+.risk-review__filters input, .risk-review__filters > button { border: 1px solid #cbd5e1; border-radius: 8px; padding: 9px 10px; min-width: 0; background: white; color: #14284b; font: inherit; font-size: 13px; }
+.risk-review__filters input { flex: 1 1 220px; }
+.risk-review__filters > button { cursor: pointer; }
+.risk-review__filters > button[aria-pressed="true"] { background: #14284b; color: white; }
+.risk-review__section-filter { width: 160px; font-size: 13px; }
+.risk-review__section-filter .dropdown-select__trigger { height: 38px; }
+.risk-review__section-filter .dropdown-select__trigger:focus-visible { outline: 0; }
+.risk-review__empty { display: flex; flex-direction: column; flex: 1; min-height: 100px; align-items: center; justify-content: center; text-align: center; gap: 10px; padding: 22px 12px; color: #4a5b76; }
+.risk-review__empty h3 { margin: 0 0 4px; font-size: 14px; font-weight: 600; color: #14284b; }
+.risk-review__empty p { margin: 0; font-size: 12px; line-height: 1.5; }
+.risk-review__notice, .risk-review__result-count { color: #4a5b76; font-size: 12px; line-height: 1.5; }
+.risk-review__notice { padding: 10px 12px; background: #f5f7fa; border-radius: 8px; }
+.risk-review__notice summary { cursor: pointer; }
+.risk-review__student { padding: 16px; border: 1px solid #e2e8f0; border-left: 3px solid var(--band-color); border-radius: 10px; }
+.risk-review__student h3 { font-size: 15px; margin: 0 0 5px; }
+.risk-review__student p { color: #4a5b76; font-size: 12px; margin: 0; overflow-wrap: anywhere; }
+.risk-review__pill { background: var(--band-bg); color: var(--band-color); font-size: 12px; font-weight: 600; border-radius: 20px; padding: 5px 10px; white-space: nowrap; }
+.risk-review__subjects { margin: 12px 0 0; padding: 0; list-style: none; font-size: 12px; }
+.risk-review__subjects li { display: flex; justify-content: space-between; gap: 12px; padding-top: 8px; }
+.risk-review__subjects li span:last-child { color: #4a5b76; text-align: right; }
+.risk-review button:focus-visible, .risk-review input:focus-visible, .risk-review select:focus-visible { outline: 2px solid #14284b; outline-offset: 2px; }
+@media (max-width: 600px) {
+  .at-risk-modal__backdrop { padding: 10px; }
+  .at-risk-modal__card.risk-review { height: 94dvh; max-height: 94dvh; border-radius: 14px; }
+  .risk-review .at-risk-modal__header { padding: 18px 16px 12px; }
+  .risk-review__toolbar { padding: 12px 16px; align-items: flex-start; flex-direction: column; gap: 10px; }
+  .risk-review__content { padding: 0 16px 16px; }
+  .risk-review__band { padding: 10px; flex-direction: column; align-items: flex-start; font-size: 12px; gap: 4px; }
+  .risk-review .at-risk-modal__footer { padding: 12px 16px; gap: 12px; }
+  .risk-review .at-risk-modal__student-card-top { flex-wrap: wrap; }
+}
+@media (prefers-reduced-motion: reduce) { .at-risk-modal__backdrop, .risk-review { animation: none; } }

@@ -32,6 +32,7 @@ import { getSectionDetails } from "../../services/sectionDetailsService";
 // Services
 import {
   getAdviserSummary,
+  getAtRiskStudents,
   getSubjectPerformance,
   getAssignedClasses,
   getGradeRangeDistribution,
@@ -43,6 +44,7 @@ import {
 } from "../../services/adviserDashboardService";
 
 // Custom Adviser Visual Components
+import RiskCarouselCard from "../../components/adviser/RiskCarouselCard";
 import AdviserStatCard from "../../components/adviser/AdviserStatCard";
 import AdviserEntryProgressGauge from "../../components/adviser/AdviserEntryProgressGauge";
 import AdviserSubjectBarChart from "../../components/adviser/AdviserSubjectBarChart";
@@ -76,13 +78,16 @@ export default function AdviserDashboard() {
   }, [userId]);
 
   const cacheOptions = { enabled: Boolean(userId), keepPreviousData: true, refreshInterval: 0, revalidateOnFocus: false };
-  const overview = useCachedQuery(cacheKey('adviser:dashboard-overview', { userId }), async () => {
+  const overview = useCachedQuery(cacheKey('adviser:dashboard-overview', { userId, riskVersion: 'v2' }), async () => {
     const [role, summary, classes, attendance] = await Promise.all([
       checkAdviserRole(userId), getAdviserSummary(userId), getAssignedClasses(userId), getAttendanceTrend(userId),
     ]);
     return { role, summary, classes, attendance };
   }, cacheOptions);
   const loading = overview.loading;
+  const riskQuery = useCachedQuery(cacheKey('adviser:dashboard-risk-v2', { userId, mode: 'monitoring' }),
+    () => getAtRiskStudents(userId, { force: true }),
+    { enabled: Boolean(userId), refreshInterval: 0, revalidateOnFocus: false });
   const summary = overview.data?.summary || {};
   const assignedClasses = useMemo(() => overview.data?.classes || [], [overview.data]);
   const attendanceTrend = overview.data?.attendance || [];
@@ -96,6 +101,7 @@ export default function AdviserDashboard() {
   const [testSection, setTestSection] = useState('All');
   const [areaChoice, setSubjectAreaTerm] = useState(null);
   const [isAtRiskModalOpen, setIsAtRiskModalOpen] = useState(false);
+  const [riskBand, setRiskBand] = useState('high');
   const [submissionsModal, setSubmissionsModal] = useState({
     isOpen: false,
     initialTab: "pending",
@@ -821,15 +827,14 @@ export default function AdviserDashboard() {
               subtitleType="warning"
               loading={loading}
             />
-            <AdviserStatCard
-              title="High-Risk Students"
-              value={summary?.atRiskStudentsCount ?? 0}
-              subtitle={Number(summary?.atRiskStudentsCount || 0) > 0 ? "Requires intervention" : "No intervention needed"}
-              subtitleType={Number(summary?.atRiskStudentsCount || 0) > 0 ? "danger" : "default"}
-              accentColor="#EF4444"
-              loading={loading}
-              clickable
-              onClick={() => setIsAtRiskModalOpen(true)}
+            <RiskCarouselCard
+              high={riskQuery.data?.counts.high}
+              medium={riskQuery.data?.counts.medium}
+              low={riskQuery.data?.counts.low}
+              loading={riskQuery.loading}
+              error={riskQuery.error}
+              onRetry={riskQuery.refresh}
+              onSelect={band => { setRiskBand(band); setIsAtRiskModalOpen(true); }}
             />
           </div>
 
@@ -1042,8 +1047,9 @@ export default function AdviserDashboard() {
         </section>
       )}
 
-      {/* At-Risk Students ML Modal */}
+      {/* Current-term monitoring with optional English prediction */}
       <AtRiskStudentsModal
+        initialBand={riskBand}
         isOpen={isAtRiskModalOpen}
         onClose={() => setIsAtRiskModalOpen(false)}
         userId={userId}
