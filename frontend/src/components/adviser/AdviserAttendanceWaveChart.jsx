@@ -1,5 +1,6 @@
 import { SkeletonBlock } from '../common/PageSkeleton.jsx';
 import React, { useState } from "react";
+import { useDashboardInView, useProgressValue } from "./useDashboardProgressAnimation.js";
 
 export default function AdviserAttendanceWaveChart({
   data = [
@@ -12,6 +13,8 @@ export default function AdviserAttendanceWaveChart({
   loading = false,
 }) {
   const [hoveredIdx, setHoveredIdx] = useState(null);
+  const [cardRef, isVisible] = useDashboardInView();
+  const animationProgress = useProgressValue(100, isVisible) / 100;
 
   const yTicks = [200, 150, 100, 50, 0];
   const VB_W = 640;
@@ -27,7 +30,7 @@ export default function AdviserAttendanceWaveChart({
     const availableWidth = chartWidth - leftPad - 32;
     const x =
       leftPad + 16 + (idx / Math.max(1, data.length - 1)) * availableWidth;
-    const count = Math.min(200, Math.max(0, item.count || 0));
+    const count = Math.min(200, Math.max(0, item.count || 0)) * animationProgress;
     const y = topPad + ((200 - count) / 200) * chartHeight;
     return { x, y, count, label: item.week || `Week ${idx + 1}` };
   });
@@ -60,7 +63,7 @@ export default function AdviserAttendanceWaveChart({
     : "";
 
   return (
-    <div className="adviser-dashboard__chart-card">
+    <div ref={cardRef} className={`adviser-dashboard__chart-card adviser-dashboard__scroll-reveal${isVisible ? " is-visible" : ""}`}>
       <div className="adviser-dashboard__chart-header">
         <h3 className="adviser-dashboard__chart-title">{loading ? <SkeletonBlock width={200} height={18} /> : <>
           Attendance Trend Analysis
@@ -170,7 +173,7 @@ export default function AdviserAttendanceWaveChart({
                       fontSize="12"
                       fontWeight="600"
                     >
-                      {pt.count}
+                      {Math.round(pt.count)}
                     </text>
                   </g>
                 )}

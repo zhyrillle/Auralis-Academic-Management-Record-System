@@ -1,5 +1,6 @@
 import { SkeletonBlock } from '../common/PageSkeleton.jsx';
 import React, { useState } from "react";
+import { useDashboardInView, useProgressValue } from "./useDashboardProgressAnimation.js";
 
 export default function AdviserSubjectAreaHBarChart({
   data = null,
@@ -8,6 +9,8 @@ export default function AdviserSubjectAreaHBarChart({
   loading = false,
 }) {
   const [hoveredIndex, setHoveredIndex] = useState(null);
+  const [cardRef, isVisible] = useDashboardInView();
+  const animationProgress = useProgressValue(100, isVisible) / 100;
   const terms = ["T1", "T2", "T3"];
   const xTicks = [0, 20, 40, 60, 80, 100];
 
@@ -45,7 +48,7 @@ export default function AdviserSubjectAreaHBarChart({
   const plotHeight = items.length * rowHeight;
 
   return (
-    <div className="adviser-dashboard__chart-card">
+    <div ref={cardRef} className={`adviser-dashboard__chart-card adviser-dashboard__scroll-reveal${isVisible ? " is-visible" : ""}`}>
       <div className="adviser-dashboard__chart-header">
         <div>
           <h3 className="adviser-dashboard__chart-title">{loading ? <SkeletonBlock width={210} height={18} /> : <>
@@ -111,7 +114,7 @@ export default function AdviserSubjectAreaHBarChart({
               const y = topPad + rowHeight * idx + (rowHeight - barThickness) / 2;
               const scoreVal = Number(item.grade || item.count || 85);
               const barVal = Math.min(100, scoreVal);
-              const barWidth = (barVal / 100) * plotWidth;
+              const barWidth = (barVal / 100) * plotWidth * animationProgress;
               const isHovered = hoveredIndex === idx;
 
               return (

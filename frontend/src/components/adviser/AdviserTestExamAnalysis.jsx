@@ -1,6 +1,7 @@
 import { SkeletonBlock } from '../common/PageSkeleton';
 import React, { useState } from "react";
 import { ChevronDown } from "lucide-react";
+import { useDashboardInView } from "./useDashboardProgressAnimation.js";
 
 export default function AdviserTestExamAnalysis({
   data = null,
@@ -13,6 +14,7 @@ export default function AdviserTestExamAnalysis({
 }) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [hoveredSlice, setHoveredSlice] = useState(null);
+  const [cardRef, isVisible] = useDashboardInView();
   const terms = ["T1", "T2", "T3"];
 
   const currentData = data || {
@@ -149,7 +151,7 @@ export default function AdviserTestExamAnalysis({
   };
 
   return (
-    <div className="adviser-dashboard__test-exam-card">
+    <div ref={cardRef} className={`adviser-dashboard__test-exam-card adviser-dashboard__scroll-reveal${isVisible ? " is-visible" : ""}`}>
       <div className="adviser-dashboard__test-exam-left">
         <div className="adviser-dashboard__test-term-col">
           {terms.map((t) => (

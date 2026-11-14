@@ -1,27 +1,30 @@
 import { SkeletonBlock } from '../common/PageSkeleton.jsx';
 import React from "react";
+import { useDashboardInView, useProgressValue } from "./useDashboardProgressAnimation.js";
 
 export default function AdviserEntryProgressGauge({ progress = 0, loading = false }) {
+  const [cardRef, isVisible] = useDashboardInView();
+  const safeProgress = Math.min(100, Math.max(0, Number(progress) || 0));
+  const animatedProgress = useProgressValue(safeProgress, isVisible);
+
   if (loading) {
     return (
-      <div className="adviser-dashboard__entry-gauge-card adviser-dashboard__entry-gauge-card--skeleton">
+      <div ref={cardRef} className={`adviser-dashboard__entry-gauge-card adviser-dashboard__entry-gauge-card--skeleton adviser-dashboard__scroll-reveal${isVisible ? " is-visible" : ""}`}>
         <SkeletonBlock className="adviser-dashboard__skeleton-circle" />
         <SkeletonBlock className="adviser-dashboard__gauge-skeleton-label" width={100} />
       </div>
     );
   }
 
-  const safeProgress = Math.min(100, Math.max(0, Number(progress) || 0));
-
   // Semi-circle SVG parameters matching reference design
   const radius = 100;
   const strokeWidth = 20;
   // Arc length for 180 degree semi-circle = Math.PI * radius
   const arcLength = Math.PI * radius;
-  const strokeDashoffset = arcLength * (1 - safeProgress / 100);
+  const strokeDashoffset = arcLength * (1 - animatedProgress / 100);
 
   return (
-    <div className="adviser-dashboard__entry-gauge-card">
+    <div ref={cardRef} className={`adviser-dashboard__entry-gauge-card adviser-dashboard__scroll-reveal${isVisible ? " is-visible" : ""}`}>
       <div className="adviser-dashboard__gauge-wrapper">
         <svg
           viewBox="0 0 260 145"
@@ -46,15 +49,12 @@ export default function AdviserEntryProgressGauge({ progress = 0, loading = fals
             strokeLinecap="round"
             strokeDasharray={arcLength}
             strokeDashoffset={strokeDashoffset}
-            style={{
-              transition: "stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1)",
-            }}
           />
         </svg>
 
         {/* Center Percentage Display */}
         <div className="adviser-dashboard__gauge-center-text">
-          <span className="adviser-dashboard__gauge-percent">{safeProgress}%</span>
+          <span className="adviser-dashboard__gauge-percent">{Math.round(animatedProgress)}%</span>
         </div>
       </div>
 
