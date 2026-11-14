@@ -175,6 +175,9 @@ export default function AdviserSubjectAreaHBarChart({
           </svg>
         )}
       </div>
+      <span className="adviser-dashboard__hbar-scroll-hint" aria-hidden="true">
+        Swipe horizontally to view the full chart
+      </span>
     </div>
   );
 }

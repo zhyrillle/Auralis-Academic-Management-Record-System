@@ -816,6 +816,7 @@ export default function AdviserDashboard() {
             <AdviserStatCard
               title="Section Average"
               value={summary?.sectionAverage ?? "0%"}
+              animateValue
               subtitle={summary?.sectionAverageDiff ?? `0% from ${summary?.activeTerm || "T1"}`}
               subtitleType="positive"
               loading={loading}
@@ -824,6 +825,7 @@ export default function AdviserDashboard() {
               title="Lowest Performing Sec..."
               value={summary?.lowestPerformingSection ?? "—"}
               subtitle={summary?.lowestPerformingSectionNote ?? "No data"}
+              animateSubtitle
               subtitleType="warning"
               loading={loading}
             />
@@ -964,6 +966,7 @@ export default function AdviserDashboard() {
             <AdviserStatCard
               title="Pending Submissions"
               value={pendingSubmissionsCount}
+              animateValue
               accentColor="#FF6B00"
               topBorderColor="#FF6B00"
               loading={loading}
@@ -973,6 +976,7 @@ export default function AdviserDashboard() {
             <AdviserStatCard
               title="Submitted Grades"
               value={submittedGradesCount}
+              animateValue
               accentColor="#10B981"
               topBorderColor="#10B981"
               loading={loading}
@@ -1007,11 +1011,13 @@ export default function AdviserDashboard() {
             <AdviserStatCard
               title="Total Classes"
               value={summary?.totalClasses ?? 0}
+              animateValue
               loading={loading}
             />
             <AdviserStatCard
               title="Total Students"
               value={summary?.totalStudents ?? 0}
+              animateValue
               loading={loading}
             />
           </div>

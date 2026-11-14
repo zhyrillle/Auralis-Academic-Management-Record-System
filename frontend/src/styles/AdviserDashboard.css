@@ -822,6 +822,17 @@
   margin: 0 auto;
 }
 
+.adviser-dashboard__hbar-body {
+  width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.adviser-dashboard__hbar-scroll-hint {
+  display: none;
+}
+
 /* Bar chart body with right vertical pills */
 .adviser-dashboard__bar-chart-body-with-pills {
   display: flex;
@@ -1434,6 +1445,25 @@
 
   .adviser-dashboard__test-charts-row {
     flex-direction: column;
+  }
+
+  .adviser-dashboard__hbar-svg {
+    min-width: 680px;
+    max-height: none;
+  }
+
+  .adviser-dashboard__hbar-label,
+  .adviser-dashboard__hbar-body .adviser-dashboard__chart-axis-label {
+    font-size: 14px;
+  }
+
+  .adviser-dashboard__hbar-scroll-hint {
+    display: block;
+    padding-top: 6px;
+    color: #718198;
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-align: center;
   }
 
   .adviser-dashboard__banner-art-wrap {
