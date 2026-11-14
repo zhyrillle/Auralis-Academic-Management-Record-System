@@ -79,6 +79,7 @@ export default function AdviserAttendanceWaveChart({
         {loading ? (
           <SkeletonBlock className="adviser-dashboard__skeleton-chart" />
         ) : (
+          <div className="adviser-dashboard__attendance-chart-track">
           <svg
             viewBox="0 0 640 360"
             className="adviser-dashboard__wave-svg"
@@ -185,6 +186,7 @@ export default function AdviserAttendanceWaveChart({
               </g>
             ))}
           </svg>
+          </div>
         )}
       </div>
       <span className="adviser-dashboard__attendance-scroll-hint" aria-hidden="true">

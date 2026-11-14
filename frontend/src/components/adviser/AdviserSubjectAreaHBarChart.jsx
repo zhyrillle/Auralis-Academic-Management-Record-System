@@ -83,6 +83,7 @@ export default function AdviserSubjectAreaHBarChart({
         {loading ? (
           <SkeletonBlock className="adviser-dashboard__skeleton-chart" />
         ) : (
+          <div className="adviser-dashboard__hbar-track">
           <svg
             viewBox={`0 0 ${chartWidth} ${chartHeight}`}
             className="adviser-dashboard__hbar-svg"
@@ -178,6 +179,7 @@ export default function AdviserSubjectAreaHBarChart({
               );
             })}
           </svg>
+          </div>
         )}
       </div>
       <span className="adviser-dashboard__hbar-scroll-hint" aria-hidden="true">
