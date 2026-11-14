@@ -1,5 +1,5 @@
 import { SkeletonBlock } from '../common/PageSkeleton.jsx';
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useDashboardInView, useProgressValue } from "./useDashboardProgressAnimation.js";
 
 export default function AdviserSubjectAreaHBarChart({
@@ -10,6 +10,8 @@ export default function AdviserSubjectAreaHBarChart({
 }) {
   const [hoveredIndex, setHoveredIndex] = useState(null);
   const [cardRef, isVisible] = useDashboardInView();
+  const plotViewportRef = useRef(null);
+  const [plotWidthPx, setPlotWidthPx] = useState(880);
   const animationProgress = useProgressValue(100, isVisible) / 100;
   const terms = ["T1", "T2", "T3"];
   const xTicks = [0, 20, 40, 60, 80, 100];
@@ -46,6 +48,27 @@ export default function AdviserSubjectAreaHBarChart({
   const rightPad = 40;
   const plotWidth = chartWidth - leftLabelPad - rightPad;
   const plotHeight = items.length * rowHeight;
+  const plotViewBoxWidth = plotWidth + rightPad;
+  const plotScale = plotWidthPx / plotViewBoxWidth;
+
+  useEffect(() => {
+    const viewport = plotViewportRef.current;
+    if (!viewport) return undefined;
+
+    const updateWidth = () => {
+      setPlotWidthPx(Math.max(plotViewBoxWidth, viewport.clientWidth));
+    };
+
+    updateWidth();
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", updateWidth);
+      return () => window.removeEventListener("resize", updateWidth);
+    }
+
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(viewport);
+    return () => observer.disconnect();
+  }, [plotViewBoxWidth]);
 
   return (
     <div ref={cardRef} className={`adviser-dashboard__chart-card adviser-dashboard__chart-card--subject-area adviser-dashboard__scroll-reveal${isVisible ? " is-visible" : ""}`}>
@@ -80,14 +103,17 @@ export default function AdviserSubjectAreaHBarChart({
             className="adviser-dashboard__hbar-y-labels"
             role="list"
             aria-label="Subject labels"
-            style={{ paddingTop: `${topPad}px` }}
+            style={{ paddingTop: `${topPad * plotScale}px` }}
           >
             {items.map((item, idx) => (
               <div
                 key={item.subject || idx}
                 className="adviser-dashboard__hbar-y-label"
                 role="listitem"
-                style={{ height: `${rowHeight}px` }}
+                style={{
+                  height: `${rowHeight * plotScale}px`,
+                  fontSize: `${12 * plotScale}px`,
+                }}
               >
                 {item.subject}
               </div>
@@ -95,6 +121,7 @@ export default function AdviserSubjectAreaHBarChart({
           </div>
         )}
         <div
+          ref={plotViewportRef}
           className="adviser-dashboard__hbar-body"
           tabIndex={loading ? undefined : 0}
           role={loading ? undefined : "region"}
@@ -103,11 +130,12 @@ export default function AdviserSubjectAreaHBarChart({
           {loading ? (
             <SkeletonBlock className="adviser-dashboard__skeleton-chart" />
           ) : (
-            <div className="adviser-dashboard__hbar-track">
+            <div className="adviser-dashboard__hbar-track" style={{ width: `${plotWidthPx}px` }}>
               <svg
-                viewBox={`0 0 ${plotWidth + rightPad} ${chartHeight}`}
+                viewBox={`0 0 ${plotViewBoxWidth} ${chartHeight}`}
                 className="adviser-dashboard__hbar-svg"
                 preserveAspectRatio="xMidYMid meet"
+                style={{ width: `${plotWidthPx}px`, height: `${chartHeight * plotScale}px` }}
               >
             {/* Vertical grid lines and X-axis labels */}
             {xTicks.map((tick) => {
