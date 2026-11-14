@@ -820,6 +820,12 @@
   max-height: none;
 }
 
+.adviser-dashboard__attendance-chart-track,
+.adviser-dashboard__hbar-track {
+  width: 100%;
+  min-width: 0;
+}
+
 .adviser-dashboard__attendance-chart-body .adviser-dashboard__skeleton-chart {
   width: 100%;
   height: 100%;
@@ -1487,6 +1493,11 @@
     height: 360px;
   }
 
+  .adviser-dashboard__attendance-chart-track {
+    width: 640px;
+    min-width: 640px;
+  }
+
   .adviser-dashboard__chart-card--subject-area .adviser-dashboard__chart-header > div:first-child {
     flex: 1;
     min-width: 0;
@@ -1501,6 +1512,11 @@
     min-width: 680px;
     max-height: none;
     margin: 0;
+  }
+
+  .adviser-dashboard__hbar-track {
+    width: 680px;
+    min-width: 680px;
   }
 
   .adviser-dashboard__attendance-scroll-hint {
