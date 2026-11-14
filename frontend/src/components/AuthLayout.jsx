@@ -20,13 +20,14 @@ export default function AuthLayout({ children, showPhoto = false, illustration =
 
   useEffect(() => {
     function updateScale() {
-      const clampedWidth = Math.min(Math.max(window.innerWidth, MIN_VIEWPORT), MAX_VIEWPORT);
+      const minimumWidth = pageType === "login" ? 900 : MIN_VIEWPORT;
+      const clampedWidth = Math.min(Math.max(window.innerWidth, minimumWidth), MAX_VIEWPORT);
       setScale(clampedWidth / DESIGN_WIDTH);
     }
     updateScale();
     window.addEventListener("resize", updateScale);
     return () => window.removeEventListener("resize", updateScale);
-  }, []);
+  }, [pageType]);
 
   return (
     <div className={`auth-viewport ${pageType === "login" ? "login-view" : "recovery-view"}`}>
