@@ -874,11 +874,12 @@
   white-space: nowrap;
 }
 
-.user-management-page .users-table th:nth-child(1) { width: 22%; }
-.user-management-page .users-table th:nth-child(2) { width: 28%; }
-.user-management-page .users-table th:nth-child(3) { width: 18%; }
-.user-management-page .users-table th:nth-child(4) { width: 22%; }
-.user-management-page .users-table th:nth-child(5) { width: 140px; }
+.user-management-page .users-table th:nth-child(1) { width: 19%; }
+.user-management-page .users-table th:nth-child(2) { width: 24%; }
+.user-management-page .users-table th:nth-child(3) { width: 16%; }
+.user-management-page .users-table th:nth-child(4) { width: 18%; }
+.user-management-page .users-table th:nth-child(5) { width: 12%; }
+.user-management-page .users-table th:nth-child(6) { width: 140px; }
 
 .user-management-page .users-table td {
   color: #415876;
@@ -1018,6 +1019,83 @@
 
 :is(.user-management-page, .user-management-overlay) .status-badge.active .status-dot { background: #00a878; }
 :is(.user-management-page, .user-management-overlay) .status-badge.inactive .status-dot { background: #e0454f; }
+
+:is(.user-management-page, .user-management-overlay) .status-badge--interactive {
+  min-block-size: 26px;
+  min-inline-size: 26px;
+  cursor: pointer;
+  transition: transform 150ms ease, box-shadow 150ms ease, background-color 150ms ease, border-color 150ms ease;
+}
+
+:is(.user-management-page, .user-management-overlay) .status-badge--interactive:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+:is(.user-management-page, .user-management-overlay) .status-badge--interactive.active:hover:not(:disabled) {
+  background: #d1f2e6;
+  border-color: #9fe0c8;
+  box-shadow: 0 2px 6px rgba(6, 114, 79, 0.14);
+}
+
+:is(.user-management-page, .user-management-overlay) .status-badge--interactive.inactive:hover:not(:disabled) {
+  background: #ffe2e5;
+  border-color: #f9b4bc;
+  box-shadow: 0 2px 6px rgba(179, 38, 49, 0.14);
+}
+
+.user-management-page dialog.status-confirm-dialog {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  max-width: none;
+  height: 100dvh;
+  max-height: none;
+  margin: 0;
+  padding: 24px;
+  border: 0;
+  background: transparent;
+  color: var(--mu-text);
+}
+
+.user-management-page dialog.status-confirm-dialog[open] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.user-management-page dialog.status-confirm-dialog:modal {
+  overscroll-behavior: contain;
+}
+
+.user-management-page dialog.status-confirm-dialog::backdrop {
+  overflow: hidden;
+  overscroll-behavior: contain;
+  background: rgba(8, 24, 47, 0.58);
+  backdrop-filter: blur(3px);
+}
+
+.user-management-page .status-activate-btn {
+  height: 44px;
+  padding: 0 20px;
+  border-radius: 11px;
+  background: #06724f;
+  border: 1px solid #06724f;
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.user-management-page .status-activate-btn:hover:not(:disabled) {
+  background: #055b3f;
+  border-color: #055b3f;
+}
+
+.user-management-page .status-activate-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
 
 /* Align existing dialogs with the System Admin surfaces. */
 .user-management-page .modal-overlay {
@@ -1395,7 +1473,8 @@
     height: 44px;
   }
 
-  .user-management-page .modal-overlay {
+  .user-management-page .modal-overlay,
+  .user-management-page dialog.status-confirm-dialog[open] {
     align-items: flex-end;
     padding: 12px;
   }
@@ -1429,7 +1508,8 @@
   :is(.user-management-page, .user-management-overlay) .profile-close-btn,
   :is(.user-management-page, .user-management-overlay) .profile-edit-btn,
   .user-management-page .delete-close-btn,
-  .user-management-page .delete-confirm-btn {
+  .user-management-page .delete-confirm-btn,
+  .user-management-page .status-activate-btn {
     width: 100%;
     min-height: 44px;
   }

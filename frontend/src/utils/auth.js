@@ -224,6 +224,9 @@ export async function verifyOfflineCredentials(email, password) {
     const raw = localStorage.getItem(`auralis_offline_auth_${cleanEmail}`);
     if (!raw) return null;
     const profile = JSON.parse(raw);
+    if (String(profile?.user?.account_status || "active").toLowerCase() === "inactive") {
+      return null;
+    }
     const hash = await hashCredentials(cleanEmail, password);
     if (profile.hash === hash && profile.user) {
       return profile.user;
@@ -233,6 +236,40 @@ export async function verifyOfflineCredentials(email, password) {
     console.warn("Failed to verify offline credentials:", err);
     return null;
   }
+}
+
+/**
+ * Check if an offline account profile is marked inactive.
+ */
+export function isOfflineAccountInactive(email) {
+  if (!email) return false;
+  try {
+    const cleanEmail = String(email).trim().toLowerCase();
+    const raw = localStorage.getItem(`auralis_offline_auth_${cleanEmail}`);
+    if (!raw) return false;
+    const profile = JSON.parse(raw);
+    return String(profile?.user?.account_status || "active").toLowerCase() === "inactive";
+  } catch (_) {
+    return false;
+  }
+}
+
+/**
+ * Sync account_status on any cached offline auth profile for this email.
+ */
+export function syncOfflineAccountStatus(email, accountStatus) {
+  if (!email) return;
+  try {
+    const cleanEmail = String(email).trim().toLowerCase();
+    const key = `auralis_offline_auth_${cleanEmail}`;
+    const raw = localStorage.getItem(key);
+    if (!raw) return;
+    const profile = JSON.parse(raw);
+    if (profile?.user) {
+      profile.user.account_status = accountStatus;
+      localStorage.setItem(key, JSON.stringify(profile));
+    }
+  } catch (_) {}
 }
 
 /**

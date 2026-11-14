@@ -8,6 +8,8 @@ import {
   saveOfflineCredentials,
   verifyOfflineCredentials,
   hasOfflineAccount,
+  isOfflineAccountInactive,
+  syncOfflineAccountStatus,
 } from "../utils/auth";
 import { warmUserOfflineData } from "../services/offlineCacheWarmer";
 
@@ -61,7 +63,9 @@ export default function Login({ user, onLoginSuccess }) {
           return;
         }
       }
-      if (hasOfflineAccount(email)) {
+      if (isOfflineAccountInactive(email)) {
+        setError("Your account is inactive. Please contact the administrator.");
+      } else if (hasOfflineAccount(email)) {
         setError("Incorrect password for offline sign-in.");
       } else {
         setError("You are currently offline. Please connect to the internet at least once on this device to enable offline access.");
@@ -82,6 +86,9 @@ export default function Login({ user, onLoginSuccess }) {
       const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
+        if (response.status === 403 && String(data.error || "").toLowerCase().includes("inactive")) {
+          syncOfflineAccountStatus(email, "inactive");
+        }
         throw new Error(data.error || data.message || "Invalid email or password.");
       }
 
@@ -138,7 +145,9 @@ export default function Login({ user, onLoginSuccess }) {
             return;
           }
         }
-        if (hasOfflineAccount(email)) {
+        if (isOfflineAccountInactive(email)) {
+          setError("Your account is inactive. Please contact the administrator.");
+        } else if (hasOfflineAccount(email)) {
           setError("Incorrect password for offline sign-in.");
         } else {
           setError("Cannot reach the server. Please check your internet connection or sign in on this device while online first.");

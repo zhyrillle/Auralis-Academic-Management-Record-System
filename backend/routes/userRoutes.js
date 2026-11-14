@@ -93,6 +93,8 @@ const getAssignmentDates = (body, schoolYear) => {
   return { assignedFrom, assignedUntil };
 };
 
+const recentlyUpdatedStatusMap = new Map();
+
 /**
  * Automatically pull latest users and their assignments from Aiven Cloud
  * into local database so teammates immediately see shared updates with 0 manual steps.
@@ -113,7 +115,12 @@ async function syncUsersFromCloud() {
     );
 
     if (cloudUsers) {
+      const now = Date.now();
       for (const u of cloudUsers) {
+        const recentLocal = recentlyUpdatedStatusMap.get(Number(u.user_id));
+        const effectiveStatus = recentLocal && now - recentLocal.updatedAt < 60000
+          ? recentLocal.account_status
+          : u.account_status;
         await db.execute(
           `INSERT INTO USER (user_id, role, department_id, first_name, middle_name, last_name, extension_name, credentials, email, password, account_status, pfp_url, last_login_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -140,7 +147,7 @@ async function syncUsersFromCloud() {
             u.credentials || null,
             u.email,
             u.password,
-            u.account_status,
+            effectiveStatus,
             u.pfp_url,
             u.last_login_at,
           ]
@@ -1444,6 +1451,10 @@ router.put("/:id", async (req, res) => {
       metadata: { target: `${first_name.trim()} ${last_name.trim()}`, summary: 'Reset the account password. No password values are retained.' } }, connection);
 
     await connection.commit();
+    recentlyUpdatedStatusMap.set(Number(userId), {
+      account_status: account_status || status || "active",
+      updatedAt: Date.now(),
+    });
 
     if (db.cloudPool) {
       try {
@@ -1465,6 +1476,83 @@ router.put("/:id", async (req, res) => {
     const updatedUser = users.find((u) => Number(u.user_id) === Number(userId));
 
     res.json({ message: "User updated successfully.", user: updatedUser });
+  } catch (err) {
+    if (connection) await connection.rollback();
+    sendDatabaseError(res, err);
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
+router.put("/:id/status", async (req, res) => {
+  if (!isValidUserId(req.params.id)) {
+    return res.status(400).json({ error: "Invalid user ID." });
+  }
+
+  let connection;
+  try {
+    const userId = Number(req.params.id);
+    const rawStatus = String(req.body?.account_status || req.body?.status || "").trim().toLowerCase();
+    if (rawStatus !== "active" && rawStatus !== "inactive") {
+      return res.status(400).json({ error: "Invalid account status. Must be 'active' or 'inactive'." });
+    }
+
+    connection = await db.getConnection();
+    await connection.beginTransaction();
+
+    await connection.execute("SELECT user_id FROM USER WHERE user_id = ? FOR UPDATE", [userId]);
+    const auditBefore = await AuditDetails.accountSnapshot(connection, userId);
+    if (!auditBefore) {
+      await connection.rollback();
+      return res.status(404).json({ error: "User not found." });
+    }
+
+    await connection.execute(
+      "UPDATE USER SET account_status = ? WHERE user_id = ?",
+      [rawStatus, userId]
+    );
+
+    const auditAfter = await AuditDetails.accountSnapshot(connection, userId);
+    const targetName = `${auditAfter.first_name || ""} ${auditAfter.last_name || ""}`.trim() || auditAfter.email;
+    await AuditDetails.record(connection, {
+      actor: AuditDetails.actorId(req),
+      actor_context: { acting_as: "System Administrator" },
+      event_type: "USER_STATUS_UPDATED",
+      module_name: "ACCOUNT_MANAGEMENT",
+      entity_type: "USER",
+      entity_id: userId,
+      before: auditBefore,
+      after: auditAfter,
+      metadata: {
+        target: targetName,
+        summary: `${rawStatus === "inactive" ? "Deactivated" : "Activated"} account for ${targetName}.`,
+      },
+    });
+
+    await connection.commit();
+    recentlyUpdatedStatusMap.set(Number(userId), {
+      account_status: rawStatus,
+      updatedAt: Date.now(),
+    });
+
+    if (db.cloudPool) {
+      try {
+        await db.cloudPool.query(
+          "UPDATE USER SET account_status = ? WHERE user_id = ?",
+          [rawStatus, userId]
+        );
+      } catch (cloudErr) {
+        console.warn("[CloudUser] Failed to dual-write user status update to Aiven:", cloudErr.message);
+      }
+    }
+
+    const users = await getManagementUsers();
+    const updatedUser = users.find((u) => Number(u.user_id) === Number(userId));
+
+    res.json({
+      message: `User account ${rawStatus === "inactive" ? "deactivated" : "activated"} successfully.`,
+      user: updatedUser || { ...auditAfter, user_id: userId, account_status: rawStatus },
+    });
   } catch (err) {
     if (connection) await connection.rollback();
     sendDatabaseError(res, err);
