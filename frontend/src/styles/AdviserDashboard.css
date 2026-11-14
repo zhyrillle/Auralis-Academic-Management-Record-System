@@ -730,11 +730,6 @@
   max-width: 100%;
 }
 
-.adviser-dashboard__chart-card--subject-area {
-  padding-left: 14px;
-  padding-right: 18px;
-}
-
 .adviser-dashboard__chart-header {
   display: flex;
   align-items: center;
@@ -857,8 +852,8 @@
 }
 
 .adviser-dashboard__hbar-y-labels {
-  flex: 0 0 104px;
-  width: 104px;
+  flex: 0 0 120px;
+  width: 120px;
   box-sizing: border-box;
   border-right: 1px solid #EAF0F6;
   background: #FFFFFF;
@@ -869,7 +864,7 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  padding-right: 8px;
+  padding-right: 12px;
   color: #64748B;
   font-size: 11px;
   font-weight: 500;
@@ -1558,6 +1553,21 @@
 
   .adviser-dashboard__chart-card--subject-area .adviser-dashboard__term-pills {
     flex-shrink: 0;
+  }
+
+  .adviser-dashboard__chart-card--subject-area {
+    padding-left: 10px;
+    padding-right: 14px;
+  }
+
+  .adviser-dashboard__hbar-y-labels {
+    flex-basis: 82px;
+    width: 82px;
+  }
+
+  .adviser-dashboard__hbar-y-label {
+    padding-right: 6px;
+    font-size: 12px;
   }
 
   .adviser-dashboard__hbar-svg {
