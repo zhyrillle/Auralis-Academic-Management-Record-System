@@ -63,14 +63,19 @@ export default function AdviserAttendanceWaveChart({
     : "";
 
   return (
-    <div ref={cardRef} className={`adviser-dashboard__chart-card adviser-dashboard__scroll-reveal${isVisible ? " is-visible" : ""}`}>
+    <div ref={cardRef} className={`adviser-dashboard__chart-card adviser-dashboard__chart-card--attendance adviser-dashboard__scroll-reveal${isVisible ? " is-visible" : ""}`}>
       <div className="adviser-dashboard__chart-header">
         <h3 className="adviser-dashboard__chart-title">{loading ? <SkeletonBlock width={200} height={18} /> : <>
           Attendance Trend Analysis
         </>}</h3>
       </div>
 
-      <div className="adviser-dashboard__attendance-chart-body">
+      <div
+        className="adviser-dashboard__attendance-chart-body"
+        tabIndex={loading ? undefined : 0}
+        role={loading ? undefined : "region"}
+        aria-label={loading ? undefined : "Attendance trend graph. Horizontally scrollable."}
+      >
         {loading ? (
           <SkeletonBlock className="adviser-dashboard__skeleton-chart" />
         ) : (
@@ -182,6 +187,9 @@ export default function AdviserAttendanceWaveChart({
           </svg>
         )}
       </div>
+      <span className="adviser-dashboard__attendance-scroll-hint" aria-hidden="true">
+        Swipe horizontally to view the full trend
+      </span>
     </div>
   );
 }

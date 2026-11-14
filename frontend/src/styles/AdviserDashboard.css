@@ -723,6 +723,13 @@
   gap: 16px;
 }
 
+.adviser-dashboard__chart-card--attendance,
+.adviser-dashboard__chart-card--subject-area {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
 .adviser-dashboard__chart-header {
   display: flex;
   align-items: center;
@@ -796,10 +803,15 @@
 /* Attendance Wave Chart (16:9 ratio) */
 .adviser-dashboard__attendance-chart-body {
   width: 100%;
+  min-width: 0;
   aspect-ratio: 16 / 9;
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  overscroll-behavior-x: contain;
 }
 
 .adviser-dashboard__attendance-chart-body .adviser-dashboard__wave-svg {
@@ -825,11 +837,19 @@
 .adviser-dashboard__hbar-body {
   width: 100%;
   min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
   overflow-x: auto;
   overflow-y: hidden;
+  scrollbar-width: thin;
+  overscroll-behavior-x: contain;
 }
 
 .adviser-dashboard__hbar-scroll-hint {
+  display: none;
+}
+
+.adviser-dashboard__attendance-scroll-hint {
   display: none;
 }
 
@@ -1447,9 +1467,49 @@
     flex-direction: column;
   }
 
+  .adviser-dashboard__mid-grid,
+  .adviser-dashboard__bottom-grid {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .adviser-dashboard__attendance-chart-body {
+    aspect-ratio: auto;
+    display: block;
+    max-width: 100%;
+  }
+
+  .adviser-dashboard__attendance-chart-body .adviser-dashboard__wave-svg {
+    width: 640px;
+    min-width: 640px;
+    height: 360px;
+  }
+
+  .adviser-dashboard__chart-card--subject-area .adviser-dashboard__chart-header > div:first-child {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .adviser-dashboard__chart-card--subject-area .adviser-dashboard__term-pills {
+    flex-shrink: 0;
+  }
+
   .adviser-dashboard__hbar-svg {
+    width: 680px;
     min-width: 680px;
     max-height: none;
+    margin: 0;
+  }
+
+  .adviser-dashboard__attendance-scroll-hint {
+    display: block;
+    padding-top: 6px;
+    color: #718198;
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-align: center;
   }
 
   .adviser-dashboard__hbar-label,
