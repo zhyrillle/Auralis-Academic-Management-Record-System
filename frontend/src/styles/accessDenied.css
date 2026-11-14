@@ -1,0 +1,94 @@
+.route-status-page {
+  display: grid;
+  min-height: min(68vh, 640px);
+  place-items: center;
+  padding: 28px 16px;
+}
+
+.route-status-card {
+  width: min(100%, 520px);
+  padding: 40px 34px;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 14px 34px rgba(15, 35, 61, 0.08);
+  text-align: center;
+}
+
+.route-status-icon {
+  display: grid;
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 18px;
+  place-items: center;
+  border-radius: 18px;
+  background: #fff1f2;
+  color: #be123c;
+}
+
+.route-status-icon--not-found {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.route-status-code {
+  margin: 0 0 6px;
+  color: #94a3b8;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+
+.route-status-card h1 {
+  margin: 0;
+  color: #183256;
+  font-size: clamp(1.45rem, 4vw, 1.8rem);
+  font-weight: 800;
+}
+
+.route-status-description {
+  max-width: 390px;
+  margin: 12px auto 24px;
+  color: #64748b;
+  font-size: 0.95rem;
+  line-height: 1.65;
+}
+
+.route-status-button {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 10px 18px;
+  border: 0;
+  border-radius: 10px;
+  background: #183256;
+  color: #ffffff;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 160ms ease, transform 160ms ease;
+}
+
+.route-status-button:hover {
+  background: #244a77;
+  transform: translateY(-1px);
+}
+
+.route-status-button:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.3);
+  outline-offset: 3px;
+}
+
+@media (max-width: 640px) {
+  .route-status-page {
+    min-height: 60vh;
+    padding: 20px 8px;
+  }
+
+  .route-status-card {
+    padding: 32px 22px;
+  }
+}

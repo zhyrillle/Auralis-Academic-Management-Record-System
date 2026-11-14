@@ -18,6 +18,7 @@ import DeptHeadNotifications from "./pages/department-head/DeptHeadNotifications
 import TeacherDashboard from "./pages/teacher/TeacherDashboard";
 import PerformanceReport from "./pages/adviser/PerformanceReport";
 import DashboardLayout from "./components/layout/DashboardLayout";
+import AccessDeniedPage from "./components/layout/AccessDeniedPage";
 import AdviserSections from "./pages/adviser/AdviserSections";
 import MasterSheet from "./pages/adviser/MasterSheet";
 import AdviserFeedback from "./pages/adviser/AdviserFeedback";
@@ -262,6 +263,9 @@ export default function App() {
             element={<AdviserFeedback userRole="teacher" />}
           />
           <Route path="/teacher/request" element={<GradeReopeningRequest />} />
+
+          {/* Signed-in URLs that do not match an available page should never render blank. */}
+          <Route path="*" element={<AccessDeniedPage mode="not-found" role={user?.role} />} />
         </Route>
       </Routes>
     </BrowserRouter>
