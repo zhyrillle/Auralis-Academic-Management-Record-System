@@ -1450,6 +1450,25 @@
 @media (max-width: 1400px) and (min-width: 1201px) { .adviser-dashboard__performance-row { grid-template-columns: 1fr 1fr; } }
 
 .adviser-dashboard__container--teacher-view .adviser-dashboard__performance-row { grid-template-columns: 1fr 1.5fr; }
+
+.adviser-dashboard__scroll-reveal {
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity 360ms ease, transform 360ms ease;
+}
+
+.adviser-dashboard__scroll-reveal.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .adviser-dashboard__scroll-reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
 /* ==========================================================================
    At-Risk Students Modal & Clickable Stat Card Styles
    ========================================================================== */

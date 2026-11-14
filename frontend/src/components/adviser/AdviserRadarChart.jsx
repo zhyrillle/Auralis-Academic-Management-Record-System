@@ -1,6 +1,7 @@
 import { SkeletonBlock } from '../common/PageSkeleton.jsx';
 import React, { useState } from "react";
 import { ChevronDown } from "lucide-react";
+import { useDashboardInView } from "./useDashboardProgressAnimation.js";
 
 export default function AdviserRadarChart({
   data = [0, 0, 0, 0, 0],
@@ -13,6 +14,7 @@ export default function AdviserRadarChart({
   loading = false,
 }) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [cardRef, isVisible] = useDashboardInView();
   const terms = ["T1", "T2", "T3"];
 
   const cx = 160;
@@ -67,7 +69,7 @@ export default function AdviserRadarChart({
   ];
 
   return (
-    <div className="adviser-dashboard__radar-card">
+    <div ref={cardRef} className={`adviser-dashboard__radar-card adviser-dashboard__scroll-reveal${isVisible ? " is-visible" : ""}`}>
       <div className="adviser-dashboard__radar-top-row">
         <h3 className="adviser-dashboard__radar-heading">{loading ? <SkeletonBlock width="55%" height={18} /> : <>
           Grade Range Distribution
