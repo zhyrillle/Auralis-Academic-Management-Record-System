@@ -2,8 +2,9 @@ import { useState, useEffect } from "react";
 import { Outlet, useLocation, useNavigate, Navigate } from "react-router-dom";
 import Sidebar from "./Sidebar";
 import Navbar from "./Navbar";
-import { isPathAllowedForRole, getRoleDefaultPath } from "../../utils/auth";
+import { isPathAllowedForRole } from "../../utils/auth";
 import { WifiOff, BookOpen } from "lucide-react";
+import AccessDeniedPage from "./AccessDeniedPage";
 import "../../styles/sidebar.css";
 
 function isOfflineSupportedRoute(pathname) {
@@ -43,13 +44,7 @@ export default function DashboardLayout({ user, onLogout }) {
     return <Navigate to="/" replace />;
   }
 
-  // 2. Guard: if user is logged in but navigating to a route outside their role permissions, redirect to default dashboard
-  if (!isPathAllowedForRole(location.pathname, user.role)) {
-    const defaultPath = getRoleDefaultPath(user.role);
-    if (location.pathname !== defaultPath) {
-      return <Navigate to={defaultPath} replace />;
-    }
-  }
+  const hasRouteAccess = isPathAllowedForRole(location.pathname, user.role);
 
   const handleMobileSidebarToggle = () => {
     setCollapsed(false);
@@ -111,7 +106,9 @@ export default function DashboardLayout({ user, onLogout }) {
 
         {/* Content outlet */}
         <main className="page-content-area">
-          {!isOnline && !isOfflineSupportedRoute(location.pathname) ? (
+          {!hasRouteAccess ? (
+            <AccessDeniedPage role={user.role} />
+          ) : !isOnline && !isOfflineSupportedRoute(location.pathname) ? (
             <div
               style={{
                 margin: "40px auto",
