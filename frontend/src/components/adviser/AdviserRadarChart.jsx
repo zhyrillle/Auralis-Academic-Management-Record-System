@@ -1,7 +1,7 @@
 import { SkeletonBlock } from '../common/PageSkeleton.jsx';
 import React, { useState } from "react";
 import { ChevronDown } from "lucide-react";
-import { useDashboardInView } from "./useDashboardProgressAnimation.js";
+import { useDashboardInView, useProgressValue } from "./useDashboardProgressAnimation.js";
 
 export default function AdviserRadarChart({
   data = [0, 0, 0, 0, 0],
@@ -15,6 +15,7 @@ export default function AdviserRadarChart({
 }) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [cardRef, isVisible] = useDashboardInView();
+  const animationProgress = useProgressValue(100, isVisible) / 100;
   const terms = ["T1", "T2", "T3"];
 
   const cx = 160;
@@ -55,7 +56,9 @@ export default function AdviserRadarChart({
 
   const dataPoints = safeData.map((val, idx) => {
     const num = Number(val) || 0;
-    const scale = num > 0 ? Math.min(1, Math.max(0.05, num / chartMax)) : 0;
+    const scale = num > 0 && animationProgress > 0
+      ? Math.min(1, Math.max(0.05, (num / chartMax) * animationProgress))
+      : 0;
     return getCoordinates(angles[idx], maxRadius * scale);
   });
   const dataPointsString = dataPoints.map((pt) => `${pt.x},${pt.y}`).join(" ");

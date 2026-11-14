@@ -1,5 +1,6 @@
 import { SkeletonBlock } from '../common/PageSkeleton.jsx';
 import React, { useState } from "react";
+import { useDashboardInView, useProgressValue } from "./useDashboardProgressAnimation.js";
 
 export default function AdviserSubjectBarChart({
   data = [],
@@ -9,6 +10,8 @@ export default function AdviserSubjectBarChart({
   loading = false,
 }) {
   const [hoveredIndex, setHoveredIndex] = useState(null);
+  const [cardRef, isVisible] = useDashboardInView();
+  const animationProgress = useProgressValue(100, isVisible) / 100;
 
   const terms = ["T1", "T2", "T3"];
   const yTicks = [100, 80, 60, 40, 20, 0];
@@ -22,7 +25,7 @@ export default function AdviserSubjectBarChart({
   const chartRight = chartWidth - 15;
 
   return (
-    <div className="adviser-dashboard__chart-card">
+    <div ref={cardRef} className={`adviser-dashboard__chart-card adviser-dashboard__scroll-reveal${isVisible ? " is-visible" : ""}`}>
       <div className="adviser-dashboard__chart-header">
         <h3 className="adviser-dashboard__chart-title">{loading ? <SkeletonBlock width={210} height={18} /> : <>
           Section Performance Breakdown
@@ -92,7 +95,7 @@ export default function AdviserSubjectBarChart({
                     const x = 35 + slotWidth * idx + (slotWidth - barWidth) / 2;
 
                     const score = Math.min(100, Math.max(0, item.score || 0));
-                    const barHeight = (score / 100) * 160;
+                    const barHeight = (score / 100) * 160 * animationProgress;
                     const y = 180 - barHeight;
 
                     const maxScore = Math.max(...data.map((d) => d.score || 0));

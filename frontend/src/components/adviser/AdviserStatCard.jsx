@@ -1,5 +1,22 @@
 import { SkeletonBlock } from '../common/PageSkeleton.jsx';
 import React from "react";
+import { useDashboardInView, useProgressValue } from "./useDashboardProgressAnimation.js";
+
+function AnimatedStatValue({ value }) {
+  const [valueRef, isVisible] = useDashboardInView();
+  const text = String(value ?? "—");
+  const match = text.match(/^([^\d-]*)(-?[\d,]+(?:\.\d+)?)(.*)$/);
+  const target = match ? Number(match[2].replace(/,/g, "")) : 0;
+  const animatedValue = useProgressValue(target, isVisible);
+  const decimalPlaces = match?.[2].split(".")[1]?.length || 0;
+  const displayValue = !match
+    ? text
+    : animatedValue >= target
+      ? text
+      : `${match[1]}${animatedValue.toFixed(decimalPlaces)}${match[3]}`;
+
+  return <span ref={valueRef}>{displayValue}</span>;
+}
 
 export default function AdviserStatCard({
   title,
@@ -12,6 +29,8 @@ export default function AdviserStatCard({
   className = "",
   onClick,
   clickable = false,
+  animateValue = false,
+  animateSubtitle = false,
 }) {
   if (loading) {
     return (
@@ -51,13 +70,13 @@ export default function AdviserStatCard({
         className="adviser-dashboard__stat-value"
         style={accentColor ? { color: accentColor } : {}}
       >
-        {value ?? "—"}
+        {animateValue ? <AnimatedStatValue value={value} /> : value ?? "—"}
       </div>
       {subtitle && (
         <div
           className={`adviser-dashboard__stat-subtitle adviser-dashboard__stat-subtitle--${subtitleType}`}
         >
-          {subtitle}
+          {animateSubtitle ? <AnimatedStatValue value={subtitle} /> : subtitle}
         </div>
       )}
     </div>
