@@ -1,7 +1,7 @@
 import { cachedApiFetch as fetch } from "../../services/navigationCache";
 import useCachedQuery from "../../services/useCachedQuery";
 import { cacheKey } from "../../services/navigationCache";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import DropdownSelect from "../../components/common/DropdownSelect";
 import OverlayPanel from "../../components/common/OverlayPanel";
 import { SkeletonBlock, SkeletonTableRows } from '../../components/common/PageSkeleton.jsx';
@@ -9,6 +9,7 @@ import UserFormModal from "./manage-users/UserFormModal";
 import { assignmentFieldsForYear, adviserIsInYear } from "../../utils/userAssignments";
 import "../../styles/ManageUsers.css";
 import { isSessionCancellation } from "../../offline/syncManager.js";
+import { syncOfflineAccountStatus } from "../../utils/auth";
 import { API_BASE_URL as API_URL } from "../../services/apiConfig";
 
 function Icon({ type, size = 22 }) {
@@ -165,12 +166,32 @@ function RoleBadge({ role }) {
   return <span className={`role-badge ${roleClass}`}>{role}</span>;
 }
 
-function StatusBadge({ status }) {
-  const isActive = String(status).toLowerCase() === "active";
+function StatusBadge({ status, onClick, disabled = false, userLabel = "" }) {
+  const isActive = String(status || "active").toLowerCase() !== "inactive";
+  const label = isActive ? "Active" : "Inactive";
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        className={`status-badge status-badge--interactive ${isActive ? "active" : "inactive"}`}
+        onClick={onClick}
+        disabled={disabled}
+        title={isActive ? "Click to deactivate user" : "Click to activate user"}
+      >
+        <span className="status-dot" aria-hidden="true"></span>
+        <span>{label}</span>
+        {userLabel && (
+          <span className="visually-hidden">
+            {` — ${isActive ? "Deactivate" : "Activate"} ${userLabel}`}
+          </span>
+        )}
+      </button>
+    );
+  }
   return (
     <span className={`status-badge ${isActive ? "active" : "inactive"}`}>
-      <span className="status-dot"></span>
-      {isActive ? "Active" : "Inactive"}
+      <span className="status-dot" aria-hidden="true"></span>
+      {label}
     </span>
   );
 }
@@ -211,6 +232,11 @@ export default function UserManagement() {
   const [statusFilter, setStatusFilter] = useState("All Status");
 
   const [deleteUser, setDeleteUser] = useState(null);
+  const [statusModalUser, setStatusModalUser] = useState(null);
+  const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [statusError, setStatusError] = useState("");
+  const statusDialogRef = useRef(null);
+  const statusDialogTitleId = useId();
   const [formMode, setFormMode] = useState(null);
   const [selectedUser, setSelectedUser] = useState(null);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -253,7 +279,7 @@ export default function UserManagement() {
   useEffect(() => {
     let isFetching = false;
     const revalidate = async () => {
-      if (isFetching || formMode || savingUser || deletingUser) return;
+      if (isFetching || formMode || savingUser || deletingUser || updatingStatus || statusModalUser) return;
       isFetching = true;
       try {
         await userQuery.refresh();
@@ -280,7 +306,19 @@ export default function UserManagement() {
       window.removeEventListener("focus", handleFocusOrVisible);
       document.removeEventListener("visibilitychange", handleFocusOrVisible);
     };
-  }, [formMode, savingUser, deletingUser, userQuery]);
+  }, [formMode, savingUser, deletingUser, updatingStatus, statusModalUser, userQuery]);
+
+  useEffect(() => {
+    const dialogNode = statusDialogRef.current;
+    if (!dialogNode) return;
+    if (statusModalUser) {
+      if (!dialogNode.open) {
+        dialogNode.showModal();
+      }
+    } else if (dialogNode.open) {
+      dialogNode.close();
+    }
+  }, [statusModalUser]);
 
   const getUserDepartment = (user) => {
     if (!user) return "-";
@@ -315,7 +353,8 @@ export default function UserManagement() {
 
       const searchMatch = fullName.includes(searchText) || email.includes(searchText);
       const roleMatch = roleFilter === "All Roles" || displayRole.toLowerCase() === roleFilter.toLowerCase();
-      const statusMatch = statusFilter === "All Status" || String(user.account_status || "").toLowerCase() === statusFilter.toLowerCase();
+      const effectiveStatus = String(user.account_status || "active").toLowerCase() === "inactive" ? "inactive" : "active";
+      const statusMatch = statusFilter === "All Status" || effectiveStatus === statusFilter.toLowerCase();
 
       return searchMatch && roleMatch && statusMatch;
     });
@@ -459,6 +498,56 @@ export default function UserManagement() {
       alert(error.message || "Failed to delete user.");
     } finally {
       setDeletingUser(false);
+    }
+  };
+
+  const handleOpenStatusModal = (user, event) => {
+    if (event) event.stopPropagation();
+    if (!user || updatingStatus) return;
+    setStatusError("");
+    setStatusModalUser(user);
+  };
+
+  const handleCloseStatusModal = () => {
+    if (updatingStatus) return;
+    setStatusError("");
+    setStatusModalUser(null);
+  };
+
+  const handleConfirmStatusChange = async () => {
+    if (!statusModalUser || updatingStatus) return;
+    const currentlyInactive = String(statusModalUser.account_status || "active").toLowerCase() === "inactive";
+    const nextStatus = currentlyInactive ? "active" : "inactive";
+
+    try {
+      setUpdatingStatus(true);
+      setStatusError("");
+      const response = await fetch(`${API_URL}/users/${statusModalUser.user_id}/status`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ account_status: nextStatus, status: nextStatus }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.error || `Failed to ${nextStatus === "inactive" ? "deactivate" : "activate"} user.`);
+      }
+
+      syncOfflineAccountStatus(statusModalUser.email, nextStatus);
+
+      if (selectedUser && String(selectedUser.user_id) === String(statusModalUser.user_id)) {
+        setSelectedUser((prev) => (prev ? { ...prev, account_status: nextStatus } : prev));
+      }
+
+      setStatusModalUser(null);
+      await fetchUsers();
+      if (typeof window !== "undefined" && window.dispatchEvent) {
+        window.dispatchEvent(new Event("auralis-cache-invalidated"));
+      }
+    } catch (error) {
+      if (isSessionCancellation(error)) return;
+      setStatusError(error.message || "Failed to update user status.");
+    } finally {
+      setUpdatingStatus(false);
     }
   };
 
@@ -771,6 +860,7 @@ export default function UserManagement() {
                       <th>Email</th>
                       <th>Role</th>
                       <th>Department</th>
+                      <th>Status</th>
                       <th>Actions</th>
                     </tr>
                   </thead>
@@ -793,6 +883,13 @@ export default function UserManagement() {
                         <td><RoleBadge role={getDisplayRole(user)} /></td>
                         <td>{getUserDepartment(user)}</td>
                         <td>
+                          <StatusBadge
+                            status={user.account_status}
+                            userLabel={getUsername(user)}
+                            onClick={(event) => handleOpenStatusModal(user, event)}
+                          />
+                        </td>
+                        <td>
                           <div className="actions">
                             <button type="button" className="action-btn action-btn--edit" title="Edit" aria-label={`Edit ${getUsername(user)}`} onClick={event => { event.stopPropagation(); handleEditUser(user); }}>
                               <Icon type="edit" size={21} />
@@ -806,7 +903,7 @@ export default function UserManagement() {
                     ))}
                     {!loadingUsers && filteredUsers.length === 0 && (
                       <tr>
-                        <td className="users-table-empty" colSpan="5">
+                        <td className="users-table-empty" colSpan="6">
                           <strong>No users found</strong>
                           <span>Try changing the search term or filters.</span>
                         </td>
@@ -923,6 +1020,76 @@ export default function UserManagement() {
 
           </>}
         </OverlayPanel>
+
+        {/* STATUS CONFIRMATION MODAL */}
+        <dialog
+          ref={statusDialogRef}
+          className="status-confirm-dialog"
+          aria-labelledby={statusDialogTitleId}
+          onCancel={(e) => {
+            e.preventDefault();
+            handleCloseStatusModal();
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              handleCloseStatusModal();
+            }
+          }}
+        >
+          {statusModalUser && (() => {
+            const isCurrentlyInactive = String(statusModalUser.account_status || "active").toLowerCase() === "inactive";
+            return (
+              <div className="delete-modal status-modal" onClick={(e) => e.stopPropagation()}>
+                <div className="delete-modal-header">
+                  <h2 id={statusDialogTitleId}>
+                    {isCurrentlyInactive
+                      ? "Are you sure you want to activate this user?"
+                      : "Are you sure you want to deactivate this user?"}
+                  </h2>
+                  <p>
+                    {isCurrentlyInactive
+                      ? "Activating this account will set its status to active and allow the user to log in with their credentials."
+                      : "Deactivating this account will set its status to inactive and the deactivated user will not be able to log in with their credentials."}
+                  </p>
+                </div>
+
+                <div className="delete-user-info">
+                  <strong>{getUsername(statusModalUser)}</strong>
+                  <span>{statusModalUser.email}</span>
+                </div>
+
+                {statusError && (
+                  <div className="users-state-message users-state-message--error" role="alert" style={{ marginBottom: "18px" }}>
+                    {statusError}
+                  </div>
+                )}
+
+                <div className="delete-modal-actions">
+                  <button
+                    type="button"
+                    className="delete-close-btn"
+                    autoFocus
+                    onClick={handleCloseStatusModal}
+                    disabled={updatingStatus}
+                  >
+                    No
+                  </button>
+
+                  <button
+                    type="button"
+                    className={isCurrentlyInactive ? "status-activate-btn" : "delete-confirm-btn"}
+                    onClick={handleConfirmStatusChange}
+                    disabled={updatingStatus}
+                  >
+                    {updatingStatus
+                      ? (isCurrentlyInactive ? "Activating..." : "Deactivating...")
+                      : "Yes"}
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
+        </dialog>
 
         {/* DELETE USER MODAL */}
         {deleteUser && (
