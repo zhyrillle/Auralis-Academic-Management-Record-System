@@ -74,24 +74,44 @@ export default function AdviserSubjectAreaHBarChart({
         </div>
       </div>
 
-      <div
-        className="adviser-dashboard__hbar-body"
-        tabIndex={loading ? undefined : 0}
-        role={loading ? undefined : "region"}
-        aria-label={loading ? undefined : "Subject area performance graph. Horizontally scrollable."}
-      >
-        {loading ? (
-          <SkeletonBlock className="adviser-dashboard__skeleton-chart" />
-        ) : (
-          <div className="adviser-dashboard__hbar-track">
-          <svg
-            viewBox={`0 0 ${chartWidth} ${chartHeight}`}
-            className="adviser-dashboard__hbar-svg"
-            preserveAspectRatio="xMidYMid meet"
+      <div className="adviser-dashboard__hbar-layout">
+        {!loading && (
+          <div
+            className="adviser-dashboard__hbar-y-labels"
+            role="list"
+            aria-label="Subject labels"
+            style={{ paddingTop: `${topPad}px` }}
           >
+            {items.map((item, idx) => (
+              <div
+                key={item.subject || idx}
+                className="adviser-dashboard__hbar-y-label"
+                role="listitem"
+                style={{ height: `${rowHeight}px` }}
+              >
+                {item.subject}
+              </div>
+            ))}
+          </div>
+        )}
+        <div
+          className="adviser-dashboard__hbar-body"
+          tabIndex={loading ? undefined : 0}
+          role={loading ? undefined : "region"}
+          aria-label={loading ? undefined : "Subject area performance graph. Subject labels stay fixed while the graph scrolls horizontally."}
+        >
+          {loading ? (
+            <SkeletonBlock className="adviser-dashboard__skeleton-chart" />
+          ) : (
+            <div className="adviser-dashboard__hbar-track">
+              <svg
+                viewBox={`0 0 ${plotWidth + rightPad} ${chartHeight}`}
+                className="adviser-dashboard__hbar-svg"
+                preserveAspectRatio="xMidYMid meet"
+              >
             {/* Vertical grid lines and X-axis labels */}
             {xTicks.map((tick) => {
-              const x = leftLabelPad + (tick / 100) * plotWidth;
+              const x = (tick / 100) * plotWidth;
               return (
                 <g key={tick}>
                   <line
@@ -114,7 +134,7 @@ export default function AdviserSubjectAreaHBarChart({
               );
             })}
 
-            {/* Horizontal Bars */}
+            {/* Horizontal bars; subject labels stay in the fixed left column. */}
             {items.map((item, idx) => {
               const barThickness = 14;
               const y = topPad + rowHeight * idx + (rowHeight - barThickness) / 2;
@@ -130,19 +150,9 @@ export default function AdviserSubjectAreaHBarChart({
                   onMouseLeave={() => setHoveredIndex(null)}
                   style={{ cursor: "pointer" }}
                 >
-                  {/* Subject Label */}
-                  <text
-                    x={leftLabelPad - 12}
-                    y={y + barThickness / 2 + 4}
-                    textAnchor="end"
-                    className="adviser-dashboard__hbar-label"
-                  >
-                    {item.subject}
-                  </text>
-
                   {/* Horizontal Bar */}
                   <rect
-                    x={leftLabelPad}
+                    x="0"
                     y={y}
                     width={Math.max(barWidth, barThickness)}
                     height={barThickness}
@@ -156,7 +166,7 @@ export default function AdviserSubjectAreaHBarChart({
                   {isHovered && (
                     <g>
                       <rect
-                        x={Math.min(chartWidth - 110, leftLabelPad + barWidth + 8)}
+                        x={Math.min(plotWidth + rightPad - 110, barWidth + 8)}
                         y={y - 5}
                         width="100"
                         height="24"
@@ -164,7 +174,7 @@ export default function AdviserSubjectAreaHBarChart({
                         fill="#1E293B"
                       />
                       <text
-                        x={Math.min(chartWidth - 110, leftLabelPad + barWidth + 8) + 50}
+                        x={Math.min(plotWidth + rightPad - 110, barWidth + 8) + 50}
                         y={y + 11}
                         textAnchor="middle"
                         fill="#FFFFFF"
@@ -178,9 +188,10 @@ export default function AdviserSubjectAreaHBarChart({
                 </g>
               );
             })}
-          </svg>
-          </div>
-        )}
+              </svg>
+            </div>
+          )}
+        </div>
       </div>
       <span className="adviser-dashboard__hbar-scroll-hint" aria-hidden="true">
         Swipe horizontally to view the full chart

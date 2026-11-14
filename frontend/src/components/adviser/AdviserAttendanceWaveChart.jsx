@@ -25,11 +25,11 @@ export default function AdviserAttendanceWaveChart({
   const bottomPad = 44;
   const chartWidth = VB_W - rightPad;
   const chartHeight = VB_H - topPad - bottomPad;
+  const plotWidth = chartWidth - leftPad;
 
   const points = data.map((item, idx) => {
-    const availableWidth = chartWidth - leftPad - 32;
-    const x =
-      leftPad + 16 + (idx / Math.max(1, data.length - 1)) * availableWidth;
+    const availableWidth = plotWidth - 32;
+    const x = 16 + (idx / Math.max(1, data.length - 1)) * availableWidth;
     const count = Math.min(200, Math.max(0, item.count || 0)) * animationProgress;
     const y = topPad + ((200 - count) / 200) * chartHeight;
     return { x, y, count, label: item.week || `Week ${idx + 1}` };
@@ -70,21 +70,43 @@ export default function AdviserAttendanceWaveChart({
         </>}</h3>
       </div>
 
-      <div
-        className="adviser-dashboard__attendance-chart-body"
-        tabIndex={loading ? undefined : 0}
-        role={loading ? undefined : "region"}
-        aria-label={loading ? undefined : "Attendance trend graph. Horizontally scrollable."}
-      >
+      <div className="adviser-dashboard__attendance-chart-layout">
         {loading ? (
-          <SkeletonBlock className="adviser-dashboard__skeleton-chart" />
+          <SkeletonBlock className="adviser-dashboard__skeleton-chart adviser-dashboard__attendance-chart-skeleton" />
         ) : (
-          <div className="adviser-dashboard__attendance-chart-track">
-          <svg
-            viewBox="0 0 640 360"
-            className="adviser-dashboard__wave-svg"
-            preserveAspectRatio="xMidYMid meet"
-          >
+          <>
+            <svg
+              className="adviser-dashboard__attendance-y-axis"
+              viewBox={`0 0 ${leftPad} ${VB_H}`}
+              aria-hidden="true"
+            >
+              {yTicks.map((tick) => {
+                const y = topPad + ((200 - tick) / 200) * chartHeight;
+                return (
+                  <text
+                    key={tick}
+                    x={leftPad - 12}
+                    y={y + 4}
+                    textAnchor="end"
+                    className="adviser-dashboard__chart-axis-label"
+                  >
+                    {tick}
+                  </text>
+                );
+              })}
+            </svg>
+            <div
+              className="adviser-dashboard__attendance-chart-body"
+              tabIndex={0}
+              role="region"
+              aria-label="Attendance trend graph. The value scale stays fixed while the graph scrolls horizontally."
+            >
+              <div className="adviser-dashboard__attendance-chart-track">
+                <svg
+                  viewBox={`0 0 ${plotWidth} ${VB_H}`}
+                  className="adviser-dashboard__wave-svg"
+                  preserveAspectRatio="xMidYMid meet"
+                >
             <defs>
               <linearGradient id="adviserWaveGrad" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="#4173B8" stopOpacity="0.85" />
@@ -93,23 +115,15 @@ export default function AdviserAttendanceWaveChart({
               </linearGradient>
             </defs>
 
-            {/* Horizontal Grid lines and Y labels */}
+            {/* Horizontal grid lines; the value scale stays in the fixed left column. */}
             {yTicks.map((tick) => {
               const y = topPad + ((200 - tick) / 200) * chartHeight;
               return (
                 <g key={tick}>
-                  <text
-                    x={leftPad - 12}
-                    y={y + 4}
-                    textAnchor="end"
-                    className="adviser-dashboard__chart-axis-label"
-                  >
-                    {tick}
-                  </text>
                   <line
-                    x1={leftPad}
+                    x1="0"
                     y1={y}
-                    x2={chartWidth}
+                    x2={plotWidth}
                     y2={y}
                     stroke={tick === 0 ? "#4A5568" : "#EAEFF5"}
                     strokeWidth={tick === 0 ? "1.5" : "1"}
@@ -164,7 +178,7 @@ export default function AdviserAttendanceWaveChart({
                 {hoveredIdx === idx && (
                   <g>
                     <rect
-                      x={Math.max(leftPad, Math.min(chartWidth - 52, pt.x - 26))}
+                      x={Math.max(0, Math.min(plotWidth - 52, pt.x - 26))}
                       y={Math.max(6, pt.y - 32)}
                       width="52"
                       height="22"
@@ -172,7 +186,7 @@ export default function AdviserAttendanceWaveChart({
                       fill="#1E293B"
                     />
                     <text
-                      x={Math.max(leftPad + 26, Math.min(chartWidth - 26, pt.x))}
+                      x={Math.max(26, Math.min(plotWidth - 26, pt.x))}
                       y={Math.max(6, pt.y - 32) + 15}
                       textAnchor="middle"
                       fill="#FFFFFF"
@@ -187,6 +201,8 @@ export default function AdviserAttendanceWaveChart({
             ))}
           </svg>
           </div>
+          </div>
+          </>
         )}
       </div>
       <span className="adviser-dashboard__attendance-scroll-hint" aria-hidden="true">

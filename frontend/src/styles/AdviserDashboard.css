@@ -800,48 +800,92 @@
   overflow: visible;
 }
 
-/* Attendance Wave Chart (16:9 ratio) */
-.adviser-dashboard__attendance-chart-body {
+.adviser-dashboard__attendance-chart-layout {
+  display: flex;
   width: 100%;
   min-width: 0;
-  aspect-ratio: 16 / 9;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  align-items: stretch;
+}
+
+.adviser-dashboard__attendance-y-axis {
+  flex: 0 0 48px;
+  width: 48px;
+  height: 360px;
+  overflow: visible;
+}
+
+.adviser-dashboard__attendance-chart-body {
+  flex: 1 1 auto;
+  width: auto;
+  height: 360px;
+  min-width: 0;
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: thin;
   overscroll-behavior-x: contain;
 }
 
-.adviser-dashboard__attendance-chart-body .adviser-dashboard__wave-svg {
-  width: 100%;
-  height: 100%;
+.adviser-dashboard__attendance-chart-track {
+  width: 568px;
+  min-width: 568px;
+  height: 360px;
+}
+
+.adviser-dashboard__attendance-chart-track .adviser-dashboard__wave-svg {
+  display: block;
+  width: 568px;
+  min-width: 568px;
+  height: 360px;
   max-height: none;
 }
 
-.adviser-dashboard__attendance-chart-track,
-.adviser-dashboard__hbar-track {
+.adviser-dashboard__attendance-chart-skeleton {
+  width: 100%;
+  height: 300px;
+}
+
+.adviser-dashboard__hbar-layout {
+  display: flex;
+  align-items: stretch;
   width: 100%;
   min-width: 0;
 }
 
-.adviser-dashboard__attendance-chart-body .adviser-dashboard__skeleton-chart {
-  width: 100%;
-  height: 100%;
+.adviser-dashboard__hbar-y-labels {
+  flex: 0 0 120px;
+  width: 120px;
+  box-sizing: border-box;
+  border-right: 1px solid #EAF0F6;
+  background: #FFFFFF;
+  z-index: 1;
+}
+
+.adviser-dashboard__hbar-y-label {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 12px;
+  color: #64748B;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.2;
+  text-align: right;
+  white-space: nowrap;
 }
 
 .adviser-dashboard__hbar-svg {
-  width: 100%;
-  height: auto;
-  max-height: 420px;
-  overflow: visible;
   display: block;
-  margin: 0 auto;
+  width: 880px;
+  min-width: 880px;
+  height: auto;
+  max-height: none;
+  overflow: visible;
+  margin: 0;
 }
 
 .adviser-dashboard__hbar-body {
-  width: 100%;
+  flex: 1 1 auto;
+  width: auto;
   min-width: 0;
   max-width: 100%;
   box-sizing: border-box;
@@ -849,6 +893,11 @@
   overflow-y: hidden;
   scrollbar-width: thin;
   overscroll-behavior-x: contain;
+}
+
+.adviser-dashboard__hbar-track {
+  width: 880px;
+  min-width: 880px;
 }
 
 .adviser-dashboard__hbar-scroll-hint {
@@ -1482,20 +1531,19 @@
   }
 
   .adviser-dashboard__attendance-chart-body {
-    aspect-ratio: auto;
     display: block;
     max-width: 100%;
   }
 
-  .adviser-dashboard__attendance-chart-body .adviser-dashboard__wave-svg {
-    width: 640px;
-    min-width: 640px;
+  .adviser-dashboard__attendance-chart-track .adviser-dashboard__wave-svg {
+    width: 568px;
+    min-width: 568px;
     height: 360px;
   }
 
   .adviser-dashboard__attendance-chart-track {
-    width: 640px;
-    min-width: 640px;
+    width: 568px;
+    min-width: 568px;
   }
 
   .adviser-dashboard__chart-card--subject-area .adviser-dashboard__chart-header > div:first-child {
@@ -1508,15 +1556,15 @@
   }
 
   .adviser-dashboard__hbar-svg {
-    width: 680px;
-    min-width: 680px;
+    width: 880px;
+    min-width: 880px;
     max-height: none;
     margin: 0;
   }
 
   .adviser-dashboard__hbar-track {
-    width: 680px;
-    min-width: 680px;
+    width: 880px;
+    min-width: 880px;
   }
 
   .adviser-dashboard__attendance-scroll-hint {
@@ -1528,7 +1576,7 @@
     text-align: center;
   }
 
-  .adviser-dashboard__hbar-label,
+  .adviser-dashboard__hbar-y-label,
   .adviser-dashboard__hbar-body .adviser-dashboard__chart-axis-label {
     font-size: 14px;
   }
