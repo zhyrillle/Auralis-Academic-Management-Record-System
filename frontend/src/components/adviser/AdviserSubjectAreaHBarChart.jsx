@@ -48,7 +48,7 @@ export default function AdviserSubjectAreaHBarChart({
   const plotHeight = items.length * rowHeight;
 
   return (
-    <div ref={cardRef} className={`adviser-dashboard__chart-card adviser-dashboard__scroll-reveal${isVisible ? " is-visible" : ""}`}>
+    <div ref={cardRef} className={`adviser-dashboard__chart-card adviser-dashboard__chart-card--subject-area adviser-dashboard__scroll-reveal${isVisible ? " is-visible" : ""}`}>
       <div className="adviser-dashboard__chart-header">
         <div>
           <h3 className="adviser-dashboard__chart-title">{loading ? <SkeletonBlock width={210} height={18} /> : <>
@@ -74,7 +74,12 @@ export default function AdviserSubjectAreaHBarChart({
         </div>
       </div>
 
-      <div className="adviser-dashboard__hbar-body">
+      <div
+        className="adviser-dashboard__hbar-body"
+        tabIndex={loading ? undefined : 0}
+        role={loading ? undefined : "region"}
+        aria-label={loading ? undefined : "Subject area performance graph. Horizontally scrollable."}
+      >
         {loading ? (
           <SkeletonBlock className="adviser-dashboard__skeleton-chart" />
         ) : (
