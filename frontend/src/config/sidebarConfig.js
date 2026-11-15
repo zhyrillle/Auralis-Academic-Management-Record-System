@@ -182,6 +182,11 @@ export const sidebarConfig = {
       icon: FolderOpen,
     },
     { title: "PHIL-IRI", path: "/department-head/phil-iri", icon: BookOpen, requiresPhilIri: true },
+    {
+      title: "Feedback",
+      path: "/department-head/feedback",
+      icon: MessageSquare,
+    },
   ],
   departmentHead: [
     // Duplicate mapping to support camelCase
@@ -194,6 +199,11 @@ export const sidebarConfig = {
       title: "Class Records",
       path: "/department-head/class-records",
       icon: FolderOpen,
+    },
+    {
+      title: "Feedback",
+      path: "/department-head/feedback",
+      icon: MessageSquare,
     },
     { title: "PHIL-IRI", path: "/department-head/phil-iri", icon: BookOpen, requiresPhilIri: true },
   ],
