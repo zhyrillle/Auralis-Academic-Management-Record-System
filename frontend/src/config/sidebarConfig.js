@@ -112,6 +112,10 @@ export const sidebarConfig = {
       title: "Student Monitoring",
       path: "/principal/student-monitoring",
       icon: ClipboardList,
+      submenu: [
+        { title: "Academic Monitoring", path: "/principal/student-monitoring", end: true },
+        { title: "Attendance Monitoring", path: "/principal/student-monitoring/attendance" },
+      ],
     },
     {
       title: "Performance Level",

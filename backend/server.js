@@ -90,6 +90,7 @@ app.use('/api/principal/performance', principalPerformanceRoutes);
 app.use('/api/department-head', departmentHeadDashboardRoutes);
 app.use('/api/principal/at-risk-prediction', atRiskPredictionRoutes);
 app.use('/api/principal/student-monitoring', studentMonitoringRoutes);
+app.use('/api/principal/attendance-monitoring', require('./routes/attendanceMonitoringRoutes'));
 app.use('/api/grading-periods', gradingPeriodRoutes);
 app.use('/api/master-sheets', masterSheetRoutes);
 app.use('/api/section-details', sectionDetailsRoutes);

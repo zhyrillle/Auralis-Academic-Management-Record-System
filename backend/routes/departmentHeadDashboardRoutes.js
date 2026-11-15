@@ -3,6 +3,14 @@ const router = express.Router();
 const db = require('../config/db');
 const { getSubmissionMonitor, submissionTotals } = require('../services/DeptSubmissionMonitorService');
 const DeptHeadClassRecordService = require('../services/DeptHeadClassRecordService');
+// Saved grades can exist before a term starts (for example, imported test data).
+// Such rows must not produce future-term pass rates, including in Overall.
+const startedGradeTerm = ` AND EXISTS (SELECT 1 FROM ACADEMIC_TERM period
+  WHERE period.school_year_id = so.school_year_id
+    AND CAST(REGEXP_SUBSTR(period.term_name, '[123]') AS UNSIGNED)
+      = CAST(REGEXP_SUBSTR(sg.term, '[123]') AS UNSIGNED)
+    AND DATE(CONVERT_TZ(period.starts_at, '+00:00', '+08:00'))
+      <= DATE(CONVERT_TZ(UTC_TIMESTAMP(), '+00:00', '+08:00')))`;
 router.use('/monitoring', require('./deptHeadMonitoringRoutes'));
 
 async function getDepartmentId(userId) {
@@ -47,6 +55,8 @@ router.get('/comparative-analysis', async (req, res) => {
         SUM(CASE WHEN sg.quarterly_grade >= 90 THEN 1 ELSE 0 END) AS aboveAverage,
         SUM(CASE WHEN sg.quarterly_grade >= 75 THEN 1 ELSE 0 END) AS passed,
         SUM(CASE WHEN sg.quarterly_grade < 75 THEN 1 ELSE 0 END) AS fail,
+        COUNT(DISTINCT CASE WHEN sg.quarterly_grade >= 75 THEN sg.student_id END) AS passedLearners,
+        COUNT(DISTINCT CASE WHEN sg.quarterly_grade < 75 THEN sg.student_id END) AS failedLearners,
         COUNT(sg.student_grade_id) AS total
       FROM STUDENT_GRADE sg
       JOIN SUBJECT_OFFERING so ON sg.subject_offering_id = so.subject_offering_id
@@ -58,13 +68,17 @@ router.get('/comparative-analysis', async (req, res) => {
     `;
     const params = [departmentId];
     query += buildFilters(req.query, params, 'sg');
+    query += startedGradeTerm;
     query += ` GROUP BY gl.grade_level_name ORDER BY gl.grade_level_name`;
 
     const [rows] = await db.query(query, params);
     const results = rows.map(r => ({
       gradeLevel: r.gradeLevel,
       aboveAverage: Number(r.aboveAverage) || 0,
+      passed: Number(r.passed) || 0,
       fail: Number(r.fail) || 0,
+      passedLearners: Number(r.passedLearners) || 0,
+      failedLearners: Number(r.failedLearners) || 0,
       passingRate: r.total > 0 ? Math.round((Number(r.passed) / Number(r.total)) * 100) : 0
     }));
     res.json(results);
@@ -91,6 +105,7 @@ router.get('/pass-rate', async (req, res) => {
     `;
     const params = [departmentId];
     query += buildFilters(req.query, params, 'sg');
+    query += startedGradeTerm;
 
     const [rows] = await db.query(query, params);
     const row = rows[0] || { passed: 0, failed: 0, total: 0 };

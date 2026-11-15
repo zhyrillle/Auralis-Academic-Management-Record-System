@@ -124,7 +124,8 @@ export function loadCached(key, loader, { force = false } = {}) {
       verify();
       if (startedGeneration !== generation) return loadCached(key, loader);
       // Server rejections and session changes must not be disguised as offline success.
-      const persisted = isNetworkError(error) ? await getPersistentCacheEntry(key, scope) : undefined;
+      if (!isNetworkError(error)) throw error;
+      const persisted = await getPersistentCacheEntry(key, scope);
       verify();
       if (!persisted && previous?.data === undefined) throw error;
       if (entries.get(key) === entry) {

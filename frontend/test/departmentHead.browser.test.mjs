@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createServer } from 'vite';
+import { riskSummary } from './fixtures/monitoringOverviewData.mjs';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE_PATH ? pathToFileURL(process.env.PLAYWRIGHT_MODULE_PATH).href : 'playwright');
 const artifacts = mkdtempSync(join(tmpdir(), 'auralis-department-ui-'));
 const server = await createServer({ server: { host: '127.0.0.1', port: 0, open: false } });
@@ -15,7 +16,8 @@ const contextData = { department: { id: 9, name: 'English', code: 'ENG' }, subje
   gradeLevels: [7, 8, 9, 10].map((grade, i) => ({ id: i + 1, name: `G${grade}` })) };
 const sections = Array.from({ length: 11 }, (_, i) => ({ sectionId: i + 7, sectionName: i === 0 ? 'Carrots' : `Section ${i}`,
   gradeLevelId: i % 4 + 1, gradeLevelName: `G${i % 4 + 7}`, programCode: i % 2 ? 'STE' : 'EBEC',
-  learnerCount: 3, teacherName: 'Demo Teacher', adviserName: 'Demo Adviser', subjectOfferingId: i + 88, screeningComplete: 1, screeningIncomplete: 1, postTestComplete: 1, postTestIncomplete: 0 }));
+  learnerCount: 3, teacherName: 'Demo Teacher', adviserName: 'Demo Adviser', subjectOfferingId: i + 88, screeningComplete: 1, screeningIncomplete: 1,
+  screeningThresholds: [28], screeningThresholdCounts: { 28: { passed: 1, failed: 0 } }, postTestComplete: 1, postTestIncomplete: 0 }));
 const learners = ['Complete', 'Incomplete', 'Not assessed'].map((status, i) => ({ enrollmentId: i + 101, sectionId: 7, name: `Demo Learner ${i + 1}`, lrn: String(123456789010 + i),
   sex: ['M', 'F', null][i],
   screeningStatus: status, postTestStatus: i === 0 ? 'Complete' : 'Not assessed',
@@ -66,12 +68,17 @@ try {
         students: [{ student_id: 101, student_section_id: 101, LRN: '123456789010', first_name: 'Demo', last_name: 'Learner', sex: 'M', scores: {}, saved_summary: { initialGrade: 80, termGrade: 87, calculationError: null } }] });
       if (role === 'adviser' && path === '/phil-iri/screening/7') return json({ records: [{ ...learners[0].screening, student_section_id: 101 }], tableReady: true });
       if (role === 'adviser' && path === '/phil-iri/7') return json({ records: [{ student_section_id: 101, words_correct: 56, comp_correct: 2 }], tableReady: true });
-      if (path === '/department-head/comparative-analysis') return json([{ gradeLevel: 'G7', aboveAverage: 2, fail: 1, passingRate: 75 }]);
+      if (path === '/department-head/comparative-analysis') return json([{ gradeLevel: 'G7', aboveAverage: 1, passed: 3, fail: 1, passedLearners: 3, failedLearners: 1, passingRate: 75 }]);
+      if (path === '/department-head/monitoring/academic-risk') return json(riskSummary(url.searchParams.get('term') || 'T2'));
       if (path === '/department-head/pass-rate') return json({ passed: 3, failed: 1, total: 4, passRatePercentage: 75 });
       if (path === '/department-head/stats') return json({ totalTeachers: 8, submittedGrades: 3, submittedGradesPercent: 60, delayedSubmissions: 2, atRiskStudents: 1 });
       if (path === '/department-head/submission-monitor') return json(Array.from({ length: 8 }, (_, i) => ({ subjectOfferingId: i + 88, subject: 'English', teacher: i ? 'Demo Teacher ' + (i + 1) : 'Demo Teacher', gradeSection: 'G7 - Carrots', status: 'Pending', completion: 0, submittedTerms: 0, expectedTerms: 3, overdueTerms: 0, lateTerms: 0 })));
       if (path === '/department-head/performance-matrix') return json([{ section: 'G7 - Carrots', mean: 83.2, mps: 83.2, examDistribution: 'Average' }]);
       if (path === '/department-head/grade-distribution') return json([{ gradeLevel: 'G7', term1Mean: 83.2, term2Mean: null, term3Mean: null, term1Mps: 83.2, term2Mps: null, term3Mps: null }]);
+      if (path === '/department-head/grade-distribution-report') {
+        const values = { total_score: 83.2, num_takers: 1, score_mean: 83.2, mps: 83.2, r80_84: 1 };
+        return json({ departmentName: 'English', summary: { ...values, name: 'Average' }, grades: [{ ...values, id: 'G7', name: 'Grade 7', teachers: [] }] });
+      }
       return json([]);
     });
     const page = await ctx.newPage(); page.setDefaultTimeout(10000); page.on('pageerror', error => errors.push(error.message));
@@ -80,7 +87,7 @@ try {
   const { ctx, page } = await setup();
   await page.goto(`${server.resolvedUrls.local[0]}department-head/dashboard`);
   await page.getByRole('heading', { name: 'English Department', exact: true }).waitFor();
-  await page.getByText('Pass rate 3 / 4 students', { exact: true }).waitFor();
+  await page.getByText('Passed 3 / 4 grade results', { exact: true }).waitFor();
   await page.getByRole('heading', { name: 'Submission Monitor', exact: true }).waitFor();
   assert.equal(await page.getByRole('heading', { name: 'Performance Analysis Matrix', exact: true }).count(), 0);
   assert.equal(await page.getByRole('button', { name: 'Submissions', exact: true }).count(), 0);
@@ -94,13 +101,14 @@ try {
   const chartHeights = await page.locator('.dept-main-cards').evaluate(row => [...row.children].map(card => card.getBoundingClientRect().height));
   assert(Math.abs(chartHeights[0] - chartHeights[1]) < 2);
   const comparisonSegments = page.locator('.dept-comparison-chart .stacked-bar-chart__bar').first().locator('span');
+  await page.locator('.dept-main-cards').evaluate(node => node.scrollIntoView({ block: 'center', behavior: 'instant' }));
   for (let index = 0; index < 2; index++) {
     const segment = comparisonSegments.nth(index);
     await segment.hover();
     await page.waitForFunction(element => getComputedStyle(element).filter !== 'none', await segment.elementHandle());
     const tooltip = page.getByRole('tooltip');
     await tooltip.waitFor();
-    assert.match(await tooltip.textContent(), new RegExp(`G7${index === 0 ? 'Above average2' : 'Failing1'} learners`));
+    assert.match(await tooltip.textContent(), new RegExp(`G7${index === 0 ? 'Passed3' : 'Failed1'} learners`));
     assert.equal(await segment.getAttribute('title'), null, 'do not also show a browser-native tooltip');
     assert.equal(await segment.getAttribute('aria-describedby'), await tooltip.getAttribute('id'));
     const tooltipAppearance = await tooltip.evaluate(element => ({ background: getComputedStyle(element).backgroundColor, radius: getComputedStyle(element).borderRadius }));
@@ -111,12 +119,12 @@ try {
   }
   await comparisonSegments.first().focus();
   assert(await comparisonSegments.first().evaluate(element => element.matches(':focus-visible')));
-  await page.getByRole('tooltip').getByText('Above average', { exact: true }).waitFor();
+  await page.getByRole('tooltip').getByText('Passed', { exact: true }).waitFor();
   await page.screenshot({ path: join(artifacts, 'grade-comparison-tooltip-laptop.png'), animations: 'disabled', fullPage: true });
   await page.keyboard.press('Escape');
   assert.equal(await page.getByRole('tooltip').count(), 0);
   await comparisonSegments.last().focus();
-  await page.getByRole('tooltip').getByText('Failing', { exact: true }).waitFor();
+  await page.getByRole('tooltip').getByText('Failed', { exact: true }).waitFor();
   await page.getByRole('heading', { name: 'Submission Monitor', exact: true }).hover();
   await comparisonSegments.last().evaluate(element => element.blur());
   assert.equal(await page.getByRole('tooltip').count(), 0);
@@ -137,23 +145,17 @@ try {
   assert.equal(await page.getByRole('option', { name: /All school years/i }).count(), 0);
   await page.keyboard.press('Escape');
   assert(reads.filter(read => read.path === '/department-head/stats').every(read => read.params.schoolYear === '2026-2027'));
-  const headerColors = await page.locator('.dept-grade-table').evaluate(table => ['.dept-column-mean', '.dept-column-mps'].map(selector => getComputedStyle(table.querySelector(selector)).backgroundColor));
-  assert.notEqual(headerColors[0], headerColors[1]);
-  const separator = await page.locator('.dept-grade-table .dept-column-mean').evaluate(header => getComputedStyle(header).borderRightColor);
-  assert.equal(separator, 'rgb(203, 213, 225)');
-  const bodySeparators = await page.locator('.dept-grade-table tbody tr').evaluateAll(rows => rows.map(row => [
-    getComputedStyle(row.cells[0]).borderRight,
-    getComputedStyle(row.cells[4]).borderLeft,
-  ]));
-  assert.equal(bodySeparators.length, 2, 'checks include the Average row');
-  assert(bodySeparators.flat().every(border => border === '1px solid rgb(203, 213, 225)'));
-  assert.equal(await page.locator('.dept-grade-table .dept-column-mps').evaluate(header => getComputedStyle(header).borderBottomColor), 'rgb(203, 213, 225)');
-  assert.equal(await page.locator('.dept-monitor-details .dept-column-mean').count(), 1);
+  // The current report uses separate Mean/MPS and grade-range tables.
+  const reportTables = page.locator('.dept-grade-distribution-container .performance-table');
+  assert.equal(await reportTables.count(), 2);
+  assert.equal(await reportTables.first().locator('tbody tr').count(), 2, 'includes the Average row');
+  assert.match(await reportTables.first().textContent(), /83\.2/);
+  assert.match(await reportTables.first().textContent(), /MPS/);
   const headerGap = await page.evaluate(() => document.querySelector('.dept-dashboard-header').getBoundingClientRect().top - document.querySelector('.navbar-container').getBoundingClientRect().bottom);
   assert(headerGap <= 22, 'laptop header gap should be compact');
   await page.locator('.page-content-area').evaluate(element => { element.scrollTop = 0; });
   await page.screenshot({ path: join(artifacts, 'dashboard-laptop.png'), animations: 'disabled', fullPage: true });
-  await page.locator('.dept-grade-table').scrollIntoViewIfNeeded();
+  await page.locator('.dept-grade-distribution-container .grade-table').scrollIntoViewIfNeeded();
   await page.screenshot({ path: join(artifacts, 'dashboard-tables-laptop.png'), animations: 'disabled', fullPage: true });
   console.log('PASS existing dashboard values and analytics-first details');
 
@@ -186,9 +188,10 @@ try {
   assert.equal(await page.getByRole('button', { name: /^Subject:/ }).count(), 0);
   await page.locator('.term-grade-cell').filter({ hasText: '87' }).first().waitFor();
   assert.equal(await page.getByText('123456789010', { exact: true }).count(), 0);
-  const termResponse = page.waitForResponse(response => response.url().includes('/class-record/88?term=T2'));
   await page.getByRole('button', { name: 'T2', exact: true }).click();
-  await termResponse;
+  await page.waitForFunction(() => [...document.querySelectorAll('.term-btn.active')].some(button => button.textContent.trim() === 'T2'));
+  await page.locator('.term-grade-cell').filter({ hasText: '87' }).first().waitFor();
+  assert(reads.some(read => read.path === '/class-record/88' && read.params.term === 'T2'), 'term may be served from its prefetched cache');
   assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
   await page.screenshot({ path: join(artifacts, 'class-record-laptop.png'), animations: 'disabled', fullPage: true });
   await page.getByRole('button', { name: 'Download', exact: true }).waitFor({ state: 'visible' });
@@ -236,7 +239,7 @@ try {
   await page.locator('.phil-iri-sheet-header').getByText('10', { exact: true }).waitFor();
   await page.getByText('Division of Gingoog City', { exact: true }).waitFor();
   await page.getByText('Gingoog City Comprehensive National High School', { exact: true }).waitFor();
-  assert(reads.some(read => read.path === '/department-head/monitoring/phil-iri/7' && read.params.viewVersion === '2'));
+  assert(reads.some(read => read.path === '/department-head/monitoring/phil-iri/7' && read.params.viewVersion === '6'));
   assert.equal(await page.locator('.dept-phil-adviser-report input').count(), 0);
   assert.equal(await page.getByRole('button', { name: /Download PDF|Edit Screening Test|Finish editing/ }).count(), 0);
   assert.equal(await page.locator('.phil-iri-subheader, .phil-iri-sheet-footer, .screening-document-footer').count(), 0);
@@ -245,9 +248,9 @@ try {
   assert.deepEqual(await page.locator('.phil-iri-score-max').allTextContents(), ['(14)', '(12)', '(14)']);
   assert.equal(await page.getByRole('columnheader', { name: 'Assessment details', exact: true }).count(), 0);
   const screeningRows = await page.locator('.dept-phil-screening-table .dept-phil-learner-row').evaluateAll(rows => rows.map(row => row.cells.length));
-  assert.deepEqual(screeningRows, [10, 10, 10]);
+  assert.deepEqual(screeningRows, [9, 9, 9]);
   const unassessedCells = await page.locator('.dept-phil-screening-table .dept-phil-learner-row').last().locator('td').allTextContents();
-  assert.deepEqual(unassessedCells.slice(3), Array(7).fill(''));
+  assert.deepEqual(unassessedCells.slice(3), Array(6).fill(''));
   assert((await page.locator('.dept-phil-screening-table tbody td').allTextContents()).every(value => !value.includes('—')));
   assert.equal(await page.locator('.screening-gender-divider').count(), 3);
   assert.equal(await page.locator('.dept-phil-adviser-report .student-admin-pagination').count(), 0);
@@ -263,20 +266,14 @@ try {
   await page.locator('.page-content-area').evaluate(element => { element.scrollTop = 0; });
   await page.getByRole('textbox').fill('No matching learner');
   await page.getByText('No learners match this search.', { exact: true }).waitFor();
-  assert.equal(await page.locator('.dept-phil-screening-table tbody td').getAttribute('colspan'), '10');
+  assert.equal(await page.locator('.dept-phil-screening-table tbody td').getAttribute('colspan'), '9');
   await page.getByRole('textbox').fill('');
   await page.getByRole('button', { name: 'Post-Test', exact: true }).click();
   await page.getByRole('cell', { name: '80%', exact: true }).waitFor();
   await page.getByRole('columnheader', { name: 'Oral Reading', exact: true }).waitFor();
   await page.getByRole('columnheader', { name: 'Comprehension', exact: true }).waitFor();
   assert.equal(await page.getByRole('columnheader', { name: 'Status', exact: true }).count(), 0);
-  const lrnColumnWidth = await page.locator('.dept-phil-post-table thead .col-lrn').boundingBox();
-  assert(lrnColumnWidth.width >= 210);
-  const lrnContentFits = await page.locator('.dept-phil-post-table .dept-phil-lrn').first().evaluate(cell => {
-    const cellBounds = cell.getBoundingClientRect(), contents = cell.querySelector('.masked-lrn-wrapper').getBoundingClientRect();
-    return contents.left > cellBounds.left && contents.right < cellBounds.right;
-  });
-  assert(lrnContentFits, 'masked LRN and reveal icon should fit inside their own column');
+  assert.equal(await page.locator('.dept-phil-post-table .col-lrn').count(), 0, 'the current reading report does not display learner identifiers');
   assert(await page.locator('.dept-phil-post-table .reading-level-text').evaluateAll(labels => labels.every(label => {
     if (!label.textContent) return true;
     const bounds = label.getBoundingClientRect(), cell = label.closest('td').getBoundingClientRect();

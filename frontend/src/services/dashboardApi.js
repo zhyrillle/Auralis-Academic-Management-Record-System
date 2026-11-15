@@ -16,7 +16,7 @@ async function fetchApi(endpoint, queryParams = {}, options = {}) {
     if (userObj) {
       userId = userObj.user_id || userObj.id || '';
     }
-  } catch (e) {}
+  } catch { userId = ''; }
 
   const response = await fetch(url.toString(), { queueOffline: false, ...options,
     headers: {
@@ -34,11 +34,15 @@ async function fetchApi(endpoint, queryParams = {}, options = {}) {
 }
 
 export async function getComparativeAnalysis({ schoolYear, gradeLevel, quarter }) {
-  return fetchApi('/department-head/comparative-analysis', { schoolYear, gradeLevel, quarter });
+  const data = await fetchApi('/department-head/comparative-analysis', { schoolYear, gradeLevel, quarter, countsVersion: 4 }, { force: true });
+  if (!Array.isArray(data) || data.some(row => !['passed', 'fail', 'passedLearners', 'failedLearners'].every(key => Number.isFinite(row[key])))) {
+    throw new Error('Grade comparison could not be loaded. Please refresh and try again.');
+  }
+  return data;
 }
 
 export async function getOverallPassRate({ schoolYear, gradeLevel, quarter }) {
-  return fetchApi('/department-head/pass-rate', { schoolYear, gradeLevel, quarter });
+  return fetchApi('/department-head/pass-rate', { schoolYear, gradeLevel, quarter, countsVersion: 2 }, { force: true });
 }
 
 export async function getDashboardStats({ schoolYear, gradeLevel, quarter }) {

@@ -95,6 +95,50 @@
   flex-direction: column;
   gap: 24px;
 }
+.dept-dashboard-content { position: relative; overflow-anchor: none; }
+.dept-dashboard-skeleton-overlay { position: absolute; inset: 0; overflow: hidden; }
+.dept-risk-summary, .dept-academic-performance { border: 1px solid #dce5f1; border-radius: 14px; overflow: hidden; background: #f8fafd; }
+.dept-academic-performance { background: #f2f6fd; }
+.dept-overview-section__header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 20px; background: #eef3fa; }
+.dept-academic-performance .dept-overview-section__header { background: #e9f1fe; }
+.dept-overview-section__title { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.dept-overview-section__title > svg { padding: 8px; box-sizing: content-box; border-radius: 9px; background: white; color: #235791; flex-shrink: 0; }
+.dept-risk-summary .dept-overview-section__title > svg { color: #b55e0b; }
+.dept-overview-section__header h2 { margin: 0 0 3px; font-size: 17px; color: #183256; }
+.dept-overview-section__header p { margin: 0; font-size: 12px; color: #586e8b; }
+.dept-risk-summary__link { color: white; background: #16396d; border-radius: 8px; padding: 10px 14px; font-size: 12px; text-decoration: none; white-space: nowrap; }
+.dept-risk-summary__link:focus-visible { outline: 3px solid #80a1d5; outline-offset: 3px; }
+.dept-risk-summary__bands { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 16px 20px; }
+.dept-risk-band { border: 1px solid #dfe7f3; border-radius: 10px; background: white; padding: 15px 17px; color: #183256; }
+.dept-risk-band > div { display: flex; justify-content: space-between; gap: 10px; align-items: center; }
+.dept-risk-band span { font-size: 12px; display: flex; align-items: center; gap: 6px; }
+.dept-risk-band i { width: 7px; height: 7px; border-radius: 50%; background: var(--band-color); }
+.dept-risk-band small { font-size: 11px; color: #526781; }
+.dept-risk-band strong { display: block; margin-top: 6px; font-size: 26px; line-height: 1.2; color: var(--band-color); font-weight: 600; }
+.dept-risk-band--low { --band-color: #168449; }
+.dept-risk-band--moderate { --band-color: #b47519; }
+.dept-risk-band--high { --band-color: #c62828; }
+.dept-count-badge { font-size: 11px; color: #204e87; border: 1px solid #bfd0e8; background: white; border-radius: 20px; padding: 5px 10px; white-space: nowrap; }
+.dept-academic-performance .dept-main-cards { padding: 18px 20px; }
+.dept-chart-context { color: #586e8b; font-size: 12px; margin: -8px 0 16px; }
+.dept-risk-analysis__back { align-self: flex-start; color: #214d84; font-size: 13px; text-decoration: none; }
+.dept-risk-analysis__header { justify-content: flex-start; gap: 14px; }
+.dept-risk-analysis__note { color: #586e8b; font-size: 13px; text-align: center; }
+.dept-risk-analysis .dept-analysis-stat--low { --stat-accent: #168449; }
+.dept-risk-analysis .dept-analysis-stat--moderate { --stat-accent: #b47519; }
+.dept-risk-analysis .dept-analysis-stat--high { --stat-accent: #c62828; }
+@media (max-width: 600px) {
+  .dept-overview-section__header { align-items: flex-start; flex-wrap: wrap; padding: 14px; }
+  .dept-risk-summary__bands { grid-template-columns: minmax(0, 1fr); padding: 14px; }
+  .dept-academic-performance .dept-main-cards { padding: 14px; }
+}
+
+.dept-risk-overview { min-width: 0; display: grid; gap: 16px; }
+.dept-risk-overview__header { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.dept-risk-overview__header h2 { font-size: 20px; color: #183256; margin: 0 0 6px; }
+.dept-risk-overview__header p, .dept-risk-overview__coverage { font-size: 12px; line-height: 1.7; color: #526781; margin: 0; }
+.dept-risk-overview .ar-charts-row { margin: 0; min-width: 0; }
+@media (max-width: 600px) { .dept-risk-overview__header { flex-direction: column; align-items: stretch; } }
 
 .dept-main-cards {
   display: grid;

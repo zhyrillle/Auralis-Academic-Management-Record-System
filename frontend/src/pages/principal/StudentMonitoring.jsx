@@ -1,5 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, AlertTriangle, BookOpen, CalendarCheck2, ClipboardList, Info, MinusCircle, Search, X } from "lucide-react";
+import {
+  AlertCircle,
+  AlertTriangle,
+  BookOpen,
+  CalendarCheck2,
+  ClipboardList,
+  Info,
+  MinusCircle,
+  Search,
+  X,
+} from "lucide-react";
 import DropdownSelect from "../../components/common/DropdownSelect";
 import FilterToolbar from "../../components/common/FilterToolbar";
 import PageSkeleton, {
@@ -125,28 +135,40 @@ function MonitoringCharts({ students }) {
     label: band.label,
     color: band.color,
   }));
-  const distribution = Object.fromEntries(bands.map((band, index) => [
-    chartBands[index].level,
-    { count: assessed.filter((row) => row.academic.riskLevel === band.value).length },
-  ]));
+  const distribution = Object.fromEntries(
+    bands.map((band, index) => [
+      chartBands[index].level,
+      {
+        count: assessed.filter((row) => row.academic.riskLevel === band.value)
+          .length,
+      },
+    ]),
+  );
   distribution.totalFlagged = assessed.length;
   const grades = [...new Set(students.map((row) => row.grade))]
     .filter(Number.isFinite)
     .sort((a, b) => a - b);
   const breakdown = grades.map((grade) => ({
     grade,
-    ...Object.fromEntries(bands.map((band, index) => [
-      chartBands[index].level,
-      assessed.filter(
-        (row) => row.grade === grade && row.academic.riskLevel === band.value,
-      ).length,
-    ])),
+    ...Object.fromEntries(
+      bands.map((band, index) => [
+        chartBands[index].level,
+        assessed.filter(
+          (row) => row.grade === grade && row.academic.riskLevel === band.value,
+        ).length,
+      ]),
+    ),
   }));
   return (
-    <section className="ar-charts-row ar-charts-row--responsive" aria-label="Academic band distribution">
+    <section
+      className="ar-charts-row ar-charts-row--responsive"
+      aria-label="Academic band distribution"
+    >
       <OverallDistributionChart
         data={distribution}
-        labels={Object.fromEntries(chartBands.map((band) => [band.level, band.label]))}
+        labels={Object.fromEntries(
+          chartBands.map((band) => [band.level, band.label]),
+        )}
       />
       <GradeLevelBreakdownChart
         data={breakdown}
@@ -214,20 +236,22 @@ function LearnerDetails({ student, context, onClose }) {
             <div className="sm-info-content">
               <strong>How this preview works</strong>
               <p>
-                Only recorded scores are included. A confirmed missing submission
-                contributes zero; an unrecorded score remains unknown. Future activities
-                and excused work are excluded. Represented weight is not the percentage
-                of the term completed. Examination stages contribute their recorded
-                share; MAPEH previews its two components separately.
+                Only recorded scores are included. A confirmed missing
+                submission contributes zero; an unrecorded score remains
+                unknown. Future activities and excused work are excluded.
+                Represented weight is not the percentage of the term completed.
+                Examination stages contribute their recorded share; MAPEH
+                previews its two components separately.
               </p>
               <p>
-                Possible is the combined maximum score of the included activities.
-                The count below each component shows how many activities contribute
-                to these totals.
+                Possible is the combined maximum score of the included
+                activities. The count below each component shows how many
+                activities contribute to these totals.
               </p>
               <p>
-                The band uses the converted preview: below 75 is High; 75 to below
-                80 is Moderate; 80 or above is Low. These are monitoring rules.
+                The band uses the converted preview: below 75 is High; 75 to
+                below 80 is Moderate; 80 or above is Low. These are monitoring
+                rules.
               </p>
             </div>
           </details>
@@ -254,10 +278,21 @@ function LearnerDetails({ student, context, onClose }) {
           </ul>
         )}
         {!!academic.components.length && (
-          <section className="sm-components" aria-labelledby="monitoring-components-title">
-            <h3 className="sm-components-title" id="monitoring-components-title">Available scores and configured weights</h3>
+          <section
+            className="sm-components"
+            aria-labelledby="monitoring-components-title"
+          >
+            <h3
+              className="sm-components-title"
+              id="monitoring-components-title"
+            >
+              Available scores and configured weights
+            </h3>
             <div className="sm-table-scroll sm-review-table">
-              <table className="sm-table sm-component-table" aria-labelledby="monitoring-components-title">
+              <table
+                className="sm-table sm-component-table"
+                aria-labelledby="monitoring-components-title"
+              >
                 <thead>
                   <tr>
                     <th>Component</th>
@@ -275,7 +310,11 @@ function LearnerDetails({ student, context, onClose }) {
                         {component.group && <small>{component.group}</small>}
                         {componentName(component.code)}
                         <small>
-                          {component.activityCount} {component.activityCount === 1 ? "activity" : "activities"} included
+                          {component.activityCount}{" "}
+                          {component.activityCount === 1
+                            ? "activity"
+                            : "activities"}{" "}
+                          included
                         </small>
                       </th>
                       <td>
@@ -301,7 +340,10 @@ function LearnerDetails({ student, context, onClose }) {
         <section className="sm-detail-sources">
           <div>
             <div className="sm-source-header">
-              <h3><CalendarCheck2 size={17} aria-hidden="true" />Attendance</h3>
+              <h3>
+                <CalendarCheck2 size={17} aria-hidden="true" />
+                Attendance
+              </h3>
               <details className="sm-info">
                 <summary
                   className="sm-icon-button"
@@ -312,11 +354,13 @@ function LearnerDetails({ student, context, onClose }) {
                 </summary>
                 <div className="sm-info-content">
                   <strong>About attendance</strong>
-                  {student.attendance?.reason && <p>{student.attendance.reason}</p>}
+                  {student.attendance?.reason && (
+                    <p>{student.attendance.reason}</p>
+                  )}
                   <p>
-                    Section attendance through {sourceDate(context.asOf)}. Late marks
-                    remain separate from absences. Attendance does not change the
-                    academic band.
+                    Section attendance through {sourceDate(context.asOf)}. Late
+                    marks remain separate from absences. Attendance does not
+                    change the academic band.
                   </p>
                 </div>
               </details>
@@ -330,7 +374,10 @@ function LearnerDetails({ student, context, onClose }) {
           {context.isEnglish && (
             <div>
               <div className="sm-source-header">
-                <h3><BookOpen size={17} aria-hidden="true" />English PHIL-IRI</h3>
+                <h3>
+                  <BookOpen size={17} aria-hidden="true" />
+                  English PHIL-IRI
+                </h3>
                 <details className="sm-info">
                   <summary
                     className="sm-icon-button"
@@ -383,9 +430,13 @@ export default function StudentMonitoring() {
   const [selected, setSelected] = useState(null);
   const learnerListRef = useRef(null);
   const openBand = (value) => {
-    change('band', value);
-    learnerListRef.current?.scrollIntoView({ block: 'start',
-      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+    change("band", value);
+    learnerListRef.current?.scrollIntoView({
+      block: "start",
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        ? "auto"
+        : "smooth",
+    });
     learnerListRef.current?.focus({ preventScroll: true });
   };
   const students = useMemo(() => data?.students || [], [data]);
@@ -468,30 +519,62 @@ export default function StudentMonitoring() {
             records
           </p>
         </div>
+        <div className="sm-context-row">
+          <p className="sm-context">
+            {data
+              ? `${data.context.subject} · Term ${data.context.term.slice(1)} · ${data.context.schoolYear} · Records through ${sourceDate(data.context.asOf)}`
+              : "Choose a subject, term, and school year to review recorded progress."}
+          </p>
+          {data && !loading && (
+            <details className="sm-info">
+              <summary
+                className="sm-icon-button"
+                aria-label="About grade previews and academic bands"
+                title="About grade previews and academic bands"
+              >
+                <Info size={18} aria-hidden="true" />
+              </summary>
+              <div className="sm-info-content">
+                <strong>About these bands</strong>
+                <p>
+                  <strong>
+                    {assessed.length} of {scoped.length} learners
+                  </strong>{" "}
+                  have a grade preview. Bands update from recorded scores and
+                  available component weights; they are not official term
+                  grades. Attendance and English PHIL-IRI are reviewed
+                  separately.
+                </p>
+              </div>
+            </details>
+          )}
+        </div>
       </header>
       <FilterToolbar
         label="Student monitoring filters"
         className="sm-filters"
-        end={<>
-          <DropdownSelect
-            className="sm-filter-term"
-            label="Term"
-            value={view.filters.term}
-            placeholder="Term"
-            options={view.terms}
-            onChange={(value) => change("term", value)}
-            disabled={disabled || !view.terms.length}
-          />
-          <DropdownSelect
-            className="sm-filter-year"
-            label="School year"
-            value={view.filters.schoolYear}
-            placeholder="School year"
-            options={options?.schoolYears || []}
-            onChange={(value) => change("schoolYear", value)}
-            disabled={!options}
-          />
-        </>}
+        end={
+          <>
+            <DropdownSelect
+              className="sm-filter-term"
+              label="Term"
+              value={view.filters.term}
+              placeholder="Term"
+              options={view.terms}
+              onChange={(value) => change("term", value)}
+              disabled={disabled || !view.terms.length}
+            />
+            <DropdownSelect
+              className="sm-filter-year"
+              label="School year"
+              value={view.filters.schoolYear}
+              placeholder="School year"
+              options={options?.schoolYears || []}
+              onChange={(value) => change("schoolYear", value)}
+              disabled={!options}
+            />
+          </>
+        }
       >
         <DropdownSelect
           className="sm-filter-subject"
@@ -525,33 +608,7 @@ export default function StudentMonitoring() {
           disabled={disabled || loading}
         />
       </FilterToolbar>
-      <div className="sm-context-row">
-        <p className="sm-context">
-          {data
-            ? `${data.context.subject} · Term ${data.context.term.slice(1)} · ${data.context.schoolYear} · Records through ${sourceDate(data.context.asOf)}`
-            : "Choose a subject, term, and school year to review recorded progress."}
-        </p>
-        {data && !loading && (
-          <details className="sm-info">
-            <summary
-              className="sm-icon-button"
-              aria-label="About grade previews and academic bands"
-              title="About grade previews and academic bands"
-            >
-              <Info size={18} aria-hidden="true" />
-            </summary>
-            <div className="sm-info-content">
-              <strong>About these bands</strong>
-              <p>
-                <strong>{assessed.length} of {scoped.length} learners</strong> have
-                a grade preview. Bands update from recorded scores and available
-                component weights; they are not official term grades. Attendance
-                and English PHIL-IRI are reviewed separately.
-              </p>
-            </div>
-          </details>
-        )}
-      </div>
+
       {error && (
         <div className="sm-error" role="alert">
           <strong>
@@ -607,7 +664,13 @@ export default function StudentMonitoring() {
             <section className="sm-panel sm-learners">
               <div className="sm-list-header">
                 <div>
-                  <h2 ref={learnerListRef} tabIndex={-1} className="sm-learner-heading">Learner monitoring</h2>
+                  <h2
+                    ref={learnerListRef}
+                    tabIndex={-1}
+                    className="sm-learner-heading"
+                  >
+                    Learner monitoring
+                  </h2>
                   <p>
                     Ordered by academic priority. Review the records and
                     calculation behind each academic band.
