@@ -1066,18 +1066,39 @@
 
   .ms-controls-row {
     gap: 8px;
-    flex-wrap: nowrap;
+    align-items: stretch;
+    flex-direction: column;
+    flex-wrap: wrap;
+  }
+
+  .ms-summary {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .ms-control-actions {
+    display: grid;
+    width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    justify-content: stretch;
+    gap: 8px;
   }
 
   .ms-summary__metric {
     padding: 7px 9px;
   }
 
-  .ms-control-actions {
+  .ms-control-actions .grade-submission-open,
+  .ms-control-actions .ms-honors-trigger-btn,
+  .ms-control-actions .ms-download-btn,
+  .ms-search-fieldset {
+    width: 100%;
+    max-width: none;
     min-width: 0;
-    flex: 1;
-    flex-wrap: nowrap;
-    gap: 7px;
+  }
+
+  .ms-search-fieldset {
+    flex: initial;
   }
 
   .ms-control-actions .search-bar-container {
@@ -1313,31 +1334,7 @@
   }
 
   .ms-controls-row {
-    display: flex;
-    flex-direction: row;
-    flex-wrap: nowrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-
-  .ms-controls-row::-webkit-scrollbar {
-    display: none;
-  }
-
-  .ms-summary {
-    width: auto;
-    flex-shrink: 0;
-  }
-
-  .ms-control-actions {
-    width: auto;
-    flex: 1 1 auto;
-    flex-wrap: nowrap;
-    justify-content: flex-end;
-    gap: 7px;
+    overflow: visible;
   }
 
   .ms-skeleton-page-header {
@@ -1393,10 +1390,16 @@
 
   .ms-selectors,
   .ms-control-actions,
-  .ms-summary,
   .ms-page-header {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .ms-summary {
+    width: 100%;
+    align-items: center;
+    flex-direction: row;
+    flex-wrap: wrap;
   }
 
   .ms-skeleton-selectors,
@@ -1413,8 +1416,14 @@
   }
 
   .ms-selector-field,
-  .ms-download-btn {
+  .ms-download-btn,
+  .ms-control-actions .grade-submission-open,
+  .ms-control-actions .ms-honors-trigger-btn {
     width: 100%;
+  }
+
+  .ms-control-actions {
+    display: flex;
   }
 
   .ms-summary span + span {
@@ -1423,7 +1432,8 @@
   }
 
   .ms-summary__metric {
-    justify-content: space-between;
+    width: auto;
+    justify-content: flex-start;
     padding: 9px 11px;
   }
 
