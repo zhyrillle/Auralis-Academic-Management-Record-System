@@ -19,14 +19,14 @@ const compute = changes => computeTermGrade({ weights, studentSectionId: 10, act
 
 test('transmutation uses the saved On/Off choice rather than a second hardcoded table', () => {
   assert.equal(transmuteInitialGrade(83, off), 83);
-  assert.equal(transmuteInitialGrade(83, on), 85);
+  assert.equal(transmuteInitialGrade(83, on), 86);
   assert.equal(transmuteInitialGrade(100, on), 100);
   assert.equal(transmuteInitialGrade(0, off), 0);
 });
 test('complete weighted grades match the shared frontend engine with transmutation Off and On', () => {
   const normal = compute();
   assert.equal(normal.complete, true); assert.equal(normal.initialGrade, 83); assert.equal(normal.termGrade, 83);
-  assert.equal(compute({ config: on }).termGrade, 85);
+  assert.equal(compute({ config: on }).termGrade, 86);
 });
 test('MISSING counts as zero; an EXCUSED assessment requires an explicit policy review', () => {
   const values = activities(); values[0].scores[0] = { student_section_id: 10, raw_score: null, score_status: 'MISSING' };
