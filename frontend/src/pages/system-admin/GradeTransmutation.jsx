@@ -25,14 +25,14 @@ import {
 import "../../styles/wsConfig.css";
 import "../../styles/gradeTransmutation.css";
 
-// Official DepEd MATATAG (SY 2026-2027) 42-tier transmutation table
+// Official DepEd Order No. 015, s. 2026 (SY 2026-2027) 41-tier transmutation table
 const buildOfficialDepEdRanges = () => {
   return TRANSMUTATION_TABLE.map((row, index) => ({
     id: `default-${index}`,
     min: Number(row.min).toFixed(2),
     max: Number(row.max).toFixed(2),
     transmuted: String(row.transmuted !== undefined ? row.transmuted : row.grade),
-    label: row.label || (row.isDefaultMinimum || (Number(row.min) === 0 && Number(row.max) === 24) ? "default minimum" : null),
+    label: row.label || (row.isDefaultMinimum || (Number(row.min) === 0 && Number(row.max) <= 4.67) ? "default minimum" : null),
   }));
 };
 
@@ -97,7 +97,7 @@ const findTransmutedMatch = (ranges, initialGrade) => {
   if (!match) return null;
   return {
     transmuted: Number(match.transmuted),
-    label: match.label || (Number(match.min) === 0 && Number(match.max) === 24 ? "default minimum" : null),
+    label: match.label || (Number(match.min) === 0 && Number(match.max) <= 4.67 ? "default minimum" : null),
   };
 };
 
@@ -427,7 +427,7 @@ export default function GradeTransmutation() {
     reset: {
       title: "Reset to DepEd default?",
       message:
-        "All current ranges will be replaced with the official DepEd SY 2026-2027 transmutation table (42 tiers including default minimum). You can still discard this before saving.",
+        "All current ranges will be replaced with the official DepEd Order No. 015, s. 2026 transmutation table (41 tiers including default minimum). You can still discard this before saving.",
       confirmLabel: "Reset",
       tone: "danger",
       icon: RotateCcw,
@@ -473,7 +473,7 @@ export default function GradeTransmutation() {
           <h1>Grade Transmutation</h1>
           <p>
             Define how initial grades are converted into transmuted grades for report cards
-            (DepEd SY 2026–2027 MATATAG Standard).
+            (DepEd Order No. 015, s. 2026 / SY 2026–2027 Standards).
           </p>
         </div>
         <div className="ws-config-actions">
@@ -634,7 +634,7 @@ export default function GradeTransmutation() {
                       const isPassing = !Number.isNaN(transmuted) && transmuted >= PASSING_GRADE;
                       const isDefaultMin =
                         range.label === "default minimum" ||
-                        (Number(range.min) === 0 && Number(range.max) === 24);
+                        (Number(range.min) === 0 && Number(range.max) <= 4.67);
                       const isDragOver = dragOverId === range.id;
                       const canDrag = !isDisabled && !isTableLocked && !isLoading && !isSaving;
 
@@ -716,7 +716,7 @@ export default function GradeTransmutation() {
                                   {isPassing ? "Passed" : "Failed"}
                                 </span>
                                 {isDefaultMin && (
-                                  <span className="gt-chip gt-chip--default-min" title="Default minimum grade assigned for 0.00 - 24.00">
+                                  <span className="gt-chip gt-chip--default-min" title="Default minimum grade assigned for 0.00 - 4.67">
                                     Default Minimum
                                   </span>
                                 )}
@@ -819,8 +819,8 @@ export default function GradeTransmutation() {
           <section className="gt-note">
             <Info size={16} aria-hidden="true" />
             <p>
-              Under DepEd MATATAG (SY 2026–2027), the official passing grade is <strong>75</strong> (initial grade 70.00–72.99),
-              and initial scores from 0.00 to 24.00 receive a <strong>60 (default minimum)</strong>.
+              Under DepEd Order No. 015, s. 2026 (SY 2026–2027), the official passing grade is <strong>75</strong> (initial grade 70.00–71.17),
+              and initial scores from 0.00 to 4.67 receive a <strong>60 (default minimum)</strong>.
             </p>
           </section>
         </aside>

@@ -30,7 +30,7 @@ test('a repair plan derives both grades from existing scores without changing it
   assert.deepEqual(input, before);
   assert.equal(plan.updates.length, 1);
   assert.equal(plan.skipped.length, 0);
-  assert.deepEqual(plan.updates[0].after, { initial_grade: 81.8, quarterly_grade: 83, remarks: 'Passed' });
+  assert.deepEqual(plan.updates[0].after, { initial_grade: 81.8, quarterly_grade: 85, remarks: 'Passed' });
   assert.equal(plan.updates[0].before.quarterly_grade, '94.00');
   Object.assign(input.grades[0], plan.updates[0].after);
   const repeated = buildPlan(input, { schoolYearId: 1 });
@@ -39,7 +39,7 @@ test('a repair plan derives both grades from existing scores without changing it
 });
 
 test('matching final grades with incorrect initial grades are also repaired', () => {
-  const input = snapshot(); input.grades[0].quarterly_grade = '83.00';
+  const input = snapshot(); input.grades[0].quarterly_grade = '85.00';
   assert.equal(buildPlan(input, { schoolYearId: 1 }).updates.length, 1);
 });
 
@@ -90,7 +90,7 @@ test('the repaired seeder previews calculated grades and preserves existing work
   const result = await seedEnglishTerm1(pool, { schoolYearId: 1 });
   assert.equal(result.created.length, 1);
   assert.equal(result.created[0].grades[0].initialGrade, 61.6);
-  assert.equal(result.created[0].grades[0].termGrade, 70);
+  assert.equal(result.created[0].grades[0].termGrade, 73);
   input.sheets = snapshot().sheets; input.activities = snapshot().activities;
   assert.equal((await seedEnglishTerm1(pool, { schoolYearId: 1 })).created.length, 0);
   await assert.rejects(seedEnglishTerm1({ ...pool, cloudPool: {} }, { schoolYearId: 1, apply: true }), /Pause/);
@@ -110,7 +110,7 @@ test('the write step updates only approved grade fields and records their audit 
   } };
   const audits = await applyPlan(connection, plan, { backupPath: 'reviewed-backup.json', source: 'test-reconciliation' });
   assert.deepEqual(audits, [9]);
-  assert.deepEqual(calls[0].values, [81.8, 83, 'Passed', 1]);
+  assert.deepEqual(calls[0].values, [81.8, 85, 'Passed', 1]);
   assert.equal(calls.filter(call => !call.sql.startsWith('SELECT')).length, 2);
   const recorded = calls.find(call => call.sql.startsWith('INSERT INTO AUDIT_EVENT'));
   assert.equal(JSON.parse(recorded.values[6])[0].learner_name, 'Fixture Learner');

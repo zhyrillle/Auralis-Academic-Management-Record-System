@@ -26,11 +26,11 @@ Module._load = function (name, parent, main) {
 const GradeTransmutationConfig = require('../models/GradeTransmutationConfig');
 test.after(() => { Module._load = originalLoad; });
 
-test('GradeTransmutationConfig official table conforms to DepEd SY 2026-2027 policy briefer', () => {
+test('GradeTransmutationConfig official table conforms to DepEd Order No. 015, s. 2026 (SY 2026-2027)', () => {
   const table = GradeTransmutationConfig.OFFICIAL_TABLE;
 
-  // Total 42 tiers
-  assert.equal(table.length, 42, 'Official table must contain 42 ranges');
+  // Total 41 tiers
+  assert.equal(table.length, 41, 'Official table must contain 41 ranges');
 
   // Top tier
   assert.equal(table[0].min, '99.50');
@@ -41,16 +41,16 @@ test('GradeTransmutationConfig official table conforms to DepEd SY 2026-2027 pol
   const passingTier = table.find((t) => t.transmuted === '75');
   assert.ok(passingTier, 'Passing tier 75 must exist');
   assert.equal(passingTier.min, '70.00');
-  assert.equal(passingTier.max, '72.99');
+  assert.equal(passingTier.max, '71.17');
 
-  // Lowest computed band
-  const lowestBand = table.find((t) => t.min === '25.00' && t.max === '39.99');
-  assert.ok(lowestBand, '25.00 - 39.99 tier must exist');
-  assert.equal(lowestBand.transmuted, '60');
+  // Lowest computed band above minimum floor
+  const lowestBand = table.find((t) => t.min === '4.68' && t.max === '9.34');
+  assert.ok(lowestBand, '4.68 - 9.34 tier must exist');
+  assert.equal(lowestBand.transmuted, '61');
 
   // Default minimum band
-  const defaultMinTier = table.find((t) => t.min === '0.00' && t.max === '24.00');
-  assert.ok(defaultMinTier, '0.00 - 24.00 default minimum tier must exist');
+  const defaultMinTier = table.find((t) => t.min === '0.00' && t.max === '4.67');
+  assert.ok(defaultMinTier, '0.00 - 4.67 default minimum tier must exist');
   assert.equal(defaultMinTier.transmuted, '60');
   assert.equal(defaultMinTier.label, 'default minimum');
 });
@@ -98,9 +98,12 @@ test('GradeTransmutationConfig transmuteSync matches boundary scores with explic
   assert.equal(GradeTransmutationConfig.transmuteSync(99.5, officialTiers), 100);
   assert.equal(GradeTransmutationConfig.transmuteSync(99.49, officialTiers), 99);
   assert.equal(GradeTransmutationConfig.transmuteSync(70.0, officialTiers), 75);
+  assert.equal(GradeTransmutationConfig.transmuteSync(71.17, officialTiers), 75);
   assert.equal(GradeTransmutationConfig.transmuteSync(69.99, officialTiers), 74);
-  assert.equal(GradeTransmutationConfig.transmuteSync(39.99, officialTiers), 60);
-  assert.equal(GradeTransmutationConfig.transmuteSync(24.0, officialTiers), 60);
+  assert.equal(GradeTransmutationConfig.transmuteSync(65.34, officialTiers), 74);
+  assert.equal(GradeTransmutationConfig.transmuteSync(65.33, officialTiers), 73);
+  assert.equal(GradeTransmutationConfig.transmuteSync(4.68, officialTiers), 61);
+  assert.equal(GradeTransmutationConfig.transmuteSync(4.67, officialTiers), 60);
   assert.equal(GradeTransmutationConfig.transmuteSync(0.0, officialTiers), 60);
   assert.equal(GradeTransmutationConfig.transmuteSync(-5, officialTiers), 60);
   assert.equal(GradeTransmutationConfig.transmuteSync(105, officialTiers), 100);
@@ -118,7 +121,7 @@ test('GradeTransmutationConfig database operations: init, get, save, and reset',
   await GradeTransmutationConfig.resetToDefault({ updated_by: null });
   const initial = await GradeTransmutationConfig.getConfig();
   assert.equal(initial.is_custom_enabled, false);
-  assert.equal(initial.ranges.length, 42);
+  assert.equal(initial.ranges.length, 41);
   const inactiveTiers = await GradeTransmutationConfig.getActiveTiers();
   assert.equal(inactiveTiers, null);
   assert.equal(GradeTransmutationConfig.transmuteSync(84), 84); // Untransmuted
@@ -145,7 +148,7 @@ test('GradeTransmutationConfig database operations: init, get, save, and reset',
   // Reset back to default (custom OFF: grades are not transmuted)
   const reset = await GradeTransmutationConfig.resetToDefault({ updated_by: null });
   assert.equal(reset.is_custom_enabled, false);
-  assert.equal(reset.ranges.length, 42);
+  assert.equal(reset.ranges.length, 41);
 
   const resetActiveTiers = await GradeTransmutationConfig.getActiveTiers();
   assert.equal(resetActiveTiers, null);

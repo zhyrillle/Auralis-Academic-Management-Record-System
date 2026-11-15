@@ -12,7 +12,7 @@ const learner = { grade_id: 7524, learner_name: 'Alex Santos', initial_grade: 81
 const score = { score_key: '3:101', activity_id: 3, activity_name: 'Written Work 1', student_section_id: 101, learner_name: 'Alex Santos', raw_score: '14.00', score_status: 'ENCODED' };
 const activity = { activity_id: 3, activity_name: 'Written Work 1', component: 'Written Work', highest_possible_score: 20, activity_date: '2026-09-05', status: 'ACTIVE' };
 const weight = (component, percentage) => ({ weight_key: `English:${component}`, subject: 'English', component, percentage });
-const range = converted => ({ id: 'range-25', min: 70, max: 72.99, transmuted: converted, label: null });
+const range = converted => ({ id: 'range-25', min: 70, max: 71.17, transmuted: converted, label: null });
 const reopening = { ...classroom, actorName: 'Morgan Admin', actorRole: 'System Administrator', actingAs: 'System Administrator',
   entityType: 'Grade Reopen Request', entityId: '55', metadata: { requester: 'Jamie Teacher', reason: 'Correct a score checked against the learner’s answer sheet.' } };
 

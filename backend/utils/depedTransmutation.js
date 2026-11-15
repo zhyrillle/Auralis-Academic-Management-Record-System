@@ -1,51 +1,50 @@
 /**
- * DepEd MATATAG (SY 2026-2027) Transmutation Table & Grade Calculation Helpers
+ * DepEd Order No. 015, s. 2026 (SY 2026-2027) Transmutation Table & Grade Calculation Helpers
  * Standard classroom assessment guidelines for Junior High School.
  */
 
 const TRANSMUTATION_TABLE = [
   { min: 99.50, max: 100.00, grade: 100, transmuted: 100 },
-  { min: 97.50, max: 99.49, grade: 99, transmuted: 99 },
-  { min: 96.00, max: 97.49, grade: 98, transmuted: 98 },
-  { min: 95.00, max: 95.99, grade: 97, transmuted: 97 },
-  { min: 94.00, max: 94.99, grade: 96, transmuted: 96 },
-  { min: 93.00, max: 93.99, grade: 95, transmuted: 95 },
-  { min: 92.00, max: 92.99, grade: 94, transmuted: 94 },
-  { min: 91.00, max: 91.99, grade: 93, transmuted: 93 },
-  { min: 90.00, max: 90.99, grade: 92, transmuted: 92 },
-  { min: 89.00, max: 89.99, grade: 91, transmuted: 91 },
-  { min: 88.00, max: 88.99, grade: 90, transmuted: 90 },
-  { min: 87.00, max: 87.99, grade: 89, transmuted: 89 },
-  { min: 86.00, max: 86.99, grade: 88, transmuted: 88 },
-  { min: 85.00, max: 85.99, grade: 87, transmuted: 87 },
-  { min: 84.00, max: 84.99, grade: 86, transmuted: 86 },
-  { min: 83.00, max: 83.99, grade: 85, transmuted: 85 },
-  { min: 82.00, max: 82.99, grade: 84, transmuted: 84 },
-  { min: 81.00, max: 81.99, grade: 83, transmuted: 83 },
-  { min: 80.00, max: 80.99, grade: 82, transmuted: 82 },
-  { min: 79.00, max: 79.99, grade: 81, transmuted: 81 },
-  { min: 78.00, max: 78.99, grade: 80, transmuted: 80 },
-  { min: 77.00, max: 77.99, grade: 79, transmuted: 79 },
-  { min: 76.00, max: 76.99, grade: 78, transmuted: 78 },
-  { min: 75.00, max: 75.99, grade: 77, transmuted: 77 },
-  { min: 73.00, max: 74.99, grade: 76, transmuted: 76 },
-  { min: 70.00, max: 72.99, grade: 75, transmuted: 75 },
-  { min: 68.00, max: 69.99, grade: 74, transmuted: 74 },
-  { min: 66.00, max: 67.99, grade: 73, transmuted: 73 },
-  { min: 64.00, max: 65.99, grade: 72, transmuted: 72 },
-  { min: 62.00, max: 63.99, grade: 71, transmuted: 71 },
-  { min: 60.00, max: 61.99, grade: 70, transmuted: 70 },
-  { min: 58.00, max: 59.99, grade: 69, transmuted: 69 },
-  { min: 56.00, max: 57.99, grade: 68, transmuted: 68 },
-  { min: 54.00, max: 55.99, grade: 67, transmuted: 67 },
-  { min: 52.00, max: 53.99, grade: 66, transmuted: 66 },
-  { min: 50.00, max: 51.99, grade: 65, transmuted: 65 },
-  { min: 48.00, max: 49.99, grade: 64, transmuted: 64 },
-  { min: 46.00, max: 47.99, grade: 63, transmuted: 63 },
-  { min: 43.00, max: 45.99, grade: 62, transmuted: 62 },
-  { min: 40.00, max: 42.99, grade: 61, transmuted: 61 },
-  { min: 25.00, max: 39.99, grade: 60, transmuted: 60 },
-  { min: 0.00, max: 24.00, grade: 60, transmuted: 60, isDefaultMinimum: true, label: 'default minimum' },
+  { min: 98.32, max: 99.49, grade: 99, transmuted: 99 },
+  { min: 97.14, max: 98.31, grade: 98, transmuted: 98 },
+  { min: 95.96, max: 97.13, grade: 97, transmuted: 97 },
+  { min: 94.78, max: 95.95, grade: 96, transmuted: 96 },
+  { min: 93.60, max: 94.77, grade: 95, transmuted: 95 },
+  { min: 92.42, max: 93.59, grade: 94, transmuted: 94 },
+  { min: 91.24, max: 92.41, grade: 93, transmuted: 93 },
+  { min: 90.06, max: 91.23, grade: 92, transmuted: 92 },
+  { min: 88.88, max: 90.05, grade: 91, transmuted: 91 },
+  { min: 87.70, max: 88.87, grade: 90, transmuted: 90 },
+  { min: 86.52, max: 87.69, grade: 89, transmuted: 89 },
+  { min: 85.34, max: 86.51, grade: 88, transmuted: 88 },
+  { min: 84.16, max: 85.33, grade: 87, transmuted: 87 },
+  { min: 82.98, max: 84.15, grade: 86, transmuted: 86 },
+  { min: 81.80, max: 82.97, grade: 85, transmuted: 85 },
+  { min: 80.62, max: 81.79, grade: 84, transmuted: 84 },
+  { min: 79.44, max: 80.61, grade: 83, transmuted: 83 },
+  { min: 78.26, max: 79.43, grade: 82, transmuted: 82 },
+  { min: 77.08, max: 78.25, grade: 81, transmuted: 81 },
+  { min: 75.90, max: 77.07, grade: 80, transmuted: 80 },
+  { min: 74.72, max: 75.89, grade: 79, transmuted: 79 },
+  { min: 73.54, max: 74.71, grade: 78, transmuted: 78 },
+  { min: 72.36, max: 73.53, grade: 77, transmuted: 77 },
+  { min: 71.18, max: 72.35, grade: 76, transmuted: 76 },
+  { min: 70.00, max: 71.17, grade: 75, transmuted: 75 },
+  { min: 65.34, max: 69.99, grade: 74, transmuted: 74 },
+  { min: 60.67, max: 65.33, grade: 73, transmuted: 73 },
+  { min: 56.01, max: 60.66, grade: 72, transmuted: 72 },
+  { min: 51.34, max: 56.00, grade: 71, transmuted: 71 },
+  { min: 46.67, max: 51.33, grade: 70, transmuted: 70 },
+  { min: 42.01, max: 46.66, grade: 69, transmuted: 69 },
+  { min: 37.34, max: 42.00, grade: 68, transmuted: 68 },
+  { min: 32.68, max: 37.33, grade: 67, transmuted: 67 },
+  { min: 28.01, max: 32.67, grade: 66, transmuted: 66 },
+  { min: 23.35, max: 28.00, grade: 65, transmuted: 65 },
+  { min: 18.68, max: 23.34, grade: 64, transmuted: 64 },
+  { min: 14.01, max: 18.67, grade: 63, transmuted: 63 },
+  { min: 9.35, max: 14.00, grade: 62, transmuted: 62 },
+  { min: 4.68, max: 9.34, grade: 61, transmuted: 61 },
+  { min: 0.00, max: 4.67, grade: 60, transmuted: 60, isDefaultMinimum: true, label: 'default minimum' },
 ];
 
 /**
@@ -162,7 +161,15 @@ function getGradeDescriptor(grade, style = 'matatag') {
     return 'Emerging';
   }
 
-  // Official DepEd MATATAG Descriptors (mandated for SY 2026-2027)
+  if (style === 'filipino') {
+    if (numericGrade >= 90) return 'Namumukod-tangi';
+    if (numericGrade >= 80) return 'Napamamalas';
+    if (numericGrade >= 75) return 'Natutungo';
+    if (numericGrade >= 65) return 'Napauunlad';
+    return 'Nagsisimula';
+  }
+
+  // Official DepEd Descriptors (mandated for SY 2026-2027 under DO 015, s. 2026)
   if (numericGrade >= 90) return 'Advancing';
   if (numericGrade >= 80) return 'Benchmarking';
   if (numericGrade >= 75) return 'Connecting';

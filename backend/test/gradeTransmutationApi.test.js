@@ -23,7 +23,7 @@ test('API endpoints for grade transmutation', async () => {
     const getData = await getRes.json();
     assert.ok(Array.isArray(getData.ranges));
     assert.ok(Array.isArray(getData.default_ranges));
-    assert.equal(getData.default_ranges.length, 42);
+    assert.equal(getData.default_ranges.length, 41);
 
     // 2. PUT /api/grade-transmutation with invalid ranges (overlapping)
     const badPutRes = await fetch(baseUrl, {
@@ -66,7 +66,7 @@ test('API endpoints for grade transmutation', async () => {
     const resetData = await resetRes.json();
     assert.equal(resetData.success, true);
     assert.equal(resetData.config.is_custom_enabled, false);
-    assert.equal(resetData.config.ranges.length, 42);
+    assert.equal(resetData.config.ranges.length, 41);
   } finally {
     server.close();
   }
