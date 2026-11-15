@@ -78,7 +78,8 @@ export default function ClassCard({
         flexDirection: "column",
         justifyContent: "flex-start",
         transition: "all 0.2s ease",
-        height: children ? "auto" : "205px",
+        minHeight: children ? "auto" : "205px",
+        height: "auto",
         cursor: selectable ? "pointer" : "default",
       }}
 
