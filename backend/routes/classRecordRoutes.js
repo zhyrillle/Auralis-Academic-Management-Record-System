@@ -2860,7 +2860,8 @@ router.post('/class-record/export-grading-sheet-pdf', async (req, res) => {
       finalHtml = finalHtml.replace(/src="[^"]*deped_logo[^"]*"/gi, `src="${depedLogoBase64}"`);
     }
     if (depedGifLogoBase64) {
-      finalHtml = finalHtml.replace(/src="[^"]*deped-logo\.gif[^"]*"/gi, `src="${depedGifLogoBase64}"`);
+      // Vite adds a content hash before the extension in production builds.
+      finalHtml = finalHtml.replace(/src="[^"]*deped-logo[^"]*\.gif[^"]*"/gi, `src="${depedGifLogoBase64}"`);
     }
 
     const puppeteer = require('puppeteer-core');
