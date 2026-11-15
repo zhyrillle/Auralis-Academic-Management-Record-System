@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 
-export default function SelectFilter({ value, onChange, options = [], minWidth = "150px" }) {
+export default function SelectFilter({ value, onChange, options = [], minWidth = "150px", className = "" }) {
     const [isHovered, setIsHovered] = useState(false);
     const [isOpen, setIsOpen] = useState(false);
 
@@ -20,6 +20,7 @@ export default function SelectFilter({ value, onChange, options = [], minWidth =
 
     return (
         <div
+            className={`select-filter-wrapper ${className}`.trim()}
             style={{
                 position: "relative",
                 display: "inline-flex",
