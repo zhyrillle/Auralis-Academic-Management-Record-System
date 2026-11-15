@@ -205,7 +205,7 @@ function DonutChart({ data, hoveredQ, onHoverQ }) {
 
 // Main Component
 
-export default function AdviserFeedback() {
+export default function AdviserFeedback({ departmentHeadMode = false }) {
   const currentUser = getStoredUser();
   const feedbackRequest = useRef(0);
   const hasFeedback = useRef(false);
@@ -281,8 +281,19 @@ export default function AdviserFeedback() {
           setWindowStatus(statsData.window_status);
         }
 
+        const principalIds = new Set(
+          (Array.isArray(usersData) ? usersData : [])
+            .filter((user) => {
+              const role = (user.role || user.display_role || "").toLowerCase();
+              return role.includes("principal");
+            })
+            .map((user) => Number(user.user_id))
+        );
+        const evaluatorFeedbacks = Array.isArray(evalFeedbacksData) ? evalFeedbacksData : [];
         const evaluatedSet = new Set(
-          Array.isArray(evalFeedbacksData) ? evalFeedbacksData.map((f) => Number(f.evaluee_id)) : []
+          evaluatorFeedbacks
+            .filter((feedback) => !departmentHeadMode || principalIds.has(Number(feedback.evaluee_id)))
+            .map((feedback) => Number(feedback.evaluee_id))
         );
 
         let pendingTeachers = 0;
@@ -296,6 +307,7 @@ export default function AdviserFeedback() {
             if (Number(u.user_id) === Number(currentUser.user_id)) return;
             const r = (u.role || u.display_role || "").toLowerCase();
             if (r.includes("admin")) return;
+            if (departmentHeadMode && !r.includes("principal")) return;
 
             totalEligiblePeers++;
             const isEvaluated = evaluatedSet.has(Number(u.user_id));
@@ -328,14 +340,18 @@ export default function AdviserFeedback() {
 
         setPendingPeersList(unsubmittedPeers);
 
-        const totalSubmitted = evaluatedSet.size || (statsData?.total_submitted || 0);
+        const totalSubmitted = departmentHeadMode
+          ? evaluatedSet.size
+          : evaluatedSet.size || (statsData?.total_submitted || 0);
         const pendingCount = pendingTeachers + pendingDeptHeads + pendingPrincipals;
 
         const mergedStats = {
           total_submitted: totalSubmitted,
           total_received: statsData?.total_received || 0,
           avg_rating: statsData?.avg_rating || "0.0",
-          total_peers: totalEligiblePeers || (statsData?.total_peers || (totalSubmitted + pendingCount)),
+          total_peers: departmentHeadMode
+            ? totalEligiblePeers
+            : totalEligiblePeers || (statsData?.total_peers || (totalSubmitted + pendingCount)),
           pending_count: pendingCount,
           completion_rate:
             totalEligiblePeers > 0
@@ -401,7 +417,7 @@ export default function AdviserFeedback() {
     fetchFeedbackData();
     window.addEventListener("focus", fetchFeedbackData);
     return () => { feedbackRequest.current += 1; window.removeEventListener("focus", fetchFeedbackData); };
-  }, [currentUser?.user_id, currentView]);
+  }, [currentUser?.user_id, currentView, departmentHeadMode]);
 
   const handleEvaluatePeer = (person) => {
     if (!windowStatus?.can_submit) {
@@ -466,7 +482,7 @@ export default function AdviserFeedback() {
   const dynamicStats = [
     {
       id: "total",
-      label: "Total Peer Feedback Submitted",
+      label: departmentHeadMode ? "Feedback Given to Principal" : "Total Peer Feedback Submitted",
       value: String(totalSubmitted),
       sub: "All time",
       subType: "success",
@@ -582,11 +598,11 @@ export default function AdviserFeedback() {
 
   const displayedComments = recentComments.length > 0 ? recentComments : RECENT_COMMENTS;
   if (feedbackLoading) return <div className="fb-container">
-    <div className="fb-header-wrap"><div><h1 className="fb-page-title">Peer Feedback</h1><p className="fb-page-subtitle">Annual peer evaluation &amp; professional development feedback</p></div></div>
+  <div className="fb-header-wrap"><div><h1 className="fb-page-title">{departmentHeadMode ? "Feedback" : "Peer Feedback"}</h1><p className="fb-page-subtitle">{departmentHeadMode ? "Review feedback received from teachers and share feedback with the principal." : "Annual peer evaluation &amp; professional development feedback"}</p></div></div>
     <PageSkeleton label="Loading peer feedback" cards={3} layout="charts" />
   </div>;
   if (feedbackError && !hasLoadedFeedback) return <div className="fb-container">
-    <h1 className="fb-page-title">Peer Feedback</h1><div role="alert">{feedbackError}<button type="button" onClick={fetchFeedbackData}>Retry</button></div>
+    <h1 className="fb-page-title">{departmentHeadMode ? "Feedback" : "Peer Feedback"}</h1><div role="alert">{feedbackError}<button type="button" onClick={fetchFeedbackData}>Retry</button></div>
   </div>;
 
 
@@ -596,8 +612,8 @@ export default function AdviserFeedback() {
       {/* ── Page Title & Deadline Status ── */}
       <div className="fb-header-wrap">
         <div>
-          <h1 className="fb-page-title">Peer Feedback</h1>
-          <p className="fb-page-subtitle">Annual peer evaluation &amp; professional development feedback</p>
+          <h1 className="fb-page-title">{departmentHeadMode ? "Feedback" : "Peer Feedback"}</h1>
+          <p className="fb-page-subtitle">{departmentHeadMode ? "Review feedback received from teachers and share feedback with the principal." : "Annual peer evaluation &amp; professional development feedback"}</p>
         </div>
         {windowStatus && (
           <div className={`fb-status-pill fb-status-pill--${windowStatus.status.toLowerCase()}`}>
@@ -690,7 +706,9 @@ export default function AdviserFeedback() {
               <span /><span /><span />
             </span>
             <span className="fb-progress-label">
-              Progress ({totalSubmitted} / {totalPeers} Feedbacks Submitted)
+              {departmentHeadMode
+                ? `Progress (${totalSubmitted} / ${totalPeers} Principal Feedbacks Submitted)`
+                : `Progress (${totalSubmitted} / ${totalPeers} Feedbacks Submitted)`}
             </span>
           </div>
           <span className="fb-progress-pct">{`${completionRate}% Complete`}</span>
@@ -713,7 +731,7 @@ export default function AdviserFeedback() {
             <h2 className="fb-section-title">Give Feedback</h2>
           </div>
           <div className="fb-give-cards-row">
-            {GIVE_FEEDBACK_CARDS.map((card) => {
+            {GIVE_FEEDBACK_CARDS.filter((card) => !departmentHeadMode || card.id === "principal").map((card) => {
               let pendingDesc = card.description;
               if (card.id === "teacher" && userStats.pending_breakdown) {
                 const count = userStats.pending_breakdown.teachers || 0;
@@ -779,7 +797,7 @@ export default function AdviserFeedback() {
           <div className="fb-pending-list">
             {pendingCount === 0 ? (
               <p style={{ padding: "20px 10px", color: "#16a34a", fontSize: "13px", fontWeight: "500" }}>
-                ✓ All peer feedback evaluations are complete!
+                ✓ {departmentHeadMode ? "Principal feedback is complete!" : "All peer feedback evaluations are complete!"}
               </p>
             ) : (
               [
@@ -804,8 +822,7 @@ export default function AdviserFeedback() {
                   status: "Pending",
                   view: "principal-list",
                 },
-              ]
-                .filter(Boolean)
+              ].filter((item) => item && (!departmentHeadMode || item.id === "principal"))
                 .map((pf, i, arr) => (
                   <React.Fragment key={pf.id}>
                     <div
@@ -840,12 +857,12 @@ export default function AdviserFeedback() {
         <div className="fb-comments-panel">
           <div className="fb-section-heading">
             <MessageSquare size={18} className="fb-heading-icon" />
-            <h2 className="fb-section-title">Recent Peer Comments</h2>
+            <h2 className="fb-section-title">{departmentHeadMode ? "Feedback Received from Teachers" : "Recent Peer Comments"}</h2>
           </div>
           <div className="fb-comments-list">
             {recentComments.length === 0 ? (
               <p style={{ padding: "20px 10px", color: "#64748b", fontSize: "13px" }}>
-                No peer comments received yet.
+                {departmentHeadMode ? "No feedback comments received yet." : "No peer comments received yet."}
               </p>
             ) : (
               recentComments.slice(0, 3).map((c) => (
@@ -993,7 +1010,7 @@ export default function AdviserFeedback() {
               {/* Modal Header */}
               <div className="fb-modal-header">
                 <div className="fb-modal-header-title">
-                  <h2>All Peer Comments Received</h2>
+                  <h2>{departmentHeadMode ? "Feedback Comments Received" : "All Peer Comments Received"}</h2>
                   <span className="fb-modal-badge">
                     {filteredComments.length} Comment{filteredComments.length !== 1 ? "s" : ""}
                   </span>
