@@ -2,7 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const ExcelJS = require("exceljs");
 
-const ASSET_DIRECTORY = path.join(__dirname, "..", "..", "frontend", "src", "assets");
+const ASSET_DIRECTORY = path.join(__dirname, "..", "assets");
 const SCHOOL_LOGO_PATH = path.join(ASSET_DIRECTORY, "deped_logo.png");
 const DEPED_LOGO_PATH = path.join(ASSET_DIRECTORY, "deped-logo.gif");
 
