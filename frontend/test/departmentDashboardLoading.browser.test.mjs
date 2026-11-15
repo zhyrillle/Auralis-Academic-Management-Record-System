@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createServer } from 'vite';
+import { riskSummary } from './fixtures/monitoringOverviewData.mjs';
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE_PATH
   ? pathToFileURL(process.env.PLAYWRIGHT_MODULE_PATH).href : 'playwright');
@@ -32,9 +33,12 @@ try {
     if (url.pathname.endsWith('/monitoring/context')) return json({ department: { name: 'English' },
       schoolYears: [{ id: 3, label: '2026-2027', isCurrent: true }] });
     if (url.pathname.endsWith('/grade-distribution-report')) { reportReads++; return json(report); }
+    if (url.pathname.endsWith('/monitoring/academic-risk')) return json(riskSummary(url.searchParams.get('term') || 'T2'));
     if (gate && url.pathname.startsWith('/api/department-head/')) await gate;
     if (url.pathname.endsWith('/stats')) return json({ totalTeachers: 1, submittedGrades: 1, submittedGradesPercent: 100, delayedSubmissions: 0, atRiskStudents: 0 });
     if (url.pathname.endsWith('/pass-rate')) return json({ passed: 1, failed: 0, total: 1, passRatePercentage: 100 });
+    if (url.pathname.endsWith('/submission-monitor')) return json(Array.from({ length: 5 }, (_, i) => ({ subjectOfferingId: i + 10,
+      teacher: `Teacher ${i + 1}`, subject: 'English', gradeSection: 'Grade 8 · Fixture', status: 'Pending', expectedTerms: 1, submittedTerms: 0, completion: 0 })));
     return json([]);
   });
   const page = await context.newPage();
@@ -57,7 +61,24 @@ try {
   assert.equal(await term.inputValue(), '2', 'report term survives the dashboard skeleton');
   await page.getByRole('button', { name: 'View sections for Fixture Teacher', exact: true }).first().waitFor();
   assert.equal(reportReads, readsBeforeFilter, 'dashboard filtering does not restart the unchanged report');
+  gate = new Promise(resolve => { release = resolve; });
+  const submissionTerm = page.getByRole('button', { name: 'Submission term: All Terms', exact: true });
+  await submissionTerm.scrollIntoViewIfNeeded();
+  await submissionTerm.click();
+  const option = page.getByRole('listbox', { name: 'Submission term', exact: true }).getByRole('option', { name: 'Term 1', exact: true });
+  await option.scrollIntoViewIfNeeded();
+  const before = await page.locator('.page-content-area').evaluate(node => ({ top: node.scrollTop, height: node.scrollHeight }));
+  await option.click();
+  await page.getByRole('status', { name: 'Loading department dashboard', exact: true }).waitFor();
+  const during = await page.locator('.page-content-area').evaluate(node => ({ top: node.scrollTop, height: node.scrollHeight }));
+  assert.ok(Math.abs(during.top - before.top) <= 5, `scroll moved during filter change: ${before.top} to ${during.top}`);
+  assert.ok(during.height >= before.height * .9, `dashboard collapsed beneath skeleton: ${before.height} to ${during.height}`);
+  release();
+  await page.getByRole('status', { name: 'Loading department dashboard', exact: true }).waitFor({ state: 'detached' });
+  const after = await page.locator('.page-content-area').evaluate(node => node.scrollTop);
+  assert.ok(Math.abs(after - before.top) <= 5, `scroll moved after loading: ${before.top} to ${after}`);
+  assert.equal(await page.getByRole('button', { name: 'Term: Term 1', exact: true }).count(), 1);
   assert.deepEqual(errors, []);
   assert.deepEqual(writes, []);
-  console.log('PASS Department Head filter skeleton preserves report term and drill-down; no record writes');
+  console.log('PASS existing skeleton preserves dashboard height, submission scroll, report term and drill-down; no writes');
 } finally { release?.(); await browser?.close(); await server.close(); }

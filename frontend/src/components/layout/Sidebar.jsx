@@ -7,8 +7,8 @@ import logoName from "../../assets/auralis-logo-name.png";
 import logoIcon from "../../assets/auralis-logo.png";
 import { useDepartmentContext } from "../../services/deptHeadMonitoringApi";
 
-const isRouteActive = (pathname, path) => Boolean(path)
-  && (pathname === path || pathname.startsWith(`${path}/`) || (path.endsWith('/sections') && pathname.endsWith('/archived-classes')));
+const isRouteActive = (pathname, path, end = false) => Boolean(path)
+  && (pathname === path || (!end && (pathname.startsWith(`${path}/`) || (path.endsWith('/sections') && pathname.endsWith('/archived-classes')))));
 
 function positionSidebarFlyout(trigger, panel) {
   if (!trigger || !panel) return;
@@ -58,7 +58,7 @@ function CollapsedSidebarGroup({ item, pathname, active, onNavigate }) {
         }
       }}>
       <div className="sidebar-flyout__items">{item.submenu.map(subItem => {
-        const selected = isRouteActive(pathname, subItem.path);
+        const selected = isRouteActive(pathname, subItem.path, subItem.end);
         return <Link key={subItem.path} to={subItem.path}
           className={`submenu-item ${selected ? "active" : ""}`}
           aria-current={selected ? "page" : undefined}
@@ -94,7 +94,7 @@ export default function Sidebar({ user, onLogout, collapsed = false, mobileOpen 
         menuItems.map((item, index) => [
           index,
           Boolean(
-            item.submenu?.some((sub) => isRouteActive(location.pathname, sub.path)),
+            item.submenu?.some((sub) => isRouteActive(location.pathname, sub.path, sub.end)),
           ),
         ]),
       ),
@@ -166,7 +166,7 @@ export default function Sidebar({ user, onLogout, collapsed = false, mobileOpen 
           {menuItems.map((item, index) => {
             const hasSubmenu = !!item.submenu;
             const isSubActive = hasSubmenu
-              ? item.submenu.some((sub) => isRouteActive(location.pathname, sub.path))
+              ? item.submenu.some((sub) => isRouteActive(location.pathname, sub.path, sub.end))
               : false;
             const isDirectActive = isRouteActive(location.pathname, item.path);
             const isActive = isDirectActive || isSubActive;
@@ -213,7 +213,7 @@ export default function Sidebar({ user, onLogout, collapsed = false, mobileOpen 
                   {/* Submenu links */}
                   <div className="sidebar-submenu">
                     {item.submenu.map((subItem, subIndex) => {
-                      const isSubItemActive = isRouteActive(location.pathname, subItem.path);
+                      const isSubItemActive = isRouteActive(location.pathname, subItem.path, subItem.end);
                       return (
                         <Link
                           key={subIndex}

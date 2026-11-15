@@ -102,7 +102,7 @@ export default function StackedBarChart({
           style={{ left: `clamp(74px, ${activeSegment.x}px, calc(100% - 74px))`, top: activeSegment.y }}>
           <strong>{activeGroup.label}</strong>
           <span>{activeData.label}</span>
-          <small>{activeData.valueLabel ?? `${activeData.value}%`}</small>
+          <small style={{ whiteSpace: 'pre-line' }}>{activeData.valueLabel ?? `${activeData.value}%`}</small>
         </div>
       )}
     </div>

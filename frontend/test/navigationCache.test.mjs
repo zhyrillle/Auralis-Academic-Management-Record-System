@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { apiFetch, cachedApiFetch, cacheKey, clearNavigationCache, getCachedData, loadCached } from '../src/services/navigationCache.js';
+import { apiFetch, cachedApiFetch, cacheKey, clearNavigationCache, getCachedData, getNavigationSnapshot, loadCached } from '../src/services/navigationCache.js';
 import { filterRiskPreview } from '../src/utils/filterRiskPreview.js';
 
 let user = { user_id: 1, role: 'principal' };
@@ -67,6 +67,18 @@ test('errors are not successful cache entries and retry can recover', async () =
   await assert.rejects(loadCached('failure', async () => { throw new Error('offline'); }), /offline/);
   assert.equal(getCachedData('failure'), undefined);
   assert.equal(await loadCached('failure', async () => 'recovered'), 'recovered');
+});
+
+test('a rejected refresh preserves usable data with a visible error, and authorization failures clear it', async () => {
+  clearNavigationCache();
+  await loadCached('refresh-rejection', async () => 'last usable result');
+  await assert.rejects(loadCached('refresh-rejection', async () => { throw Object.assign(new Error('Server failed'), { status: 503 }); }, { force: true }), /Server failed/);
+  assert.equal(getCachedData('refresh-rejection'), 'last usable result');
+  assert.equal(getNavigationSnapshot('refresh-rejection').error, 'Server failed');
+  await assert.rejects(loadCached('refresh-rejection', async () => { throw Object.assign(new Error('Access denied'), { status: 403 }); }, { force: true }), /Access denied/);
+  assert.equal(getCachedData('refresh-rejection'), undefined);
+  assert.equal(await loadCached('refresh-rejection', async () => 'new result', { force: true }), 'new result');
+  assert.equal(getNavigationSnapshot('refresh-rejection').error, '');
 });
 
 test('switching user or role clears previously loaded records', async () => {

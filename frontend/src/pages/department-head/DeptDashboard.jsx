@@ -1,10 +1,11 @@
 import PageSkeleton, { SkeletonBlock, SkeletonCards, SkeletonChart, SkeletonTable } from '../../components/common/PageSkeleton';
 import { useState, useEffect, useMemo } from "react";
+import { useSearchParams } from 'react-router-dom';
 import FilterBar from "../../components/dashboard/FilterBar";
 import ComparativeAnalysisCard from "../../components/dashboard/ComparativeAnalysisCard";
 import OverallPassRateCard from "../../components/dashboard/OverallPassRateCard";
 import StatCard from "../../components/common/StatCard";
-import { Users, ClipboardCheck, Clock3, AlertTriangle } from "lucide-react";
+import { Users, ClipboardCheck, Clock3, AlertTriangle, BarChart3 } from "lucide-react";
 import SubmissionMonitorTable from "../../components/dashboard/SubmissionMonitorTable";
 import GradeDistributionTable from "../../components/dashboard/GradeDistributionTable";
 import {
@@ -17,6 +18,8 @@ import {
 import "../../styles/departmentHeadDashboard.css";
 import "../../styles/departmentMonitoring.css";
 import { useDepartmentContext } from "../../services/deptHeadMonitoringApi";
+import useDepartmentAcademicRisk from "../../services/useDepartmentAcademicRisk";
+import DepartmentRiskSummary from "../../components/dashboard/DepartmentRiskSummary";
 
 const EMPTY_COMPARATIVE = [];
 const EMPTY_PASS_RATE = { passed: 0, failed: 0, total: 0, passRatePercentage: 0 };
@@ -33,15 +36,18 @@ const readResult = promise => promise.then(data => ({ data, error: null }), erro
 
 export default function DeptDashboard() {
   const context = useDepartmentContext();
+  const [params, setParams] = useSearchParams();
   const departmentName = context.data?.department?.name;
   const [filters, setFilters] = useState({
-    schoolYear: "",
-    gradeLevel: "",
-    quarter: "",
+    schoolYear: params.get('schoolYear') || '',
+    gradeLevel: params.get('gradeLevel') || '',
+    quarter: params.get('quarter') || '',
   });
   const defaultYear = (context.data?.schoolYears.find(year => year.isCurrent) || context.data?.schoolYears[0])?.label || '';
   const activeFilters = useMemo(() => ({ ...filters, schoolYear: filters.schoolYear || defaultYear }), [filters, defaultYear]);
+  const academicRisk = useDepartmentAcademicRisk(activeFilters);
   const [comparative, setComparative] = useState(EMPTY_COMPARATIVE);
+  const [comparativeError, setComparativeError] = useState(null);
   const [passRate, setPassRate] = useState(EMPTY_PASS_RATE);
   const [stats, setStats] = useState(EMPTY_STATS);
   const [submissions, setSubmissions] = useState(EMPTY_SUBMISSIONS);
@@ -65,7 +71,7 @@ export default function DeptDashboard() {
       try {
         const [comparativeData, passRateData, statsData, submissionsData, distributionData] =
           await Promise.all([
-            getComparativeAnalysis(activeFilters).catch(() => EMPTY_COMPARATIVE),
+            readResult(getComparativeAnalysis(activeFilters)),
             getOverallPassRate(activeFilters).catch(() => EMPTY_PASS_RATE),
             readResult(getDashboardStats(activeFilters)),
             readResult(getSubmissionMonitor(activeFilters)),
@@ -74,7 +80,8 @@ export default function DeptDashboard() {
 
         if (cancelled) return;
 
-        setComparative(comparativeData);
+        setComparative(comparativeData.data || EMPTY_COMPARATIVE);
+        setComparativeError(comparativeData.error?.message || null);
         setPassRate(passRateData);
         setStats(statsData.data || EMPTY_STATS);
         setStatsError(statsData.error);
@@ -102,12 +109,14 @@ export default function DeptDashboard() {
 
   const handleFilterChange = (key, value) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
+    setParams({ ...activeFilters, [key]: value }, { replace: true });
   };
+  const analysisUrl = `/department-head/dashboard/risk-analysis?${new URLSearchParams(activeFilters)}`;
 
-  const contentLoading = !error && !context.error && (context.loading || (loadedContext !== contextKey && (loading || Boolean(activeFilters.schoolYear))));
+  const contentLoading = !error && !context.error && (context.loading || academicRisk.loading || academicRisk.isPreviousData || (loadedContext !== contextKey && (loading || Boolean(activeFilters.schoolYear))));
   const bodySkeleton = <PageSkeleton label="Loading department dashboard">
-    <div className="app-skeleton-charts"><SkeletonChart /><SkeletonChart round /></div>
     <SkeletonCards count={4} />
+    <div className="app-skeleton-charts"><SkeletonChart /><SkeletonChart round /></div>
     <div className="dept-loading-details">
       <div className="dept-card dept-loading-submissions">
         <div className="dept-loading-header">
@@ -148,37 +157,37 @@ export default function DeptDashboard() {
 
       {(error || context.error) && <div className="dept-error-banner">{error || context.error}</div>}
 
-      <div aria-busy={contentLoading}>
-        {contentLoading && bodySkeleton}
+      <div className="dept-dashboard-content" aria-busy={contentLoading}>
+        {contentLoading && <div className={loadedContext !== null ? 'dept-dashboard-skeleton-overlay' : undefined}>{bodySkeleton}</div>}
         {/* Preserve report selections while a different dashboard context loads. */}
-        {loadedContext !== null && <div className="dept-dashboard-body" hidden={contentLoading} style={contentLoading ? { display: 'none' } : undefined}>
-        <div className="dept-main-cards">
-          <ComparativeAnalysisCard
-            departmentName={departmentName}
-            data={comparative}
-            loading={loading || context.loading}
-            error={!loading && comparative.length === 0 ? null : undefined}
-          />
-          <OverallPassRateCard
-            data={passRate}
-            loading={loading || context.loading}
-          />
-        </div>
-
+        {loadedContext !== null && <div className="dept-dashboard-body" style={contentLoading ? { visibility: 'hidden', pointerEvents: 'none' } : undefined}>
         {statsError && !loading && <div className="dept-error-banner" role="alert">
           Couldn’t load dashboard counts. <button type="button" onClick={() => setRetryVersion(value => value + 1)}>Retry counts</button>
         </div>}
         <div className="dept-stats-row">
-          <StatCard loading={loading || context.loading} title="Total Teachers" value={statsError || loading ? '—' : stats.totalTeachers} description="Department wide" icon={Users} variant="info" />
-          <StatCard loading={loading || context.loading} title="Submitted Grades" value={statsError || loading ? '—' : stats.submittedGradesPercent + '%'} description={statsError || loading ? 'Submission count unavailable' : stats.submittedGrades + ' submitted'} icon={ClipboardCheck} variant="success" />
-          <StatCard loading={loading || context.loading} title="Delayed Submissions" value={statsError || loading ? '—' : stats.delayedSubmissions} description="Past deadline, not submitted" icon={Clock3} variant="warning" />
-          <StatCard loading={loading || context.loading} title="At-Risk Students" value={statsError || loading ? '—' : stats.atRiskStudents} description="Need intervention" icon={AlertTriangle} variant="warning" />
+          <StatCard title="Total Teachers" value={statsError ? '—' : stats.totalTeachers} description="Department wide" icon={Users} variant="info" />
+          <StatCard title="Submitted Grades" value={statsError ? '—' : stats.submittedGradesPercent + '%'} description={statsError ? 'Submission count unavailable' : stats.submittedGrades + ' submitted'} icon={ClipboardCheck} variant="success" />
+          <StatCard title="Delayed Submissions" value={statsError ? '—' : stats.delayedSubmissions} description="Past deadline, not submitted" icon={Clock3} variant="warning" />
+          <StatCard loading={academicRisk.loading} title="At-Risk Students" value={academicRisk.data ? academicRisk.data.summary.high : '—'} description={`High academic risk · ${academicRisk.term === 'ALL' ? 'Overall · Learner-term entries' : academicRisk.term.replace('T', 'Term ')}`} icon={AlertTriangle} variant="warning" />
         </div>
+
+        <DepartmentRiskSummary query={academicRisk} analysisUrl={analysisUrl} />
+
+        <section className="dept-academic-performance" aria-label="Academic performance">
+        <header className="dept-overview-section__header"><div className="dept-overview-section__title"><BarChart3 size={21} aria-hidden="true" />
+          <div><h2>Academic performance</h2><p>Saved grade results · Includes draft grades</p></div></div>
+          <span className="dept-count-badge">Counts grade results ({passRate.total})</span></header>
+        <div className="dept-main-cards">
+          <ComparativeAnalysisCard departmentName={departmentName} data={comparative}
+            error={comparativeError} onRetry={() => setRetryVersion(value => value + 1)} />
+          <OverallPassRateCard data={passRate} />
+        </div>
+        </section>
 
         <div className="dept-monitor-details">
         <SubmissionMonitorTable
           data={submissions}
-          loading={loading || context.loading}
+          loading={false}
           error={submissionError}
           onRetry={() => setRetryVersion(value => value + 1)}
           term={activeFilters.quarter}

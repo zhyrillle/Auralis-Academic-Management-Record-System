@@ -13,6 +13,7 @@ import AcademicPeriod from "./pages/system-admin/AcademicPeriod";
 import GradeTransmutation from "./pages/system-admin/GradeTransmutation";
 import AdviserDashboard from "./pages/adviser/AdviserDashboard";
 import DeptDashboard from "./pages/department-head/DeptDashboard";
+import DepartmentRiskAnalysis from "./pages/department-head/DepartmentRiskAnalysis";
 import DepartmentDirectory from "./pages/department-head/DepartmentDirectory";
 import DeptHeadNotifications from "./pages/department-head/DeptHeadNotifications";
 import TeacherDashboard from "./pages/teacher/TeacherDashboard";
@@ -26,6 +27,7 @@ import ProfilePage from "./pages/ProfilePage";
 import AtRiskBreakdown from "./pages/principal/AtRiskBreakdown";
 import AtRiskPrediction from "./pages/principal/AtRiskPrediction";
 import StudentMonitoring from "./pages/principal/StudentMonitoring";
+import AttendanceMonitoring from "./pages/principal/AttendanceMonitoring";
 import AtRiskLearners from "./pages/principal/AtRiskLearners";
 import PerformanceGradeLevels from "./pages/principal/PerformanceGradeLevels";
 import PerformanceSections from "./pages/principal/PerformanceSections";
@@ -118,6 +120,7 @@ export default function App() {
 
           {/* 2. Principal (Landing page is At-Risk Students) */}
           <Route path="/principal/student-monitoring" element={<StudentMonitoring />} />
+          <Route path="/principal/student-monitoring/attendance" element={<AttendanceMonitoring />} />
           <Route
             path="/principal"
             element={
@@ -184,6 +187,7 @@ export default function App() {
             path="/department-head/dashboard"
             element={<DeptDashboard />}
           />
+          <Route path="/department-head/dashboard/risk-analysis" element={<DepartmentRiskAnalysis />} />
           <Route
             path="/department-head/class-records"
             element={<DepartmentDirectory />}
