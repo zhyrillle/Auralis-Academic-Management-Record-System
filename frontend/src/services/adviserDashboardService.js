@@ -69,8 +69,8 @@ export async function getAdviserSummary(userId) {
   const effectiveId = getEffectiveUserId(userId);
   try {
     const url = effectiveId
-      ? `${API_BASE_URL}/adviser/dashboard/summary?viewVersion=teacher-dashboard-risk-v2&userId=${encodeURIComponent(effectiveId)}`
-      : `${API_BASE_URL}/adviser/dashboard/summary`;
+      ? `${API_BASE_URL}/adviser/dashboard/summary?viewVersion=teacher-dashboard-risk-v3&userId=${encodeURIComponent(effectiveId)}`
+      : `${API_BASE_URL}/adviser/dashboard/summary?viewVersion=teacher-dashboard-risk-v3`;
     const response = await fetch(url);
     return await parseResponse(response);
   } catch (error) {
@@ -107,8 +107,8 @@ export async function getAssignedClasses(userId) {
   const effectiveId = getEffectiveUserId(userId);
   try {
     const url = effectiveId
-      ? `${API_BASE_URL}/adviser/dashboard/assigned-classes?userId=${encodeURIComponent(effectiveId)}`
-      : `${API_BASE_URL}/adviser/dashboard/assigned-classes`;
+      ? `${API_BASE_URL}/adviser/dashboard/assigned-classes?v=2&userId=${encodeURIComponent(effectiveId)}`
+      : `${API_BASE_URL}/adviser/dashboard/assigned-classes?v=2`;
     const response = await fetch(url);
     const data = await parseResponse(response);
     return data?.classes || placeholderAssignedClasses;
@@ -256,8 +256,8 @@ export async function getTeacherSubmissions(userId) {
   const effectiveId = getEffectiveUserId(userId);
   try {
     const url = effectiveId
-      ? `${API_BASE_URL}/adviser/dashboard/submissions?userId=${encodeURIComponent(effectiveId)}`
-      : `${API_BASE_URL}/adviser/dashboard/submissions`;
+      ? `${API_BASE_URL}/adviser/dashboard/submissions?v=2&userId=${encodeURIComponent(effectiveId)}`
+      : `${API_BASE_URL}/adviser/dashboard/submissions?v=2`;
     const response = await fetch(url);
     return await parseResponse(response);
   } catch (error) {

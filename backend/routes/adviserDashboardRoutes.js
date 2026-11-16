@@ -125,7 +125,17 @@ async function getTeacherClasses(userId) {
 /**
  * Shared helper to get fully populated assigned classes array for a teacher
  */
-async function getTeacherAssignedClasses(userId, targetTermId = null) {
+async function getTeacherAssignedClasses(userId, activeTermOrId = null) {
+  const activeTermInfo =
+    activeTermOrId && typeof activeTermOrId === 'object'
+      ? activeTermOrId
+      : await resolveCurrentActiveTerm();
+  const activeTermId =
+    typeof activeTermOrId === 'number'
+      ? activeTermOrId
+      : activeTermInfo?.termId || 1;
+  const activeTermCode = String(activeTermInfo?.termCode || 'T1').toUpperCase();
+
   const { teachingRows, advisoryRows } = await getTeacherClasses(userId);
   const classMap = new Map();
 
@@ -240,11 +250,12 @@ async function getTeacherAssignedClasses(userId, targetTermId = null) {
     const offPlaceholders = allOfferingIds.map(() => '?').join(',');
 
     const [sheetStatuses] = await db.execute(
-      `SELECT subject_offering_id, workflow_status, lock_status
+      `SELECT subject_offering_id, workflow_status, lock_status, submitted_at
        FROM GRADE_SHEET
        WHERE subject_offering_id IN (${offPlaceholders})
+         AND term_id = ?
        ORDER BY grade_sheet_id DESC`,
-      allOfferingIds
+      [...allOfferingIds, activeTermId]
     ).catch(() => [[]]);
     (sheetStatuses || []).forEach((r) => {
       if (!sheetStatusMap.has(r.subject_offering_id)) {
@@ -256,9 +267,10 @@ async function getTeacherAssignedClasses(userId, targetTermId = null) {
       `SELECT subject_offering_id, COUNT(DISTINCT student_id) AS graded_count
        FROM STUDENT_GRADE
        WHERE subject_offering_id IN (${offPlaceholders})
+         AND UPPER(term) = ?
          AND COALESCE(quarterly_grade, initial_grade) IS NOT NULL
        GROUP BY subject_offering_id`,
-      allOfferingIds
+      [...allOfferingIds, activeTermCode]
     ).catch(() => [[]]);
     (gradeCounts || []).forEach((r) => gradedCountMap.set(r.subject_offering_id, Number(r.graded_count || 0)));
 
@@ -270,11 +282,14 @@ async function getTeacherAssignedClasses(userId, targetTermId = null) {
          COUNT(DISTINCT ga.activity_id) AS total_activities
        FROM GRADE_SHEET gs
        JOIN GRADE_ACTIVITY ga ON ga.grade_sheet_id = gs.grade_sheet_id
-       LEFT JOIN SCORE sc ON sc.activity_id = ga.activity_id AND sc.raw_score IS NOT NULL
+       LEFT JOIN SCORE sc ON sc.activity_id = ga.activity_id
+                         AND sc.raw_score IS NOT NULL
+                         AND (sc.score_status IS NULL OR sc.score_status != 'NOT_ENCODED')
        WHERE gs.subject_offering_id IN (${offPlaceholders})
+         AND gs.term_id = ?
          AND (ga.status = 'ACTIVE' OR ga.status IS NULL)
        GROUP BY gs.subject_offering_id`,
-      allOfferingIds
+      [...allOfferingIds, activeTermId]
     ).catch(() => [[]]);
     (scoreStats || []).forEach((r) => scoreStatsMap.set(r.subject_offering_id, {
       scored_students: Number(r.scored_students || 0),
@@ -289,6 +304,9 @@ async function getTeacherAssignedClasses(userId, targetTermId = null) {
 
     if (cls.subject_offering_ids.length > 0) {
       let isSubmitted = false;
+      let workflowStatus = 'DRAFT';
+      let lockStatus = 'EDITABLE';
+      let submittedAt = null;
       let totalGraded = 0;
       let totalScoredStudents = 0;
       let totalEncodedScores = 0;
@@ -296,8 +314,15 @@ async function getTeacherAssignedClasses(userId, targetTermId = null) {
 
       for (const offId of cls.subject_offering_ids) {
         const s = sheetStatusMap.get(offId);
-        if (s && (s.workflow_status === 'SUBMITTED' || s.lock_status === 'TERM_LOCKED')) {
-          isSubmitted = true;
+        if (s) {
+          const wf = String(s.workflow_status || 'DRAFT').toUpperCase();
+          const lk = String(s.lock_status || '').toUpperCase();
+          workflowStatus = wf;
+          lockStatus = lk || 'EDITABLE';
+          submittedAt = s.submitted_at || submittedAt;
+          if (wf === 'SUBMITTED' && lk !== 'TEMPORARILY_REOPENED') {
+            isSubmitted = true;
+          }
         }
         totalGraded += gradedCountMap.get(offId) || 0;
         const sc = scoreStatsMap.get(offId);
@@ -308,26 +333,34 @@ async function getTeacherAssignedClasses(userId, targetTermId = null) {
         }
       }
 
+      cls.is_submitted = isSubmitted;
+      cls.workflow_status = workflowStatus;
+      cls.lock_status = lockStatus;
+      cls.submitted_at = submittedAt;
+
       if (isSubmitted) {
         cls.status = 'Submitted';
         cls.entryProgress = 100;
-      } else if (totalGraded > 0 && cls.studentCount > 0) {
-        cls.entryProgress = Math.min(100, Math.round((totalGraded / cls.studentCount) * 100));
-        cls.status = cls.entryProgress >= 100 ? 'Submitted' : 'In Progress';
-      } else if (totalActivities > 0 && cls.studentCount > 0) {
-        const expectedTotal = totalActivities * cls.studentCount;
-        const cellProgress = Math.min(100, Math.round((totalEncodedScores / expectedTotal) * 100));
-        const studentProgress = Math.min(100, Math.round((totalScoredStudents / cls.studentCount) * 100));
-        cls.entryProgress = Math.max(cellProgress, studentProgress);
-        cls.status = cls.entryProgress > 0 ? 'In Progress' : 'Pending';
-      } else if (cls.studentCount > 0 && totalScoredStudents > 0) {
-        cls.entryProgress = Math.min(100, Math.round((totalScoredStudents / cls.studentCount) * 100));
-        cls.status = cls.entryProgress > 0 ? 'In Progress' : 'Pending';
       } else {
-        cls.entryProgress = 0;
-        cls.status = 'In Progress';
+        let progress = 0;
+        if (cls.studentCount > 0) {
+          const gradedPct = totalGraded > 0
+            ? Math.min(100, Math.round((totalGraded / cls.studentCount) * 100))
+            : 0;
+          const cellPct = totalActivities > 0
+            ? Math.min(100, Math.round((totalEncodedScores / (totalActivities * cls.studentCount)) * 100))
+            : 0;
+          const studentPct = totalScoredStudents > 0
+            ? Math.min(100, Math.round((totalScoredStudents / cls.studentCount) * 100))
+            : 0;
+          progress = Math.max(gradedPct, cellPct, studentPct);
+        }
+        cls.entryProgress = progress;
+        cls.status = progress > 0 ? 'In Progress' : 'Pending';
       }
     } else {
+      cls.is_submitted = false;
+      cls.workflow_status = 'DRAFT';
       cls.status = 'In Progress';
       cls.entryProgress = 0;
     }
@@ -362,16 +395,20 @@ router.get('/check-role/:userId', async (req, res) => {
  */
 async function getTeacherSubmissionsData(userId, activeTermInfo) {
   try {
-    const termId = activeTermInfo?.termId || 1;
-    const syId = activeTermInfo?.schoolYearId || null;
+    const resolvedTerm = activeTermInfo || (await resolveCurrentActiveTerm());
+    const termId = resolvedTerm?.termId || 1;
+    const termCode = String(resolvedTerm?.termCode || 'T1').toUpperCase();
+    const syId = resolvedTerm?.schoolYearId || null;
 
-    const [assignedOfferings] = await db.execute(
+    const [rawOfferings] = await db.execute(
       `SELECT DISTINCT
          ta.teacher_assignment_id,
          so.subject_offering_id,
          so.subject_id,
          so.section_id,
+         so.school_year_id,
          sec.section_name,
+         gl.grade_level_id,
          gl.grade_level_name,
          s.subject_name,
          s.subject_code,
@@ -388,12 +425,21 @@ async function getTeacherSubmissionsData(userId, activeTermInfo) {
                                AND gs.term_id = ?
        WHERE ta.user_id = ?
          AND (so.school_year_id = ? OR ? IS NULL OR so.school_year_id IS NULL)
-       ORDER BY gl.grade_level_id ASC, sec.section_name ASC, s.subject_name ASC`,
+       ORDER BY gl.grade_level_id ASC, sec.section_name ASC, s.subject_name ASC, gs.grade_sheet_id DESC`,
       [termId, userId, syId, syId]
     ).catch((err) => {
       console.warn('Error querying assigned offerings for submissions:', err.message);
       return [[]];
     });
+
+    const seenOfferings = new Set();
+    const assignedOfferings = [];
+    for (const row of rawOfferings || []) {
+      const key = row.subject_offering_id || `${row.section_id}-${row.subject_id}`;
+      if (seenOfferings.has(key)) continue;
+      seenOfferings.add(key);
+      assignedOfferings.push(row);
+    }
 
     const sectionIds = Array.from(new Set(assignedOfferings.map((o) => o.section_id).filter(Boolean)));
     const offeringIds = Array.from(new Set(assignedOfferings.map((o) => o.subject_offering_id).filter(Boolean)));
@@ -414,29 +460,68 @@ async function getTeacherSubmissionsData(userId, activeTermInfo) {
     }
 
     const gradeCounts = new Map();
+    const scoreStatsMap = new Map();
     if (offeringIds.length > 0) {
       const offPlaceholders = offeringIds.map(() => '?').join(',');
       const [gradeRows] = await db.execute(
         `SELECT subject_offering_id, COUNT(DISTINCT student_id) AS graded_count
          FROM STUDENT_GRADE
          WHERE subject_offering_id IN (${offPlaceholders})
+           AND UPPER(term) = ?
            AND COALESCE(quarterly_grade, initial_grade) IS NOT NULL
          GROUP BY subject_offering_id`,
-        offeringIds
+        [...offeringIds, termCode]
       ).catch(() => [[]]);
       gradeRows.forEach((r) => gradeCounts.set(r.subject_offering_id, Number(r.graded_count || 0)));
+
+      const [scoreRows] = await db.execute(
+        `SELECT
+           gs.subject_offering_id,
+           COUNT(DISTINCT sc.student_section_id) AS scored_students,
+           COUNT(sc.score_id) AS encoded_scores,
+           COUNT(DISTINCT ga.activity_id) AS total_activities
+         FROM GRADE_SHEET gs
+         JOIN GRADE_ACTIVITY ga ON ga.grade_sheet_id = gs.grade_sheet_id
+         LEFT JOIN SCORE sc ON sc.activity_id = ga.activity_id
+                           AND sc.raw_score IS NOT NULL
+                           AND (sc.score_status IS NULL OR sc.score_status != 'NOT_ENCODED')
+         WHERE gs.subject_offering_id IN (${offPlaceholders})
+           AND gs.term_id = ?
+           AND (ga.status = 'ACTIVE' OR ga.status IS NULL)
+         GROUP BY gs.subject_offering_id`,
+        [...offeringIds, termId]
+      ).catch(() => [[]]);
+      scoreRows.forEach((r) => scoreStatsMap.set(r.subject_offering_id, {
+        scored_students: Number(r.scored_students || 0),
+        encoded_scores: Number(r.encoded_scores || 0),
+        total_activities: Number(r.total_activities || 0),
+      }));
     }
 
     const submissionDetails = assignedOfferings.map((offering) => {
+      const workflowStatus = String(offering.workflow_status || 'DRAFT').toUpperCase();
+      const lockStatus = String(offering.lock_status || '').toUpperCase();
       const isSubmitted =
-        offering.workflow_status === 'SUBMITTED' || offering.lock_status === 'TERM_LOCKED';
+        workflowStatus === 'SUBMITTED' && lockStatus !== 'TEMPORARILY_REOPENED';
       const studentCount = sectionCounts.get(offering.section_id) || 0;
       const gradedCount = gradeCounts.get(offering.subject_offering_id) || 0;
-      const progress = isSubmitted
-        ? 100
-        : studentCount > 0
-        ? Math.min(100, Math.round((gradedCount / studentCount) * 100))
-        : 0;
+      const sc = scoreStatsMap.get(offering.subject_offering_id);
+
+      let progress = 0;
+      if (isSubmitted) {
+        progress = 100;
+      } else if (studentCount > 0) {
+        const gradedPct = gradedCount > 0
+          ? Math.min(100, Math.round((gradedCount / studentCount) * 100))
+          : 0;
+        const cellPct = sc && sc.total_activities > 0
+          ? Math.min(100, Math.round((sc.encoded_scores / (sc.total_activities * studentCount)) * 100))
+          : 0;
+        const studentPct = sc && sc.scored_students > 0
+          ? Math.min(100, Math.round((sc.scored_students / studentCount) * 100))
+          : 0;
+        progress = Math.max(gradedPct, cellPct, studentPct);
+      }
 
       return {
         teacher_assignment_id: offering.teacher_assignment_id,
@@ -449,7 +534,7 @@ async function getTeacherSubmissionsData(userId, activeTermInfo) {
         grade_level_name: offering.grade_level_name || '',
         school_year_id: offering.school_year_id || syId || 1,
         schoolYearId: offering.school_year_id || syId || 1,
-        workflow_status: offering.workflow_status,
+        workflow_status: workflowStatus,
         lock_status: offering.lock_status,
         submitted_at: offering.submitted_at,
         is_submitted: isSubmitted,
@@ -488,7 +573,7 @@ router.get('/summary', async (req, res) => {
 
     const isAdviser = await checkIsAdviser(userId);
     const activeTermInfo = await resolveCurrentActiveTerm();
-    const assignedClasses = await getTeacherAssignedClasses(userId, activeTermInfo.termId);
+    const assignedClasses = await getTeacherAssignedClasses(userId, activeTermInfo);
     const totalClasses = assignedClasses.length;
 
     // Total Students Counter: Replace mock count with dynamic sum of enrollees across assigned sections
@@ -717,7 +802,8 @@ router.get('/assigned-classes', async (req, res) => {
       return res.status(400).json({ error: 'userId is required' });
     }
 
-    const classes = await getTeacherAssignedClasses(userId);
+    const activeTermInfo = await resolveCurrentActiveTerm();
+    const classes = await getTeacherAssignedClasses(userId, activeTermInfo);
     res.json({ classes });
   } catch (err) {
     console.error('Error in /assigned-classes endpoint:', err);

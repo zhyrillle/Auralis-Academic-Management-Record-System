@@ -42,6 +42,38 @@ export default function SubmissionStatusModal({
     }
   }, [isOpen, initialTab]);
 
+  const isItemSubmitted = (item) =>
+    Boolean(item?.is_submitted) ||
+    (String(item?.workflow_status || "").toUpperCase() === "SUBMITTED" &&
+      String(item?.lock_status || "").toUpperCase() !== "TEMPORARILY_REOPENED");
+
+  const mapAssignedClassesFallback = (classesList) => {
+    const teachingClasses = classesList.filter(
+      (cls) => cls.subject_offering_id || (Array.isArray(cls.subject_offering_ids) && cls.subject_offering_ids.length > 0)
+    );
+    const sourceClasses = teachingClasses.length > 0 ? teachingClasses : classesList;
+    return sourceClasses.map((cls) => {
+      const isSub = isItemSubmitted(cls) || cls.status === "Submitted";
+      return {
+        teacher_assignment_id: cls.teacher_assignment_id || cls.assignmentId || cls.id,
+        subject_offering_id: cls.subject_offering_id || cls.subject_id,
+        subject_id: cls.subject_id,
+        subject_name: cls.subject || "General Subject",
+        subject_code: "",
+        section_id: cls.section_id,
+        section_name: cls.section || cls.sectionName,
+        grade_level_name: cls.gradeLevel || "",
+        workflow_status: isSub ? "SUBMITTED" : "DRAFT",
+        lock_status: cls.lock_status || (isSub ? "TERM_LOCKED" : "EDITABLE"),
+        is_submitted: isSub,
+        student_count: cls.studentCount || 0,
+        graded_count: isSub ? cls.studentCount || 0 : Math.round(((cls.entryProgress || 0) / 100) * (cls.studentCount || 0)),
+        progress: cls.entryProgress || 0,
+        submitted_at: cls.submitted_at || null,
+      };
+    });
+  };
+
   // Load submissions data
   useEffect(() => {
     if (!isOpen) return;
@@ -71,27 +103,7 @@ export default function SubmissionStatusModal({
           setSubmissions(list);
         } else if (Array.isArray(assignedClasses) && assignedClasses.length > 0) {
           // Fallback to assignedClasses if submissions endpoint returned empty
-          const fallback = assignedClasses.map((cls) => {
-            const isSub = cls.status === "Submitted" || cls.entryProgress >= 100;
-            return {
-              teacher_assignment_id: cls.assignmentId || cls.id,
-              subject_offering_id: cls.subject_offering_id || cls.subject_id,
-              subject_id: cls.subject_id,
-              subject_name: cls.subject || "General Subject",
-              subject_code: "",
-              section_id: cls.section_id,
-              section_name: cls.section || cls.sectionName,
-              grade_level_name: cls.gradeLevel || "",
-              workflow_status: isSub ? "SUBMITTED" : "DRAFT",
-              lock_status: isSub ? "TERM_LOCKED" : "EDITABLE",
-              is_submitted: isSub,
-              student_count: cls.studentCount || 0,
-              graded_count: isSub ? cls.studentCount || 0 : Math.round(((cls.entryProgress || 0) / 100) * (cls.studentCount || 0)),
-              progress: cls.entryProgress || 0,
-              submitted_at: null,
-            };
-          });
-          setSubmissions(fallback);
+          setSubmissions(mapAssignedClassesFallback(assignedClasses));
         } else {
           setSubmissions([]);
         }
@@ -100,26 +112,7 @@ export default function SubmissionStatusModal({
         if (!isMounted) return;
         console.warn("Could not fetch submissions, using fallback:", err);
         if (Array.isArray(assignedClasses) && assignedClasses.length > 0) {
-          const fallback = assignedClasses.map((cls) => {
-            const isSub = cls.status === "Submitted" || cls.entryProgress >= 100;
-            return {
-              teacher_assignment_id: cls.assignmentId || cls.id,
-              subject_offering_id: cls.subject_offering_id || cls.subject_id,
-              subject_id: cls.subject_id,
-              subject_name: cls.subject || "General Subject",
-              subject_code: "",
-              section_id: cls.section_id,
-              section_name: cls.section || cls.sectionName,
-              grade_level_name: cls.gradeLevel || "",
-              workflow_status: isSub ? "SUBMITTED" : "DRAFT",
-              lock_status: isSub ? "TERM_LOCKED" : "EDITABLE",
-              is_submitted: isSub,
-              student_count: cls.studentCount || 0,
-              progress: cls.entryProgress || 0,
-              submitted_at: null,
-            };
-          });
-          setSubmissions(fallback);
+          setSubmissions(mapAssignedClassesFallback(assignedClasses));
         } else {
           setError(err.message || "Failed to load submission data.");
         }
@@ -148,7 +141,7 @@ export default function SubmissionStatusModal({
     const pending = [];
     const submitted = [];
     submissions.forEach((item) => {
-      if (item.is_submitted || item.workflow_status === "SUBMITTED" || item.lock_status === "TERM_LOCKED") {
+      if (isItemSubmitted(item)) {
         submitted.push(item);
       } else {
         pending.push(item);
@@ -388,7 +381,7 @@ export default function SubmissionStatusModal({
           ) : filteredItems.length > 0 ? (
             <div className="submission-status-modal__list">
               {filteredItems.map((item, idx) => {
-                const isSub = Boolean(item.is_submitted);
+                const isSub = isItemSubmitted(item);
                 const formattedDate = formatSubmittedDate(item.submitted_at);
                 const progressVal = Math.min(100, Math.max(0, item.progress || 0));
 
