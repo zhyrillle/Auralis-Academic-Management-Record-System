@@ -41,6 +41,7 @@ import {
   getSubjectAreaPerformance,
   getCoreValuesComparison,
   checkAdviserRole,
+  getTeacherSubmissions,
 } from "../../services/adviserDashboardService";
 
 // Custom Adviser Visual Components
@@ -78,7 +79,7 @@ export default function AdviserDashboard() {
   }, [userId]);
 
   const cacheOptions = { enabled: Boolean(userId), keepPreviousData: true, refreshInterval: 0, revalidateOnFocus: false };
-  const overview = useCachedQuery(cacheKey('adviser:dashboard-overview', { userId, riskVersion: 'v2' }), async () => {
+  const overview = useCachedQuery(cacheKey('adviser:dashboard-overview', { userId, riskVersion: 'v3' }), async () => {
     const [role, summary, classes, attendance] = await Promise.all([
       checkAdviserRole(userId), getAdviserSummary(userId), getAssignedClasses(userId), getAttendanceTrend(userId),
     ]);
@@ -88,6 +89,11 @@ export default function AdviserDashboard() {
   const riskQuery = useCachedQuery(cacheKey('adviser:dashboard-risk-v2', { userId, mode: 'monitoring' }),
     () => getAtRiskStudents(userId, { force: true }),
     { enabled: Boolean(userId), refreshInterval: 0, revalidateOnFocus: false });
+  const submissionsQuery = useCachedQuery(
+    cacheKey('adviser:dashboard-submissions-v2', { userId }),
+    () => getTeacherSubmissions(userId),
+    { ...cacheOptions, enabled: Boolean(userId && overview.data) }
+  );
   const summary = overview.data?.summary || {};
   const assignedClasses = useMemo(() => overview.data?.classes || [], [overview.data]);
   const attendanceTrend = overview.data?.attendance || [];
@@ -114,32 +120,67 @@ export default function AdviserDashboard() {
   const handleOpenSubmittedGrades = () => {
     setSubmissionsModal({ isOpen: true, initialTab: "submitted" });
   };
-  // Derive robust submission counters with fallback to assignedClasses
-  const pendingSubmissionsCount = useMemo(() => {
-    if (Array.isArray(summary?.submissionDetails) && summary.submissionDetails.length > 0) {
-      return summary.submissionDetails.filter((s) => !s.is_submitted).length;
+
+  const resolvedSubmissionDetails = useMemo(() => {
+    if (Array.isArray(submissionsQuery.data?.submissionDetails) && submissionsQuery.data.submissionDetails.length > 0) {
+      return submissionsQuery.data.submissionDetails;
     }
-    if (typeof summary?.pendingSubmissions === 'number' && summary.pendingSubmissions > 0) {
+    if (Array.isArray(summary?.submissionDetails) && summary.submissionDetails.length > 0) {
+      return summary.submissionDetails;
+    }
+    return null;
+  }, [submissionsQuery.data, summary]);
+
+  const isClassSubmitted = (item) =>
+    Boolean(item?.is_submitted) ||
+    (String(item?.workflow_status || "").toUpperCase() === "SUBMITTED" &&
+      String(item?.lock_status || "").toUpperCase() !== "TEMPORARILY_REOPENED") ||
+    item?.status === "Submitted";
+
+  // Derive robust submission counters strictly from actual submission workflow status (never from entryProgress >= 100)
+  const pendingSubmissionsCount = useMemo(() => {
+    if (Array.isArray(resolvedSubmissionDetails) && resolvedSubmissionDetails.length > 0) {
+      return resolvedSubmissionDetails.filter((s) => !isClassSubmitted(s)).length;
+    }
+    if (typeof submissionsQuery.data?.pendingSubmissions === 'number' && submissionsQuery.data?.totalOfferings > 0) {
+      return submissionsQuery.data.pendingSubmissions;
+    }
+    if (
+      typeof summary?.pendingSubmissions === 'number' &&
+      (summary.pendingSubmissions > 0 || summary.submittedGrades > 0)
+    ) {
       return summary.pendingSubmissions;
     }
-    if (assignedClasses.length > 0) {
-      return assignedClasses.filter((c) => c.status !== 'Submitted' && (c.entryProgress || 0) < 100).length;
+    const teachingClasses = assignedClasses.filter(
+      (c) => c.subject_offering_id || (Array.isArray(c.subject_offering_ids) && c.subject_offering_ids.length > 0)
+    );
+    if (teachingClasses.length > 0) {
+      return teachingClasses.filter((c) => !isClassSubmitted(c)).length;
     }
     return summary?.pendingSubmissions ?? 0;
-  }, [summary, assignedClasses]);
+  }, [resolvedSubmissionDetails, submissionsQuery.data, summary, assignedClasses]);
 
   const submittedGradesCount = useMemo(() => {
-    if (Array.isArray(summary?.submissionDetails) && summary.submissionDetails.length > 0) {
-      return summary.submissionDetails.filter((s) => s.is_submitted).length;
+    if (Array.isArray(resolvedSubmissionDetails) && resolvedSubmissionDetails.length > 0) {
+      return resolvedSubmissionDetails.filter((s) => isClassSubmitted(s)).length;
     }
-    if (typeof summary?.submittedGrades === 'number' && summary.submittedGrades > 0) {
+    if (typeof submissionsQuery.data?.submittedGrades === 'number' && submissionsQuery.data?.totalOfferings > 0) {
+      return submissionsQuery.data.submittedGrades;
+    }
+    if (
+      typeof summary?.submittedGrades === 'number' &&
+      (summary.pendingSubmissions > 0 || summary.submittedGrades > 0)
+    ) {
       return summary.submittedGrades;
     }
-    if (assignedClasses.length > 0) {
-      return assignedClasses.filter((c) => c.status === 'Submitted' || (c.entryProgress || 0) >= 100).length;
+    const teachingClasses = assignedClasses.filter(
+      (c) => c.subject_offering_id || (Array.isArray(c.subject_offering_ids) && c.subject_offering_ids.length > 0)
+    );
+    if (teachingClasses.length > 0) {
+      return teachingClasses.filter((c) => isClassSubmitted(c)).length;
     }
     return summary?.submittedGrades ?? 0;
-  }, [summary, assignedClasses]);
+  }, [resolvedSubmissionDetails, submissionsQuery.data, summary, assignedClasses]);
 
   const [coreChoice] = useState(null);
   const defaultTerm = summary.activeTerm || 'T1';
@@ -1067,8 +1108,8 @@ export default function AdviserDashboard() {
         initialTab={submissionsModal.initialTab}
         onClose={() => setSubmissionsModal((prev) => ({ ...prev, isOpen: false }))}
         userId={userId}
-        activeTerm={summary?.activeTerm || defaultTerm || "T1"}
-        preloadedSubmissions={summary?.submissionDetails}
+        activeTerm={submissionsQuery.data?.activeTerm || summary?.activeTerm || defaultTerm || "T1"}
+        preloadedSubmissions={resolvedSubmissionDetails}
         assignedClasses={assignedClasses}
         onNavigateToClass={handleOpenGradingSheet}
       />
