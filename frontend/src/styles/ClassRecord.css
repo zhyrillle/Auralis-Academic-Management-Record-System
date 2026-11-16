@@ -564,6 +564,8 @@
 
 .class-record-content {
   width: 100%;
+  min-width: 0;
+  container-type: inline-size;
 }
 
 .student-count {
@@ -579,12 +581,60 @@
    ============================================================ */
 
 .class-record-table-wrapper {
+  --cr-num-col-w: 40px;
+  --cr-name-col-w: 240px;
+  --cr-sticky-total-w: calc(var(--cr-num-col-w) + var(--cr-name-col-w));
   width: 100%;
+  max-inline-size: 100%;
   overflow-x: auto;
   overflow-y: visible;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
   border-top: 1px solid #222;
   border-left: 1px solid #222;
   position: relative;
+}
+
+.class-record-table-wrapper:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.cr-col-num {
+  width: var(--cr-num-col-w);
+  min-width: var(--cr-num-col-w);
+  max-width: var(--cr-num-col-w);
+}
+
+.cr-col-name {
+  width: var(--cr-name-col-w);
+  min-width: var(--cr-name-col-w);
+  max-width: var(--cr-name-col-w);
+}
+
+.cr-col-score {
+  width: 44px;
+  min-width: 44px;
+}
+
+.cr-col-calc {
+  width: 48px;
+  min-width: 48px;
+}
+
+.cr-col-wide {
+  width: 50px;
+  min-width: 50px;
+}
+
+.cr-col-summary {
+  width: 60px;
+  min-width: 60px;
+}
+
+.cr-col-descriptor {
+  width: 95px;
+  min-width: 95px;
 }
 
 .class-record-table {
@@ -1828,7 +1878,7 @@
 .cr-term-col {
   background: #ffffff !important;
   color: #000000 !important;
-  font-size: 22px !important;
+  font-size: clamp(0.85rem, 0.7rem + 0.8vw, 1.375rem) !important;
   font-weight: 800 !important;
   text-align: center !important;
   vertical-align: middle !important;
@@ -1839,9 +1889,9 @@
   position: sticky;
   left: 0;
   z-index: 9;
-  width: 280px;
-  min-width: 280px;
-  max-width: 280px;
+  width: var(--cr-sticky-total-w, 280px);
+  min-width: var(--cr-sticky-total-w, 280px);
+  max-width: var(--cr-sticky-total-w, 280px);
 }
 
 .cr-term-col.mapeh-term-col {
@@ -1947,9 +1997,9 @@
   position: sticky;
   left: 0;
   z-index: 8;
-  width: 280px;
-  min-width: 280px;
-  max-width: 280px;
+  width: var(--cr-sticky-total-w, 280px);
+  min-width: var(--cr-sticky-total-w, 280px);
+  max-width: var(--cr-sticky-total-w, 280px);
 }
 
 .cr-hps-cell {
@@ -1993,9 +2043,9 @@
   position: sticky;
   left: 0;
   z-index: 6;
-  width: 280px;
-  min-width: 280px;
-  max-width: 280px;
+  width: var(--cr-sticky-total-w, 280px);
+  min-width: var(--cr-sticky-total-w, 280px);
+  max-width: var(--cr-sticky-total-w, 280px);
   box-shadow: 2px 0 4px -1px rgba(0, 0, 0, 0.2);
   white-space: nowrap;
 }
@@ -2022,9 +2072,9 @@
   position: sticky;
   left: 0;
   z-index: 6;
-  width: 280px;
-  min-width: 280px;
-  max-width: 280px;
+  width: var(--cr-sticky-total-w, 280px);
+  min-width: var(--cr-sticky-total-w, 280px);
+  max-width: var(--cr-sticky-total-w, 280px);
   box-shadow: 2px 0 4px -1px rgba(0, 0, 0, 0.2);
   white-space: nowrap;
 }
@@ -2035,9 +2085,9 @@
 
 /* Student Row Cells */
 .cr-student-num {
-  width: 40px;
-  min-width: 40px;
-  max-width: 40px;
+  width: var(--cr-num-col-w, 40px);
+  min-width: var(--cr-num-col-w, 40px);
+  max-width: var(--cr-num-col-w, 40px);
   text-align: center;
   font-size: 12px;
   font-weight: 600;
@@ -2050,9 +2100,9 @@
 }
 
 .cr-student-name {
-  width: 240px;
-  min-width: 240px;
-  max-width: 240px;
+  width: var(--cr-name-col-w, 240px);
+  min-width: var(--cr-name-col-w, 240px);
+  max-width: var(--cr-name-col-w, 240px);
   text-align: left;
   padding: 0 10px;
   font-size: 12px;
@@ -2063,7 +2113,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   position: sticky;
-  left: 40px;
+  left: var(--cr-num-col-w, 40px);
   background: #ffffff;
   z-index: 5;
   box-shadow: 2px 0 4px -1px rgba(0, 0, 0, 0.1);
@@ -2158,4 +2208,338 @@
   border: 1px solid #999999;
   padding: 2px 6px;
   white-space: nowrap;
+}
+
+/* ============================================================
+   COMPREHENSIVE TABLET & MOBILE RESPONSIVE ADAPTATIONS
+   ============================================================ */
+
+@container (max-width: 920px) {
+  .cr-template-header-wrap {
+    gap: 12px;
+    padding: 4px 0 14px;
+  }
+
+  .cr-seal-wrap {
+    width: 60px;
+  }
+
+  .cr-seal-img {
+    width: 56px;
+    height: 56px;
+  }
+
+  .cr-logo-wrap {
+    width: 78px;
+  }
+
+  .cr-wordmark-img {
+    width: 74px;
+    height: 40px;
+  }
+
+  .cr-main-title {
+    font-size: clamp(1.05rem, 0.9rem + 1.1vw, 1.35rem);
+    margin-bottom: 10px;
+  }
+
+  .cr-meta-row {
+    gap: 10px 14px;
+  }
+
+  .cr-meta-box.box-lg {
+    min-width: 220px;
+    max-width: 100%;
+  }
+
+  .cr-meta-box.box-md {
+    min-width: 120px;
+  }
+
+  .cr-meta-box.box-sm {
+    min-width: 90px;
+  }
+
+  .class-record-table-wrapper {
+    --cr-num-col-w: 34px;
+    --cr-name-col-w: 176px;
+  }
+}
+
+@container (max-width: 640px) {
+  .cr-template-container {
+    padding: 12px 10px;
+    border-radius: 10px;
+  }
+
+  .cr-template-header-wrap {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 10px 8px;
+    padding: 0 0 12px;
+  }
+
+  .cr-seal-wrap {
+    width: 44px;
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .cr-seal-img {
+    width: 42px;
+    height: 42px;
+  }
+
+  .cr-logo-wrap {
+    width: 64px;
+    grid-column: 3;
+    grid-row: 1;
+  }
+
+  .cr-wordmark-img {
+    width: 62px;
+    height: 34px;
+  }
+
+  .cr-header-center {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    width: 100%;
+  }
+
+  .cr-main-title {
+    font-size: clamp(0.95rem, 0.85rem + 1vw, 1.15rem);
+    line-height: 1.25;
+    margin-bottom: 10px;
+  }
+
+  .cr-meta-section {
+    gap: 6px;
+    width: 100%;
+  }
+
+  .cr-meta-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    width: 100%;
+  }
+
+  .cr-meta-field {
+    display: grid;
+    grid-template-columns: 92px minmax(0, 1fr);
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .cr-meta-label {
+    font-size: 11px;
+    text-align: left;
+  }
+
+  .cr-meta-box,
+  .cr-meta-box.box-sm,
+  .cr-meta-box.box-md,
+  .cr-meta-box.box-lg {
+    min-width: 0;
+    width: 100%;
+    padding: 4px 8px;
+    font-size: 12px;
+    justify-content: flex-start;
+    text-align: left;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .class-record-table-wrapper {
+    --cr-num-col-w: 28px;
+    --cr-name-col-w: 132px;
+  }
+
+  .cr-term-col {
+    font-size: 12px !important;
+    padding: 4px 6px !important;
+    letter-spacing: 0.2px;
+  }
+
+  .cr-term-col.mapeh-term-col {
+    font-size: 11px !important;
+    padding: 4px !important;
+  }
+
+  .cr-hps-title-cell,
+  .hps-label {
+    font-size: 10px !important;
+    padding-right: 6px !important;
+  }
+
+  .cr-learners-names-row td,
+  .cr-gender-row td {
+    font-size: 10.5px !important;
+    padding: 4px 8px !important;
+  }
+
+  .cr-student-num {
+    font-size: 11px;
+  }
+
+  .cr-student-name {
+    font-size: 11.5px;
+    padding: 0 6px;
+  }
+}
+
+@media (max-width: 1100px) {
+  .class-record-controls {
+    width: 100%;
+    align-items: flex-start;
+  }
+
+  .class-record-actions-row {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 10px;
+  }
+}
+
+@media (max-width: 768px) {
+  .class-record-page {
+    width: 100%;
+    padding: 0 4px 32px;
+  }
+
+  .class-record-header {
+    margin-bottom: 14px;
+  }
+
+  .class-record-title-area {
+    gap: 8px 10px;
+  }
+
+  .class-record-title-area h1 {
+    font-size: clamp(1.2rem, 1rem + 1.2vw, 1.45rem);
+  }
+
+  .gdocs-sync-status {
+    margin-left: 0;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .gdocs-status-item {
+    font-size: 12px;
+    padding: 4px 8px;
+  }
+
+  .class-record-subheader {
+    gap: 14px;
+    margin-bottom: 14px;
+  }
+
+  .class-record-controls {
+    width: 100%;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .mapeh-component-toggle {
+    width: 100%;
+    display: flex;
+    box-sizing: border-box;
+  }
+
+  .mapeh-toggle-btn {
+    flex: 1 1 50%;
+    padding: 0 10px;
+    font-size: 12px;
+  }
+
+  .class-record-actions-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .class-record-action-btn {
+    flex: 1 1 calc(50% - 6px);
+    min-width: 120px;
+    height: 38px;
+    padding: 0 12px;
+    font-size: 12.5px;
+    gap: 6px;
+  }
+
+  .term-buttons {
+    width: 100%;
+    display: flex;
+    gap: 8px;
+  }
+
+  .term-btn {
+    flex: 1 1 0;
+    height: 36px;
+    font-size: 13.5px;
+  }
+
+  /* Keep column actions accessible on touch / mobile viewports */
+  .dynamic-col-header .col-actions {
+    display: flex;
+    top: -10px;
+    right: -1px;
+    transform: scale(0.9);
+    transform-origin: top right;
+  }
+}
+
+@media (max-width: 520px) {
+  .class-record-modal-backdrop {
+    padding: 10px;
+  }
+
+  .class-record-modal-card {
+    max-width: 100%;
+    border-radius: 12px;
+  }
+
+  .modal-header {
+    padding: 14px 16px;
+  }
+
+  .modal-form {
+    padding: 16px;
+  }
+
+  .form-row {
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .modal-footer {
+    flex-direction: column-reverse;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .modal-cancel-btn,
+  .modal-submit-btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 400px) {
+  .class-record-table-wrapper {
+    --cr-num-col-w: 24px;
+    --cr-name-col-w: 112px;
+  }
+
+  .class-record-action-btn {
+    flex: 1 1 100%;
+  }
 }

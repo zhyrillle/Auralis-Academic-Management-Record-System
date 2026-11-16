@@ -2725,42 +2725,47 @@ const formatToISODate = (val) => {
               const subjHalf2 = Math.max(1, subjColsCount - subjHalf1);
 
               return (
-                <div className="class-record-table-wrapper">
+                <div
+                  className="class-record-table-wrapper"
+                  tabIndex={0}
+                  role="region"
+                  aria-label="Class record spreadsheet"
+                >
                   <table className="class-record-table">
-                    {/* Fixed explicit column widths to prevent any shifting */}
+                    {/* Responsive column widths synchronized with sticky column variables */}
                     <colgroup>
-                      <col style={{ width: "40px", minWidth: "40px", maxWidth: "40px" }} />
-                      <col style={{ width: "240px", minWidth: "240px", maxWidth: "240px" }} />
+                      <col className="cr-col-num" />
+                      <col className="cr-col-name" />
                       {writtenWorkColumns.map((col) => (
-                        <col key={`col-ww-${col.id}`} style={{ width: "44px", minWidth: "44px" }} />
+                        <col key={`col-ww-${col.id}`} className="cr-col-score" />
                       ))}
-                      <col style={{ width: "48px", minWidth: "48px" }} />
-                      <col style={{ width: "48px", minWidth: "48px" }} />
-                      <col style={{ width: "48px", minWidth: "48px" }} />
+                      <col className="cr-col-calc" />
+                      <col className="cr-col-calc" />
+                      <col className="cr-col-calc" />
                       {performanceTaskColumns.map((col) => (
-                        <col key={`col-pt-${col.id}`} style={{ width: "44px", minWidth: "44px" }} />
+                        <col key={`col-pt-${col.id}`} className="cr-col-score" />
                       ))}
-                      <col style={{ width: "48px", minWidth: "48px" }} />
-                      <col style={{ width: "48px", minWidth: "48px" }} />
-                      <col style={{ width: "48px", minWidth: "48px" }} />
+                      <col className="cr-col-calc" />
+                      <col className="cr-col-calc" />
+                      <col className="cr-col-calc" />
                       {isMapeh ? (
                         <>
-                          <col style={{ width: "48px", minWidth: "48px" }} />
-                          <col style={{ width: "48px", minWidth: "48px" }} />
-                          <col style={{ width: "48px", minWidth: "48px" }} />
+                          <col className="cr-col-calc" />
+                          <col className="cr-col-calc" />
+                          <col className="cr-col-calc" />
                         </>
                       ) : (
                         <>
-                          <col style={{ width: "50px", minWidth: "50px" }} />
-                          <col style={{ width: "50px", minWidth: "50px" }} />
-                          <col style={{ width: "50px", minWidth: "50px" }} />
-                          <col style={{ width: "48px", minWidth: "48px" }} />
-                          <col style={{ width: "48px", minWidth: "48px" }} />
+                          <col className="cr-col-wide" />
+                          <col className="cr-col-wide" />
+                          <col className="cr-col-wide" />
+                          <col className="cr-col-calc" />
+                          <col className="cr-col-calc" />
                         </>
                       )}
-                      <col style={{ width: "60px", minWidth: "60px" }} />
-                      <col style={{ width: "60px", minWidth: "60px" }} />
-                      <col style={{ width: "95px", minWidth: "95px" }} />
+                      <col className="cr-col-summary" />
+                      <col className="cr-col-summary" />
+                      <col className="cr-col-descriptor" />
                     </colgroup>
 
                     {/* =================================================
