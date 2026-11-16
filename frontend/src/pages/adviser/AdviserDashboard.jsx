@@ -28,6 +28,7 @@ import { getStudentSF9Details, downloadStudentSf9Pdf, fetchEphemeralLrn } from "
 import { getStudentSF10Details, fetchEphemeralSf10Lrn } from "../../services/reportService";
 import { getAdviserSections, getStudentsBySection } from "../../services/sectionService";
 import { getSectionDetails } from "../../services/sectionDetailsService";
+import { getClassRecordEntryTimestamps } from "../../services/classRecordApi";
 
 // Services
 import {
@@ -79,7 +80,7 @@ export default function AdviserDashboard() {
   }, [userId]);
 
   const cacheOptions = { enabled: Boolean(userId), keepPreviousData: true, refreshInterval: 0, revalidateOnFocus: false };
-  const overview = useCachedQuery(cacheKey('adviser:dashboard-overview', { userId, riskVersion: 'v3' }), async () => {
+  const overview = useCachedQuery(cacheKey('adviser:dashboard-overview', { userId, riskVersion: 'v4' }), async () => {
     const [role, summary, classes, attendance] = await Promise.all([
       checkAdviserRole(userId), getAdviserSummary(userId), getAssignedClasses(userId), getAttendanceTrend(userId),
     ]);
@@ -95,7 +96,38 @@ export default function AdviserDashboard() {
     { ...cacheOptions, enabled: Boolean(userId && overview.data) }
   );
   const summary = overview.data?.summary || {};
-  const assignedClasses = useMemo(() => overview.data?.classes || [], [overview.data]);
+  const assignedClasses = useMemo(() => {
+    const rawClasses = overview.data?.classes || [];
+    if (rawClasses.length <= 1) return rawClasses;
+    const localEntryMap = getClassRecordEntryTimestamps();
+
+    const getEffectiveTimestamp = (cls) => {
+      let maxTs = Number(cls.lastEntryTimestamp) || (cls.lastEntryAt ? new Date(cls.lastEntryAt).getTime() : 0) || 0;
+      if (cls.subject_offering_id) {
+        const localOff = Number(localEntryMap[`off-${cls.subject_offering_id}`] || localEntryMap[String(cls.subject_offering_id)] || 0);
+        if (localOff > maxTs) maxTs = localOff;
+      }
+      if (Array.isArray(cls.subject_offering_ids)) {
+        for (const offId of cls.subject_offering_ids) {
+          const localOff = Number(localEntryMap[`off-${offId}`] || localEntryMap[String(offId)] || 0);
+          if (localOff > maxTs) maxTs = localOff;
+        }
+      }
+      if (cls.section_id) {
+        const localSec = Number(localEntryMap[`sec-${cls.section_id}`] || 0);
+        if (localSec > maxTs) maxTs = localSec;
+      }
+      return maxTs;
+    };
+
+    return [...rawClasses].sort((a, b) => {
+      const tsDiff = getEffectiveTimestamp(b) - getEffectiveTimestamp(a);
+      if (tsDiff !== 0) return tsDiff;
+      const scoreIdDiff = (Number(b.lastScoreId) || 0) - (Number(a.lastScoreId) || 0);
+      if (scoreIdDiff !== 0) return scoreIdDiff;
+      return 0;
+    });
+  }, [overview.data]);
   const attendanceTrend = overview.data?.attendance || [];
   const isAdviser = overview.data
     ? (summary.isAdviser ?? overview.data.role?.isAdviser ?? false)

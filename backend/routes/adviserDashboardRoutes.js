@@ -245,6 +245,7 @@ async function getTeacherAssignedClasses(userId, activeTermOrId = null) {
   const sheetStatusMap = new Map();
   const gradedCountMap = new Map();
   const scoreStatsMap = new Map();
+  const latestEntryMap = new Map();
 
   if (allOfferingIds.length > 0) {
     const offPlaceholders = allOfferingIds.map(() => '?').join(',');
@@ -296,6 +297,36 @@ async function getTeacherAssignedClasses(userId, activeTermOrId = null) {
       encoded_scores: Number(r.encoded_scores || 0),
       total_activities: Number(r.total_activities || 0),
     }));
+
+    const [latestEntryRows] = await db.execute(
+      `SELECT
+         gs.subject_offering_id,
+         MAX(GREATEST(
+           COALESCE(sc.updated_at, '1970-01-01'),
+           COALESCE(sc.created_at, '1970-01-01'),
+           COALESCE(ga.updated_at, '1970-01-01'),
+           COALESCE(ga.created_at, '1970-01-01')
+         )) AS latest_entry_at,
+         MAX(COALESCE(sc.score_id, 0)) AS latest_score_id
+       FROM GRADE_SHEET gs
+       LEFT JOIN GRADE_ACTIVITY ga ON ga.grade_sheet_id = gs.grade_sheet_id
+         AND (ga.status = 'ACTIVE' OR ga.status IS NULL)
+       LEFT JOIN SCORE sc ON sc.activity_id = ga.activity_id
+         AND sc.raw_score IS NOT NULL
+         AND (sc.score_status IS NULL OR sc.score_status != 'NOT_ENCODED')
+       WHERE gs.subject_offering_id IN (${offPlaceholders})
+       GROUP BY gs.subject_offering_id`,
+      allOfferingIds
+    ).catch(() => [[]]);
+    (latestEntryRows || []).forEach((r) => {
+      const rawTs = r.latest_entry_at ? String(r.latest_entry_at) : null;
+      const validTs = rawTs && !rawTs.startsWith('1970-01-01') ? new Date(rawTs.endsWith('Z') ? rawTs : `${rawTs.replace(' ', 'T')}Z`).getTime() : 0;
+      latestEntryMap.set(r.subject_offering_id, {
+        timestampMs: Number.isFinite(validTs) && validTs > 0 ? validTs : 0,
+        iso: Number.isFinite(validTs) && validTs > 0 ? new Date(validTs).toISOString() : null,
+        latestScoreId: Number(r.latest_score_id || 0),
+      });
+    });
   }
 
   // 3. Assemble metrics per class
@@ -311,6 +342,9 @@ async function getTeacherAssignedClasses(userId, activeTermOrId = null) {
       let totalScoredStudents = 0;
       let totalEncodedScores = 0;
       let totalActivities = 0;
+      let maxEntryTs = 0;
+      let maxEntryIso = null;
+      let maxScoreId = 0;
 
       for (const offId of cls.subject_offering_ids) {
         const s = sheetStatusMap.get(offId);
@@ -331,12 +365,25 @@ async function getTeacherAssignedClasses(userId, activeTermOrId = null) {
           totalEncodedScores += sc.encoded_scores;
           totalActivities += sc.total_activities;
         }
+        const le = latestEntryMap.get(offId);
+        if (le) {
+          if (le.timestampMs > maxEntryTs) {
+            maxEntryTs = le.timestampMs;
+            maxEntryIso = le.iso;
+          }
+          if (le.latestScoreId > maxScoreId) {
+            maxScoreId = le.latestScoreId;
+          }
+        }
       }
 
       cls.is_submitted = isSubmitted;
       cls.workflow_status = workflowStatus;
       cls.lock_status = lockStatus;
       cls.submitted_at = submittedAt;
+      cls.lastEntryAt = maxEntryIso;
+      cls.lastEntryTimestamp = maxEntryTs;
+      cls.lastScoreId = maxScoreId;
 
       if (isSubmitted) {
         cls.status = 'Submitted';
@@ -363,7 +410,19 @@ async function getTeacherAssignedClasses(userId, activeTermOrId = null) {
       cls.workflow_status = 'DRAFT';
       cls.status = 'In Progress';
       cls.entryProgress = 0;
+      cls.lastEntryAt = null;
+      cls.lastEntryTimestamp = 0;
+      cls.lastScoreId = 0;
     }
+  });
+
+  // Sort classes so the section with the most recent Class Record entry appears first
+  classes.sort((a, b) => {
+    const tsDiff = (Number(b.lastEntryTimestamp) || 0) - (Number(a.lastEntryTimestamp) || 0);
+    if (tsDiff !== 0) return tsDiff;
+    const scoreIdDiff = (Number(b.lastScoreId) || 0) - (Number(a.lastScoreId) || 0);
+    if (scoreIdDiff !== 0) return scoreIdDiff;
+    return String(a.sectionName || a.section || '').localeCompare(String(b.sectionName || b.section || ''));
   });
 
   return classes;

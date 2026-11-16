@@ -575,7 +575,37 @@ export const getClassRecord = async (
   }
 };
 
+const LAST_ENTRY_STORAGE_KEY = "auralis_class_record_last_entry";
+
+export function recordClassEntryTimestamp(subjectOfferingId, sectionId = null) {
+  if (typeof window === "undefined" || !window.localStorage) return;
+  try {
+    const raw = window.localStorage.getItem(LAST_ENTRY_STORAGE_KEY);
+    const map = raw ? JSON.parse(raw) : {};
+    const now = Date.now();
+    if (subjectOfferingId) {
+      map[`off-${subjectOfferingId}`] = now;
+      map[String(subjectOfferingId)] = now;
+    }
+    if (sectionId) {
+      map[`sec-${sectionId}`] = now;
+    }
+    window.localStorage.setItem(LAST_ENTRY_STORAGE_KEY, JSON.stringify(map));
+  } catch (_) {}
+}
+
+export function getClassRecordEntryTimestamps() {
+  if (typeof window === "undefined" || !window.localStorage) return {};
+  try {
+    const raw = window.localStorage.getItem(LAST_ENTRY_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch (_) {
+    return {};
+  }
+}
+
 export const createAssessment = async (payload) => {
+  recordClassEntryTimestamp(payload?.subject_offering_id, payload?.section_id);
   const res = await fetch(`${API_BASE_URL}/assessments`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -602,6 +632,7 @@ export const createAssessment = async (payload) => {
 };
 
 export const updateAssessment = async (assessmentId, payload) => {
+  recordClassEntryTimestamp(payload?.subject_offering_id, payload?.section_id);
   if (!assessmentId || isNaN(Number(assessmentId))) {
     return { success: true, offline: true };
   }
@@ -625,6 +656,7 @@ export const deleteAssessment = async (assessmentId) => {
 
 export const saveScoresBatch = async ({ subject_offering_id, term = "T1", scores, mapeh_component = null, examConfig = null }, scope = getSessionScope()) => {
   assertCurrentSession(scope);
+  recordClassEntryTimestamp(subject_offering_id);
   const payload = {
     subject_offering_id,
     term,
