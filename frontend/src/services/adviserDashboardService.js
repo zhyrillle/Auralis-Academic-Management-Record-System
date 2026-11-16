@@ -107,8 +107,8 @@ export async function getAssignedClasses(userId) {
   const effectiveId = getEffectiveUserId(userId);
   try {
     const url = effectiveId
-      ? `${API_BASE_URL}/adviser/dashboard/assigned-classes?v=2&userId=${encodeURIComponent(effectiveId)}`
-      : `${API_BASE_URL}/adviser/dashboard/assigned-classes?v=2`;
+      ? `${API_BASE_URL}/adviser/dashboard/assigned-classes?v=3&userId=${encodeURIComponent(effectiveId)}`
+      : `${API_BASE_URL}/adviser/dashboard/assigned-classes?v=3`;
     const response = await fetch(url);
     const data = await parseResponse(response);
     return data?.classes || placeholderAssignedClasses;
