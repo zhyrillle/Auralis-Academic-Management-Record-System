@@ -125,7 +125,10 @@ function databaseFixture() {
     assert.match(sql, /attendance_scope = 'SECTION'/);
     assert.ok(!sql.includes('is_active'), 'historical adviser assignments remain included');
     if (sql.includes('FROM ATTENDANCE_SHEET ash')) return [[{ section_id: 7, date: dates[1], no_class_reason: 'HOLIDAY' }]];
-    if (sql.includes('FROM ATTENDANCE a')) return [[{ student_section_id: 501, section_id: 7, date: dates[0], status: state.status }]];
+    if (sql.includes('FROM ATTENDANCE a')) {
+      return [(state.marks || [{ date: dates[0], status: state.status }])
+        .map(mark => ({ student_section_id: 501, section_id: 7, ...mark }))];
+    }
     throw new Error(`Unexpected query: ${sql}`);
   } };
   return { database, state, calls };
@@ -173,6 +176,34 @@ test('batch reads are year/SECTION scoped, respect exclusions and Manila midnigh
   await assert.rejects(service.preview(f.database, { schoolYear: '999' }, now), error => error.status === 400);
 });
 
+test('weekly tardiness counts unique class days, skips exclusions and defaults to the last completed week', async () => {
+  const { database, state } = databaseFixture();
+  state.marks = [
+    ...['2026-01-26', '2026-01-26', '2026-01-27', '2026-01-30', '2026-01-31', '2026-02-04', '2026-02-09']
+      .map(date => ({ date, status: 'L' })),
+    { date: '2026-01-28', status: 'A' },
+    { date: '2026-01-30', status: 'P' },
+    { date: '2026-02-03', status: 'P' },
+  ];
+  const now = new Date('2026-02-02T18:00:00Z'); // Feb 3 in Manila
+  const data = await service.weekly(database, { schoolYear: '3' }, now);
+  assert.equal(data.defaultWeek, '2026-01-26');
+  assert.deepEqual(data.weeks, [
+    { startsOn: '2026-02-02', endsOn: '2026-02-06', through: '2026-02-03', isCurrent: true },
+    { startsOn: '2026-01-26', endsOn: '2026-01-30', through: '2026-01-30', isCurrent: false },
+  ]);
+  assert.deepEqual(data.students[0].attendanceByWeek, {
+    '2026-01-26': { absenceDates: ['2026-01-28'], lateDates: ['2026-01-26'] },
+    '2026-02-02': { absenceDates: [], lateDates: [] },
+  });
+  const onBreak = await service.weekly(database, { schoolYear: '3' }, new Date('2026-02-12T00:00:00Z'));
+  assert.equal(onBreak.defaultWeek, '2026-02-02');
+  assert.ok(!onBreak.weeks.some(week => week.isCurrent));
+  state.marks = [{ date: '2026-02-02', status: 'L' }, { date: '2026-02-02', status: 'A' }];
+  const unresolved = await service.weekly(database, { schoolYear: '3' }, now);
+  assert.deepEqual(unresolved.students[0].attendanceByWeek, { '2026-02-02': null });
+});
+
 test('attendance endpoints enforce active Principal access before reading school records', async () => {
   const express = require('express'), User = require('../models/User'), db = require('../config/db');
   const originalFind = User.findById, originalExecute = db.execute;
@@ -195,6 +226,14 @@ test('attendance endpoints enforce active Principal access before reading school
     const data = await preview.json();
     assert.ok(!Object.hasOwn(data, 'diagnostics'), 'HTTP parameters cannot enable developer data');
     assert.ok(!Object.hasOwn(data.students[0], 'incomplete'));
+    const weeklyUrl = base.replace('/options', '/weekly?schoolYear=3');
+    assert.equal((await fetch(weeklyUrl, { headers: { 'X-Auralis-User-Id': '2' } })).status, 403);
+    const weekly = await fetch(weeklyUrl, { headers: { 'X-Auralis-User-Id': '1' } });
+    assert.equal(weekly.status, 200);
+    assert.equal(weekly.headers.get('cache-control'), 'no-store');
+    assert.deepEqual((await weekly.json()).students[0].attendanceByWeek, {
+      '2026-01-26': { absenceDates: ['2026-01-26'], lateDates: [] },
+    });
   } finally {
     if (server) await new Promise(resolve => server.close(resolve));
     User.findById = originalFind; db.execute = originalExecute;

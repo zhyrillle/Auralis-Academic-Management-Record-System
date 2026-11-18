@@ -1,7 +1,6 @@
 import { Fragment, useMemo, useState } from "react";
 import {
   AlertTriangle,
-  CalendarCheck2,
   ChevronDown,
   Info,
 } from "lucide-react";
@@ -19,8 +18,10 @@ import { cacheKey } from "../../services/navigationCache";
 import {
   getAttendanceOptions,
   getAttendanceOverview,
+  getWeeklyTardiness,
 } from "../../services/monitoringOverviewApi";
 import { getStoredUser } from "../../utils/auth";
+import AnalyticsTermTabs from "./analytics/AnalyticsTermTabs";
 import "../../styles/principalAnalytics.css";
 import "../../styles/studentMonitoring.css";
 import "../../styles/attendanceMonitoring.css";
@@ -38,6 +39,18 @@ const monthLabel = (month) =>
     month: "long",
     year: "numeric",
   });
+const weekFormatter = new Intl.DateTimeFormat("en-US", {
+  month: "short", day: "numeric", year: "numeric", timeZone: "UTC",
+});
+const weekLabel = (week) => weekFormatter.formatRange(
+  new Date(week.startsOn), new Date(week.endsOn),
+);
+const attendanceViews = [
+  { id: "year", label: "School-year overview" },
+  { id: "weekly", label: "Weekly attendance" },
+];
+const weeklyStatus = (attendance) =>
+  attendance === null ? "Attendance unavailable" : "No attendance recorded";
 const levels = {
   ...Object.fromEntries([1, 2, 3, 4, 5, 6].map((tier) => [`tier${tier}`, `Tier ${tier}`])),
   none: "No recorded absences",
@@ -97,7 +110,7 @@ function AttendanceInformation({ policy, onClose }) {
       </section>
       <section>
         <h3>Reading the counts</h3>
-        <p>The overview follows the grade and section filters. Search and the tier selector narrow the learner list. Counts reflect recorded attendance through the displayed date.</p>
+        <p>The overview follows the grade and section filters. The learner list starts with the students who have the most recorded absences.</p>
       </section>
       <section><h3>Monitoring guidance only</h3><p>{policy.disclaimer}</p></section>
     </OverlayPanel>
@@ -215,6 +228,36 @@ function AttendanceReview({ student, context, policy, onClose }) {
   );
 }
 
+function WeeklyReview({ student, week, attendance, onClose }) {
+  return (
+    <OverlayPanel isOpen onClose={onClose} variant="modal" title="Weekly attendance review"
+      description={`${student.name} · Grade ${student.grade} · ${student.section}`} className="attendance-review attendance-review--weekly"
+      footer={<button type="button" className="attendance-monitor__primary" onClick={onClose}>Done</button>}>
+      <dl className="attendance-review__facts">
+        <div><dt>Week</dt><dd>{weekLabel(week)}</dd></div>
+        <div><dt>Adviser</dt><dd>{student.adviser}</dd></div>
+        {week.isCurrent && <div><dt>Through</dt><dd>{dateLabel(week.through)}</dd></div>}
+      </dl>
+      {attendance ? (
+        <div className="attendance-review__weekly-marks">
+          <section>
+            <h3>Absences ({attendance.absenceDates.length})</h3>
+            {attendance.absenceDates.length
+              ? <DateList dates={attendance.absenceDates} label="Absence dates this week" />
+              : <p>No absences recorded</p>}
+          </section>
+          <section>
+            <h3>Late arrivals ({attendance.lateDates.length})</h3>
+            {attendance.lateDates.length
+              ? <DateList dates={attendance.lateDates} label="Late-arrival dates this week" />
+              : <p>No late arrivals recorded</p>}
+          </section>
+        </div>
+      ) : <p>{weeklyStatus(attendance)}</p>}
+    </OverlayPanel>
+  );
+}
+
 export default function AttendanceMonitoring() {
   const user = getStoredUser();
   const userId = user?.user_id || user?.id;
@@ -223,12 +266,25 @@ export default function AttendanceMonitoring() {
     getAttendanceOptions,
   );
   const [year, setYear] = useState("");
+  const [view, setView] = useState("year");
+  const [weekStart, setWeekStart] = useState("");
+  const isWeekly = view === "weekly";
   const schoolYear = year || options.data?.defaultSchoolYear || "";
   const overview = useCachedQuery(
     cacheKey("attendance-overview-v5", { userId, schoolYear }),
     () => getAttendanceOverview(schoolYear),
-    { enabled: Boolean(schoolYear) },
+    { enabled: Boolean(schoolYear) && !isWeekly },
   );
+  const weekly = useCachedQuery(
+    cacheKey("attendance-weekly-v2", { userId, schoolYear }),
+    () => getWeeklyTardiness(schoolYear),
+    { enabled: Boolean(schoolYear) && isWeekly },
+  );
+  const active = isWeekly ? weekly : overview;
+  const weeks = weekly.data?.weeks || [];
+  const selectedWeek = weeks.find(week => week.startsOn === weekStart)
+    || weeks.find(week => week.startsOn === weekly.data?.defaultWeek);
+  const weekAttendance = (student) => student.unavailable ? null : student.attendanceByWeek?.[selectedWeek?.startsOn];
   const [grade, setGrade] = useState("");
   const [section, setSection] = useState("");
   const [search, setSearch] = useState("");
@@ -238,8 +294,8 @@ export default function AttendanceMonitoring() {
   const [showInformation, setShowInformation] = useState(false);
   const [showGuidance, setShowGuidance] = useState(false);
   const students = useMemo(
-    () => overview.data?.students || [],
-    [overview.data],
+    () => active.data?.students || [],
+    [active.data],
   );
   const sections = [
     ...new Map(
@@ -269,9 +325,15 @@ export default function AttendanceMonitoring() {
   ];
   const filtered = scope.filter(
     (row) =>
-      matchesAlert(row, alert) &&
+      (isWeekly || matchesAlert(row, alert)) &&
       row.name.toLowerCase().includes(search.toLowerCase().trim()),
   );
+  const rankingValue = (student) => {
+    if (isWeekly) return weekAttendance(student)?.lateDates.length;
+    return student.level === "unavailable" ? undefined : student.absent;
+  };
+  filtered.sort((a, b) => (rankingValue(b) ?? -1) - (rankingValue(a) ?? -1)
+    || a.name.localeCompare(b.name));
   const counts = Object.fromEntries(
     cards.map((card) => [
       card.value,
@@ -288,9 +350,9 @@ export default function AttendanceMonitoring() {
     setPage(1);
     setSelected(null);
   };
-  const loading = options.loading || overview.loading;
-  const error = options.error || overview.error;
-  const retry = () => (options.error ? options.refresh() : overview.refresh());
+  const loading = options.loading || active.loading;
+  const error = options.error || active.error;
+  const retry = () => (options.error ? options.refresh() : active.refresh());
   return (
     <div className="pa-page attendance-monitor">
       <header className="attendance-monitor__header">
@@ -301,40 +363,57 @@ export default function AttendanceMonitoring() {
               type="button"
               className="attendance-monitor__info"
               aria-label="How attendance monitoring works"
-              disabled={!overview.data?.policy}
+              disabled={!active.data}
               onClick={() => setShowInformation(true)}
             >
               <Info size={18} aria-hidden="true" />
             </button>
           </div>
-          <p>School-year attendance alerts from adviser records.</p>
+          <p>{isWeekly ? "Weekly absences and late arrivals from saved adviser records." : "School-year attendance alerts from adviser records."}</p>
         </div>
-        {overview.data && (
-          <div className="attendance-monitor__scope">
-            <CalendarCheck2 size={16} aria-hidden="true" />{" "}
-            {overview.data.context.schoolYear} · Through{" "}
-            {dateLabel(overview.data.context.asOf)}
-            <button type="button" className="attendance-monitor__info" aria-label="Monitoring guidance only" title="Monitoring guidance only" onClick={() => setShowGuidance(true)}><Info size={18} aria-hidden="true" /></button>
-          </div>
-        )}
+        <AnalyticsTermTabs className="attendance-monitor__views" ariaLabel="Attendance view"
+          options={attendanceViews} value={view} onChange={(value) => change(setView, value)} />
       </header>
       <FilterToolbar
         label="Attendance monitoring filters"
+        className="sm-filters"
         end={
-          <DropdownSelect
-            label="School year"
-            value={schoolYear}
-            options={options.data?.schoolYears || []}
-            placeholder="School year"
-            disabled={options.loading}
-            onChange={(value) => {
-              change(setYear, value);
-              setSection("");
-            }}
-          />
+          <>
+            <DropdownSelect
+              className="sm-filter-year"
+              label="School year"
+              value={schoolYear}
+              options={options.data?.schoolYears || []}
+              placeholder="School year"
+              disabled={options.loading}
+              onChange={(value) => {
+                change(setYear, value);
+                setSection("");
+                setWeekStart("");
+              }}
+            />
+            {overview.data && <button type="button" className="attendance-monitor__info"
+              aria-label="Monitoring guidance only" title="Monitoring guidance only"
+              onClick={() => setShowGuidance(true)}><Info size={18} aria-hidden="true" /></button>}
+          </>
         }
       >
+        {isWeekly && (
+          <DropdownSelect
+            className="attendance-monitor__week-filter"
+            label="Week"
+            placeholder="Select week"
+            value={selectedWeek?.startsOn || ""}
+            options={weeks.map(week => ({
+              value: week.startsOn,
+              label: week.isCurrent ? `This week · ${weekLabel(week)}` : weekLabel(week),
+            }))}
+            onChange={(value) => change(setWeekStart, value)}
+            disabled={!weeks.length}
+          />
+        )}
         <DropdownSelect
+          className="sm-filter-grade"
           label="Grade level"
           value={grade}
           options={[
@@ -350,6 +429,7 @@ export default function AttendanceMonitoring() {
           }}
         />
         <DropdownSelect
+          className="sm-filter-section"
           label="Section"
           value={section}
           options={[{ value: "", label: "All sections" }, ...sections]}
@@ -365,79 +445,103 @@ export default function AttendanceMonitoring() {
         </div>
       )}
       {loading && (
-        <PageSkeleton label="Loading school-year attendance">
-          <SkeletonCards count={7} />
-          <SkeletonTable rows={7} columns={6} />
+        <PageSkeleton label={isWeekly ? "Loading weekly attendance" : "Loading school-year attendance"}>
+          {!isWeekly && <SkeletonCards count={7} />}
+          <SkeletonTable rows={7} columns={isWeekly ? 4 : 6} />
         </PageSkeleton>
       )}
-      {!loading && overview.data && (
+      {!loading && isWeekly && weekly.data && !selectedWeek && (
+        <div className="attendance-monitor__table-card attendance-monitor__empty">
+          <h2>No school weeks to review yet</h2>
+          <p>Weeks appear after a scheduled class day is reached.</p>
+        </div>
+      )}
+      {!loading && active.data && (!isWeekly || selectedWeek) && (
         <>
-          <AttendanceOverview cards={cards} counts={counts} alert={alert} onSelect={(value) => change(setAlert, value)} />
+          {!isWeekly && <AttendanceOverview cards={cards} counts={counts} alert={alert} onSelect={(value) => change(setAlert, value)} />}
           <div className="attendance-monitor__table-card">
             <div className="attendance-monitor__table-heading">
-              <h2>Learner attendance</h2>
+              <div>
+                <h2>Learner attendance</h2>
+                <p>{isWeekly
+                  ? `${selectedWeek.isCurrent ? `Through ${dateLabel(selectedWeek.through)} · ` : ""}Most late arrivals first`
+                  : `Most absences first · Records through ${dateLabel(overview.data.context.asOf)}`}</p>
+              </div>
               <div className="attendance-monitor__table-filters">
                 <SearchBar
                   query={search}
                   setQuery={(value) => change(setSearch, value)}
                   placeholder="Search learner name…"
                 />
-                <DropdownSelect
+                {!isWeekly && <DropdownSelect
                   label="Attendance alert"
                   value={alert}
                   options={alertOptions}
                   onChange={(value) => change(setAlert, value)}
-                />
+                />}
               </div>
             </div>
             <div
               className="attendance-monitor__scroll"
               tabIndex={0}
               role="region"
-              aria-label="Learner attendance records"
+              aria-label={isWeekly ? "Weekly attendance records" : "Learner attendance records"}
             >
               <table>
                 <thead>
                   <tr>
                     <th scope="col">Learner</th>
-                    <th scope="col">Absent</th>
-                    <th scope="col">Late</th>
-                    <th scope="col">Longest streak</th>
-                    <th scope="col">Alerts</th>
+                    {isWeekly ? <>
+                      <th scope="col">Absent this week</th>
+                      <th scope="col" aria-sort="descending">Late this week</th>
+                    </> : <>
+                      <th scope="col" aria-sort="descending">Absent</th>
+                      <th scope="col">Late</th>
+                      <th scope="col">Longest streak</th>
+                      <th scope="col">Alerts</th>
+                    </>}
                     <th scope="col">Action</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filtered
                     .slice((currentPage - 1) * 15, currentPage * 15)
-                    .map((student) => (
-                      <tr key={student.id}>
-                        <td>
-                          <strong>{student.name}</strong>
-                          <small>
-                            Grade {student.grade} · {student.section}
-                          </small>
-                        </td>
-                        <td>{student.level === "unavailable" ? "—" : student.absent}</td>
-                        <td>{student.level === "unavailable" ? "—" : student.late}</td>
-                        <td>
-                          {student.level === "unavailable" || student.longestStreak == null ? "—" : `${student.longestStreak} ${student.longestStreak === 1 ? "day" : "days"}`}
-                        </td>
-                        <td>
-                          <Alerts student={student} />
-                        </td>
-                        <td>
-                          <button
-                            type="button"
-                            className="sm-detail-button"
-                            onClick={() => setSelected(student.id)}
-                            aria-label={`Review ${student.name}`}
-                          >
-                            Review
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                    .map((student) => {
+                      const attendance = isWeekly ? weekAttendance(student) : undefined;
+                      return (
+                        <tr key={student.id}>
+                          <td>
+                            <strong>{student.name}</strong>
+                            <small>Grade {student.grade} · {student.section}</small>
+                          </td>
+                          {isWeekly ? (
+                            attendance ? <>
+                              <td>{attendance.absenceDates.length}</td>
+                              <td>{attendance.lateDates.length}</td>
+                            </> : <td colSpan={2} className="attendance-monitor__missing-week">{weeklyStatus(attendance)}</td>
+                          ) : (
+                            <>
+                              <td>{student.level === "unavailable" ? "—" : student.absent}</td>
+                              <td>{student.level === "unavailable" ? "—" : student.late}</td>
+                              <td>
+                                {student.level === "unavailable" || student.longestStreak == null ? "—" : `${student.longestStreak} ${student.longestStreak === 1 ? "day" : "days"}`}
+                              </td>
+                              <td><Alerts student={student} /></td>
+                            </>
+                          )}
+                          <td>
+                            <button
+                              type="button"
+                              className="sm-detail-button"
+                              onClick={() => setSelected(student.id)}
+                              aria-label={`Review ${student.name}`}
+                            >
+                              Review
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                 </tbody>
               </table>
             </div>
@@ -445,7 +549,7 @@ export default function AttendanceMonitoring() {
               <div className="attendance-monitor__empty">
                 <AlertTriangle size={20} aria-hidden="true" />
                 <h3>No matching learners</h3>
-                <p>Try another alert, section, or search.</p>
+                <p>{isWeekly ? "Try another grade, section, or learner name." : "Try another alert, section, or search."}</p>
               </div>
             )}
             <TablePagination
@@ -463,7 +567,10 @@ export default function AttendanceMonitoring() {
           No school years are configured.
         </p>
       )}
-      {review && (
+      {review && isWeekly && selectedWeek && (
+        <WeeklyReview student={review} week={selectedWeek} attendance={weekAttendance(review)} onClose={() => setSelected(null)} />
+      )}
+      {review && !isWeekly && (
         <AttendanceReview
           key={review.id}
           student={review}
@@ -472,8 +579,13 @@ export default function AttendanceMonitoring() {
           onClose={() => setSelected(null)}
         />
       )}
-      {showGuidance && <OverlayPanel isOpen onClose={() => setShowGuidance(false)} variant="modal" title="Monitoring guidance only" className="attendance-information"><p>{overview.data.policy.disclaimer}</p></OverlayPanel>}
-      {showInformation && (
+      {showGuidance && overview.data && <OverlayPanel isOpen onClose={() => setShowGuidance(false)} variant="modal" title="Monitoring guidance only" className="attendance-information"><p>{overview.data.policy.disclaimer}</p></OverlayPanel>}
+      {showInformation && isWeekly && (
+        <OverlayPanel isOpen onClose={() => setShowInformation(false)} variant="modal" title="How weekly attendance works" className="attendance-information">
+          <p>Each class day marked Absent or Late by the adviser counts once in its Monday to Friday week. Weekends, term breaks, and saved no-class dates are excluded. Late arrivals are tracked separately from absences.</p>
+        </OverlayPanel>
+      )}
+      {showInformation && !isWeekly && overview.data && (
         <AttendanceInformation
           policy={overview.data.policy}
           onClose={() => setShowInformation(false)}

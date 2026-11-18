@@ -3,7 +3,8 @@ const { DISCLAIMER, TIERS, tierForOccurrences } = require('./AttendanceIntervent
 
 const VERSION = 'attendance-monitoring-v5';
 const fail = (message, status = 400) => Object.assign(new Error(message), { status });
-const dayAfter = date => new Date(Date.parse(`${date}T00:00:00Z`) + 86400000).toISOString().slice(0, 10);
+const addDays = (date, days) => new Date(Date.parse(date) + days * 86400000).toISOString().slice(0, 10);
+const dayAfter = date => addDays(date, 1);
 const validDate = date => typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)
   && Number.isFinite(Date.parse(date)) && new Date(date).toISOString().slice(0, 10) === date;
 const NO_CLASSES = new Set(['HOLIDAY', 'SUSPENSION']);
@@ -32,14 +33,24 @@ function scheduledDays(terms) {
   return [...new Set(dates)];
 }
 
-function summarizeLearner(learner, dates, exclusions, records, asOf) {
-  const calendar = dates.filter(date => !exclusions.has(date));
-  const elapsed = calendar.filter(date => date <= asOf);
+function groupMarks(records) {
   const marks = new Map();
   for (const record of records) {
     if (!marks.has(record.date)) marks.set(record.date, []);
     marks.get(record.date).push(record.status);
   }
+  return marks;
+}
+
+function resolveMark(entries) {
+  const status = entries[0];
+  return ['P', 'A', 'L'].includes(status) && entries.every(value => value === status) ? status : null;
+}
+
+function summarizeLearner(learner, dates, exclusions, records, asOf) {
+  const calendar = dates.filter(date => !exclusions.has(date));
+  const elapsed = calendar.filter(date => date <= asOf);
+  const marks = groupMarks(records);
   const missingDates = [], conflictingDates = [], incidents = [], months = new Map();
   let absent = 0, late = 0, present = 0, run = [], lastResolved = false;
   const finishRun = () => {
@@ -52,8 +63,8 @@ function summarizeLearner(learner, dates, exclusions, records, asOf) {
     const monthly = months.get(month);
     monthly.expectedDays++;
     const entries = marks.get(date) || [];
-    const distinct = new Set(entries);
-    if (!entries.length || distinct.size !== 1 || entries.some(status => !['P', 'A', 'L'].includes(status))) {
+    const status = resolveMark(entries);
+    if (!status) {
       (entries.length ? conflictingDates : missingDates).push(date);
       lastResolved = false;
       finishRun();
@@ -61,7 +72,6 @@ function summarizeLearner(learner, dates, exclusions, records, asOf) {
     }
     lastResolved = true;
     monthly.recordedDays++;
-    const status = entries[0];
     if (status === 'A') { absent++; monthly.absent++; monthly.absenceDates.push(date); run.push(date); }
     else {
       finishRun();
@@ -105,13 +115,16 @@ async function options(database, now = new Date()) {
   return { version: VERSION, schoolYears: source.schoolYears, defaultSchoolYear: source.defaultSchoolYear, today: source.today };
 }
 
-async function preview(database, query, now = new Date(), { includeDiagnostics = false } = {}) {
+async function getYearCalendar(database, schoolYear, now) {
   const available = await options(database, now);
-  const year = available.schoolYears.find(row => row.value === String(query.schoolYear));
+  const year = available.schoolYears.find(row => row.value === String(schoolYear));
   if (!year) throw fail('Choose a configured school year.');
   const dates = scheduledDays(year.terms);
-  const asOf = available.today < dates.at(-1) ? available.today : dates.at(-1);
-  const params = [Number(year.value)];
+  return { year, dates, today: available.today };
+}
+
+async function loadLearners(database, schoolYearId) {
+  const params = [Number(schoolYearId)];
   const [[roster], [sheets], [records]] = await Promise.all([
     database.execute(`SELECT ss.student_section_id, ss.student_id, ss.section_id, sec.section_name, gl.grade_level_name,
       CONCAT_WS(', ', st.last_name, CONCAT_WS(' ', st.first_name, st.middle_name)) AS name,
@@ -146,14 +159,21 @@ async function preview(database, query, now = new Date(), { includeDiagnostics =
     if (!byStudent.has(Number(row.student_id))) byStudent.set(Number(row.student_id), []);
     byStudent.get(Number(row.student_id)).push(row);
   }
-  const students = [...byStudent.values()].map(rows => {
+  return [...byStudent.values()].map(rows => {
     const row = rows[0];
     const learner = { id: String(row.student_section_id), studentId: Number(row.student_id), name: row.name,
       sectionId: Number(row.section_id), section: row.section_name, grade: Number(String(row.grade_level_name).match(/\d+/)?.[0]),
       adviser: row.adviser || 'Not assigned', reviewReason: rows.length > 1 ? 'Multiple section enrollments need review.' : null };
-    return summarizeLearner(learner, dates, exclusions.get(learner.sectionId) || new Set(),
-      rows.length > 1 ? [] : byEnrollment.get(Number(row.student_section_id)) || [], asOf);
+    return { learner, exclusions: exclusions.get(learner.sectionId) || new Set(),
+      records: rows.length > 1 ? [] : byEnrollment.get(Number(row.student_section_id)) || [] };
   });
+}
+
+async function preview(database, query, now = new Date(), { includeDiagnostics = false } = {}) {
+  const { year, dates, today } = await getYearCalendar(database, query.schoolYear, now);
+  const asOf = today < dates.at(-1) ? today : dates.at(-1);
+  const students = (await loadLearners(database, year.value)).map(({ learner, exclusions, records }) =>
+    summarizeLearner(learner, dates, exclusions, records, asOf));
   return { version: VERSION, context: { schoolYearId: Number(year.value), schoolYear: year.label, asOf,
     startsOn: dates[0], endsOn: dates.at(-1), hasStarted: dates[0] <= asOf },
   policy: { scope: 'SECTION', occurrenceBasis: 'absent', tiers: TIERS, disclaimer: DISCLAIMER,
@@ -166,4 +186,48 @@ async function preview(database, query, now = new Date(), { includeDiagnostics =
     ({ id, name, section, incomplete, missingDates, conflictingDates, expectedDays, recordedDays, reviewReason, currentStreak, longestStreak, incidents, reasons })) } : {}) };
 }
 
-module.exports = { VERSION, options, preview, scheduledDays, summarizeLearner, dateInManila };
+function mondayOf(date) {
+  const day = new Date(date).getUTCDay();
+  return addDays(date, -((day + 6) % 7));
+}
+
+async function weekly(database, query, now = new Date()) {
+  const { year, dates, today } = await getYearCalendar(database, query.schoolYear, now);
+  const currentMonday = mondayOf(today);
+  const weeksByMonday = new Map();
+  const weekByDate = new Map();
+  for (const date of dates) {
+    if (date > today) break;
+    const startsOn = mondayOf(date);
+    weekByDate.set(date, startsOn);
+    if (!weeksByMonday.has(startsOn)) {
+      weeksByMonday.set(startsOn, { startsOn, endsOn: addDays(startsOn, 4), isCurrent: startsOn === currentMonday });
+    }
+    weeksByMonday.get(startsOn).through = date;
+  }
+  const weeks = [...weeksByMonday.values()].reverse();
+  const defaultWeek = weeks.find(week => week.endsOn < today) || weeks[0];
+  const scopedLearners = weeks.length ? await loadLearners(database, year.value) : [];
+  const students = scopedLearners.map(({ learner, exclusions, records }) => {
+    const { reviewReason, ...profile } = learner;
+    const attendanceByWeek = {};
+    const marks = groupMarks(records);
+    for (const [date, monday] of weekByDate) {
+      const entries = marks.get(date);
+      if (!entries || exclusions.has(date)) continue;
+      const status = resolveMark(entries);
+      if (status) {
+        const week = attendanceByWeek[monday] ??= { absenceDates: [], lateDates: [] };
+        if (status === 'A') week.absenceDates.push(date);
+        if (status === 'L') week.lateDates.push(date);
+      } else if (!Object.hasOwn(attendanceByWeek, monday)) {
+        // A missing key means no marks. Null means the saved marks could not be counted.
+        attendanceByWeek[monday] = null;
+      }
+    }
+    return { ...profile, unavailable: Boolean(reviewReason), attendanceByWeek };
+  });
+  return { schoolYear: year.label, weeks, defaultWeek: defaultWeek?.startsOn || '', students };
+}
+
+module.exports = { VERSION, options, preview, weekly, scheduledDays, summarizeLearner, dateInManila };

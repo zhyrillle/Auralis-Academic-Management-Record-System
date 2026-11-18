@@ -5,6 +5,7 @@
 .sm-detail-button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 10px 15px; border: 0; border-radius: 10px; background: #112d61; color: white; cursor: pointer; font: inherit; }
 .sm-filters .filter-toolbar__controls { flex: 1 1 564px; }
 .sm-filters .dropdown-select { flex: 0 0 auto; min-width: 0; }
+.filter-toolbar.sm-filters .dropdown-select__trigger { min-height: 36px; padding: 0 38px 0 12px; font-size: 12px; }
 .sm-filters .sm-filter-subject { width: 220px; }
 .sm-filters .sm-filter-section, .sm-filters .sm-filter-grade { width: 160px; }
 .sm-filters .sm-filter-term { width: 130px; }
