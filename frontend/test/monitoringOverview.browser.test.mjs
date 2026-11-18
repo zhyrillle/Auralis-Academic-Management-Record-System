@@ -33,6 +33,26 @@ try {
         if (holdOldYear && year === '2') await oldYearGate;
         return attendanceError ? json({ message: 'Fixture attendance error' }, 503) : json(attendanceOverview(year));
       }
+      if (path.endsWith('/attendance-monitoring/weekly')) {
+        const { context, students } = attendanceOverview(url.searchParams.get('schoolYear'));
+        const completedWeek = '2026-11-09', currentWeek = '2026-11-16';
+        return json({
+          schoolYear: context.schoolYear, defaultWeek: completedWeek,
+          weeks: [
+            { startsOn: currentWeek, endsOn: '2026-11-20', through: '2026-11-18', isCurrent: true },
+            { startsOn: completedWeek, endsOn: '2026-11-13', through: '2026-11-13', isCurrent: false },
+          ],
+          students: students.map(({ id, name, grade, section, sectionId, adviser }, i) => ({
+            id, name, grade, section, sectionId, adviser, attendanceByWeek: {
+              ...(i < 3 && { [completedWeek]: {
+                absenceDates: i === 2 ? ['2026-11-12'] : [],
+                lateDates: [[], ['2026-11-10'], ['2026-11-09', '2026-11-11', '2026-11-13']][i],
+              } }),
+              ...(i === 0 && { [currentWeek]: { absenceDates: [], lateDates: ['2026-11-17'] } }),
+            },
+          })),
+        });
+      }
       if (path.endsWith('/monitoring/context')) return json({ department: { name: 'English' }, schoolYears: [{ id: 3, label: '2026-2027', isCurrent: true }] });
       if (path.endsWith('/monitoring/academic-risk')) {
         const result = riskSummary(url.searchParams.get('term') || 'T2');
@@ -64,13 +84,19 @@ try {
   assert.equal(await page.locator('.attendance-monitor__tiers button').count(), 6);
   await page.getByRole('columnheader', { name: 'Longest streak', exact: true }).waitFor();
   assert.equal(await page.getByRole('columnheader', { name: 'Occurrences', exact: true }).count(), 0);
-  const firstRow = page.locator('.attendance-monitor tbody tr').first();
-  assert.equal(await firstRow.locator('td').nth(3).textContent(), '5 days');
-  const reviewColors = await firstRow.getByRole('button', { name: 'Review Fixture Learner 01', exact: true }).evaluate(node => ({ bg: getComputedStyle(node).backgroundColor, text: getComputedStyle(node).color }));
+  const yearlyRows = page.locator('.attendance-monitor tbody tr');
+  assert.equal(await page.getByRole('columnheader', { name: 'Absence rate', exact: true }).count(), 0);
+  assert.match(await yearlyRows.first().textContent(), /Fixture Learner 06/);
+  assert.equal(await yearlyRows.first().locator('td').nth(1).textContent(), '41');
+  assert.match(await yearlyRows.nth(1).textContent(), /Fixture Learner 09/);
+  assert.equal(await yearlyRows.nth(1).locator('td').nth(1).textContent(), '8');
+  const learner01 = yearlyRows.filter({ hasText: 'Fixture Learner 01' });
+  assert.equal(await learner01.locator('td').nth(3).textContent(), '5 days');
+  const reviewColors = await learner01.getByRole('button', { name: 'Review Fixture Learner 01', exact: true }).evaluate(node => ({ bg: getComputedStyle(node).backgroundColor, text: getComputedStyle(node).color }));
   assert.deepEqual(reviewColors, { bg: 'rgb(17, 45, 97)', text: 'rgb(255, 255, 255)' });
   const disclaimer = 'Numerical thresholds serve only as monitoring and intervention guides.';
   assert.equal(await page.locator('.attendance-monitor__disclaimer').count(), 0);
-  await page.locator('.attendance-monitor__scope').getByRole('button', { name: 'Monitoring guidance only', exact: true }).click();
+  await page.getByRole('button', { name: 'Monitoring guidance only', exact: true }).click();
   assert.ok((await page.getByRole('dialog').textContent()).includes(disclaimer));
   await page.keyboard.press('Escape');
   await page.getByRole('dialog').waitFor({ state: 'hidden' });
@@ -138,6 +164,42 @@ try {
     await page.keyboard.press('Escape'); await modal.waitFor({ state: 'hidden' });
     await page.locator(`.attendance-monitor__card--tier${tier}`).click();
   }
+  await page.setViewportSize({ width: 1366, height: 900 });
+  const attendanceViews = page.locator('.attendance-monitor__header').getByRole('tablist', { name: 'Attendance view' });
+  await attendanceViews.getByRole('tab', { name: 'Weekly attendance', exact: true }).click();
+  const weeklyTable = page.getByRole('region', { name: 'Weekly attendance records' });
+  await weeklyTable.getByRole('columnheader', { name: 'Absent this week' }).waitFor();
+  await weeklyTable.getByRole('columnheader', { name: 'Late this week' }).waitFor();
+  const weeklyRows = weeklyTable.locator('tbody tr');
+  assert.match(await weeklyRows.first().textContent(), /Fixture Learner 03/);
+  assert.equal(await weeklyRows.first().locator('td').nth(1).textContent(), '1');
+  assert.equal(await weeklyRows.first().locator('td').nth(2).textContent(), '3');
+  assert.equal(await weeklyRows.nth(2).locator('td').nth(2).textContent(), '0');
+  assert.equal(await weeklyRows.nth(3).locator('td').nth(1).textContent(), 'No attendance recorded');
+  await weeklyRows.first().getByRole('button', { name: 'Review Fixture Learner 03', exact: true }).click();
+  assert.deepEqual(await modal.getByRole('list', { name: 'Absence dates this week' }).locator('time').evaluateAll(nodes => nodes.map(node => node.dateTime)),
+    ['2026-11-12']);
+  assert.deepEqual(await modal.getByRole('list', { name: 'Late-arrival dates this week' }).locator('time').evaluateAll(nodes => nodes.map(node => node.dateTime)),
+    ['2026-11-09', '2026-11-11', '2026-11-13']);
+  await page.keyboard.press('Escape'); await modal.waitFor({ state: 'hidden' });
+  await page.getByRole('button', { name: /^Week: Nov 9/ }).click();
+  await page.getByRole('option', { name: /^This week/ }).click();
+  await page.getByText('Through Nov 18, 2026 · Most late arrivals first').waitFor();
+  assert.match(await weeklyRows.first().textContent(), /Fixture Learner 01/);
+  await drop('Grade level: All grade levels', 'Grade 8');
+  await drop('Section: All sections', 'Fixture A');
+  assert.equal(await weeklyRows.count(), 11);
+  for (const width of [1366, 768, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `weekly attendance page overflow at ${width}`);
+  }
+  await attendanceViews.getByRole('tab', { name: 'School-year overview', exact: true }).click();
+  await page.getByRole('columnheader', { name: 'Longest streak', exact: true }).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Grade level: Grade 8', exact: true }).count(), 1);
+  assert.equal(await page.getByRole('button', { name: 'Section: Fixture A', exact: true }).count(), 1);
+  assert.equal(await page.locator('.attendance-monitor__tiers button').count(), 6);
+  await drop('Grade level: Grade 8', 'All grade levels');
+  await page.setViewportSize({ width: 1366, height: 900 });
   await drop('Grade level: All grade levels', 'Grade 8');
   await drop('Section: All sections', 'Fixture A');
   assert.equal(await page.locator('.attendance-monitor tbody tr').count(), 11);
@@ -239,6 +301,6 @@ try {
   assert.equal(await dept.locator('.dept-pass-chart').getByText('100%', { exact: true }).count(), 0);
   assert.deepEqual(writes, []);
   assert.deepEqual(errors, []);
-  console.log('PASS attendance navigation, filters, Retry, and department risk source/shared header terms at 390/768/1366px.');
+  console.log('PASS attendance navigation, weekly tardiness, filters, Retry, and department risk source/shared header terms at 390/768/1366px.');
   console.log(artifacts);
 } finally { releaseOldYear?.(); await browser?.close(); await server.close(); }

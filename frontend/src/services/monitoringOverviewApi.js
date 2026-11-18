@@ -16,6 +16,7 @@ async function read(path, params = {}) {
   return result;
 }
 export const getAttendanceOptions = () => read('/principal/attendance-monitoring/options');
+export const getWeeklyTardiness = schoolYear => read('/principal/attendance-monitoring/weekly', { schoolYear });
 export async function getAttendanceOverview(schoolYear) {
   const data = await read('/principal/attendance-monitoring/preview', { schoolYear });
   if (data.version !== 'attendance-monitoring-v5' || data.policy?.occurrenceBasis !== 'absent' || !Array.isArray(data.policy?.tiers) || data.policy.tiers.length !== 6 || !data.policy.disclaimer) {

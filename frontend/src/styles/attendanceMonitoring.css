@@ -5,7 +5,10 @@
 .attendance-monitor h2 { font-size: 17px; margin: 0; }
 .attendance-monitor p, .attendance-review p, .attendance-information p { color: #526781; font-size: 13px; line-height: 1.65; margin: 0; }
 .attendance-monitor__header > div > p { margin-top: 6px; }
-.attendance-monitor__scope { display: flex; align-items: center; gap: 7px; flex-shrink: 0; color: #526781; font-size: 13px; line-height: 1.65; }
+.attendance-monitor__header .attendance-monitor__views { display: inline-flex; width: auto; padding: 3px; flex-shrink: 0; }
+.attendance-monitor__header .attendance-monitor__views button { min-height: 28px; padding: 4px 10px; font-size: 12px; }
+.attendance-monitor .filter-toolbar .attendance-monitor__week-filter { width: 235px; }
+.attendance-monitor__missing-week { color: #526781; }
 .attendance-monitor__info { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; flex: 0 0 auto; background: transparent; border: 0; border-radius: 50%; color: #526781; cursor: pointer; }
 .attendance-monitor__info:hover { background: #e8eff9; color: #123062; }
 .attendance-monitor button:focus-visible, .attendance-review button:focus-visible { outline: 2px solid #315da5; outline-offset: 3px; }
@@ -71,6 +74,8 @@
 .attendance-review__facts dt { color: #465b76; font-size: 12px; font-weight: 500; margin-bottom: 6px; }
 .attendance-review__facts dd { color: #193451; font-size: 14px; font-weight: 500; margin: 0; line-height: 1.55; }
 .attendance-review .app-overlay__header p, .attendance-review p { color: #435773; }
+.attendance-review--weekly .app-overlay__header p { margin-top: 10px; }
+.attendance-review__weekly-marks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
 .attendance-review table { color: #243f60; }
 .attendance-review__monthly td[data-label] { font-weight: 500; }
 .attendance-review h3, .attendance-information h3 { margin: 0 0 12px; color: #183256; font-size: 15px; font-weight: 600; }
@@ -112,16 +117,19 @@
   .attendance-monitor__tiers { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .attendance-monitor__tier:nth-child(n+4) { border-top: 1px solid #e5ebf4; }
 }
+@media (max-width: 640px) {
+  .attendance-monitor .filter-toolbar .attendance-monitor__week-filter { flex: 1 1 100%; width: auto; }
+}
 @media (max-width: 600px) {
   .attendance-monitor__overview { grid-template-columns: minmax(0, 1fr); }
   .attendance-monitor__overview .attendance-monitor__total { border-right: 0 !important; border-bottom: 1px solid #e5ebf4; }
   .attendance-monitor__tiers { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .attendance-monitor h1 { font-size: 23px; }
-  .attendance-monitor__header p.attendance-monitor__scope { font-size: 12px; }
   .attendance-monitor__table-heading { align-items: flex-start; padding: 16px; gap: 14px; }
   .attendance-monitor__table-filters { flex-direction: column; align-items: stretch; flex-basis: 100%; }
   .attendance-monitor__table-filters .search-bar-container, .attendance-monitor__table-filters .dropdown-select { width: 100%; max-width: none; flex-basis: auto; }
   .attendance-review__facts { gap: 16px; }
+  .attendance-review__weekly-marks { grid-template-columns: minmax(0, 1fr); }
   .attendance-review__totals { gap: 7px; }
   .attendance-review__totals > div { padding: 12px 9px; }
   .attendance-review__totals dt { font-size: 11px; }

@@ -13,4 +13,5 @@ const read = action => async (req, res) => {
 };
 router.get('/options', read(() => service.options(db)));
 router.get('/preview', read(req => service.preview(db, req.query)));
+router.get('/weekly', read(req => service.weekly(db, req.query)));
 module.exports = router;
