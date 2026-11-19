@@ -10,7 +10,7 @@ import { cachedApiFetch as apiFetch } from "../../services/navigationCache.js";
 import Toast from "../../components/common/Toast.jsx";
 import EmptyState from "../../components/common/EmptyState.jsx";
 import AttendanceDayControl from "../../components/adviser/AttendanceDayControl.jsx";
-import { NO_CLASS_LABELS, noClassDaysFromSheets, classDaysForMonth, getHolidayInfo, isOfficialHoliday } from "../../utils/attendanceDays.js";
+import { NO_CLASS_LABELS, noClassDaysFromSheets, classDaysForMonth, getHolidayInfo, isOfficialHoliday, getOfficialHolidays } from "../../utils/attendanceDays.js";
 import {
   saveOfflineAttendance,
   getPendingOfflineAttendance,
@@ -147,6 +147,7 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [showAllHolidays, setShowAllHolidays] = useState(false);
   const [toasts, setToasts] = useState([]);
   const [syncStatus, setSyncStatus] = useState(
     typeof navigator !== "undefined" && !navigator.onLine ? "offline" : "saved"
@@ -797,6 +798,54 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
     const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, 1);
     return d.toLocaleDateString("en-US", { month: "long", year: "numeric" });
   }, [selectedDate, TODAY]);
+
+  const currentYear = useMemo(() => {
+    const parts = (selectedDate || TODAY).split("-");
+    return parseInt(parts[0], 10) || 2026;
+  }, [selectedDate, TODAY]);
+
+  const currentMonthNum = useMemo(() => {
+    const parts = (selectedDate || TODAY).split("-");
+    return parseInt(parts[1], 10) || 1;
+  }, [selectedDate, TODAY]);
+
+  const monthHolidays = useMemo(() => {
+    const list = getOfficialHolidays(currentYear);
+    const monthPrefix = `${currentYear}-${String(currentMonthNum).padStart(2, "0")}`;
+    const result = list.filter(h => h.date.startsWith(monthPrefix));
+
+    // Also include any other dates marked in noClassDays for this month (e.g. suspensions or custom markers)
+    Object.entries(noClassDays).forEach(([dateStr, reason]) => {
+      if (dateStr.startsWith(monthPrefix) && !result.some(h => h.date === dateStr)) {
+        result.push({
+          date: dateStr,
+          name: reason === 'SUSPENSION' ? 'Classes Suspended' : 'No Classes (Marked)',
+          type: reason,
+        });
+      }
+    });
+
+    return result.sort((a, b) => a.date.localeCompare(b.date));
+  }, [currentYear, currentMonthNum, noClassDays]);
+
+  const allYearHolidays = useMemo(() => {
+    const list = [
+      ...getOfficialHolidays(currentYear),
+      ...getOfficialHolidays(currentYear + 1),
+    ];
+    const map = new Map();
+    list.forEach(h => map.set(h.date, h));
+    return Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date));
+  }, [currentYear]);
+
+  const displayedHolidays = showAllHolidays ? allYearHolidays : monthHolidays;
+
+  const formatHolidayDate = (dateStr) => {
+    const parts = String(dateStr).split("-");
+    if (parts.length < 3) return dateStr;
+    const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", weekday: "short" });
+  };
 
   // ── Helper to find or create attendance sheet for a date ──
   const ensureSheetForDate = async (dateStr) => {
@@ -1835,6 +1884,47 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
               <span className="att-legend-text"><strong>No classes</strong> = Holiday / Suspension; excluded from totals</span>
             </div>
           </div>
+
+          {/* Official Holidays List */}
+          <div className="att-holiday-legend-section">
+            <div className="att-holiday-legend-header">
+              <div className="att-holiday-legend-title">
+                <CalendarOff size={14} aria-hidden="true" />
+                <span>Official Holidays List</span>
+              </div>
+              <button
+                type="button"
+                className="att-holiday-toggle-btn"
+                onClick={() => setShowAllHolidays(prev => !prev)}
+                title={showAllHolidays ? "Show this month's holidays only" : "View all school-year holidays"}
+              >
+                {showAllHolidays ? "This Month" : `View All (${allYearHolidays.length})`}
+              </button>
+            </div>
+
+            <div className="att-holiday-scope-label">
+              {showAllHolidays ? `All Holidays for School Year (${currentYear}–${currentYear + 1})` : `Holidays for ${currentMonthName}`}
+            </div>
+
+            {displayedHolidays.length > 0 ? (
+              <div className="att-holiday-tags-scroll">
+                {displayedHolidays.map(h => (
+                  <div key={h.date} className="att-holiday-tag-item" title={`${h.name} (${h.type === 'REGULAR' ? 'Regular Holiday' : h.type === 'SPECIAL_NON_WORKING' ? 'Special Non-Working' : h.type})`}>
+                    <div className="att-holiday-tag-main">
+                      <span className="att-holiday-tag-date">{formatHolidayDate(h.date)}</span>
+                      <span className="att-holiday-tag-name">{h.name}</span>
+                    </div>
+                    <span className={`att-holiday-tag-type ${String(h.type || '').toLowerCase()}`}>
+                      {h.type === 'REGULAR' ? 'Regular' : h.type === 'SPECIAL_NON_WORKING' ? 'Special' : h.type}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="att-no-holidays-note">No official holidays scheduled for {currentMonthName}.</p>
+            )}
+          </div>
+
           <p style={{ fontSize: "12px", color: "#64748b", marginTop: "12px", fontStyle: "italic", lineHeight: 1.4 }}>
             * Click any school day cell to toggle status: <strong>Present (P) ➡ Late (L) ➡ Absent (A) ➡ Clear (Blank)</strong>. Official calendar holidays are automatically excluded from class days.
           </p>
