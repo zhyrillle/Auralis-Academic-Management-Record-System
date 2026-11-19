@@ -66,13 +66,19 @@ test('existing entries require explicit confirmation before a no-class marker is
   assert.ok(state.rolledBack && state.released);
 });
 
-test('other advisers and past/future dates cannot change a marker', async () => {
-  for (const options of [{ owner: 88 }, { date: '2026-10-11' }, { date: '2026-10-13' }]) {
-    const { service, database, state } = harness(options);
-    await assert.rejects(service.setNoClasses({ sheetId: 11, reason: 'HOLIDAY', userId: 9, confirmExistingRecords: true }, database, now), failure =>
-      failure.code === (options.owner ? 'DAY_MARKER_FORBIDDEN' : 'ATTENDANCE_DATE_LOCKED'));
-    assert.ok(state.rolledBack);
-    assert.deepEqual(state.reasons, [null, null]);
+test('other advisers cannot change a marker, but past/future dates are open to be marked', async () => {
+  const { service, database, state } = harness({ owner: 88 });
+  await assert.rejects(service.setNoClasses({ sheetId: 11, reason: 'HOLIDAY', userId: 9, confirmExistingRecords: true }, database, now), failure =>
+    failure.code === 'DAY_MARKER_FORBIDDEN');
+  assert.ok(state.rolledBack);
+  assert.deepEqual(state.reasons, [null, null]);
+
+  // Past and future dates can now be marked
+  for (const date of ['2026-10-11', '2026-10-13']) {
+    const { service: s, database: db, state: st } = harness({ date, owner: 9 });
+    const res = await s.setNoClasses({ sheetId: 11, reason: 'HOLIDAY', userId: 9, confirmExistingRecords: true }, db, now);
+    assert.equal(res.no_class_reason, 'HOLIDAY');
+    assert.deepEqual(st.reasons, ['HOLIDAY', 'HOLIDAY']);
   }
 });
 

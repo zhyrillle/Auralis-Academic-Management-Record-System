@@ -73,9 +73,6 @@ async function setNoClasses({ sheetId, reason, confirmExistingRecords = false, u
     if (context.attendance_scope !== 'SECTION' || Number(context.adviser_user_id) !== Number(userId)) {
       throw error(403, 'DAY_MARKER_FORBIDDEN', 'Only the assigned class adviser can mark this section’s day.');
     }
-    if (context.attendance_date !== todayInManila(now)) {
-      throw error(409, 'ATTENDANCE_DATE_LOCKED', 'Past and future dates are read-only. Only today can be marked or unmarked.');
-    }
     const ids = sheets.map(sheet => sheet.attendance_sheet_id);
     const placeholders = ids.map(() => '?').join(',');
     const [counts] = await connection.execute(`SELECT COUNT(*) AS record_count FROM ATTENDANCE

@@ -1,0 +1,8 @@
+-- Create OFFICIAL_HOLIDAY table if not exists
+CREATE TABLE IF NOT EXISTS OFFICIAL_HOLIDAY (
+  holiday_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  holiday_name VARCHAR(100) NOT NULL,
+  holiday_date DATE NOT NULL,
+  holiday_type ENUM('REGULAR', 'SPECIAL_NON_WORKING') NOT NULL DEFAULT 'REGULAR',
+  UNIQUE KEY uq_holiday_date (holiday_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;

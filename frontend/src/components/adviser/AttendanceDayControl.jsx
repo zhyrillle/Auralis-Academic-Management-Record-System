@@ -47,7 +47,7 @@ export default function AttendanceDayControl({ date, reason, disabled, saving, o
         onClick={open}
         disabled={disabled || saving}
         aria-haspopup="dialog"
-        title={disabled ? 'Only today’s day marker can be changed.' : (isMarked ? 'Edit no-class marker for today' : 'Mark today as having no classes')}
+        title={disabled ? 'Cannot change day marker.' : (isMarked ? `Edit no-class marker for ${formattedDate || 'selected date'}` : `Mark ${formattedDate || 'selected date'} as having no classes`)}
       >
         <CalendarOff size={15} aria-hidden="true" />
         <span>{isMarked ? 'Edit No-Class Marker' : 'Mark No Classes'}</span>
