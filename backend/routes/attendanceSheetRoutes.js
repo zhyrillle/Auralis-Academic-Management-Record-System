@@ -82,6 +82,18 @@ router.post('/find-or-create', async (req, res) => {
   }
 });
 
+// GET official holidays for a year or range
+router.get('/holidays', (req, res) => {
+  try {
+    const year = parseInt(req.query.year, 10) || new Date().getFullYear();
+    const OfficialHolidayService = require('../services/OfficialHolidayService');
+    const holidays = OfficialHolidayService.getOfficialHolidaysForYear(year);
+    res.json(holidays);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/:id', async (req, res) => {
   try {
     const sheet = await AttendanceSheet.findById(req.params.id);

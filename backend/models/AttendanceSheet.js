@@ -1,6 +1,7 @@
 const db = require('../config/db');
 const { withWritableSheet } = require('../services/AttendanceDayService');
 const cloudSync = require('../services/cloudSyncService');
+const { isOfficialHoliday, autoPopulateSectionHolidays } = require('../services/OfficialHolidayService');
 
 class AttendanceSheet {
   static async findAll() {
@@ -17,6 +18,7 @@ class AttendanceSheet {
   static async findOrCreate({ section_id, adviser_assignment_id, teacher_assignment_id, attendance_scope, attendance_date, user_id }) {
     const cleanDate = String(attendance_date).split('T')[0];
     const isSubject = attendance_scope === 'SUBJECT' || Boolean(teacher_assignment_id);
+    const holidayReason = isOfficialHoliday(cleanDate) ? 'HOLIDAY' : null;
 
     // 1. Subject Teacher Attendance (attendance_scope = 'SUBJECT')
     if (isSubject) {
@@ -46,14 +48,15 @@ class AttendanceSheet {
           return { attendance_sheet_id: existing[0].attendance_sheet_id, created: false };
         }
         const [result] = await db.execute(
-          `INSERT INTO ATTENDANCE_SHEET (teacher_assignment_id, attendance_scope, attendance_date)
-           VALUES (?, 'SUBJECT', ?)`,
-          [targetTeacherAssignmentId, cleanDate]
+          `INSERT INTO ATTENDANCE_SHEET (teacher_assignment_id, attendance_scope, attendance_date, no_class_reason)
+           VALUES (?, 'SUBJECT', ?, ?)`,
+          [targetTeacherAssignmentId, cleanDate, holidayReason]
         );
         cloudSync.forwardAttendanceSheetToCloud(result.insertId, {
           teacher_assignment_id: targetTeacherAssignmentId,
           attendance_scope: 'SUBJECT',
           attendance_date: cleanDate,
+          no_class_reason: holidayReason,
         }).catch(() => {});
         return { attendance_sheet_id: result.insertId, created: true };
       }
@@ -95,14 +98,15 @@ class AttendanceSheet {
         return { attendance_sheet_id: existing[0].attendance_sheet_id, created: false };
       }
       const [result] = await db.execute(
-        `INSERT INTO ATTENDANCE_SHEET (adviser_assignment_id, attendance_scope, attendance_date)
-         VALUES (?, 'SECTION', ?)`,
-        [targetAdviserAssignmentId, cleanDate]
+        `INSERT INTO ATTENDANCE_SHEET (adviser_assignment_id, attendance_scope, attendance_date, no_class_reason)
+         VALUES (?, 'SECTION', ?, ?)`,
+        [targetAdviserAssignmentId, cleanDate, holidayReason]
       );
       cloudSync.forwardAttendanceSheetToCloud(result.insertId, {
         adviser_assignment_id: targetAdviserAssignmentId,
         attendance_scope: 'SECTION',
         attendance_date: cleanDate,
+        no_class_reason: holidayReason,
       }).catch(() => {});
       return { attendance_sheet_id: result.insertId, created: true };
     }
@@ -130,14 +134,15 @@ class AttendanceSheet {
       targetAdviserAssignmentId = insSaa.insertId;
 
       const [result] = await db.execute(
-        `INSERT INTO ATTENDANCE_SHEET (adviser_assignment_id, attendance_scope, attendance_date)
-         VALUES (?, 'SECTION', ?)`,
-        [targetAdviserAssignmentId, cleanDate]
+        `INSERT INTO ATTENDANCE_SHEET (adviser_assignment_id, attendance_scope, attendance_date, no_class_reason)
+         VALUES (?, 'SECTION', ?, ?)`,
+        [targetAdviserAssignmentId, cleanDate, holidayReason]
       );
       cloudSync.forwardAttendanceSheetToCloud(result.insertId, {
         adviser_assignment_id: targetAdviserAssignmentId,
         attendance_scope: 'SECTION',
         attendance_date: cleanDate,
+        no_class_reason: holidayReason,
       }).catch(() => {});
       return { attendance_sheet_id: result.insertId, created: true };
     }
@@ -197,6 +202,10 @@ class AttendanceSheet {
       query += ` ORDER BY ash.attendance_date ASC`;
       const [rows] = await db.execute(query, params);
       return rows;
+    }
+
+    if (!isSubject && sectionId) {
+      await autoPopulateSectionHolidays(sectionId, schoolYearId).catch(() => {});
     }
 
     const params = [sectionId];
