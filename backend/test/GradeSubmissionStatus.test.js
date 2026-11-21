@@ -54,6 +54,8 @@ test('reads all three term statuses without calculating or changing grades', asy
   assert.equal(result.subjects[0].terms[0].submittedBy.name, 'Actual Submitter');
   assert.equal(result.subjects[0].assignedTeachers[0], 'Assigned Teacher');
   assert(f.calls.every(c => c.sql.trim().startsWith('SELECT')));
+  const actorQuery = f.calls.find(c => c.sql.includes('FROM AUDIT_EVENT'));
+  assert.match(actorQuery.sql, /GRADE_SHEET_RESUBMITTED/);
 });
 test('teacher reads are restricted to their own offering and year', async () => {
   const f = fixture();

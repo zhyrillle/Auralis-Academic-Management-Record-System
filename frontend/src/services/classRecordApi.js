@@ -612,6 +612,7 @@ export const createAssessment = async (payload) => {
     body: JSON.stringify(payload),
   });
   const data = await parseResponse(res);
+  clearNavigationCache({ persistent: false });
   if (data?.offline && !data.assessment) {
     const tempId = `offline_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     data.assessment = {
@@ -641,7 +642,9 @@ export const updateAssessment = async (assessmentId, payload) => {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
-  return parseResponse(res);
+  const data = await parseResponse(res);
+  clearNavigationCache({ persistent: false });
+  return data;
 };
 
 export const deleteAssessment = async (assessmentId) => {
@@ -651,7 +654,9 @@ export const deleteAssessment = async (assessmentId) => {
   const res = await fetch(`${API_BASE_URL}/assessments/${assessmentId}`, {
     method: "DELETE",
   });
-  return parseResponse(res);
+  const data = await parseResponse(res);
+  clearNavigationCache({ persistent: false });
+  return data;
 };
 
 export const saveScoresBatch = async ({ subject_offering_id, term = "T1", scores, mapeh_component = null, examConfig = null }, scope = getSessionScope()) => {
@@ -699,6 +704,7 @@ export const saveScoresBatch = async ({ subject_offering_id, term = "T1", scores
     });
     const data = await parseResponse(res);
     assertCurrentSession(scope);
+    clearNavigationCache({ persistent: false });
     return data;
   } catch (err) {
     if (scope) assertCurrentSession(scope);
@@ -807,5 +813,6 @@ export async function submitTeacherGrades(context) {
     || Number(data.sectionId) !== Number(context.section_id) || Number(data.schoolYearId) !== Number(context.school_year_id)) {
     throw new Error('The server did not confirm this class and term submission. Please retry online.');
   }
+  clearNavigationCache({ persistent: false });
   return data;
 }

@@ -328,18 +328,21 @@ export default function GradingSheet({
         showToast(`Opening Print Preview for ${activeSelectedClass?.gradeLevel || ""} - ${activeSelectedClass?.sectionName || ""} (${printSubject})`, "success", CheckCircle2);
     };
 
+    const isResubmittable = currentSubmission?.state === "SUBMITTED" && Boolean(submissionWindow?.resubmittable);
+    const isLockedSubmitted = currentSubmission?.state === "SUBMITTED" && !isResubmittable;
+
     const handleFooterSubmitTrigger = async () => {
         if (!onSubmit || !/^T[123]$/.test(currentTermCode)) throw new Error("Load the current class and term before submitting.");
         const result = await onSubmit(activeSelectedClass?.id, currentTermCode);
         if (result?.submitted !== true || result.term !== currentTermCode) throw new Error("The server did not confirm this term submission.");
         submissionStatus.retry();
-        showToast(`${currentTermLabel} grades for ${activeSelectedClass?.gradeLevel || ""} - ${activeSelectedClass?.sectionName || ""} submitted successfully!`, "success", CheckCircle2);
+        showToast(`${currentTermLabel} grades for ${activeSelectedClass?.gradeLevel || ""} - ${activeSelectedClass?.sectionName || ""} ${isResubmittable ? "resubmitted" : "submitted"} successfully!`, "success", CheckCircle2);
         return result;
     };
 
     // Calculate submit button disabled state and hover reason
     const { isSubmitDisabled, submitDisabledReason } = useMemo(() => {
-        if (currentSubmission?.state === "SUBMITTED") {
+        if (isLockedSubmitted) {
             return { isSubmitDisabled: true, submitDisabledReason: "Grades already submitted (Locked)" };
         }
 
@@ -349,6 +352,13 @@ export default function GradingSheet({
 
         if (!currentTermCode) {
             return { isSubmitDisabled: true, submitDisabledReason: "Loading academic term information..." };
+        }
+
+        if (Array.isArray(activeSelectedClass?.submissionTerms) && !submissionWindow) {
+            return {
+                isSubmitDisabled: true,
+                submitDisabledReason: "The submission window for this term is closed. Request grade reopening if changes are needed.",
+            };
         }
 
         // 1. MAPEH Term Restriction Check: Cannot submit for terms that have already passed or are yet to come
@@ -420,7 +430,7 @@ export default function GradingSheet({
         }
 
         return { isSubmitDisabled: false, submitDisabledReason: "" };
-    }, [currentSubmission, currentTermCode, currentTermLabel, isMapeh, activeMapehTab, combinedTermFilter, students, resolveStudentGrades]);
+    }, [isLockedSubmitted, currentSubmission, currentTermCode, currentTermLabel, activeSelectedClass?.submissionTerms, submissionWindow, isMapeh, activeMapehTab, combinedTermFilter, students, resolveStudentGrades]);
 
     const getDescriptorClass = (desc) => {
         switch (desc) {
@@ -574,7 +584,7 @@ export default function GradingSheet({
                     />
                 </div>
 
-                {activeSelectedClass?.submitted && (
+                {activeSelectedClass?.submitted && !isResubmittable && (
                     <div
                         style={{
                             display: "flex",
@@ -885,11 +895,18 @@ export default function GradingSheet({
             <SubmissionFooter
                 deadline={resolvedDeadline}
                 isSubmitted={currentSubmission?.state === "SUBMITTED"}
+                canResubmit={isResubmittable}
                 onSubmit={handleFooterSubmitTrigger}
                 userRole={userRole}
                 disabled={loading || isSubmitDisabled}
                 disabledReason={submitDisabledReason}
-                modalTitle={`Submit ${currentTermLabel || "term"} grades to adviser?`}
+                modalTitle={isResubmittable
+                    ? `Resubmit ${currentTermLabel || "term"} grades to adviser?`
+                    : `Submit ${currentTermLabel || "term"} grades to adviser?`}
+                modalDescription={isResubmittable
+                    ? "This will update your previously submitted grades for the class adviser with your latest class record scores."
+                    : undefined}
+                confirmText={isResubmittable ? "Resubmit" : "Submit"}
                 statusContent={<>
                     {submissionTerms.some(t => t.correction) && <label>Submission term: <SelectFilter value={currentTermCode || ""}
                         onChange={setSubmissionTermChoice} options={submissionTerms.map(t => ({

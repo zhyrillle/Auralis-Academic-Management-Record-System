@@ -102,7 +102,7 @@ function AuditEventDrawerContent({ event, onClose }) {
     ?? getSectionId(event.afterData ?? event.after_data)
     ?? getSectionId(event.beforeData ?? event.before_data);
   const changes = getAuditChangeGroups(event);
-  const isSubmission = ['GRADE_SHEET_SUBMITTED', 'GRADE_SHEET_CORRECTION_RESUBMITTED'].includes(event.eventType);
+  const isSubmission = ['GRADE_SHEET_SUBMITTED', 'GRADE_SHEET_RESUBMITTED', 'GRADE_SHEET_CORRECTION_RESUBMITTED'].includes(event.eventType);
   let savedAfter = event.afterData ?? event.after_data;
   if (typeof savedAfter === 'string') {
     try { savedAfter = JSON.parse(savedAfter); } catch { savedAfter = null; }

@@ -57,7 +57,7 @@ class GradeSubmissionStatusService {
         JOIN SUBJECT_OFFERING so ON so.subject_offering_id = gs.subject_offering_id
         LEFT JOIN USER u ON u.user_id = a.user_id
         WHERE a.entity_type = 'GRADE_SHEET'
-          AND a.event_type IN ('GRADE_SHEET_SUBMITTED', 'GRADE_SHEET_CORRECTION_RESUBMITTED')
+          AND a.event_type IN ('GRADE_SHEET_SUBMITTED', 'GRADE_SHEET_RESUBMITTED', 'GRADE_SHEET_CORRECTION_RESUBMITTED')
           AND gs.submitted_at IS NOT NULL AND a.occurred_at >= gs.submitted_at
           AND so.section_id = ? AND so.school_year_id = ?${byOffering ? ' AND so.subject_offering_id = ?' : ''}
         ORDER BY a.occurred_at DESC, a.audit_event_id DESC`,
