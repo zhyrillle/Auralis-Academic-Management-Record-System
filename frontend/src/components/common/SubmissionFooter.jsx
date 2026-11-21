@@ -1,9 +1,10 @@
 import { useState, useMemo } from "react";
-import { Calendar, Check, Send, Loader2 } from "lucide-react";
+import { Calendar, Check, Send, Loader2, RefreshCw } from "lucide-react";
 
 export default function SubmissionFooter({
     deadline,
     isSubmitted,
+    canResubmit = false,
     onSubmit,
     disabled = false,
     disabledReason = "",
@@ -19,15 +20,19 @@ export default function SubmissionFooter({
     confirmText,
     cancelText,
 }) {
+    const isLockedSubmitted = Boolean(isSubmitted && !canResubmit);
+
     // ── Role-based content map ─────────────────────────────────────────────
     // Add a new case here whenever a new role needs its own modal wording.
     const getRoleConfig = () => {
         switch (userRole) {
             case "adviser":
                 return {
-                    modalTitle:       "Send to Department Head?",
-                    modalDescription: "Please ensure all subject grades are accounted for.",
-                    confirmText:      "Submit",
+                    modalTitle:       canResubmit ? "Resubmit to Department Head?" : "Send to Department Head?",
+                    modalDescription: canResubmit
+                        ? "This will update your previously submitted grades for the Department Head."
+                        : "Please ensure all subject grades are accounted for.",
+                    confirmText:      canResubmit ? "Resubmit" : "Submit",
                     cancelText:       "Cancel",
                 };
             case "admin":
@@ -47,9 +52,11 @@ export default function SubmissionFooter({
             // teacher / default
             default:
                 return {
-                    modalTitle:       "Send grades to adviser?",
-                    modalDescription: "This will forward your section's grades to the class adviser for consolidation.",
-                    confirmText:      "Submit",
+                    modalTitle:       canResubmit ? "Resubmit grades to adviser?" : "Send grades to adviser?",
+                    modalDescription: canResubmit
+                        ? "This will update your previously submitted grades for the class adviser with your latest class record scores."
+                        : "This will forward your section's grades to the class adviser for consolidation.",
+                    confirmText:      canResubmit ? "Resubmit" : "Submit",
                     cancelText:       "Cancel",
                 };
         }
@@ -66,6 +73,7 @@ export default function SubmissionFooter({
     const [showSuccess, setShowSuccess] = useState(false);
     const [isSubmittingState, setIsSubmittingState] = useState(false);
     const [submissionError, setSubmissionError] = useState("");
+    const [modalIsResubmit, setModalIsResubmit] = useState(false);
 
     const getDeadlineLabel = () => {
         if (customDeadlineLabel) return customDeadlineLabel;
@@ -159,14 +167,15 @@ export default function SubmissionFooter({
                 <div className="submission-footer__actions">
                 {statusContent}
                 <button
-                    disabled={isSubmitted || disabled || isSubmittingState}
+                    disabled={isLockedSubmitted || disabled || isSubmittingState}
                     onClick={() => {
-                        if (!isSubmitted && !disabled && !isSubmittingState) {
+                        if (!isLockedSubmitted && !disabled && !isSubmittingState) {
                             setSubmissionError("");
+                            setModalIsResubmit(Boolean(canResubmit));
                             setShowModal(true);
                         }
                     }}
-                    title={isSubmitted ? "Grades already submitted" : (disabled ? disabledReason : "")}
+                    title={isLockedSubmitted ? "Grades already submitted" : (disabled ? disabledReason : (canResubmit ? "Resubmit updated grades" : ""))}
                     style={{
                         display: "inline-flex",
                         alignItems: "center",
@@ -179,12 +188,12 @@ export default function SubmissionFooter({
                         fontFamily: "var(--font-dm-sans, sans-serif)",
                         fontSize: "0.8rem",
                         fontWeight: 800,
-                        backgroundColor: (isSubmitted || disabled || isSubmittingState)
+                        backgroundColor: (isLockedSubmitted || disabled || isSubmittingState)
                             ? "#e9eef5"
                             : "var(--success-text-color, #16a34a)",
-                        color: (isSubmitted || disabled || isSubmittingState) ? "#8795a9" : "#ffffff",
-                        border: (isSubmitted || disabled || isSubmittingState) ? "1px solid #d8e0eb" : "1px solid #16a34a",
-                        cursor: (isSubmitted || disabled || isSubmittingState) ? "not-allowed" : "pointer",
+                        color: (isLockedSubmitted || disabled || isSubmittingState) ? "#8795a9" : "#ffffff",
+                        border: (isLockedSubmitted || disabled || isSubmittingState) ? "1px solid #d8e0eb" : "1px solid #16a34a",
+                        cursor: (isLockedSubmitted || disabled || isSubmittingState) ? "not-allowed" : "pointer",
                         pointerEvents: "auto",
                         transition: "all 0.2s ease",
                         transform: "none",
@@ -192,7 +201,7 @@ export default function SubmissionFooter({
                     }}
                 >
                     <style>{`@keyframes footerSpin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
-                    {isSubmitted ? (
+                    {isLockedSubmitted ? (
                         <>
                             <Check size={16} aria-hidden="true" />
                             <span>Submitted</span>
@@ -200,7 +209,12 @@ export default function SubmissionFooter({
                     ) : isSubmittingState ? (
                         <>
                             <Loader2 size={16} style={{ animation: "footerSpin 1s linear infinite" }} aria-hidden="true" />
-                            <span>Submitting...</span>
+                            <span>{canResubmit ? "Resubmitting..." : "Submitting..."}</span>
+                        </>
+                    ) : canResubmit ? (
+                        <>
+                            <RefreshCw size={16} aria-hidden="true" />
+                            <span>Resubmit</span>
                         </>
                     ) : (
                         <>
@@ -316,7 +330,7 @@ export default function SubmissionFooter({
                                             <>
                                                 <style>{`@keyframes footerSpin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
                                                 <Loader2 size={16} style={{ animation: "footerSpin 1s linear infinite" }} />
-                                                <span>Submitting...</span>
+                                                <span>{modalIsResubmit ? "Resubmitting..." : "Submitting..."}</span>
                                             </>
                                         ) : (
                                             resolvedConfirm
@@ -354,7 +368,7 @@ export default function SubmissionFooter({
                                         color: "var(--primary-highlight-color)",
                                     }}
                                 >
-                                    Grades submitted successfully
+                                    {modalIsResubmit ? "Grades resubmitted successfully" : "Grades submitted successfully"}
                                 </h2>
                             </>
                         )}

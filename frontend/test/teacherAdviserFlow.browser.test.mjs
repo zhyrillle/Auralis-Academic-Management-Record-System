@@ -11,13 +11,15 @@ const classInfo = { id: 'teaching-131', section_id: 18, subject_offering_id: 131
   sectionName: 'Fixture', gradeLevel: 'G8', subject: 'English', classType: 'Regular Class', active_term: 'T2', deadline: '2026-12-19' };
 const assignment = { adviserAssignmentId: 1, sectionId: 18, schoolYearId: 1, schoolYearLabel: '2026-2027', gradeLevel: 'G8', sectionName: 'Fixture', isCurrent: true };
 const student = { id: 195, student_id: 195, student_section_id: 177, firstName: 'Fixture', lastName: 'Learner', middleName: '', lrn: '100000000001', sex: 'M', term1: 98, term2: 97, term3: '' };
-let submitted = false, correction = false, corrected = false, responseMode = 'ok', releaseSubmission, submissionStarted;
+let submitted = false, t2Ongoing = true, t2Edited = false, t2Resubmitted = false, correction = false, corrected = false, responseMode = 'ok', releaseSubmission, submissionStarted;
 let masterReadMode = 'ok', masterReadStarted, releaseMasterRead;
 const reads = [], writes = [], errors = [];
 const summary = () => ({ summaryVersion: 2, context: { subjectOfferingId: 131, sectionId: 18, schoolYearId: 1, activeTerm: 'T2',
-  submissionTerms: [...(!submitted ? [{ term: 'T2', deadline: '2026-12-19', correction: false }] : []),
-    ...(correction ? [{ term: 'T1', deadline: '2026-11-01', correction: true }] : [])] },
-  students: [{ ...student, term1: correction || corrected ? 99 : 98 }], warnings: [] });
+  submissionTerms: [
+    ...((!submitted || t2Ongoing) ? [{ term: 'T2', deadline: '2026-12-19', correction: false, resubmittable: submitted && t2Ongoing }] : []),
+    ...(correction ? [{ term: 'T1', deadline: '2026-11-01', correction: true, resubmittable: false }] : []),
+  ] },
+  students: [{ ...student, term1: correction || corrected ? 99 : 98, term2: t2Edited || t2Resubmitted ? 94 : 97 }], warnings: [] });
 const status = query => ({ statusVersion: 1, context: { sectionId: 18, schoolYearId: 1, ...query }, subjects: [{ subjectOfferingId: 131,
   subjectName: 'English', assignedTeachers: ['Fixture Teacher'], terms: [1, 2, 3].map(n => ({ term: `T${n}`,
     state: n === 1 ? correction ? 'IN_CORRECTION' : 'SUBMITTED' : n === 2 && submitted ? 'SUBMITTED' : 'NOT_SUBMITTED',
@@ -25,9 +27,9 @@ const status = query => ({ statusVersion: 1, context: { sectionId: 18, schoolYea
     submittedBy: n === 1 || n === 2 && submitted ? { userId: 3, name: 'Fixture Teacher' } : null })) }] });
 const master = () => ({ assignment: { adviserAssignmentId: 1, sectionId: 18, schoolYearId: 1 }, section: { id: 18, name: 'Fixture', gradeLevel: 'G8' },
   schoolYear: { id: 1, label: '2026-2027' }, subjects: [{ key: 'english', label: 'English' }], terms: [], gradeFlowVersion: 2,
-  submissionRevision: `12:${corrected ? 2 : 1}|38:${submitted ? 1 : 0}`,
+  submissionRevision: `12:${corrected ? 2 : 1}|38:${t2Resubmitted ? 2 : submitted ? 1 : 0}`,
   students: [{ ...student, studentSectionId: 177, displayName: 'Learner, Fixture', generalAverage: null,
-    grades: { english: { terms: [corrected ? 99 : 98, submitted ? 97 : null, null], finalGrade: null } } }],
+    grades: { english: { terms: [corrected ? 99 : 98, t2Resubmitted ? 94 : submitted ? 97 : null, null], finalGrade: null } } }],
   completeness: { studentCount: 1, completedTermGrades: submitted ? 2 : 1, expectedTermGrades: 33 }, warnings: [] });
 const server = await createServer({ cacheDir: mkdtempSync(join(tmpdir(), 'auralis-flow-vite-')),
   plugins: [{ name: 'isolated-teacher-flow', resolveId(id) { if (id === '/__flow.jsx') return '\0flow.jsx'; },
@@ -67,8 +69,10 @@ try {
           releaseSubmission = resolve;
           submissionStarted?.();
         });
-        if (req.postDataJSON().term === 'T1') { corrected = true; correction = false; } else submitted = true;
-        return json({ submitted: true, submissionVersion: 2, subjectOfferingId: 131, sectionId: 18, schoolYearId: 1, term: req.postDataJSON().term, revision: corrected ? 2 : 1 });
+        if (req.postDataJSON().term === 'T1') { corrected = true; correction = false; }
+        else if (submitted) { t2Resubmitted = true; }
+        else submitted = true;
+        return json({ submitted: true, resubmitted: t2Resubmitted && req.postDataJSON().term === 'T2', submissionVersion: 2, subjectOfferingId: 131, sectionId: 18, schoolYearId: 1, term: req.postDataJSON().term, revision: corrected || t2Resubmitted ? 2 : 1 });
       }
       reads.push({ path: url.pathname, owner: req.headers()['x-auralis-user-id'], query: Object.fromEntries(url.searchParams) });
       if (url.pathname === '/api/sections/adviser/3') return json([classInfo]);
@@ -164,10 +168,26 @@ try {
   assert.equal(await t.getByText('Submitted!', { exact: true }).count(), 0, 'No success before server confirmation');
   releaseSubmission(); responseMode = 'ok';
   await t.getByText('Term 2 · Submitted', { exact: true }).waitFor();
-  await t.getByRole('button', { name: 'Submitted', exact: true }).waitFor();
+  const resubmitBtn = t.getByRole('button', { name: 'Resubmit', exact: true });
+  await resubmitBtn.waitFor();
+  assert.equal(await resubmitBtn.isEnabled(), true, 'Ongoing submitted term shows an enabled Resubmit button');
   assert.deepEqual(writes.at(-1), { path: '/api/class-record/submit', owner: '3', body: { subject_offering_id: 131, section_id: 18, school_year_id: 1, term: 'T2' } }, 'Only selected term/context are sent; never browser grade values');
   await a.evaluate(data => window.__streams.at(-1).onmessage({ data: JSON.stringify(data) }), event);
   await a.locator('.ms-grade-cell').nth(1).filter({ hasText: '97' }).waitFor();
+  // Ongoing-term edit + Resubmit flow
+  t2Edited = true; await t.reload();
+  assert.equal(await t.locator('.grade-value-cell').nth(1).textContent(), '94', 'Grading sheet previews updated ongoing-term grade before resubmission');
+  await t.getByRole('button', { name: 'Resubmit', exact: true }).click();
+  await t.getByRole('heading', { name: 'Resubmit Term 2 grades to adviser?' }).waitFor();
+  await t.getByRole('button', { name: 'Resubmit', exact: true }).last().click();
+  await t.getByText('Term 2 grades for G8 - Fixture resubmitted successfully!', { exact: true }).waitFor();
+  await a.evaluate(data => window.__streams.at(-1).onmessage({ data: JSON.stringify(data) }), event);
+  await a.locator('.ms-grade-cell').nth(1).filter({ hasText: '94' }).waitFor();
+  // Once the active term ends, the button switches to disabled Submitted
+  t2Ongoing = false; await t.reload();
+  const lockedBtn = t.getByRole('button', { name: 'Submitted', exact: true });
+  await lockedBtn.waitFor();
+  assert.equal(await lockedBtn.isDisabled(), true, 'Ended submitted term locks to a disabled Submitted button');
   await a.getByRole('button', { name: 'Submission status', exact: true }).click();
   const panel = a.getByRole('dialog', { name: 'Submission status', exact: true });
   await panel.getByText('Submitted', { exact: true }).nth(1).waitFor();

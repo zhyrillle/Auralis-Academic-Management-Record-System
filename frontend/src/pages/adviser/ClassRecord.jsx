@@ -231,13 +231,16 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
   const isLocked = !isRecordReady || sheetIsLocked;
   const currentSheet = loadedSheet?.term === activeTerm ? loadedSheet : null;
   const isUpcomingTerm = isRecordReady && sheetIsLocked && currentSheet?.isUpcoming;
-  const isTermLocked = isLocked && currentSheet?.lockStatus === "TERM_LOCKED";
+  const isReopenableLocked = isLocked && (
+    currentSheet?.lockStatus === "TERM_LOCKED" ||
+    currentSheet?.workflowStatus === "SUBMITTED"
+  );
   const eligibilityReady = requestEligibility?.sheetId === currentSheet?.id
     && requestEligibility?.term === activeTerm;
   const requestOpensAt = new Date(requestEligibility?.reopening_requests_open_at ?? NaN).getTime();
   const requestClosesAt = new Date(requestEligibility?.reopening_requests_close_at ?? NaN).getTime();
   const isRequestWindowOpen = eligibilityReady && reopeningNow >= requestOpensAt && reopeningNow < requestClosesAt;
-  const canRequestChanges = isTermLocked && isRequestWindowOpen && requestEligibility?.eligible;
+  const canRequestChanges = isReopenableLocked && isRequestWindowOpen && requestEligibility?.eligible;
   const requestHint = eligibilityReady
     ? requestEligibility.error || eligibilityMessages[requestEligibility.reason] || "Request changes to this grade sheet."
     : "Checking reopening eligibility…";
@@ -258,7 +261,7 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
   }, [requestOpensAt, requestClosesAt, reopeningNow]);
 
   useEffect(() => {
-    if (!isTermLocked || !currentSheet?.id || !currentUserId) return;
+    if (!isReopenableLocked || !currentSheet?.id || !currentUserId) return;
     let isCurrent = true;
     getGradeSheetReopeningEligibility(currentUserId, currentSheet.id)
       .then(result => {
@@ -274,7 +277,7 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
         });
       });
     return () => { isCurrent = false; };
-  }, [isTermLocked, currentSheet?.id, currentUserId, activeTerm]);
+  }, [isReopenableLocked, currentSheet?.id, currentUserId, activeTerm]);
 
   // Component weights (WW 20%, PT 50%, EX 30%)
   const [weights, setWeights] = useState(DEFAULT_JHS_WEIGHTS);
@@ -1203,6 +1206,7 @@ export default function ClassRecord({ activeClass, onBack, onAttendance, onPhilI
           setLoadedSheet({
             id: data.grade_sheet_id || data.grade_sheet?.grade_sheet_id,
             lockStatus: data.lock_status || data.grade_sheet?.lock_status,
+            workflowStatus: data.grade_sheet?.workflow_status,
             term: termToLoad,
             isUpcoming: /^T[1-3]$/.test(data.active_term || "")
               && Number(termToLoad.slice(1)) > Number(data.active_term.slice(1)),
@@ -2425,7 +2429,7 @@ const formatToISODate = (val) => {
                   <span>{isUpcomingTerm ? "Upcoming term" : "Read mode"}</span>
                   <Lock size={14} aria-hidden="true" />
                 </span>
-                {isTermLocked && isRequestWindowOpen && (
+                {isReopenableLocked && isRequestWindowOpen && (
                 <span title={requestHint}>
                   <button type="button" className="class-record-request-btn"
                     disabled={!canRequestChanges} title={requestHint}

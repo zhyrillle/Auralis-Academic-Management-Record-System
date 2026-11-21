@@ -112,11 +112,15 @@ function fixture(options = {}) {
   const noDb = { execute() { throw Error('School DB forbidden'); } };
   const sheets = load('../models/GradeSheet.js', { '../config/db': noDb });
   sheets.editingWindow = async (value, actor) => {
-    if (actor?.user_id !== teacher.user_id) return { editable: false };
+    if (actor?.user_id !== teacher.user_id) return { editable: false, correction: false, resubmittable: false };
     const sheet = state.sheets.find(s => s.grade_sheet_id === (value.gradeSheetId || value.grade_sheet_id)) || value;
+    if (sheet.workflow_status === 'SUBMITTED') {
+      const canResubmit = Boolean(options.ongoingResubmit) && ['EDITABLE', 'OPEN'].includes(sheet.lock_status);
+      return { editable: canResubmit, correction: false, resubmittable: canResubmit };
+    }
     return { editable: sheet.workflow_status === 'DRAFT'
       && (sheet.lock_status === 'EDITABLE' || (sheet.lock_status === 'TEMPORARILY_REOPENED' && options.approved)),
-      correction: sheet.lock_status === 'TEMPORARILY_REOPENED' };
+      correction: sheet.lock_status === 'TEMPORARILY_REOPENED', resubmittable: false };
   };
   const routes = new Map(), auth = () => {};
   const router = Object.fromEntries(['get', 'post', 'put', 'patch', 'delete'].map(method =>
@@ -256,7 +260,8 @@ function policyFixture(row = {}, access = []) {
   return { calls, execute: async (sql, params) => {
     calls.push({ sql, params });
     return sql.includes('FROM TEMPORARY_REOPENING') ? [access]
-      : [[{ grade_sheet_id: 38, teacher_assignment_id: 21, workflow_status: 'DRAFT', lock_status: 'EDITABLE', within_submission_window: 1, ...row }]];
+      : [[{ grade_sheet_id: 38, teacher_assignment_id: 21, workflow_status: 'DRAFT', lock_status: 'EDITABLE',
+        within_submission_window: 1, within_ongoing_term: 1, ...row }]];
   } };
 }
 test('normal edits require the assigned teacher, a draft, and an open saved window', async () => {
@@ -264,9 +269,87 @@ test('normal edits require the assigned teacher, a draft, and an open saved wind
   assert.deepEqual(Array.from(cx.calls[0].params), [3, 38]);
   assert.match(cx.calls[0].sql, /at.school_year_id = so.school_year_id/);
   assert.match(cx.calls[0].sql, /ta.assigned_until >= UTC_DATE/);
+  assert.match(cx.calls[0].sql, /at\.ends_at > UTC_TIMESTAMP\(6\)/);
   assert.equal(await canEdit(sheet, null, cx), false);
-  for (const row of [{ workflow_status: 'SUBMITTED' }, { lock_status: 'TERM_LOCKED' }, { within_submission_window: 0 }]) assert.equal(await canEdit(sheet, user, policyFixture(row)), false);
+  for (const row of [
+    { workflow_status: 'SUBMITTED', within_ongoing_term: 0 },
+    { workflow_status: 'SUBMITTED', lock_status: 'TERM_LOCKED' },
+    { lock_status: 'TERM_LOCKED' },
+    { within_submission_window: 0 },
+  ]) assert.equal(await canEdit(sheet, user, policyFixture(row)), false);
   assert.equal(await canEdit(sheet, user, { execute: async () => [[]] }), false);
+});
+test('submitted sheets stay editable and resubmittable only while the active term has not ended', async () => {
+  const ongoing = await editingWindow(sheet, user, policyFixture({ workflow_status: 'SUBMITTED', lock_status: 'EDITABLE', within_ongoing_term: 1 }));
+  assert.equal(ongoing.editable, true);
+  assert.equal(ongoing.resubmittable, true);
+  assert.equal(ongoing.correction, false);
+
+  const afterTermEnd = await editingWindow(sheet, user, policyFixture({
+    workflow_status: 'SUBMITTED', lock_status: 'EDITABLE', within_submission_window: 1, within_ongoing_term: 0,
+  }));
+  assert.equal(afterTermEnd.editable, false);
+  assert.equal(afterTermEnd.resubmittable, false);
+
+  const draftInGracePeriod = await editingWindow(sheet, user, policyFixture({
+    workflow_status: 'DRAFT', lock_status: 'EDITABLE', within_submission_window: 1, within_ongoing_term: 0,
+  }));
+  assert.equal(draftInGracePeriod.editable, true);
+  assert.equal(draftInGracePeriod.resubmittable, false);
+});
+test('ongoing-term submitted sheet stays open for class record edits and resubmission until term ends', async () => {
+  const options = { ongoingResubmit: true };
+  const f = fixture(options);
+  const first = await f.submit();
+  assert.equal(first.submitted, true);
+  assert.equal(first.resubmitted, false);
+  assert.equal(f.state.audits[0].event_type, 'GRADE_SHEET_SUBMITTED');
+  assert.equal(f.state.sheets[1].workflow_status, 'SUBMITTED');
+  assert.equal(f.state.sheets[1].lock_status, 'EDITABLE');
+
+  // Class record remains open and computes live preview (no frozen saved_summary)
+  const openRes = { code: 200, set() { return this; }, status(code) { this.code = code; return this; }, json(body) { this.body = body; } };
+  await f.routes.get('get /class-record/:subject_offering_id').at(-1)({
+    params: { subject_offering_id: '131' }, query: { term: 'T2', section_id: '18' }, currentUser: teacher,
+  }, openRes);
+  assert.equal(openRes.code, 200);
+  assert.equal(openRes.body.is_editable, true);
+  assert.equal(openRes.body.is_locked, false);
+  assert.equal(openRes.body.students[0].saved_summary, undefined);
+
+  // Editing scores autosaves to SCORE without mutating accepted STUDENT_GRADE
+  const beforeResubmitGrades = structuredClone(f.state.saved);
+  const edited = await f.autosave([{ assessment_id: 10, student_id: 195, student_section_id: 177, raw_score: 20 }]);
+  assert.equal(edited.statusCode, 200);
+  assert.deepEqual(f.state.saved, beforeResubmitGrades);
+
+  // Grading summary previews updated score and marks T2 as resubmittable
+  const summary = await f.summary();
+  assert.equal(summary.students[0].term2, 83);
+  assert.equal(summary.context.submissionTerms.find(t => t.term === 'T2')?.resubmittable, true);
+
+  // Resubmitting persists updated grades, records GRADE_SHEET_RESUBMITTED, and notifies adviser/dept head
+  const resubmitted = await f.submit();
+  assert.equal(resubmitted.submitted, true);
+  assert.equal(resubmitted.resubmitted, true);
+  assert.equal(f.state.saved.find(g => g.term === 'T2').quarterly_grade, 83);
+  assert.equal(f.state.audits.at(-1).event_type, 'GRADE_SHEET_RESUBMITTED');
+  assert.equal(f.state.sheets[1].lock_status, 'EDITABLE');
+  assert.equal(f.emitted.length, 2);
+
+  // Once the active term ends, class record locks, autosave is blocked, and submit becomes idempotent
+  options.ongoingResubmit = false;
+  const lockedRes = { code: 200, set() { return this; }, status(code) { this.code = code; return this; }, json(body) { this.body = body; } };
+  await f.routes.get('get /class-record/:subject_offering_id').at(-1)({
+    params: { subject_offering_id: '131' }, query: { term: 'T2', section_id: '18' }, currentUser: teacher,
+  }, lockedRes);
+  assert.equal(lockedRes.body.is_editable, false);
+  assert.equal(lockedRes.body.is_locked, true);
+  assert.equal(lockedRes.body.students[0].quarterly_grade, 83);
+  assert.equal((await f.autosave([{ assessment_id: 10, student_id: 195, student_section_id: 177, raw_score: 30 }])).statusCode, 403);
+  const endedSummary = await f.summary();
+  assert.equal(endedSummary.context.submissionTerms.some(t => t.term === 'T2'), false);
+  assert.equal((await f.submit()).alreadySubmitted, true);
 });
 test('an older reopened term uses its own approved, owner-scoped window, not the current term', async () => {
   const cx = policyFixture({ lock_status: 'TEMPORARILY_REOPENED', within_submission_window: 0 }, [{ temporary_reopening_id: 2, expires_at: '2026-11-01T00:00:00Z' }]);

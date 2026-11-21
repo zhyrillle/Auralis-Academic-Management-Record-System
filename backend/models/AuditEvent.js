@@ -59,6 +59,7 @@ const EVENT_TYPE_MAP = {
   SUBJECT_WEIGHTS_UPDATED: 'Subject Weights Updated',
   SUBJECT_WEIGHTS_INHERITED: 'Subject Weights Inherited',
   GRADE_SHEET_SUBMITTED: 'Grade Sheet Submitted',
+  GRADE_SHEET_RESUBMITTED: 'Grade Sheet Resubmitted',
   GRADE_SHEET_RECALLED: 'Grade Sheet Recalled',
   GRADE_SHEET_CORRECTION_RESUBMITTED: 'Grade Sheet Correction Resubmitted',
   GRADE_SHEET_UPDATED: 'Grade Sheet Updated',
@@ -246,6 +247,8 @@ function computeSummary(row, beforeData, afterData, metadata, target) {
       return `Inherited subject component weights from the previous school year.`;
     case 'GRADE_SHEET_SUBMITTED':
       return `Submitted grade sheet${target ? ` for ${target}` : ''}.`;
+    case 'GRADE_SHEET_RESUBMITTED':
+      return `Resubmitted grade sheet${target ? ` for ${target}` : ''} during active term.`;
     case 'GRADE_SHEET_RECALLED':
       return `Recalled submitted grade sheet${target ? ` for ${target}` : ''} before deadline.`;
     case 'GRADE_SHEET_CORRECTION_RESUBMITTED':

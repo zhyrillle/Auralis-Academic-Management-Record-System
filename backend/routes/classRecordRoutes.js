@@ -524,17 +524,18 @@ async function submitClassGrades(input, user, database = db) {
         WHERE subject_offering_id = ? AND term_id = ? FOR UPDATE`, [offering.subject_offering_id, selected.term_id]);
     if (sheets.length !== 1) throw problem('GRADE_SHEET_REQUIRED', 'Open a uniquely configured class record before submitting.');
     const sheet = sheets[0];
-    if (sheet.workflow_status === 'SUBMITTED') {
+    const window = await GradeSheet.editingWindow(sheet, user, connection, { lock: true });
+    if (sheet.workflow_status === 'SUBMITTED' && !window.editable) {
       await connection.commit();
       return { submitted: true, submissionVersion: 2, term: input.term, ...submissionPublicContext(offering),
         submittedAt: sheet.submitted_at, alreadySubmitted: true };
     }
-    const window = await GradeSheet.editingWindow(sheet, user, connection, { lock: true });
     if (!window.editable) throw httpError(403, 'SUBMISSION_WINDOW_CLOSED', 'This sheet is not open for your account. Use the approved reopening process.');
     const data = await loadGradeInputs(offering, sheet.grade_sheet_id, connection, true);
     const grades = GradeComputationService.calculateGrades(data);
     const [clocks] = await connection.execute('SELECT UTC_TIMESTAMP(6) AS submitted_at');
     const submittedAt = clocks[0].submitted_at;
+    const isResubmission = Boolean(sheet.submitted_at);
     const auditGradesBefore = await AuditDetails.gradeSnapshot(connection, sheet.grade_sheet_id);
     for (const grade of grades) await StudentGrade.upsert({
       subject_offering_id: offering.subject_offering_id, student_id: grade.studentId, student_section_id: grade.studentSectionId,
@@ -544,7 +545,8 @@ async function submitClassGrades(input, user, database = db) {
     await GradeSheet.update(sheet.grade_sheet_id, { workflow_status: 'SUBMITTED', submitted_at: submittedAt,
       lock_status: window.correction ? 'TERM_LOCKED' : sheet.lock_status }, connection);
     await AuditEvent.create({ user_id: user.user_id,
-      event_type: sheet.submitted_at ? 'GRADE_SHEET_CORRECTION_RESUBMITTED' : 'GRADE_SHEET_SUBMITTED',
+      event_type: window.correction ? 'GRADE_SHEET_CORRECTION_RESUBMITTED'
+        : (isResubmission ? 'GRADE_SHEET_RESUBMITTED' : 'GRADE_SHEET_SUBMITTED'),
       module_name: 'GRADING', entity_type: 'GRADE_SHEET', entity_id: sheet.grade_sheet_id,
       actor_context: await AuditDetails.actorContext(connection, user.user_id),
       before_data: { workflow_status: sheet.workflow_status, submitted_at: sheet.submitted_at, grades: auditGradesBefore },
@@ -552,7 +554,7 @@ async function submitClassGrades(input, user, database = db) {
       metadata: { ...await AuditDetails.sheetContext(connection, sheet.grade_sheet_id), subject: offering.subject_name, section: offering.section_name, term: input.term,
         school_year_id: offering.school_year_id, learner_count: data.students.length } }, connection);
     const notifications = await NotificationService.prepareGradePublicationNotifications({
-      offering, sheetId: sheet.grade_sheet_id, term: input.term, correction: Boolean(sheet.submitted_at),
+      offering, sheetId: sheet.grade_sheet_id, term: input.term, correction: isResubmission,
       teacherName: [user.first_name, user.last_name].filter(Boolean).join(' '),
     }, connection);
     const atRiskStudentIds = new Set(
@@ -579,8 +581,9 @@ async function submitClassGrades(input, user, database = db) {
     await connection.commit();
     try { NotificationService.emitCommittedGradePublications(notifications); }
     catch (error) { console.warn('Submission saved; live notification delivery is unavailable:', error.message); }
-    return { submitted: true, submissionVersion: 2, term: input.term, ...submissionPublicContext(offering),
-      submittedAt, learnerCount: data.students.length, message: 'Term grades submitted to the adviser.' };
+    return { submitted: true, resubmitted: isResubmission, submissionVersion: 2, term: input.term, ...submissionPublicContext(offering),
+      submittedAt, learnerCount: data.students.length,
+      message: isResubmission ? 'Term grades resubmitted to the adviser.' : 'Term grades submitted to the adviser.' };
   } catch (error) {
     await connection.rollback();
     throw error;
@@ -617,14 +620,19 @@ async function gradingSummary(input, user, database = db) {
       if (matchingSheets.length !== 1) { warnings.push(`${code}: duplicate grade sheets need review.`); continue; }
       const sheet = matchingSheets[0];
       const window = await GradeSheet.editingWindow(sheet, user, database);
-      if (window.editable) submissionTerms.push({ term: code, deadline: window.deadline, correction: window.correction });
+      if (window.editable) submissionTerms.push({
+        term: code,
+        deadline: window.deadline,
+        correction: Boolean(window.correction),
+        resubmittable: Boolean(window.resubmittable),
+      });
       if (window.correction && window.deadline) termDeadlines[code] = window.deadline;
       let grades;
-      if (sheet.workflow_status === 'SUBMITTED') {
+      if (sheet.workflow_status === 'SUBMITTED' && !window.editable) {
         grades = saved.filter(g => termCode(g.term) === code).map(g => ({ studentId: Number(g.student_id),
           studentSectionId: g.student_section_id ? Number(g.student_section_id) : null,
           mapehComponent: g.mapeh_component || null, termGrade: g.quarterly_grade == null || g.quarterly_grade === '' ? null : Number(g.quarterly_grade) }));
-      } else if (sheet.workflow_status === 'DRAFT') {
+      } else if (sheet.workflow_status === 'DRAFT' || window.editable) {
         const data = await loadGradeInputs(offering, sheet.grade_sheet_id, database);
         // An incomplete learner does not hide complete classmates' draft grades.
         grades = data.students.flatMap(student => {
@@ -934,8 +942,10 @@ router.get('/class-record/:subject_offering_id', resolveCurrentUser, async (req,
       }
     }
 
-    // Saved summaries are accepted output; draft previews never update them.
-    const readSavedSummary = grade => selectSavedSummary(grade, sheetData.workflowStatus === 'SUBMITTED');
+    // Saved summaries are accepted output for locked/read-only submitted sheets;
+    // editable sheets (including submitted sheets in an ongoing term) compute live previews from SCORE.
+    const useSavedSummary = sheetData.workflowStatus === 'SUBMITTED' && !isEditable;
+    const readSavedSummary = grade => selectSavedSummary(grade, useSavedSummary);
 
     // Resolve specific activity IDs for ST1, ST2, and TE
     let st1ActId = null;
@@ -951,9 +961,9 @@ router.get('/class-record/:subject_offering_id', resolveCurrentUser, async (req,
       }
     });
 
-    // Draft previews and Submit use the same validated saved inputs and configuration.
+    // Draft/ongoing-edit previews and Submit use the same validated saved inputs and configuration.
     let previewInputs = null, previewError = null;
-    if (sheetData.workflowStatus !== 'SUBMITTED') {
+    if (!useSavedSummary) {
       try { previewInputs = await loadGradeInputs(classContext, gradeSheetId, db); }
       catch (error) { if (!error.statusCode) throw error; previewError = error.code; }
     }
@@ -974,7 +984,7 @@ router.get('/class-record/:subject_offering_id', resolveCurrentUser, async (req,
 
       const savedGrade = gradeMap[studentId];
       let summary, finalMapehQuarterly = null;
-      if (sheetData.workflowStatus === 'SUBMITTED') {
+      if (useSavedSummary) {
         summary = { ...readSavedSummary(savedGrade), descriptor: getGradeDescriptor(savedGrade?.quarterly_grade) };
         if (isMapeh) finalMapehQuarterly = readSavedSummary(combinedGradeMap[studentId]).termGrade;
       } else {
@@ -1011,7 +1021,7 @@ router.get('/class-record/:subject_offering_id', resolveCurrentUser, async (req,
         scores: rawScores,
         examinations: studentExaminations,
         computed: summary,
-        saved_summary: sheetData.workflowStatus === 'SUBMITTED' ? readSavedSummary(savedGrade) : undefined,
+        saved_summary: useSavedSummary ? readSavedSummary(savedGrade) : undefined,
         calculation_review: summary.calculationError || null,
         initial_grade: initialGrade,
         quarterly_grade: quarterlyGrade,
