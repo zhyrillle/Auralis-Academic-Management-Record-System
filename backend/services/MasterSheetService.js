@@ -123,7 +123,7 @@ class MasterSheetService {
     }));
   }
 
-  static async getMasterSheet(adviserAssignmentId, userId) {
+  static async getMasterSheet(adviserAssignmentId, userId, { studentId } = {}) {
     const assignmentId = Number(adviserAssignmentId);
     const numericUserId = Number(userId);
     if (!Number.isInteger(assignmentId) || assignmentId <= 0) {
@@ -179,6 +179,8 @@ class MasterSheetService {
     }
 
     const assignment = assignmentRows[0];
+    const sectionParams = [assignment.section_id, assignment.school_year_id];
+    const learnerParams = studentId == null ? sectionParams : [...sectionParams, studentId];
     const [termRows] = await db.execute(
       `SELECT term_id, term_name, starts_at, ends_at, grade_submission_deadline_at, status
        FROM ACADEMIC_TERM
@@ -216,6 +218,7 @@ class MasterSheetService {
        WHERE ss.section_id = ?
          AND ss.school_year_id = ?
          AND (st.status = 'ACTIVE' OR st.status IS NULL)
+         ${studentId == null ? '' : 'AND ss.student_id = ?'}
        ORDER BY
          CASE WHEN UPPER(st.sex) IN ('M', 'MALE') THEN 0
               WHEN UPPER(st.sex) IN ('F', 'FEMALE') THEN 1
@@ -223,7 +226,7 @@ class MasterSheetService {
          st.last_name,
          st.first_name,
          st.middle_name`,
-      [assignment.section_id, assignment.school_year_id],
+      learnerParams,
     );
 
     const [gradeSheetRows] = await db.execute(
@@ -234,8 +237,9 @@ class MasterSheetService {
     );
     const [savedGradeRows] = await db.execute(
       `SELECT sg.* FROM STUDENT_GRADE sg JOIN SUBJECT_OFFERING so ON so.subject_offering_id = sg.subject_offering_id
-       WHERE so.section_id = ? AND so.school_year_id = ?`,
-      [assignment.section_id, assignment.school_year_id],
+       WHERE so.section_id = ? AND so.school_year_id = ?
+         ${studentId == null ? '' : 'AND sg.student_id = ?'}`,
+      learnerParams,
     );
 
     let principalName = "";

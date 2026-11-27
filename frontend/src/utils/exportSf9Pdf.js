@@ -1,6 +1,52 @@
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
 
+export function printSf9Pdf(pdf, title, signal) {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) return resolve();
+    const url = URL.createObjectURL(pdf);
+    const iframe = document.createElement("iframe");
+    iframe.title = title;
+    iframe.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0";
+    let originalTitle;
+    let finished = false;
+
+    const finish = (error) => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(loadTimeout);
+      signal.removeEventListener("abort", onAfterPrint);
+      window.removeEventListener("afterprint", onAfterPrint);
+      if (originalTitle !== undefined && document.title === title) document.title = originalTitle;
+      iframe.remove();
+      URL.revokeObjectURL(url);
+      if (error) reject(error);
+      else resolve();
+    };
+    const onAfterPrint = () => finish();
+    const loadTimeout = setTimeout(() => finish(new Error("SF9 print preview did not load.")), 15000);
+
+    signal.addEventListener("abort", onAfterPrint, { once: true });
+    iframe.onerror = () => finish(new Error("SF9 print preview could not load."));
+    iframe.onload = () => {
+      clearTimeout(loadTimeout);
+      try {
+        const printWindow = iframe.contentWindow;
+        originalTitle = document.title;
+        document.title = title;
+        window.addEventListener("afterprint", onAfterPrint, { once: true });
+        printWindow.addEventListener("afterprint", onAfterPrint, { once: true });
+        printWindow.focus();
+        printWindow.print();
+      } catch (error) {
+        finish(error);
+      }
+    };
+    iframe.src = url;
+    document.body.appendChild(iframe);
+  });
+}
+
 /**
  * Multi-page portrait PDF exporter for Student SF9 Learner's Performance Report.
  * Renders Front Page (Performance Report & Descriptors) and Back Page (Attendance, Comments, Signatures & Certificate of Transfer)
@@ -15,6 +61,7 @@ export async function exportSf9Pdf({
   depedLogo,
   gccnhsLogo,
   skipDownload = false,
+  fileName,
 }) {
   const container = document.createElement("div");
   container.style.position = "fixed";
@@ -361,12 +408,8 @@ export async function exportSf9Pdf({
   document.body.appendChild(container);
 
   try {
-    if (document.fonts) {
-      await document.fonts.ready;
-    }
-
     const canvasOptions = {
-      scale: 4, // 384 DPI - razor-sharp print-grade resolution, completely eliminates blur
+      scale: 2.5, // 240 DPI on letter paper
       useCORS: true,
       logging: false,
       backgroundColor: "#ffffff",
@@ -394,7 +437,8 @@ export async function exportSf9Pdf({
 
     const nameParts = (studentProfile.name || "STUDENT").split(",");
     const lastName = nameParts[0].trim().toUpperCase().replace(/[^A-Z0-9_-]/gi, "");
-    const resolvedFileName = `${lastName || "STUDENT"}_SF9.pdf`;
+    const resolvedFileName = fileName || `${lastName || "STUDENT"}_SF9.pdf`;
+    pdf.setProperties({ title: resolvedFileName.replace(/\.pdf$/i, "") });
 
     if (!skipDownload) {
       pdf.save(resolvedFileName);
