@@ -4,7 +4,7 @@ const db = require('../config/db');
 const MasterSheetService = require('../services/MasterSheetService');
 const { dateKey, excludedDates, monthlyNoClassCounts } = require('../services/AttendanceSummaryService');
 const { decryptLrn, hashLrn, maskLrn } = require('../utils/encryption');
-const { generateSf9Pdf } = require('../services/Sf9PdfService');
+const { generateSf9Pdf, generateSf9PdfBatch, createZipBuffer } = require('../services/Sf9PdfService');
 
 const MONTH_NAMES = ["Jun", "Jul", "Aug", "Sept", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr"];
 const MONTH_INDEX_MAP = {
@@ -686,6 +686,522 @@ router.get('/student/:identifier/export-pdf', async (req, res) => {
   } catch (error) {
     console.error("Error generating SF9 PDF:", error);
     return res.status(500).json({ error: "Failed to generate SF9 PDF", message: error.message });
+  }
+});
+
+function formatOfficialName(person) {
+  if (!person) return "";
+  const baseName = `${person.first_name || ''} ${person.last_name || ''}`.trim().toUpperCase();
+  const ext = (person.extension_name || '').trim().toUpperCase();
+  const cred = (person.credentials || '').trim().toUpperCase();
+  let formatted = ext ? `${baseName}, ${ext}` : baseName;
+  if (cred) formatted = `${formatted}, ${cred}`;
+  return formatted.toUpperCase();
+}
+
+function buildStudentGradesSummary(rawProgCode, masterSheetStudent, studentGradeRows) {
+  const termIndex = (termStr) => {
+    const str = String(termStr || '').toUpperCase();
+    if (str.includes('1')) return 0;
+    if (str.includes('2')) return 1;
+    if (str.includes('3')) return 2;
+    return null;
+  };
+
+  const mapehMA = [null, null, null];
+  const mapehPEH = [null, null, null];
+  const mapehCombined = [null, null, null];
+
+  studentGradeRows.forEach(row => {
+    const isMapehSubject = String(row.subject_code || '').toUpperCase().includes('MAPEH') ||
+      String(row.subject_name || '').toUpperCase().includes('MAPEH');
+    if (isMapehSubject) {
+      const idx = termIndex(row.term);
+      if (idx !== null && row.quarterly_grade !== null && row.quarterly_grade !== undefined) {
+        const val = Math.round(Number(row.quarterly_grade));
+        if (row.mapeh_component === 'MA') {
+          mapehMA[idx] = val;
+        } else if (row.mapeh_component === 'PEH') {
+          mapehPEH[idx] = val;
+        } else if (!row.mapeh_component) {
+          mapehCombined[idx] = val;
+        }
+      }
+    }
+  });
+
+  for (let i = 0; i < 3; i++) {
+    if (mapehMA[i] !== null && mapehPEH[i] !== null) {
+      mapehCombined[i] = Math.round((mapehMA[i] + mapehPEH[i]) / 2);
+    }
+  }
+
+  const subjectMapping = [...FRONTEND_SUBJECT_MAPPING];
+  if (rawProgCode === "STE") {
+    subjectMapping.push({ code: "research", name: "Research", msKey: "research", isHeader: false, isSubSubject: false });
+  } else if (rawProgCode === "SPJ") {
+    subjectMapping.push({ code: "journalism", name: "Journalism", msKey: "journalism", isHeader: false, isSubSubject: false });
+  } else if (rawProgCode === "SPA") {
+    subjectMapping.push({ code: "spa_spec", name: "SPA Specialization", msKey: "spa_spec", isHeader: false, isSubSubject: false });
+  }
+
+  const gradesList = subjectMapping.map(tmpl => {
+    let t1 = "";
+    let t2 = "";
+    let t3 = "";
+    let finalVal = "";
+    let remark = "";
+
+    if (tmpl.code === "music_arts") {
+      t1 = mapehMA[0] !== null ? mapehMA[0] : "";
+      t2 = mapehMA[1] !== null ? mapehMA[1] : "";
+      t3 = mapehMA[2] !== null ? mapehMA[2] : "";
+    } else if (tmpl.code === "pe_health") {
+      t1 = mapehPEH[0] !== null ? mapehPEH[0] : "";
+      t2 = mapehPEH[1] !== null ? mapehPEH[1] : "";
+      t3 = mapehPEH[2] !== null ? mapehPEH[2] : "";
+    } else if (tmpl.code === "mapeh") {
+      t1 = mapehCombined[0] !== null ? mapehCombined[0] : "";
+      t2 = mapehCombined[1] !== null ? mapehCombined[1] : "";
+      t3 = mapehCombined[2] !== null ? mapehCombined[2] : "";
+    }
+
+    if (masterSheetStudent && masterSheetStudent.grades) {
+      const g = masterSheetStudent.grades[tmpl.msKey];
+      if (g && Array.isArray(g.terms)) {
+        if (t1 === "" && Number.isFinite(g.terms[0])) t1 = Math.round(g.terms[0]);
+        if (t2 === "" && Number.isFinite(g.terms[1])) t2 = Math.round(g.terms[1]);
+        if (t3 === "" && Number.isFinite(g.terms[2])) t3 = Math.round(g.terms[2]);
+      }
+      if (g && Number.isFinite(g.finalGrade) && tmpl.code !== "music_arts" && tmpl.code !== "pe_health") {
+        finalVal = Math.round(g.finalGrade);
+      }
+    }
+
+    if (typeof t1 === 'number' && typeof t2 === 'number' && typeof t3 === 'number') {
+      if (finalVal === "") {
+        finalVal = Math.round((t1 + t2 + t3) / 3);
+      }
+      remark = finalVal >= 75 ? "Passed" : "Failed";
+    } else {
+      finalVal = "";
+      remark = "";
+    }
+
+    return {
+      code: tmpl.code,
+      name: tmpl.name,
+      t1,
+      t2,
+      t3,
+      final: finalVal,
+      remark,
+      isHeader: tmpl.isHeader,
+      isSubSubject: tmpl.isSubSubject
+    };
+  });
+
+  const mainSubjGrades = gradesList.filter(g => !g.isHeader && !g.isSubSubject);
+  const allMainSubjsComplete = mainSubjGrades.length > 0 && mainSubjGrades.every(g => typeof g.final === 'number');
+
+  let overallFinalAvg = "";
+  let honorStatus = "";
+
+  if (allMainSubjsComplete) {
+    if (masterSheetStudent?.generalAverage && Number.isFinite(masterSheetStudent.generalAverage)) {
+      overallFinalAvg = Math.round(masterSheetStudent.generalAverage);
+    } else {
+      const totalFinal = mainSubjGrades.reduce((sum, g) => sum + g.final, 0);
+      overallFinalAvg = Math.round(totalFinal / mainSubjGrades.length);
+    }
+
+    if (overallFinalAvg >= 98) honorStatus = "With Highest Honors";
+    else if (overallFinalAvg >= 95) honorStatus = "With High Honors";
+    else if (overallFinalAvg >= 90) honorStatus = "With Honors";
+    else honorStatus = "Passed";
+  }
+
+  return {
+    gradesList,
+    termGrade: overallFinalAvg !== "" ? overallFinalAvg : "",
+    honorStatus,
+  };
+}
+
+function buildStudentAttendanceSummary(monthlyClassDaysBase, sheetsByDate, attRows) {
+  const monthlyClassDays = [...monthlyClassDaysBase];
+  const rawPresent = new Array(11).fill(0);
+  const rawLate = new Array(11).fill(0);
+  const rawAbsent = new Array(11).fill(0);
+  const monthlyDaysPresent = new Array(11).fill(0);
+  const monthlyDaysAbsent = new Array(11).fill(0);
+
+  if (sheetsByDate.size > 0) {
+    const statusBySheetId = new Map(attRows.map(row => [row.attendance_sheet_id, row.status]));
+    const activeMonths = new Set();
+
+    for (const [, { dateStr, sheetIds: daySheetIds }] of sheetsByDate) {
+      const parts = dateStr.split('-');
+      const monthNum = parseInt(parts[1], 10) - 1;
+      const mIndex = MONTH_INDEX_MAP[monthNum];
+      if (mIndex === undefined) continue;
+      activeMonths.add(mIndex);
+
+      const statuses = daySheetIds.map(id => statusBySheetId.get(id)).filter(Boolean);
+      if (statuses.includes('P')) {
+        rawPresent[mIndex] += 1;
+      } else if (statuses.includes('L')) {
+        rawLate[mIndex] += 1;
+      } else if (statuses.includes('A')) {
+        rawAbsent[mIndex] += 1;
+      }
+    }
+
+    const maxActiveMonth = activeMonths.size > 0 ? Math.max(...activeMonths) : -1;
+    let accumulatedLates = 0;
+
+    for (let i = 0; i < 11; i++) {
+      accumulatedLates += rawLate[i];
+      const convertedAbsent = Math.floor(accumulatedLates / 3);
+      accumulatedLates = accumulatedLates % 3;
+
+      monthlyDaysPresent[i] = Math.max(0, (rawPresent[i] + rawLate[i]) - convertedAbsent);
+      if (i <= maxActiveMonth) {
+        monthlyDaysAbsent[i] = Math.max(0, monthlyClassDays[i] - monthlyDaysPresent[i]);
+      } else {
+        monthlyDaysAbsent[i] = 0;
+      }
+    }
+  }
+
+  return {
+    attendanceData: {
+      months: MONTH_NAMES,
+      classDays: monthlyClassDays,
+      daysPresent: monthlyDaysPresent,
+      daysAbsent: monthlyDaysAbsent,
+    },
+    daysPresent: monthlyDaysPresent.reduce((a, b) => a + b, 0),
+    daysAbsent: monthlyDaysAbsent.reduce((a, b) => a + b, 0),
+  };
+}
+
+/**
+ * Fetches SF9 data for EVERY active student in a section using batched section-wide SQL queries
+ * (1 MasterSheet calculation + 1 MAPEH grades query + 1 attendance batch instead of N per-student loops).
+ */
+async function fetchSectionSf9DataBatch(sectionId, schoolYearId) {
+  let targetSchoolYearId = schoolYearId ? Number(schoolYearId) : null;
+  if (!targetSchoolYearId) {
+    const [syRows] = await db.execute(
+      `SELECT ss.school_year_id
+       FROM STUDENT_SECTION ss
+       JOIN STUDENT st ON ss.student_id = st.student_id
+       WHERE ss.section_id = ?
+         AND ss.school_year_id IS NOT NULL
+         AND (st.status = 'ACTIVE' OR st.status IS NULL)
+       ORDER BY ss.school_year_id DESC
+       LIMIT 1`,
+      [sectionId]
+    );
+    if (syRows.length > 0 && syRows[0].school_year_id != null) {
+      targetSchoolYearId = Number(syRows[0].school_year_id);
+    }
+  }
+  if (!targetSchoolYearId) {
+    const [fallbackSy] = await db.execute(
+      `SELECT school_year_id FROM SECTION_ADVISER_ASSIGNMENT WHERE section_id = ? AND school_year_id IS NOT NULL ORDER BY school_year_id DESC LIMIT 1`,
+      [sectionId]
+    );
+    if (fallbackSy.length > 0 && fallbackSy[0].school_year_id != null) {
+      targetSchoolYearId = Number(fallbackSy[0].school_year_id);
+    }
+  }
+
+  const [[secRows], [studentRows], [saaRows], [pRows]] = await Promise.all([
+    db.execute(
+      `SELECT sec.section_id, sec.section_name, sec.program_id,
+              p.program_code, p.program_name, COALESCE(p.is_specialized, 0) AS is_specialized,
+              gl.grade_level_name,
+              sy.school_year_id, sy.starts_on, sy.ends_on
+       FROM SECTION sec
+       LEFT JOIN PROGRAM p ON p.program_id = sec.program_id
+       LEFT JOIN GRADE_LEVEL gl ON sec.grade_level_id = gl.grade_level_id
+       LEFT JOIN SCHOOL_YEAR sy ON sy.school_year_id = ?
+       WHERE sec.section_id = ? LIMIT 1`,
+      [targetSchoolYearId || 0, sectionId]
+    ),
+    db.execute(
+      `SELECT ss.student_section_id, ss.section_id, ss.school_year_id,
+              st.*, p.program_code AS student_program_code, p.program_name AS student_program_name
+       FROM STUDENT_SECTION ss
+       JOIN STUDENT st ON ss.student_id = st.student_id
+       LEFT JOIN PROGRAM p ON p.program_id = st.program_id
+       WHERE ss.section_id = ? ${targetSchoolYearId ? 'AND ss.school_year_id = ?' : ''}
+         AND (st.status = 'ACTIVE' OR st.status IS NULL)
+       ORDER BY st.last_name ASC, st.first_name ASC, st.student_id ASC`,
+      targetSchoolYearId ? [sectionId, targetSchoolYearId] : [sectionId]
+    ),
+    db.execute(
+      `SELECT saa.adviser_assignment_id, saa.user_id, u.first_name, u.middle_name, u.last_name, u.extension_name, u.credentials
+       FROM SECTION_ADVISER_ASSIGNMENT saa
+       JOIN USER u ON saa.user_id = u.user_id
+       WHERE saa.section_id = ? ${targetSchoolYearId ? 'AND saa.school_year_id = ?' : ''}
+       ORDER BY saa.adviser_assignment_id DESC
+       LIMIT 1`,
+      targetSchoolYearId ? [sectionId, targetSchoolYearId] : [sectionId]
+    ),
+    db.execute(
+      `SELECT first_name, last_name, extension_name, credentials FROM USER WHERE role IN ('1', 'principal', '5') LIMIT 1`
+    ),
+  ]);
+
+  const sectionInfo = secRows[0] || null;
+  if (!sectionInfo || studentRows.length === 0) {
+    return { sectionInfo, items: [] };
+  }
+
+  const adviserRow = saaRows[0] || null;
+  const adviserAssignmentId = adviserRow?.adviser_assignment_id || null;
+  const adviserUserId = adviserRow?.user_id || null;
+  const adviserName = formatOfficialName(adviserRow);
+  const principalName = formatOfficialName(pRows[0] || null);
+
+  const studentSectionIds = studentRows.map(r => Number(r.student_section_id)).filter(Boolean);
+  const studentIds = studentRows.map(r => Number(r.student_id)).filter(Boolean);
+  const ssPlaceholders = studentSectionIds.map(() => '?').join(',');
+
+  // Fetch MasterSheet ONCE + MAPEH grades ONCE + section attendance sheets ONCE in parallel
+  const [msResult, sgResult, sheetResult] = await Promise.all([
+    adviserAssignmentId && adviserUserId && typeof MasterSheetService.getMasterSheet === 'function'
+      ? MasterSheetService.getMasterSheet(adviserAssignmentId, adviserUserId).catch(err => {
+          console.error("Batch MasterSheet calculation error:", err);
+          return null;
+        })
+      : Promise.resolve(null),
+    studentSectionIds.length > 0
+      ? db.execute(
+          `SELECT sg.student_section_id, sg.student_id, sg.subject_offering_id, sg.term,
+                  sg.mapeh_component, sg.quarterly_grade, sg.remarks,
+                  s.subject_code, s.subject_name
+           FROM STUDENT_GRADE sg
+           INNER JOIN SUBJECT_OFFERING so ON so.subject_offering_id = sg.subject_offering_id
+           INNER JOIN SUBJECT s ON s.subject_id = so.subject_id
+           WHERE ${targetSchoolYearId ? 'so.school_year_id = ? AND ' : ''}(sg.student_section_id IN (${ssPlaceholders}) OR sg.student_id IN (${studentIds.map(() => '?').join(',')}))`,
+          targetSchoolYearId ? [targetSchoolYearId, ...studentSectionIds, ...studentIds] : [...studentSectionIds, ...studentIds]
+        ).then(([rows]) => rows).catch(err => {
+          console.warn("Batch STUDENT_GRADE query error:", err.message);
+          return [];
+        })
+      : Promise.resolve([]),
+    db.execute(
+      `SELECT ash.attendance_sheet_id, ash.attendance_date, ash.no_class_reason
+       FROM ATTENDANCE_SHEET ash
+       LEFT JOIN SECTION_ADVISER_ASSIGNMENT saa ON ash.adviser_assignment_id = saa.adviser_assignment_id
+       WHERE saa.section_id = ? ${targetSchoolYearId ? 'AND saa.school_year_id = ?' : ''} AND ash.attendance_scope = 'SECTION'`,
+      targetSchoolYearId ? [sectionId, targetSchoolYearId] : [sectionId]
+    ).then(([rows]) => rows).catch(err => {
+      console.warn("Batch ATTENDANCE_SHEET query error:", err.message);
+      return [];
+    }),
+  ]);
+
+  // Index MasterSheet students for O(1) lookup
+  const msByStudentId = new Map();
+  const msByEnrollmentId = new Map();
+  if (msResult && Array.isArray(msResult.students)) {
+    for (const s of msResult.students) {
+      if (s.studentId != null) msByStudentId.set(Number(s.studentId), s);
+      if (s.studentSectionId != null) msByEnrollmentId.set(Number(s.studentSectionId), s);
+    }
+  }
+
+  // Group MAPEH / student grades by student_section_id and student_id
+  const gradesByEnrollment = new Map();
+  const gradesByStudent = new Map();
+  for (const row of sgResult) {
+    if (row.student_section_id != null) {
+      const k = Number(row.student_section_id);
+      if (!gradesByEnrollment.has(k)) gradesByEnrollment.set(k, []);
+      gradesByEnrollment.get(k).push(row);
+    }
+    if (row.student_id != null) {
+      const k = Number(row.student_id);
+      if (!gradesByStudent.has(k)) gradesByStudent.set(k, []);
+      gradesByStudent.get(k).push(row);
+    }
+  }
+
+  // Precompute section-wide attendance sheet calendar & fetch ALL student attendance rows in ONE query
+  const monthlyClassDaysBase = getMonthlyClassDays(sectionInfo.starts_on, sectionInfo.ends_on);
+  const noClassDates = excludedDates(sheetResult);
+  const exclusionsByMonth = monthlyNoClassCounts(sheetResult, sectionInfo.starts_on, sectionInfo.ends_on);
+  exclusionsByMonth.forEach((count, index) => {
+    monthlyClassDaysBase[index] = Math.max(0, monthlyClassDaysBase[index] - count);
+  });
+  const classSheets = sheetResult.filter(sheet => !noClassDates.has(dateKey(sheet.attendance_date)));
+  const sheetsByDate = new Map();
+  for (const sheet of classSheets) {
+    const dStr = dateKey(sheet.attendance_date);
+    if (!sheetsByDate.has(dStr)) sheetsByDate.set(dStr, { dateStr: dStr, sheetIds: [] });
+    sheetsByDate.get(dStr).sheetIds.push(sheet.attendance_sheet_id);
+  }
+
+  const attendanceByEnrollment = new Map();
+  if (classSheets.length > 0 && studentSectionIds.length > 0) {
+    const sheetIds = classSheets.map(s => s.attendance_sheet_id);
+    const sheetPh = sheetIds.map(() => '?').join(',');
+    const [attRows] = await db.execute(
+      `SELECT attendance_sheet_id, student_section_id, status
+       FROM ATTENDANCE
+       WHERE attendance_sheet_id IN (${sheetPh}) AND student_section_id IN (${ssPlaceholders})`,
+      [...sheetIds, ...studentSectionIds]
+    );
+    for (const row of attRows) {
+      const k = Number(row.student_section_id);
+      if (!attendanceByEnrollment.has(k)) attendanceByEnrollment.set(k, []);
+      attendanceByEnrollment.get(k).push(row);
+    }
+  }
+
+  const gradeLevelRaw = sectionInfo.grade_level_name || "";
+  const gradeNumMatch = gradeLevelRaw.match(/\d+/);
+  const gradeNum = gradeNumMatch ? gradeNumMatch[0] : "";
+  const sectionNameStr = sectionInfo.section_name || "";
+  const schoolYearLabel = formatSchoolYear(sectionInfo.starts_on, sectionInfo.ends_on);
+
+  const usedFileNames = new Set();
+  const makeUniquePdfName = (base) => {
+    let name = `${base}.pdf`;
+    let counter = 1;
+    while (usedFileNames.has(name)) {
+      name = `${base}_${counter}.pdf`;
+      counter++;
+    }
+    usedFileNames.add(name);
+    return name;
+  };
+
+  const items = studentRows.map((student) => {
+    const enrollmentId = Number(student.student_section_id);
+    const studentId = Number(student.student_id);
+    const decryptedLrn = decryptLrn(student.LRN);
+    const sexFull = (student.sex === 'M' || student.sex === 'Male')
+      ? 'Male'
+      : (student.sex === 'F' || student.sex === 'Female')
+      ? 'Female'
+      : (student.sex || '');
+
+    const rawProgCode = (student.student_program_code || sectionInfo.program_code || "").toUpperCase();
+    const rawProgName = student.student_program_name || sectionInfo.program_name || "";
+    let programDisplay = "";
+    if (rawProgName && rawProgCode && rawProgCode !== "EBEC") {
+      programDisplay = `${rawProgName} (${rawProgCode})`;
+    } else if (rawProgName) {
+      programDisplay = rawProgName;
+    } else if (rawProgCode && rawProgCode !== "EBEC") {
+      programDisplay = rawProgCode;
+    } else if (rawProgCode === "EBEC") {
+      programDisplay = "Enhanced Basic Education Curriculum (EBEC)";
+    }
+
+    const msStudent = msByEnrollmentId.get(enrollmentId) || msByStudentId.get(studentId) || null;
+    const studentGrades = gradesByEnrollment.get(enrollmentId) || gradesByStudent.get(studentId) || [];
+    const { gradesList, termGrade, honorStatus } = buildStudentGradesSummary(rawProgCode, msStudent, studentGrades);
+    const { attendanceData, daysPresent, daysAbsent } = buildStudentAttendanceSummary(
+      monthlyClassDaysBase,
+      sheetsByDate,
+      attendanceByEnrollment.get(enrollmentId) || []
+    );
+
+    const studentProfile = {
+      studentId,
+      studentSectionId: enrollmentId,
+      name: formatFullName(student),
+      lrn: String(decryptedLrn || ""),
+      gradeLevel: gradeLevelRaw && sectionNameStr ? `${gradeLevelRaw} ${sectionNameStr}` : (gradeLevelRaw || sectionNameStr || ""),
+      grade: gradeNum,
+      section: sectionNameStr,
+      program: programDisplay,
+      sex: sexFull,
+      age: calculateAge(student.birthdate),
+      schoolYear: schoolYearLabel,
+      dateOfBirth: formatDateOfBirth(student.birthdate),
+      address: formatAddress(student),
+      adviserName,
+      principalName,
+      admittedToGrade: "",
+      eligibleForAdmission: "",
+      termGrade,
+      honorStatus,
+      daysPresent,
+      daysAbsent,
+    };
+
+    const lastPart = String(student.last_name || "STUDENT").trim().toUpperCase().replace(/[^A-Z0-9_-]/gi, "") || "STUDENT";
+    const firstPart = String(student.first_name || "").trim().toUpperCase().replace(/[^A-Z0-9_-]/gi, "");
+    const baseName = firstPart ? `${lastPart}_${firstPart}_SF9` : `${lastPart}_SF9`;
+
+    return {
+      fileName: makeUniquePdfName(baseName),
+      options: {
+        studentProfile,
+        grades: gradesList,
+        attendanceData,
+        comments: { term1: "", term2: "", term3: "" },
+      },
+    };
+  });
+
+  return { sectionInfo, items };
+}
+
+// POST /section/:sectionId/export-pdf-zip - Bulk official DepEd SF9 PDFs for an entire section in one ZIP
+router.post('/section/:sectionId/export-pdf-zip', async (req, res) => {
+  try {
+    const cleanSectionId = String(req.params.sectionId || '').trim();
+    if (!/^[1-9]\d*$/.test(cleanSectionId)) {
+      return res.status(400).json({ error: "Invalid section ID" });
+    }
+    const schoolYearId = req.query.schoolYearId;
+    if (schoolYearId !== undefined && (typeof schoolYearId !== 'string' || !/^[1-9]\d*$/.test(schoolYearId))) {
+      return res.status(400).json({ error: "Invalid school year" });
+    }
+
+    const { sectionInfo, items } = await fetchSectionSf9DataBatch(Number(cleanSectionId), schoolYearId);
+    if (!sectionInfo || items.length === 0) {
+      return res.status(404).json({ error: "No students found in this section.", code: "NO_STUDENTS_FOUND" });
+    }
+
+    const comments = (req.body && typeof req.body.comments === 'object') ? req.body.comments : null;
+    if (comments) {
+      for (const item of items) {
+        item.options.comments = comments;
+      }
+    }
+
+    const renderedFiles = typeof generateSf9PdfBatch === 'function'
+      ? await generateSf9PdfBatch(items, { concurrency: 4 })
+      : await Promise.all(
+          items.map(async (item) => ({
+            fileName: item.fileName,
+            buffer: await generateSf9Pdf(item.options),
+          }))
+        );
+
+    const zipBuffer = createZipBuffer(renderedFiles);
+    const cleanSectionName = String(sectionInfo.section_name || "Advisory_Class")
+      .trim()
+      .replace(/[^a-zA-Z0-9_-]/g, "_");
+    const zipFileName = `${cleanSectionName}_All_SF9_Report_Cards.zip`;
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${zipFileName}"`);
+    res.setHeader('X-Sf9-Count', String(renderedFiles.length));
+    return res.send(zipBuffer);
+  } catch (error) {
+    console.error("Error generating bulk section SF9 ZIP:", error);
+    return res.status(500).json({ error: "Failed to generate bulk SF9 ZIP", message: error.message });
   }
 });
 

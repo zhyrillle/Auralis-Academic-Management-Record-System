@@ -24,7 +24,7 @@ import gccnhsLogo from "../../assets/gccnhs_logo.png";
 import Toast from "../../components/common/Toast.jsx";
 
 // Student & Report Services
-import { getStudentSF9Details, downloadStudentSf9Pdf, fetchEphemeralLrn } from "../../services/studentSf9Service";
+import { getStudentSF9Details, downloadStudentSf9Pdf, downloadSectionSf9Zip, fetchEphemeralLrn } from "../../services/studentSf9Service";
 import { getStudentSF10Details, fetchEphemeralSf10Lrn } from "../../services/reportService";
 import { getAdviserSections, getStudentsBySection } from "../../services/sectionService";
 import { getSectionDetails } from "../../services/sectionDetailsService";
@@ -426,8 +426,56 @@ export default function AdviserDashboard() {
       }
 
       const sectionId = advClass.section_id || advClass.id;
+      const numericSectionId = /^[1-9]\d*$/.test(String(sectionId || "")) ? Number(sectionId) : null;
+      const syId = advClass.schoolYearId || advClass.school_year_id || undefined;
       const sectionName = advClass.sectionName || advClass.section || "Advisory_Class";
       const cleanSectionName = String(sectionName).trim().replace(/[^a-zA-Z0-9_-]/g, "_");
+
+      const triggerZipDownload = (blob, fileName) => {
+        if (typeof window !== "undefined" && window.document) {
+          const url = window.URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = fileName;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          window.URL.revokeObjectURL(url);
+        }
+      };
+
+      // Fast path for SF9-only bulk download: single batched backend request (pooled SQL + parallel PDFs + ZIP)
+      if (isSF9 && numericSectionId) {
+        showToast(`Generating SF9 Report Cards for section ${sectionName}...`, "info", Loader2, true);
+        try {
+          const zipBlob = await downloadSectionSf9Zip(numericSectionId, {
+            schoolYearId: syId,
+            comments: { term1: "", term2: "", term3: "" },
+          });
+          if (zipBlob && zipBlob.size > 100) {
+            const zipFileName = `${cleanSectionName}_All_SF9_Report_Cards.zip`;
+            triggerZipDownload(zipBlob, zipFileName);
+            showToast(`Successfully downloaded ${zipFileName}!`, "success", CheckCircle2, false);
+            return;
+          }
+        } catch (batchErr) {
+          if (batchErr?.status === 404 && batchErr?.code === "NO_STUDENTS_FOUND") {
+            throw new Error(`No students found in advisory section ${sectionName}.`);
+          }
+          console.warn("Bulk SF9 ZIP endpoint unavailable, falling back to per-student generation:", batchErr);
+        }
+      }
+
+      // Start bulk SF9 ZIP in parallel when downloading Bulk Documents (SF9 + SF10)
+      const bulkSf9ZipPromise = isBulk && numericSectionId
+        ? downloadSectionSf9Zip(numericSectionId, {
+            schoolYearId: syId,
+            comments: { term1: "", term2: "", term3: "" },
+          }).catch((batchErr) => {
+            console.warn("Bulk SF9 ZIP unavailable during combined export, will fall back per student:", batchErr);
+            return null;
+          })
+        : Promise.resolve(null);
 
       // 2. Fetch students enrolled in this advisory class
       showToast(`Loading students for section ${sectionName}...`, "info", Loader2, true);
@@ -489,9 +537,34 @@ export default function AdviserDashboard() {
 
       let successCount = 0;
 
-      // 4. Sequentially process each student to prevent memory spikes & provide clear progress
-      for (let i = 0; i < students.length; i++) {
-        const student = students[i];
+      // If combined Bulk Documents got the server-built SF9 ZIP, merge its PDFs directly into SF9/
+      let handledBulkSf9 = false;
+      if (isBulk && numericSectionId) {
+        const bulkSf9ZipBlob = await bulkSf9ZipPromise;
+        if (bulkSf9ZipBlob && bulkSf9ZipBlob.size > 100) {
+          try {
+            const loadedSf9Zip = await JSZip.loadAsync(bulkSf9ZipBlob);
+            const entries = Object.values(loadedSf9Zip.files).filter((f) => !f.dir);
+            for (const entry of entries) {
+              const fileData = await entry.async("uint8array");
+              sf9Folder.file(entry.name, fileData);
+              successCount++;
+            }
+            if (entries.length > 0) handledBulkSf9 = true;
+          } catch (unpackErr) {
+            console.warn("Could not unpack bulk SF9 ZIP, falling back per student:", unpackErr);
+          }
+        }
+      }
+
+      // 4. Process students with bounded concurrency for fast generation without memory spikes
+      const needPerStudentSf9 = (isSF9 || isBulk) && !handledBulkSf9;
+      const needPerStudentSf10 = isSF10 || isBulk;
+      const concurrency = needPerStudentSf9 ? 3 : 4;
+      let completedStudents = 0;
+      let nextStudentIndex = 0;
+
+      const processStudent = async (student) => {
         const studentIdentifier =
           student.student_id ||
           student.studentId ||
@@ -514,21 +587,13 @@ export default function AdviserDashboard() {
 
         const studentBaseName = firstName ? `${lastName}_${firstName}` : lastName;
 
-        showToast(
-          `Generating documents (${i + 1}/${students.length}): ${student.name || `${lastName}, ${firstName}`}...`,
-          "info",
-          Loader2,
-          true
-        );
-
-        // --- Generate SF9 if requested ---
-        if (isSF9 || isBulk) {
+        // --- Generate SF9 if requested and not already handled via bulk endpoint ---
+        if (needPerStudentSf9) {
           try {
             let sf9Blob = null;
 
             // Attempt 1: Native Vector PDF via Backend (Razor-sharp, 100% crisp vector fonts, zero blur)
             try {
-              const syId = advClass.schoolYearId || advClass.school_year_id;
               const backendBlob = await downloadStudentSf9Pdf(studentIdentifier, {
                 schoolYearId: syId,
                 comments: { term1: "", term2: "", term3: "" },
@@ -546,7 +611,7 @@ export default function AdviserDashboard() {
               if (studentIdentifier) {
                 try {
                   sf9Data = await getStudentSF9Details(studentIdentifier, {
-                    schoolYearId: advClass.schoolYearId || advClass.school_year_id,
+                    schoolYearId: syId,
                   });
                 } catch (sf9FetchErr) {
                   console.warn(`Could not fetch dynamic SF9 data for student ${studentIdentifier}:`, sf9FetchErr);
@@ -610,7 +675,7 @@ export default function AdviserDashboard() {
         }
 
         // --- Generate SF10 if requested ---
-        if (isSF10 || isBulk) {
+        if (needPerStudentSf10) {
           try {
             let sf10Data = null;
             if (studentIdentifier) {
@@ -674,15 +739,33 @@ export default function AdviserDashboard() {
             console.error(`Error generating SF10 for student ${studentIdentifier}:`, sf10Err);
           }
         }
-      }
+
+        completedStudents++;
+        showToast(
+          `Generating documents (${completedStudents}/${students.length}): ${student.name || `${lastName}, ${firstName}`}...`,
+          "info",
+          Loader2,
+          true
+        );
+      };
+
+      const workerCount = Math.min(concurrency, students.length);
+      await Promise.all(
+        Array.from({ length: workerCount }, async () => {
+          while (nextStudentIndex < students.length) {
+            const idx = nextStudentIndex++;
+            await processStudent(students[idx]);
+          }
+        })
+      );
 
       if (successCount === 0) {
         throw new Error("No document files could be generated.");
       }
 
-      // 5. Compress and download ZIP
-      showToast("Compressing files into ZIP archive...", "info", Loader2, true);
-      const zipBlob = await zip.generateAsync({ type: "blob" });
+      // 5. Pack and download ZIP
+      showToast("Packing files into ZIP archive...", "info", Loader2, true);
+      const zipBlob = await zip.generateAsync({ type: "blob", compression: "STORE" });
 
       const zipFileName = isSF9
         ? `${cleanSectionName}_All_SF9_Report_Cards.zip`
@@ -690,16 +773,7 @@ export default function AdviserDashboard() {
         ? `${cleanSectionName}_All_SF10_Permanent_Records.zip`
         : `${cleanSectionName}_All_Documents_SF9_SF10.zip`;
 
-      if (typeof window !== "undefined" && window.document) {
-        const url = window.URL.createObjectURL(zipBlob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = zipFileName;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(url);
-      }
+      triggerZipDownload(zipBlob, zipFileName);
 
       showToast(`Successfully downloaded ${zipFileName}!`, "success", CheckCircle2, false);
     } catch (err) {

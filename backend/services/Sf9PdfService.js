@@ -32,8 +32,14 @@ function resolveBrowserExecutable() {
 // Read and cache institutional logos as Base64 strings
 let cachedDepedLogo = null;
 let cachedGccnhsLogo = null;
+let cachedOptimizedLogos = null;
+let optimizedLogosPromise = null;
 
 function getLogos() {
+  if (cachedOptimizedLogos) {
+    return cachedOptimizedLogos;
+  }
+
   if (!cachedDepedLogo) {
     const depedPath = path.join(__dirname, '../assets/deped_logo.png');
     if (fs.existsSync(depedPath)) {
@@ -49,6 +55,78 @@ function getLogos() {
   }
 
   return { depedLogo: cachedDepedLogo || '', gccnhsLogo: cachedGccnhsLogo || '' };
+}
+
+/**
+ * Downscales oversized institutional logo assets once in memory (e.g. 2194x2193 1.2MB PNG -> 300x300 ~30KB PNG)
+ * so Chromium does not re-decode and re-embed a multi-megapixel PNG for a 74x74px print seal on every SF9 PDF.
+ * At 74x74px (0.77in), 300x300px provides ~390 DPI print crispness while cutting render time & PDF size by >10x.
+ */
+async function ensureOptimizedLogos(browser) {
+  if (cachedOptimizedLogos) return cachedOptimizedLogos;
+  if (optimizedLogosPromise) return optimizedLogosPromise;
+
+  const raw = getLogos();
+  const needsOptimization =
+    (raw.depedLogo && raw.depedLogo.length > 35000) ||
+    (raw.gccnhsLogo && raw.gccnhsLogo.length > 35000);
+
+  if (!needsOptimization) {
+    cachedOptimizedLogos = raw;
+    return cachedOptimizedLogos;
+  }
+
+  optimizedLogosPromise = (async () => {
+    const context = await browser.createBrowserContext();
+    try {
+      const page = await context.newPage();
+      const resizeDataUri = async (dataUri, maxDim = 240) => {
+        if (!dataUri || dataUri.length <= 35000) return dataUri;
+        return await page.evaluate(
+          (src, maxSize) =>
+            new Promise((resolve) => {
+              const img = new Image();
+              img.onload = () => {
+                const scale = Math.min(1, maxSize / Math.max(img.naturalWidth || 1, img.naturalHeight || 1));
+                const w = Math.max(1, Math.round(img.naturalWidth * scale));
+                const h = Math.max(1, Math.round(img.naturalHeight * scale));
+                const canvas = document.createElement('canvas');
+                canvas.width = w;
+                canvas.height = h;
+                const ctx = canvas.getContext('2d');
+                // SF9 page background is solid white; JPEG at 240x240 (~311 DPI at 74px) embeds directly into PDF /DCTDecode without PNG re-compression overhead
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, w, h);
+                ctx.imageSmoothingEnabled = true;
+                ctx.imageSmoothingQuality = 'high';
+                ctx.drawImage(img, 0, 0, w, h);
+                resolve(canvas.toDataURL('image/jpeg', 0.92));
+              };
+              img.onerror = () => resolve(src);
+              img.src = src;
+            }),
+          dataUri,
+          maxDim
+        );
+      };
+
+      const [depedLogo, gccnhsLogo] = await Promise.all([
+        resizeDataUri(raw.depedLogo, 240),
+        resizeDataUri(raw.gccnhsLogo, 240),
+      ]);
+      cachedOptimizedLogos = { depedLogo, gccnhsLogo };
+      return cachedOptimizedLogos;
+    } catch (err) {
+      console.warn('[Sf9PdfService] Logo optimization skipped:', err.message);
+      cachedOptimizedLogos = raw;
+      return raw;
+    } finally {
+      await context.close().catch(() => {});
+      optimizedLogosPromise = null;
+    }
+  })();
+
+  return optimizedLogosPromise;
 }
 
 /**
@@ -72,8 +150,8 @@ function buildSf9Html({ studentProfile = {}, grades = [], performanceDescriptors
     { scale: "90-100", desc: "Advancing", remarks: "Passed" },
     { scale: "80-89", desc: "Benchmarking", remarks: "Passed" },
     { scale: "75-79", desc: "Connecting", remarks: "Passed" },
-    { scale: "65-74", desc: "Developing", remarks: "Passed" },
-    { scale: "0-64", desc: "Emerging", remarks: "Passed" }
+    { scale: "65-74", desc: "Developing", remarks: "Failed" },
+    { scale: "0-64", desc: "Emerging", remarks: "Failed" }
   ];
 
   const descriptorsToUse = performanceDescriptors && performanceDescriptors.length > 0
@@ -438,10 +516,18 @@ function getSf9Browser() {
   return launch;
 }
 
+const PDF_OPTIONS = Object.freeze({
+  width: '816px',
+  height: '1056px',
+  printBackground: true,
+  preferCSSPageSize: true,
+});
+
 /** Generates an official SF9 PDF from the learner's report data. */
 async function generateSf9Pdf(options) {
-  const html = buildSf9Html(options);
   const browser = await getSf9Browser();
+  await ensureOptimizedLogos(browser);
+  const html = buildSf9Html(options);
   // Keep each learner's report isolated while sharing the Chrome process.
   const context = await browser.createBrowserContext();
   try {
@@ -449,19 +535,166 @@ async function generateSf9Pdf(options) {
     await page.setJavaScriptEnabled(false);
     await page.setViewport({ width: 816, height: 1056 });
     await page.setContent(html, { waitUntil: 'load' });
-    return await page.pdf({
-      width: '816px',
-      height: '1056px',
-      printBackground: true,
-      preferCSSPageSize: true,
-    });
+    return await page.pdf(PDF_OPTIONS);
   } finally {
     await context.close();
   }
 }
 
+/**
+ * Generates multiple official SF9 PDFs concurrently using a bounded pool of pages inside
+ * a single isolated browser context (JS disabled + strict CSP guarantees zero cross-learner state).
+ *
+ * @param {Array<{ fileName: string, options: object }>} items
+ * @param {{ concurrency?: number }} [config]
+ * @returns {Promise<Array<{ fileName: string, buffer: Buffer }>>}
+ */
+async function generateSf9PdfBatch(items, { concurrency = 4 } = {}) {
+  if (!Array.isArray(items) || items.length === 0) return [];
+  const browser = await getSf9Browser();
+  await ensureOptimizedLogos(browser);
+
+  const workerCount = Math.max(1, Math.min(Number(concurrency) || 4, items.length));
+  const results = new Array(items.length);
+  const context = await browser.createBrowserContext();
+
+  try {
+    const pages = await Promise.all(
+      Array.from({ length: workerCount }, async () => {
+        const page = await context.newPage();
+        await page.setJavaScriptEnabled(false);
+        await page.setViewport({ width: 816, height: 1056 });
+        return page;
+      })
+    );
+
+    let nextIndex = 0;
+    await Promise.all(
+      pages.map(async (page) => {
+        while (nextIndex < items.length) {
+          const currentIndex = nextIndex++;
+          const item = items[currentIndex];
+          const html = buildSf9Html(item.options);
+          await page.setContent(html, { waitUntil: 'load' });
+          const pdfBytes = await page.pdf(PDF_OPTIONS);
+          results[currentIndex] = {
+            fileName: item.fileName,
+            buffer: Buffer.isBuffer(pdfBytes) ? pdfBytes : Buffer.from(pdfBytes),
+          };
+        }
+      })
+    );
+
+    return results.filter(Boolean);
+  } finally {
+    await context.close();
+  }
+}
+
+// Precomputed IEEE CRC-32 lookup table for zero-dependency ZIP archive creation
+const CRC32_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let k = 0; k < 8; k++) {
+      c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+    }
+    table[i] = c >>> 0;
+  }
+  return table;
+})();
+
+function crc32(buffer) {
+  let crc = 0xffffffff;
+  for (let i = 0; i < buffer.length; i++) {
+    crc = CRC32_TABLE[(crc ^ buffer[i]) & 0xff] ^ (crc >>> 8);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+/**
+ * Packs in-memory files into a standard ZIP archive using STORE (method 0).
+ * PDFs are already internally compressed, so STORE avoids redundant CPU work while staying compact.
+ *
+ * @param {Array<{ fileName: string, buffer: Buffer|Uint8Array }>} files
+ * @returns {Buffer}
+ */
+function createZipBuffer(files) {
+  const now = new Date();
+  const dosTime =
+    ((now.getHours() & 0x1f) << 11) |
+    ((now.getMinutes() & 0x3f) << 5) |
+    ((now.getSeconds() >> 1) & 0x1f);
+  const dosDate =
+    (((Math.max(1980, now.getFullYear()) - 1980) & 0x7f) << 9) |
+    (((now.getMonth() + 1) & 0x0f) << 5) |
+    (now.getDate() & 0x1f);
+
+  const localParts = [];
+  const centralParts = [];
+  let offset = 0;
+
+  for (const file of files) {
+    const nameBuf = Buffer.from(String(file.fileName), 'utf8');
+    const dataBuf = Buffer.isBuffer(file.buffer) ? file.buffer : Buffer.from(file.buffer);
+    const checksum = crc32(dataBuf);
+
+    const localHeader = Buffer.alloc(30);
+    localHeader.writeUInt32LE(0x04034b50, 0);
+    localHeader.writeUInt16LE(20, 4);
+    localHeader.writeUInt16LE(0x0800, 6);
+    localHeader.writeUInt16LE(0, 8);
+    localHeader.writeUInt16LE(dosTime, 10);
+    localHeader.writeUInt16LE(dosDate, 12);
+    localHeader.writeUInt32LE(checksum, 14);
+    localHeader.writeUInt32LE(dataBuf.length, 18);
+    localHeader.writeUInt32LE(dataBuf.length, 22);
+    localHeader.writeUInt16LE(nameBuf.length, 26);
+    localHeader.writeUInt16LE(0, 28);
+
+    localParts.push(localHeader, nameBuf, dataBuf);
+
+    const centralHeader = Buffer.alloc(46);
+    centralHeader.writeUInt32LE(0x02014b50, 0);
+    centralHeader.writeUInt16LE(20, 4);
+    centralHeader.writeUInt16LE(20, 6);
+    centralHeader.writeUInt16LE(0x0800, 8);
+    centralHeader.writeUInt16LE(0, 10);
+    centralHeader.writeUInt16LE(dosTime, 12);
+    centralHeader.writeUInt16LE(dosDate, 14);
+    centralHeader.writeUInt32LE(checksum, 16);
+    centralHeader.writeUInt32LE(dataBuf.length, 20);
+    centralHeader.writeUInt32LE(dataBuf.length, 24);
+    centralHeader.writeUInt16LE(nameBuf.length, 28);
+    centralHeader.writeUInt16LE(0, 30);
+    centralHeader.writeUInt16LE(0, 32);
+    centralHeader.writeUInt16LE(0, 34);
+    centralHeader.writeUInt16LE(0, 36);
+    centralHeader.writeUInt32LE(0, 38);
+    centralHeader.writeUInt32LE(offset, 42);
+
+    centralParts.push(centralHeader, nameBuf);
+    offset += localHeader.length + nameBuf.length + dataBuf.length;
+  }
+
+  const centralDirSize = centralParts.reduce((sum, part) => sum + part.length, 0);
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0);
+  eocd.writeUInt16LE(0, 4);
+  eocd.writeUInt16LE(0, 6);
+  eocd.writeUInt16LE(files.length, 8);
+  eocd.writeUInt16LE(files.length, 10);
+  eocd.writeUInt32LE(centralDirSize, 12);
+  eocd.writeUInt32LE(offset, 16);
+  eocd.writeUInt16LE(0, 20);
+
+  return Buffer.concat([...localParts, ...centralParts, eocd]);
+}
+
 module.exports = {
   generateSf9Pdf,
+  generateSf9PdfBatch,
+  createZipBuffer,
   buildSf9Html,
   resolveBrowserExecutable,
 };

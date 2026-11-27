@@ -20,8 +20,8 @@ function buildSf9Pages({
     { scale: "90-100", desc: "Advancing", remarks: "Passed" },
     { scale: "80-89", desc: "Benchmarking", remarks: "Passed" },
     { scale: "75-79", desc: "Connecting", remarks: "Passed" },
-    { scale: "65-74", desc: "Developing", remarks: "Passed" },
-    { scale: "0-64", desc: "Emerging", remarks: "Passed" },
+    { scale: "65-74", desc: "Developing", remarks: "Failed" },
+    { scale: "0-64", desc: "Emerging", remarks: "Failed" },
   ];
   const descriptorsToUse =
     performanceDescriptors && performanceDescriptors.length > 0

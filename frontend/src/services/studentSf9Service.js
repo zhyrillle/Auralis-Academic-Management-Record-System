@@ -40,6 +40,30 @@ export const downloadStudentSf9Pdf = async (identifier, { schoolYearId, comments
   return await response.blob();
 };
 
+export const downloadSectionSf9Zip = async (sectionId, { schoolYearId, comments, signal } = {}) => {
+  if (!sectionId) throw new Error("Section ID is required");
+  const query = schoolYearId ? `?schoolYearId=${encodeURIComponent(schoolYearId)}` : "";
+  const response = await window.fetch(
+    `${API_BASE_URL}/student-sf9/section/${encodeURIComponent(sectionId)}/export-pdf-zip${query}`,
+    {
+      method: "POST",
+      signal,
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ comments: comments || {} }),
+    }
+  );
+  if (!response.ok) {
+    const errBody = await response.json().catch(() => ({}));
+    const error = new Error(errBody.error || `Failed to generate SF9 ZIP: ${response.statusText}`);
+    error.status = response.status;
+    error.code = errBody.code || null;
+    throw error;
+  }
+  return await response.blob();
+};
+
 export const fetchEphemeralLrn = async (identifier, { signal } = {}) => {
   if (!identifier) return null;
   const response = await window.fetch(`${API_BASE_URL}/student-sf9/student/${encodeURIComponent(identifier)}/ephemeral-lrn`, {
