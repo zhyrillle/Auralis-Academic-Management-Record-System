@@ -397,6 +397,15 @@
   background-color: rgba(248, 250, 252, 0.9);
 }
 
+.section-data-table tbody tr.section-learner-row--highlighted {
+  background-color: #fef3c7;
+  box-shadow: inset 3px 0 0 #d97706;
+}
+
+.section-data-table tbody tr.section-learner-row--highlighted:hover {
+  background-color: #fde68a;
+}
+
 .section-data-table td {
   padding: 0.875rem 1rem;
   border-bottom: 0;

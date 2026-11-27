@@ -94,3 +94,120 @@ test('NotificationService exposes expected notification types including SUBMISSI
   assert.equal(NotificationService.TYPES.DEADLINE, 'DEADLINE');
   assert.equal(NotificationService.TYPES.SUMMARY, 'SUMMARY');
 });
+
+test('GET /api/notifications/adviser links At-Risk Student Detected to corresponding section details with student, section, and term', async (t) => {
+  let advisoryOnly = false;
+  const scopedDb = {
+    async execute(sql) {
+      assert.match(sql, /^\s*SELECT\b/i, 'Notification feed tests must never write records.');
+      if (sql.includes('FROM SECTION_ADVISER_ASSIGNMENT')) {
+        return [[{
+          adviser_assignment_id: 301,
+          section_id: 55,
+          section_name: 'Rizal',
+          grade_level_name: 'Grade 9',
+          grade_level_id: 9,
+          school_year_id: 2026,
+        }]];
+      }
+      if (sql.includes('FROM TEACHER_ASSIGNMENT')) {
+        if (advisoryOnly) return [[]];
+        return [[{
+          teacher_assignment_id: 707,
+          subject_offering_id: 808,
+          section_id: 55,
+          school_year_id: 2026,
+          section_name: 'Rizal',
+          grade_level_name: 'Grade 9',
+          subject_name: 'English',
+        }]];
+      }
+      if (sql.includes('FROM NOTIFICATION')) return [[]];
+      if (sql.includes('FROM ACADEMIC_TERM')) {
+        return [[{ term_id: 2, term_name: '2nd Term', ends_at: null }]];
+      }
+      if (sql.includes('FROM STUDENT_GRADE sg')) {
+        return [[{
+          student_id: 44,
+          student_section_id: 944,
+          student_name: 'Juan Dela Cruz',
+          subject_offering_id: 808,
+          subject_name: 'English',
+          term: 'T2',
+          quarterly_grade: 71,
+          updated_at: new Date().toISOString(),
+          student_grade_id: 1,
+        }]];
+      }
+      if (sql.includes('FROM GRADE_SHEET') || sql.includes('FROM SUBJECT_OFFERING') || sql.includes('FROM GRADE_REOPEN_REQUEST')) {
+        return [[]];
+      }
+      throw new Error(`Unexpected query: ${sql}`);
+    },
+  };
+
+  let scopedRoutes;
+  const prevLoad = Module._load;
+  delete require.cache[require.resolve('../routes/notificationRoutes')];
+  try {
+    Module._load = function (request, parent, isMain) {
+      if (request === '../config/db') return scopedDb;
+      return prevLoad.call(this, request, parent, isMain);
+    };
+    scopedRoutes = require('../routes/notificationRoutes');
+  } finally {
+    Module._load = prevLoad;
+  }
+
+  const app = express();
+  app.use(express.json());
+  app.use('/api/notifications', scopedRoutes);
+  const server = app.listen(0);
+  t.after(() => server.close());
+  const { port } = server.address();
+
+  // Case 1: Adviser who also teaches the failing subject -> teaching section details
+  const resTeaching = await fetch(`http://127.0.0.1:${port}/api/notifications/adviser`, {
+    headers: { 'x-auralis-user-id': '42' },
+  });
+  assert.equal(resTeaching.status, 200);
+  const dataTeaching = await resTeaching.json();
+  const teachingNotif = [...dataTeaching.notifications.today, ...dataTeaching.notifications.yesterday]
+    .find((n) => n.title === 'At-Risk Student Detected');
+  assert.ok(teachingNotif, 'Expected synthesized At-Risk Student Detected notification');
+  assert.equal(teachingNotif.section_id, 55);
+  assert.equal(teachingNotif.assignment_id, 707);
+  assert.equal(teachingNotif.assignment_type, 'teaching');
+  assert.equal(teachingNotif.student_id, 44);
+  assert.equal(teachingNotif.student_name, 'Juan Dela Cruz');
+  assert.equal(teachingNotif.term, 'T2');
+  assert.match(teachingNotif.message, /Term 2/);
+  const teachUrl = new URL(teachingNotif.action_link, 'http://localhost');
+  assert.equal(teachUrl.pathname, '/adviser/sections/details');
+  assert.equal(teachUrl.searchParams.get('sectionId'), '55');
+  assert.equal(teachUrl.searchParams.get('assignmentId'), '707');
+  assert.equal(teachUrl.searchParams.get('assignmentType'), 'teaching');
+  assert.equal(teachUrl.searchParams.get('term'), 'T2');
+  assert.equal(teachUrl.searchParams.get('studentId'), '44');
+  assert.equal(teachUrl.searchParams.get('studentName'), 'Juan Dela Cruz');
+
+  // Case 2: Adviser who does not teach the failing subject -> advisory section details
+  advisoryOnly = true;
+  const resAdvisory = await fetch(`http://127.0.0.1:${port}/api/notifications/adviser`, {
+    headers: { 'x-auralis-user-id': '42' },
+  });
+  assert.equal(resAdvisory.status, 200);
+  const dataAdvisory = await resAdvisory.json();
+  const advisoryNotif = [...dataAdvisory.notifications.today, ...dataAdvisory.notifications.yesterday]
+    .find((n) => n.title === 'At-Risk Student Detected');
+  assert.ok(advisoryNotif, 'Expected synthesized At-Risk Student Detected notification for advisory-only user');
+  assert.equal(advisoryNotif.assignment_id, 301);
+  assert.equal(advisoryNotif.assignment_type, 'advisory');
+  const advUrl = new URL(advisoryNotif.action_link, 'http://localhost');
+  assert.equal(advUrl.pathname, '/adviser/sections/details');
+  assert.equal(advUrl.searchParams.get('sectionId'), '55');
+  assert.equal(advUrl.searchParams.get('assignmentId'), '301');
+  assert.equal(advUrl.searchParams.get('assignmentType'), 'advisory');
+  assert.equal(advUrl.searchParams.get('term'), 'T2');
+  assert.equal(advUrl.searchParams.get('studentId'), '44');
+});

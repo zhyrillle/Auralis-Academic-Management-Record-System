@@ -64,6 +64,22 @@ function isCreatedToday(dateInput) {
   return isNaN(d.getTime()) || d.toDateString() === new Date().toDateString();
 }
 
+/** Normalize term labels (e.g. "T2", "Term 2", "Quarter 2", "2nd Term") to T1/T2/T3. */
+function normalizeTermCode(value) {
+  if (!value) return null;
+  const raw = String(value).trim().toUpperCase();
+  if (/^T[1-3]$/.test(raw)) return raw;
+  if (/(?:^|\b)(?:FIRST|1ST|TERM\s*1|QUARTER\s*1|Q1|T1)(?:\b|$)/.test(raw) || raw === '1') return 'T1';
+  if (/(?:^|\b)(?:SECOND|2ND|TERM\s*2|QUARTER\s*2|Q2|T2)(?:\b|$)/.test(raw) || raw === '2') return 'T2';
+  if (/(?:^|\b)(?:THIRD|3RD|TERM\s*3|QUARTER\s*3|Q3|T3)(?:\b|$)/.test(raw) || raw === '3') return 'T3';
+  return null;
+}
+
+function formatTermLabel(termCode) {
+  const normalized = normalizeTermCode(termCode);
+  return normalized ? `Term ${normalized.slice(1)}` : null;
+}
+
 /**
  * Shapes a raw DB row into the response format the frontend expects.
  */
@@ -82,6 +98,11 @@ function formatNotification(n) {
     section_id:          n.section_id || null,
     school_year_id:      n.school_year_id || null,
     subject_offering_id: n.subject_offering_id || null,
+    assignment_id:       n.assignment_id || null,
+    assignment_type:     n.assignment_type || null,
+    student_id:          n.student_id || null,
+    student_name:        n.student_name || null,
+    term:                normalizeTermCode(n.term) || null,
   };
 }
 
@@ -389,7 +410,7 @@ router.get('/adviser', async (req, res) => {
     if (userId) {
       try {
         const [secRows] = await db.execute(
-          `SELECT DISTINCT sec.section_id, sec.section_name, gl.grade_level_name, gl.grade_level_id, saa.school_year_id
+          `SELECT DISTINCT saa.adviser_assignment_id, sec.section_id, sec.section_name, gl.grade_level_name, gl.grade_level_id, saa.school_year_id
            FROM SECTION_ADVISER_ASSIGNMENT saa
            JOIN SECTION sec ON saa.section_id = sec.section_id
            JOIN GRADE_LEVEL gl ON sec.grade_level_id = gl.grade_level_id
@@ -400,7 +421,7 @@ router.get('/adviser', async (req, res) => {
 
         // Also fetch teaching sections/offerings
         const [teachRows] = await db.execute(
-          `SELECT DISTINCT so.subject_offering_id, so.section_id, sec.section_name, gl.grade_level_name, sub.subject_name
+          `SELECT DISTINCT ta.teacher_assignment_id, so.subject_offering_id, so.section_id, so.school_year_id, sec.section_name, gl.grade_level_name, sub.subject_name
            FROM TEACHER_ASSIGNMENT ta
            JOIN SUBJECT_OFFERING so ON ta.subject_offering_id = so.subject_offering_id
            JOIN SECTION sec ON so.section_id = sec.section_id
@@ -536,35 +557,91 @@ router.get('/adviser', async (req, res) => {
 
       // 3c. At-risk learners in this section (failing quarterly grades)
       try {
+        const syClause = sec.school_year_id
+          ? 'AND so.school_year_id = ? AND ss.school_year_id = ?'
+          : '';
+        const atRiskParams = sec.school_year_id
+          ? [sec.section_id, sec.school_year_id, sec.school_year_id]
+          : [sec.section_id];
+
         const [atRiskRows] = await db.execute(
-          `SELECT DISTINCT
+          `SELECT
              st.student_id,
+             ss.student_section_id,
              CONCAT(st.first_name, ' ', st.last_name) AS student_name,
+             so.subject_offering_id,
              sub.subject_name,
-             sg.quarterly_grade
+             sg.term,
+             sg.quarterly_grade,
+             sg.updated_at,
+             sg.student_grade_id
            FROM STUDENT_GRADE sg
            JOIN STUDENT_SECTION ss ON sg.student_id = ss.student_id
            JOIN STUDENT st ON st.student_id = ss.student_id
            JOIN SUBJECT_OFFERING so ON sg.subject_offering_id = so.subject_offering_id
            JOIN SUBJECT sub ON so.subject_id = sub.subject_id
            WHERE ss.section_id = ?
+             AND so.section_id = ss.section_id
+             ${syClause}
              AND sg.quarterly_grade IS NOT NULL
              AND sg.quarterly_grade < 75
-           LIMIT 2`,
-          [sec.section_id]
+           ORDER BY sg.updated_at DESC, sg.student_grade_id DESC
+           LIMIT 6`,
+          atRiskParams
         );
 
+        const seenAtRisk = new Set();
+        let addedForSection = 0;
         for (const ar of atRiskRows) {
+          const termCode = normalizeTermCode(ar.term) || normalizeTermCode(activeTerm?.term_name) || 'T1';
+          const termLabel = formatTermLabel(termCode) || 'Term 1';
+          const dedupKey = `${ar.student_id}-${ar.subject_offering_id || ar.subject_name}-${termCode}`;
+          if (seenAtRisk.has(dedupKey)) continue;
+          seenAtRisk.add(dedupKey);
+
+          const matchingTeach = teachingSections.find(
+            (t) =>
+              Number(t.subject_offering_id) === Number(ar.subject_offering_id) &&
+              (!sec.school_year_id || !t.school_year_id || Number(t.school_year_id) === Number(sec.school_year_id))
+          );
+          const assignmentType = matchingTeach ? 'teaching' : 'advisory';
+          const assignmentId = matchingTeach
+            ? matchingTeach.teacher_assignment_id
+            : (sec.adviser_assignment_id || sec.section_id);
+
+          const detailParams = new URLSearchParams({
+            sectionId: String(sec.section_id),
+            assignmentId: String(assignmentId),
+            assignmentType,
+            term: termCode,
+          });
+          if (ar.student_id) detailParams.set('studentId', String(ar.student_id));
+          if (ar.student_name) detailParams.set('studentName', ar.student_name);
+
           synthesized.push({
-            id: `atrisk-${ar.student_id}-${ar.subject_name}`,
+            id: `atrisk-${dedupKey}`,
             title: 'At-Risk Student Detected',
-            message: `${ar.student_name} in ${secLabel} has been identified as at-risk due to a failing grade (${Math.round(ar.quarterly_grade)}) in ${ar.subject_name}.`,
+            message: `${ar.student_name} in ${secLabel} has been identified as at-risk due to a failing grade (${Math.round(ar.quarterly_grade)}) in ${ar.subject_name} (${termLabel}).`,
             timestamp: 'Today',
             created_at: new Date().toISOString(),
             unread: true,
             type: 'AT_RISK',
-            action_link: `/adviser/performance`,
+            section_id: sec.section_id,
+            section_name: sec.section_name,
+            grade_level_name: sec.grade_level_name,
+            school_year_id: sec.school_year_id || null,
+            subject_offering_id: ar.subject_offering_id || null,
+            subject_name: ar.subject_name || null,
+            assignment_id: assignmentId,
+            assignment_type: assignmentType,
+            student_id: ar.student_id,
+            student_name: ar.student_name,
+            term: termCode,
+            action_link: `/adviser/sections/details?${detailParams.toString()}`,
           });
+
+          addedForSection += 1;
+          if (addedForSection >= 2) break;
         }
       } catch (arErr) {
         console.warn('[notifications/adviser] synthesize at-risk error:', arErr.message);

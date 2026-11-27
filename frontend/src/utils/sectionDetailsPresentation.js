@@ -4,6 +4,70 @@ const monitoringLevels = ['low', 'moderate', 'high'];
 const modelLevels = ['low', 'medium', 'high'];
 const validNumber = value => Number.isFinite(value) && value >= 0 && value <= 100;
 
+export function normalizeSectionTermParam(value) {
+  if (!value) return null;
+  const raw = String(value).trim().toUpperCase();
+  if (/^T[1-3]$/.test(raw)) return raw;
+  if (/^[1-3]$/.test(raw)) return `T${raw}`;
+  const match =
+    raw.match(/(?:TERM|QUARTER|Q|T)\s*([1-3])\b/) ||
+    raw.match(/\b([1-3])(?:ST|ND|RD)\s*(?:TERM|QUARTER)\b/);
+  if (match) return `T${match[1]}`;
+  if (/\bFIRST\s*(?:TERM|QUARTER)\b/.test(raw)) return 'T1';
+  if (/\bSECOND\s*(?:TERM|QUARTER)\b/.test(raw)) return 'T2';
+  if (/\bTHIRD\s*(?:TERM|QUARTER)\b/.test(raw)) return 'T3';
+  return null;
+}
+
+function tokenizeName(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+export function matchesLearnerSearch(learnerName, query) {
+  const normalizedQuery = String(query || '').trim().toLowerCase();
+  if (!normalizedQuery) return true;
+  const normalizedName = String(learnerName || '').toLowerCase();
+  if (normalizedName.includes(normalizedQuery)) return true;
+  const queryTokens = tokenizeName(normalizedQuery);
+  if (queryTokens.length === 0) return true;
+  const nameTokens = tokenizeName(normalizedName);
+  return queryTokens.every((token) =>
+    nameTokens.some((nameToken) => nameToken.includes(token))
+  );
+}
+
+export function findFocusedLearner(learners = [], targetStudentId = null, targetStudentName = '') {
+  if (!Array.isArray(learners) || learners.length === 0) return null;
+  if (targetStudentId != null) {
+    const byId = learners.find(
+      (learner) => Number(learner.studentId) === Number(targetStudentId)
+    );
+    if (byId) return byId;
+  }
+  const cleanName = String(targetStudentName || '').trim();
+  if (!cleanName) return null;
+  const lowerTarget = cleanName.toLowerCase();
+  const exactSubstring = learners.find((learner) =>
+    String(learner.name || '').toLowerCase().includes(lowerTarget)
+  );
+  if (exactSubstring) return exactSubstring;
+
+  const targetTokens = tokenizeName(cleanName);
+  if (targetTokens.length === 0) return null;
+  return (
+    learners.find((learner) => {
+      const learnerTokens = tokenizeName(learner.name);
+      return targetTokens.every((token) =>
+        learnerTokens.some((learnerToken) => learnerToken === token || learnerToken.startsWith(token))
+      );
+    }) || null
+  );
+}
+
 export function getSectionGrade(learner, mode) {
   return mode === 'monitoring' ? learner.academic?.gradePreview : learner.termGrade;
 }

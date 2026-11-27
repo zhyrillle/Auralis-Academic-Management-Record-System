@@ -11,7 +11,13 @@ import TermToggleGroup from "../../components/common/TermToggleGroup.jsx";
 import PredictionInfoButton from "../../components/at-risk/PredictionInfoButton.jsx";
 import { RISK_BANDS, missingRiskSourcesText } from "../../utils/riskPresentation.js";
 import { getStoredUser } from "../../utils/auth.js";
-import { getSectionGrade, getSectionRisk } from '../../utils/sectionDetailsPresentation.js';
+import {
+  findFocusedLearner,
+  getSectionGrade,
+  getSectionRisk,
+  matchesLearnerSearch,
+  normalizeSectionTermParam,
+} from '../../utils/sectionDetailsPresentation.js';
 import {
   getSectionDetails,
   normalizeSectionDetailsError,
@@ -56,6 +62,23 @@ export default function SectionDetails({
     };
   }, [searchParams]);
 
+  const requestedTerm = useMemo(
+    () => normalizeSectionTermParam(searchParams.get("term") || location.state?.term) || "T1",
+    [searchParams, location.state?.term],
+  );
+  const requestedStudentId = useMemo(() => {
+    const raw = searchParams.get("studentId") ?? location.state?.studentId;
+    const numeric = Number(raw);
+    return Number.isInteger(numeric) && numeric > 0 ? numeric : null;
+  }, [searchParams, location.state?.studentId]);
+  const requestedStudentName = useMemo(() => {
+    const raw =
+      searchParams.get("studentName") ??
+      searchParams.get("student") ??
+      location.state?.studentName;
+    return raw ? String(raw).trim() : "";
+  }, [searchParams, location.state?.studentName]);
+
   const activeSection =
     section ||
     location.state?.section ||
@@ -70,8 +93,9 @@ export default function SectionDetails({
   const [pendingTerm, setPendingTerm] = useState(null);
   const [pendingMode, setPendingMode] = useState(null);
   const [error, setError] = useState("");
-  const [selectedTerm, setSelectedTerm] = useState("T1");
+  const [selectedTerm, setSelectedTerm] = useState(requestedTerm);
   const [searchQuery, setSearchQuery] = useState("");
+  const [highlightedStudentId, setHighlightedStudentId] = useState(null);
   const [selectedRisk, setSelectedRisk] = useState(null);
   const [sortBy, setSortBy] = useState("name");
   const [sortAscending, setSortAscending] = useState(true);
@@ -133,6 +157,8 @@ export default function SectionDetails({
   const requestSequenceRef = useRef(0);
   const failedTermRef = useRef(null);
   const failedModeRef = useRef(null);
+  const appliedFocusKeyRef = useRef("");
+  const highlightedRowRef = useRef(null);
 
   const loadDetails = useCallback(async (term, force = false, mode = 'monitoring') => {
     if (!assignmentId || !assignmentType || !userId) return;
@@ -165,6 +191,21 @@ export default function SectionDetails({
       setData(nextData);
       setSelectedTerm(term);
       if (!nextData.capabilities?.atRiskAvailable) setSelectedRisk(null);
+      if ((requestedStudentId || requestedStudentName) && Array.isArray(nextData?.learners)) {
+        const focusKey = `${assignmentType}:${assignmentId}:${requestedTerm}:${requestedStudentId || ""}:${requestedStudentName}`;
+        if (appliedFocusKeyRef.current !== focusKey) {
+          appliedFocusKeyRef.current = focusKey;
+          const matched = findFocusedLearner(
+            nextData.learners,
+            requestedStudentId,
+            requestedStudentName,
+          );
+          if (matched) {
+            setSearchQuery(matched.name);
+            setHighlightedStudentId(matched.studentId);
+          }
+        }
+      }
     } catch (requestError) {
       if (requestSequence !== requestSequenceRef.current) return;
       failedTermRef.current = term;
@@ -178,7 +219,7 @@ export default function SectionDetails({
         setPendingMode(null);
       }
     }
-  }, [assignmentId, assignmentType, userId]);
+  }, [assignmentId, assignmentType, requestedStudentId, requestedStudentName, requestedTerm, userId]);
 
   useEffect(() => {
     let active = true;
@@ -188,24 +229,25 @@ export default function SectionDetails({
       dataRef.current = null;
       failedTermRef.current = null;
       failedModeRef.current = null;
+      appliedFocusKeyRef.current = "";
       setData(null);
       setError("");
-      setSelectedTerm("T1");
+      setSelectedTerm(requestedTerm);
       setSearchQuery("");
+      setHighlightedStudentId(null);
       setSelectedRisk(null);
-      if (assignmentId && assignmentType && userId) loadDetails("T1");
+      if (assignmentId && assignmentType && userId) loadDetails(requestedTerm);
     });
     return () => {
       active = false;
       requestSequenceRef.current += 1;
     };
-  }, [assignmentId, assignmentType, loadDetails, userId]);
+  }, [assignmentId, assignmentType, loadDetails, requestedTerm, userId]);
 
   const filteredLearners = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     const result = (data?.learners || []).filter((learner) => {
-      const matchesSearch = !query
-        || learner.name.toLowerCase().includes(query);
+      const matchesSearch = matchesLearnerSearch(learner.name, query);
       const risk = getSectionRisk(learner, riskMode);
       const matchesRisk = !selectedRisk || (risk?.status === "available" && risk.riskLevel === selectedRisk);
       return matchesSearch && matchesRisk;
@@ -228,6 +270,12 @@ export default function SectionDetails({
         : rightValue.localeCompare(leftValue);
     });
   }, [data, riskMode, searchQuery, selectedRisk, sortAscending, sortBy]);
+
+  useEffect(() => {
+    if (highlightedStudentId != null && highlightedRowRef.current) {
+      highlightedRowRef.current.scrollIntoView?.({ behavior: "smooth", block: "center" });
+    }
+  }, [highlightedStudentId, filteredLearners.length]);
 
   const kpiCards = useMemo(() => {
     const bands = data?.summary?.performanceBands || {};
@@ -339,7 +387,7 @@ export default function SectionDetails({
             title="Section Details could not be loaded"
             description={error}
           />
-          <button className="section-details-retry-btn" type="button" onClick={() => loadDetails(failedTermRef.current || "T1", true, failedModeRef.current || 'monitoring')}>
+          <button className="section-details-retry-btn" type="button" onClick={() => loadDetails(failedTermRef.current || requestedTerm, true, failedModeRef.current || 'monitoring')}>
             <RefreshCw size={16} aria-hidden="true" />
             Retry
           </button>
@@ -450,8 +498,13 @@ export default function SectionDetails({
               <tbody>
                 {filteredLearners.length > 0 ? filteredLearners.map((learner, index) => {
                   const risk = getSectionRisk(learner, riskMode), grade = getSectionGrade(learner, riskMode);
+                  const isHighlighted = highlightedStudentId != null && Number(learner.studentId) === Number(highlightedStudentId);
                   return (
-                  <tr key={learner.studentSectionId}>
+                  <tr
+                    key={learner.studentSectionId}
+                    ref={isHighlighted ? highlightedRowRef : null}
+                    className={isHighlighted ? "section-learner-row--highlighted" : undefined}
+                  >
                     <td className="text-center">{index + 1}</td>
                     <td className="text-left section-learner-name">{learner.name}</td>
                     {showRiskColumn && <td className="text-center">
