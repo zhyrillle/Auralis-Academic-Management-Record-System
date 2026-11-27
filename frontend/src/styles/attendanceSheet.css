@@ -41,6 +41,35 @@
 .app-overlay.att-day-overlay-modal {
   z-index: 10000;
 }
+.app-overlay.att-date-warning-modal {
+  z-index: 10000;
+}
+.att-date-warning-modal .app-overlay__panel {
+  max-width: 500px;
+}
+.att-date-warning-modal .app-overlay__body {
+  padding: 20px 28px 24px;
+}
+.att-date-warning-message {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid #fcd34d;
+  border-radius: 10px;
+  background: #fffbeb;
+  color: #92400e;
+}
+.att-date-warning-message svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: #d97706;
+}
+.att-date-warning-message p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+}
 .att-day-overlay-modal .app-overlay__panel {
   max-width: 490px;
   overflow: visible;

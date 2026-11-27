@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { Calendar, CalendarOff, CheckCircle, AlertTriangle, Info, Save, ChevronLeft, ChevronRight, Cloud, CloudOff, RefreshCw } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import "../../styles/attendanceSheet.css";
+import OverlayPanel from "../../components/common/OverlayPanel.jsx";
 import backIconUrl from "../../assets/backButton.svg";
 import { getStoredUser, normalizeRole } from "../../utils/auth";
 import { cachedApiFetch as apiFetch } from "../../services/navigationCache.js";
@@ -40,6 +41,13 @@ function getTodayISO() {
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
+}
+
+function formatAttendanceDate(dateStr) {
+  const date = new Date(`${dateStr}T00:00:00`);
+  return Number.isNaN(date.getTime())
+    ? dateStr
+    : date.toLocaleDateString("en-PH", { month: "long", day: "numeric", year: "numeric" });
 }
 
 // Generate all weekdays (Monday through Friday) for the month of dateStr
@@ -135,6 +143,9 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
 
   const TODAY = getTodayISO();
   const [selectedDate, setSelectedDate] = useState(TODAY);
+  const [dateWarning, setDateWarning] = useState(null);
+  const pendingDateActionRef = useRef(null);
+  const acknowledgedDateWarningsRef = useRef(new Set());
 
   // Data states
   const [adviserAssignment, setAdviserAssignment] = useState(null);
@@ -892,7 +903,7 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
   };
 
   // ── Handle cell click: toggle Blank → P → L → A → Blank ──
-  const handleCellClick = async (studentSectionId, dateStr, colIdx, studentId = null) => {
+  const applyCellClick = async (studentSectionId, dateStr, colIdx, studentId = null) => {
     if (noClassDays[dateStr]) return;
     if (!targetSectionId) {
       triggerToast("No section selected.");
@@ -993,6 +1004,53 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
         }
         return next;
       });
+    }
+  };
+
+  const handleCellClick = async (studentSectionId, dateStr, colIdx, studentId = null) => {
+    if (noClassDays[dateStr]) return;
+    if (!targetSectionId) {
+      triggerToast("No section selected.");
+      return;
+    }
+    if (dateStr !== TODAY && !acknowledgedDateWarningsRef.current.has(dateStr)) {
+      pendingDateActionRef.current = {
+        type: "cell",
+        args: [studentSectionId, dateStr, colIdx, studentId],
+      };
+      setDateWarning({ dateStr });
+      return;
+    }
+    await applyCellClick(studentSectionId, dateStr, colIdx, studentId);
+  };
+
+  const handleAttendanceDateChange = (dateStr) => {
+    if (!dateStr) return;
+    if (dateStr !== TODAY && !noClassDays[dateStr]
+      && !acknowledgedDateWarningsRef.current.has(dateStr)) {
+      pendingDateActionRef.current = { type: "select", dateStr };
+      setDateWarning({ dateStr });
+      return;
+    }
+    setSelectedDate(dateStr);
+  };
+
+  const dismissDateWarning = () => {
+    pendingDateActionRef.current = null;
+    setDateWarning(null);
+  };
+
+  const continueWithSelectedDate = async () => {
+    if (!dateWarning) return;
+    acknowledgedDateWarningsRef.current.add(dateWarning.dateStr);
+    const pendingAction = pendingDateActionRef.current;
+    pendingDateActionRef.current = null;
+    setDateWarning(null);
+
+    if (pendingAction?.type === "cell") {
+      await applyCellClick(...pendingAction.args);
+    } else if (pendingAction?.type === "select") {
+      setSelectedDate(pendingAction.dateStr);
     }
   };
 
@@ -1392,6 +1450,32 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
         ))}
       </div>
 
+      <OverlayPanel
+        isOpen={Boolean(dateWarning)}
+        onClose={dismissDateWarning}
+        variant="modal"
+        title="This is not today’s date"
+        description={dateWarning
+          ? `You selected ${formatAttendanceDate(dateWarning.dateStr)}. Today is ${formatAttendanceDate(TODAY)}.`
+          : undefined}
+        className="att-date-warning-modal"
+        footer={(
+          <div className="att-day-modal-footer">
+            <button type="button" className="att-day-btn att-day-btn--secondary" onClick={dismissDateWarning}>
+              Cancel
+            </button>
+            <button type="button" className="att-day-btn att-day-btn--primary" onClick={continueWithSelectedDate}>
+              Continue editing
+            </button>
+          </div>
+        )}
+      >
+        <div className="att-date-warning-message" role="status">
+          <AlertTriangle size={18} aria-hidden="true" />
+          <p>Attendance for this date is still editable. Continue only if this is the date you intended to update.</p>
+        </div>
+      </OverlayPanel>
+
       {/* Header Bar */}
       <div className="att-header-bar">
         <div className="att-title-area">
@@ -1527,7 +1611,7 @@ export default function AttendanceSheet({ activeClass: propActiveClass, onBack }
               type="date"
               className="att-date-input"
               value={selectedDate}
-              onChange={e => setSelectedDate(e.target.value)}
+              onChange={e => handleAttendanceDateChange(e.target.value)}
             />
           </div>
         </div>
