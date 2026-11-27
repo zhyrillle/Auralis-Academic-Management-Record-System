@@ -64,6 +64,22 @@ and then `python3` fallback are retained.
 `model_metadata.json`. Do not load uploaded or third-party joblib files: loading
 them executes Python code. Runtime mismatches fail closed.
 
+## Model provenance and evaluation artifacts
+
+Training, model comparison, threshold selection, and held-out test evaluation
+artifacts for `english-model.joblib` (SHA-256:
+`449c7505d4ae9b8924289a78884d381bc3984c07be82a16c02ca9c0d99658ad8`) are archived
+in `backend/ml/research/` without any raw or identifiable learner records:
+
+- `Auralis_at-risk.ipynb` — end-to-end training, 5-fold learner-grouped CV,
+  tuning, and held-out testing notebook
+- `evaluation_report.json` — summary development and held-out test metrics
+- `class_imbalance.png`, `target_grade_skewness.png`, `model_comparison.png`,
+  `model_threshold_comparison.png`, `threshold_selection.png`,
+  `final_evaluation.png` — target class distribution, following-quarter grade
+  skewness, 0.50 reference CV comparison, F2-selected threshold comparison,
+  tuned threshold search, and test confusion-matrix figures
+
 ## Input contract and pending teammate work
 
 - English offerings and enrollments are scoped to the same school year and section.
