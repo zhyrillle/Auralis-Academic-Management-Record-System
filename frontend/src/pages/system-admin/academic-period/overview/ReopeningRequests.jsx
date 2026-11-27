@@ -85,7 +85,7 @@ export default function ReopeningRequests({
     ? {
         title: "Requests are not available yet",
         description:
-          "Teachers may submit requests during the seven days after this term ends.",
+          "Teachers may submit requests during the permitted request window for this term.",
       }
     : {
         title: "No pending requests",

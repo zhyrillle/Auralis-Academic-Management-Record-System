@@ -4,6 +4,7 @@ const AcademicTerm = require('../models/AcademicTerm');
 const GradeSheet = require('../models/GradeSheet');
 const GradeReopenRequest = require('../models/GradeReopenRequest');
 const TemporaryReopening = require('../models/TemporaryReopening');
+const reopeningTestingWindow = require('../config/gradeReopeningTestingWindow');
 const {
   CALENDAR_RULE,
   buildSuggestedTerms,
@@ -11,22 +12,35 @@ const {
 
 const REOPENING_REQUEST_DAYS = 7;
 
-function deriveReopeningWindow(termEndValue) {
+function deriveReopeningWindow(termEndValue, schoolYearStatus = null) {
+  const isTestingWindow = reopeningTestingWindow.enabled
+    && ['active', 'ongoing'].includes(String(schoolYearStatus).toLowerCase());
+  if (isTestingWindow) {
+    const opensAt = new Date(reopeningTestingWindow.opensAt);
+    const closesAt = new Date(reopeningTestingWindow.closesAt);
+    if (!Number.isFinite(opensAt.getTime()) || !Number.isFinite(closesAt.getTime())
+      || closesAt <= opensAt) {
+      throw serviceError(500, 'INVALID_REOPENING_TEST_WINDOW',
+        'The grade reopening testing dates are invalid. Please contact the system administrator.');
+    }
+    return { opensAt, closesAt, isTestingWindow: true };
+  }
+
   const opensAt = new Date(termEndValue ?? NaN);
   if (Number.isNaN(opensAt.getTime())) {
-    return { opensAt: null, closesAt: null };
+    return { opensAt: null, closesAt: null, isTestingWindow: false };
   }
   const closesAt = new Date(opensAt.getTime());
   closesAt.setUTCDate(closesAt.getUTCDate() + REOPENING_REQUEST_DAYS);
-  return { opensAt, closesAt };
+  return { opensAt, closesAt, isTestingWindow: false };
 }
 
-function requestWindowReason(termEnd, timestamp) {
-  const { opensAt, closesAt } = deriveReopeningWindow(termEnd);
+function requestWindowReason(termEnd, timestamp, schoolYearStatus = null) {
+  const { opensAt, closesAt, isTestingWindow } = deriveReopeningWindow(termEnd, schoolYearStatus);
   const at = new Date(timestamp ?? NaN).getTime();
   if (!opensAt || !closesAt || !Number.isFinite(at)) return 'WINDOW_NOT_CONFIGURED';
   if (at < opensAt.getTime()) return 'WINDOW_NOT_OPEN';
-  if (at >= closesAt.getTime()) return 'WINDOW_CLOSED';
+  if (isTestingWindow ? at > closesAt.getTime() : at >= closesAt.getTime()) return 'WINDOW_CLOSED';
   return null;
 }
 
@@ -49,11 +63,11 @@ function canRequestReopening(sheet) {
 }
 
 function reopeningEligibility(sheet, now = Date.now()) {
-  let reason = requestWindowReason(sheet.ends_at, now);
+  let reason = requestWindowReason(sheet.ends_at, now, sheet.school_year_status);
   if (!reason && sheet.has_active) reason = 'TEMPORARY_ACCESS_ACTIVE';
   if (!reason && sheet.has_pending) reason = 'REQUEST_ALREADY_PENDING';
   if (!reason && !canRequestReopening(sheet)) reason = 'SHEET_NOT_ELIGIBLE';
-  const window = deriveReopeningWindow(sheet.ends_at);
+  const window = deriveReopeningWindow(sheet.ends_at, sheet.school_year_status);
   return {
     eligible: !reason, reason,
     request_type: getReopeningRequestType(sheet.workflow_status),
@@ -348,12 +362,14 @@ async function getTerms(schoolYearId) {
   const [rows] = await db.execute(
     `SELECT
       at.*,
+      sy.status AS school_year_status,
       COUNT(gs.grade_sheet_id) AS total_grade_sheets,
       SUM(gs.workflow_status = 'SUBMITTED') AS submitted_grade_sheets,
       SUM(gs.workflow_status = 'DRAFT') AS draft_count,
       SUM(gs.workflow_status = 'SUBMITTED') AS submitted_count,
       SUM(gs.lock_status = 'TERM_LOCKED') AS locked_count
     FROM ACADEMIC_TERM at
+    INNER JOIN SCHOOL_YEAR sy ON sy.school_year_id = at.school_year_id
     LEFT JOIN GRADE_SHEET gs ON gs.term_id = at.term_id
     WHERE at.school_year_id = ?
     GROUP BY at.term_id
@@ -373,8 +389,8 @@ async function getTerms(schoolYearId) {
       draft_count: Number(term.draft_count || 0),
       submitted_count: Number(term.submitted_count || 0),
       locked_count: Number(term.locked_count || 0),
-      reopening_requests_open_at: deriveReopeningWindow(term.ends_at).opensAt,
-      reopening_requests_close_at: deriveReopeningWindow(term.ends_at).closesAt,
+      reopening_requests_open_at: deriveReopeningWindow(term.ends_at, term.school_year_status).opensAt,
+      reopening_requests_close_at: deriveReopeningWindow(term.ends_at, term.school_year_status).closesAt,
     };
   });
 }
@@ -774,6 +790,7 @@ async function approveRequest(requestId, data, actor) {
     await connection.beginTransaction();
     const [rows] = await connection.execute(
       `SELECT grr.*, gs.workflow_status, gs.lock_status, at.ends_at,
+        sy.status AS school_year_status,
         gs.subject_offering_id, ta.subject_offering_id AS assignment_offering_id,
         EXISTS(SELECT 1 FROM TEMPORARY_REOPENING tr
           INNER JOIN GRADE_REOPEN_REQUEST existing ON existing.request_id = tr.request_id
@@ -782,6 +799,7 @@ async function approveRequest(requestId, data, actor) {
        FROM GRADE_REOPEN_REQUEST grr
        INNER JOIN GRADE_SHEET gs ON gs.grade_sheet_id = grr.grade_sheet_id
        INNER JOIN ACADEMIC_TERM at ON at.term_id = gs.term_id
+       INNER JOIN SCHOOL_YEAR sy ON sy.school_year_id = at.school_year_id
        INNER JOIN TEACHER_ASSIGNMENT ta ON ta.teacher_assignment_id = grr.teacher_assignment_id
        WHERE grr.request_id = ? FOR UPDATE`,
       [requestId]
@@ -791,8 +809,9 @@ async function approveRequest(requestId, data, actor) {
     if (request.status !== 'PENDING') {
       throw serviceError(409, 'REQUEST_ALREADY_REVIEWED', 'This request has already been reviewed.');
     }
-    if (requestWindowReason(request.ends_at, request.requested_at) || new Date(request.requested_at).getTime() > Date.now()) {
-      throw serviceError(409, 'REQUEST_OUTSIDE_WINDOW', 'This request was not submitted within seven days after its term ended. Review the linked sheet and request date.');
+    if (requestWindowReason(request.ends_at, request.requested_at, request.school_year_status)
+      || new Date(request.requested_at).getTime() > Date.now()) {
+      throw serviceError(409, 'REQUEST_OUTSIDE_WINDOW', 'This request was submitted outside the permitted reopening request window. Review the linked sheet and request date.');
     }
     if (Number(request.subject_offering_id) !== Number(request.assignment_offering_id)) {
       throw serviceError(409, 'REQUEST_SHEET_MISMATCH', 'The request assignment does not match its grade sheet.');
@@ -891,6 +910,7 @@ async function findOwnedReopeningSheet(gradeSheetId, userId, connection = db, lo
     `SELECT
       gs.grade_sheet_id, gs.workflow_status, gs.lock_status,
       at.ends_at, at.grade_submission_deadline_at,
+      sy.status AS school_year_status,
       ta.teacher_assignment_id,
       EXISTS(
         SELECT 1 FROM GRADE_REOPEN_REQUEST pending
@@ -904,6 +924,7 @@ async function findOwnedReopeningSheet(gradeSheetId, userId, connection = db, lo
       ) AS has_active
     FROM GRADE_SHEET gs
     INNER JOIN ACADEMIC_TERM at ON at.term_id = gs.term_id
+    INNER JOIN SCHOOL_YEAR sy ON sy.school_year_id = at.school_year_id
     INNER JOIN TEACHER_ASSIGNMENT ta
       ON ta.subject_offering_id = gs.subject_offering_id AND ta.user_id = ?
     WHERE gs.grade_sheet_id = ?
@@ -933,6 +954,7 @@ async function getReopeningOptions(userId) {
       at.ends_at,
       at.grade_submission_deadline_at,
       sy.school_year_id,
+      sy.status AS school_year_status,
       sy.starts_on AS school_year_starts_on,
       sy.ends_on AS school_year_ends_on,
         ta.teacher_assignment_id,

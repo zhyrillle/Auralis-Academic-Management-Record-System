@@ -7,8 +7,8 @@ const API_ORIGIN = new URL(API_BASE_URL, window.location.origin).origin;
 const MANILA_TIMEZONE = "Asia/Manila";
 
 export const eligibilityMessages = {
-  WINDOW_CLOSED: "The seven-day request window for this term has closed.",
-  WINDOW_NOT_OPEN: "Requests open after this grade sheet's term ends.",
+  WINDOW_CLOSED: "The request window for this term has closed.",
+  WINDOW_NOT_OPEN: "The request window for this term is not open yet.",
   WINDOW_NOT_CONFIGURED: "This term's end date needs administrator review.",
   REQUEST_ALREADY_PENDING: "This grade sheet already has a pending request.",
   TEMPORARY_ACCESS_ACTIVE: "This grade sheet already has temporary editing access.",

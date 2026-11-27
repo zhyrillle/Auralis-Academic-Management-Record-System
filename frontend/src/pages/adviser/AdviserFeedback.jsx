@@ -598,7 +598,7 @@ export default function AdviserFeedback({ departmentHeadMode = false }) {
 
   const displayedComments = recentComments.length > 0 ? recentComments : RECENT_COMMENTS;
   if (feedbackLoading) return <div className="fb-container">
-  <div className="fb-header-wrap"><div><h1 className="fb-page-title">{departmentHeadMode ? "Feedback" : "Peer Feedback"}</h1><p className="fb-page-subtitle">{departmentHeadMode ? "Review feedback received from teachers and share feedback with the principal." : "Annual peer evaluation &amp; professional development feedback"}</p></div></div>
+  <div className="fb-header-wrap"><div><h1 className="fb-page-title">{departmentHeadMode ? "Feedback" : "Peer Feedback"}</h1><p className="fb-page-subtitle">{departmentHeadMode ? "Review feedback received from teachers and share feedback with the principal." : "Annual peer evaluation & professional development feedback"}</p></div></div>
     <PageSkeleton label="Loading peer feedback" cards={3} layout="charts" />
   </div>;
   if (feedbackError && !hasLoadedFeedback) return <div className="fb-container">
@@ -613,7 +613,7 @@ export default function AdviserFeedback({ departmentHeadMode = false }) {
       <div className="fb-header-wrap">
         <div>
           <h1 className="fb-page-title">{departmentHeadMode ? "Feedback" : "Peer Feedback"}</h1>
-          <p className="fb-page-subtitle">{departmentHeadMode ? "Review feedback received from teachers and share feedback with the principal." : "Annual peer evaluation &amp; professional development feedback"}</p>
+          <p className="fb-page-subtitle">{departmentHeadMode ? "Review feedback received from teachers and share feedback with the principal." : "Annual peer evaluation & professional development feedback"}</p>
         </div>
         {windowStatus && (
           <div className={`fb-status-pill fb-status-pill--${windowStatus.status.toLowerCase()}`}>
