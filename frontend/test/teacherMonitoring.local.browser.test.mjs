@@ -76,7 +76,8 @@ try {
         await page.getByRole('columnheader', { name: /English.*Term 2/ }).waitFor();
         for (const learner of prediction.learners) {
           const row = page.locator('.section-data-table tbody tr').filter({ hasText: learner.name });
-          assert.equal(await row.locator('td').nth(3).textContent(), Number.isFinite(learner.termGrade) ? String(learner.termGrade) : '—');
+          const grade = getSectionGrade(learner, 'prediction');
+          assert.equal(await row.locator('td').nth(3).textContent(), Number.isFinite(grade) ? String(grade) : '—');
         }
         await toggle.click();
         await page.getByRole('columnheader', { name: 'At-risk Status', exact: true }).waitFor();

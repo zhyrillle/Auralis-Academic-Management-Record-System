@@ -112,7 +112,10 @@ test('the actual HTTP endpoint produces the frontend contract and preserves it o
     };
     const monitoring = await read('monitoring');
     assert.equal(monitoring.learners[0].academic.status, 'available');
-    assert.equal((await read('prediction')).context.riskMode, 'prediction');
+    const prediction = await read('prediction');
+    assert.equal(prediction.context.riskMode, 'prediction');
+    assert.deepEqual(prediction.learners.map(row => row.academic?.gradePreview), monitoring.learners.map(row => row.academic?.gradePreview));
+    assert.deepEqual(prediction.summary.performanceBands, monitoring.summary.performanceBands);
     f.state.submitted = false;
     assert.equal((await read('prediction')).context.riskMode, 'monitoring');
     const malformed = structuredClone(monitoring);

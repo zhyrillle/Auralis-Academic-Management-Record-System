@@ -3,7 +3,6 @@ import { Users } from "lucide-react";
 import DropdownSelect from "../common/DropdownSelect";
 import FilterToolbar from "../common/FilterToolbar";
 import AnalyticsStatCard from "../../pages/principal/analytics/AnalyticsStatCard";
-import PredictionInfoButton from "./PredictionInfoButton";
 import {
   RISK_BANDS,
   TERM_OPTIONS,
@@ -11,7 +10,7 @@ import {
 } from "../../utils/riskPresentation";
 import "../../styles/principalAnalytics.css";
 
-export function AtRiskFilters({ preview, children, showInfo = true }) {
+export function AtRiskFilters({ preview, children }) {
   const disabled = preview.loading || !preview.options;
   const predictionTerms = TERM_OPTIONS.map((option) => ({
     value: option.id,
@@ -23,11 +22,6 @@ export function AtRiskFilters({ preview, children, showInfo = true }) {
       className="ar-filter-toolbar ar-review-navigation"
       aria-label="Prediction navigation"
     >
-      {showInfo && (
-        <div className="ar-filter-info">
-          <PredictionInfoButton />
-        </div>
-      )}
       <FilterToolbar
         className="pa-navigation"
         label="Prediction filters"

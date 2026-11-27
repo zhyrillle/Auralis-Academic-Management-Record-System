@@ -232,19 +232,6 @@
   color: #173968;
   cursor: pointer;
 }
-.section-details-page .section-details-status-note {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 10px 24px;
-  margin: 0 0 20px;
-  color: #526984;
-  font-size: 12px;
-  line-height: 1.6;
-}
-.section-details-page .section-details-status-note > div { flex: 1 1 560px; }
-.section-details-page .section-details-status-note p { margin: 0 0 4px; }
 .section-details-page .section-filter-block { display: flex; flex-direction: column; gap: 5px; }
 .section-details-page .section-filter-label { font-size: 12px; color: #526984; }
 .section-details-page .section-status-detail { display: block; margin-top: 5px; color: #667d99; font-size: 11px; font-weight: 400; line-height: 1.35; }
