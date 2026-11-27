@@ -1,0 +1,87 @@
+{
+  "algorithm": "random_forest",
+  "features": [
+    "ww_pct",
+    "pt_pct",
+    "qa_pct",
+    "previous_final_grade",
+    "phil_iri_literal_pct",
+    "phil_iri_inferential_pct",
+    "phil_iri_critical_pct",
+    "phil_iri_unavailable",
+    "absence_rate"
+  ],
+  "threshold": 0.35,
+  "selected_parameters": {
+    "max_depth": 4
+  },
+  "hyperparameter_grid": {
+    "max_depth": [
+      4,
+      3,
+      6
+    ]
+  },
+  "hyperparameter_tuning_scope": "Selected Random Forest only",
+  "hyperparameter_candidate_count": 3,
+  "minimum_alert_threshold": 0.35,
+  "minimum_threshold_reason": "Operational lower bound reflecting the requested 0.35\u20130.40 comfort range, not a guaranteed recall or probability boundary",
+  "hyperparameter_selection_rule": "Highest pooled DEV OOF F2 after threshold search; ties: precision, higher threshold, declared candidate order",
+  "algorithm_selection_metric": "Initial five-reference-algorithm DEV F2 after threshold searches; algorithm then kept fixed",
+  "algorithm_tie_break": "Higher precision, then higher threshold, then algorithm name",
+  "average_precision_role": "Supporting ranking metric only; not used for selection",
+  "threshold_selection_metric": "F2 among eligible thresholds",
+  "threshold_grid": [
+    0.0,
+    1.0,
+    0.05
+  ],
+  "threshold_tie_break": "Higher precision, then higher threshold",
+  "dev_metrics": {
+    "average_precision": 0.6820462557390613,
+    "recall": 0.926829268292683,
+    "precision": 0.48717948717948717,
+    "f1": 0.6386554621848739,
+    "f2": 0.7851239669421488,
+    "accuracy": 0.7839195979899497,
+    "tn": 118,
+    "fp": 40,
+    "fn": 3,
+    "tp": 38,
+    "alerts": 78,
+    "rows": 199,
+    "failures": 41
+  },
+  "test_metrics": {
+    "average_precision": 0.4739377289377289,
+    "recall": 0.8,
+    "precision": 0.38095238095238093,
+    "f1": 0.5161290322580645,
+    "f2": 0.6557377049180327,
+    "accuracy": 0.7,
+    "tn": 27,
+    "fp": 13,
+    "fn": 2,
+    "tp": 8,
+    "alerts": 21,
+    "rows": 50,
+    "failures": 10
+  },
+  "test_learners": 17,
+  "python_version": "3.14.3",
+  "scikit_learn_version": "1.8.0",
+  "pandas_version": "3.0.2",
+  "study_design": "Exploratory follow-up on the same historical learner partitions",
+  "limitations": [
+    "TEST was inspected before this follow-up; this is not a fresh external test.",
+    "DEV hyperparameter, model and threshold selection share folds and can be optimistic; no nested-CV performance estimate.",
+    "Only three declared Random Forest depth settings were searched; other algorithms retain reference configurations.",
+    "The 0.35 minimum alert threshold is an operational constraint, not a statistically validated boundary.",
+    "SVM internal probability estimation is not learner-group-aware; outer DEV folds are learner-disjoint.",
+    "Few learners and failing outcomes limit conclusions; transitions repeat learners.",
+    "Cayetano grades; Defensor grades are as recorded.",
+    "Task counts and coverage are excluded from the nine model inputs.",
+    "English quarter records do not validate three-term performance.",
+    "Risk scores are not calibrated probabilities and do not establish causal effects."
+  ]
+}

@@ -73,10 +73,10 @@ class AtRiskPrediction {
       generatedAt: new Date().toISOString(), schoolYear: input.schoolYear,
       automaticAlertsEnabled: false, termTransferValidated: false,
       warnings: [
-        'Research preview only. This quarterly-trained model has not been validated on three-term outcomes.',
+        'Advisory early-warning indicator (English only). Review alongside learner records before intervention.',
         'Predictions require complete, dated screening sub-scores from the enrollment year, assessed by the source term end and before the target term. Missing, invalid or out-of-period screening receives no risk label.',
         'Predictions require complete previous-term section attendance. All source-term weekdays must be accounted for, excluding marked Holiday or Suspension dates. Missing, conflicting or unverified attendance receives no risk label. Late marks are not converted into absences for the model.',
-        'Scores are not calibrated probabilities. Requiring complete recorded inputs does not establish prediction accuracy on the current three-term calendar.',
+        'Scores are not calibrated probabilities and should be reviewed alongside learner records.',
       ],
       summary: { ...summary, unavailable: unavailable.length, eligible: students.length,
         totalEnglish: students.length + unavailable.length },
