@@ -1,5 +1,5 @@
 import { SkeletonBlock } from '../../components/common/PageSkeleton.jsx';
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { Eye, Download, FileText, Sparkles, Printer, FileSpreadsheet, CheckCircle2, Loader2 } from "lucide-react";
 import "../../styles/studentSF9.css";
 
@@ -10,7 +10,7 @@ import { getStoredUser, normalizeRole } from "../../utils/auth";
 import { getStudentSF9Details, downloadStudentSf9Pdf, fetchEphemeralLrn } from "../../services/studentSf9Service";
 import { getStudentSF10Details, fetchEphemeralSf10Lrn } from "../../services/reportService";
 import Toast from "../../components/common/Toast.jsx";
-import { exportSf9Pdf } from "../../utils/exportSf9Pdf";
+import { exportSf9Pdf, printSf9Pdf } from "../../utils/exportSf9Pdf";
 import SF10PreviewModal from "../../components/SF10PreviewModal.jsx";
 import { exportSf10Excel } from "../../utils/exportSf10Excel.js";
 import MaskedLrn from "../../components/common/MaskedLrn.jsx";
@@ -82,6 +82,9 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
   const [requestAttempt, setRequestAttempt] = useState(0);
   const [downloadingSF10, setDownloadingSF10] = useState(false);
   const [downloadingZip, setDownloadingZip] = useState(false);
+  const [sf9Action, setSf9Action] = useState(null);
+  const sf9ActionController = useRef(null);
+  useEffect(() => () => sf9ActionController.current?.abort(), []);
   // This details component remounts for a different learner/school year.
   const [cachedSF10Data, setCachedSF10Data] = useState(null);
 
@@ -238,178 +241,76 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
     return "STUDENT";
   };
 
-  const handleDownloadPDF = async () => {
-    if (loading || loadError || !sf9Data) return;
+  const prepareSf9Pdf = async (fileName, signal) => {
     try {
-      showToast(`Generating PDF for ${studentProfile.name || "Student"}...`, "info", CheckCircle2);
-
-      // Attempt 1: Native Vector PDF via Backend (Razor-sharp, 100% crisp vector fonts, zero blur)
-      try {
-        const syId = schoolYearId || studentProfile.schoolYearId || studentProfile.school_year_id;
-        const pdfBlob = await downloadStudentSf9Pdf(identifier, {
-          schoolYearId: syId,
-          comments,
-        });
-
-        if (pdfBlob && pdfBlob.size > 1000) {
-          const lastName = getStudentLastName();
-          const fileName = `${lastName}_SF9.pdf`;
-          const blobUrl = window.URL.createObjectURL(pdfBlob);
-          const link = document.createElement("a");
-          link.href = blobUrl;
-          link.download = fileName;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          setTimeout(() => window.URL.revokeObjectURL(blobUrl), 1000);
-
-          showToast(`Downloaded official PDF SF9 for ${studentProfile.name}`, "success", CheckCircle2);
-          return;
-        }
-      } catch (backendErr) {
-        console.warn("Backend PDF generation unavailable, falling back to high-res client renderer:", backendErr);
-      }
-
-      // Attempt 2: Fallback to high-resolution client-side PDF (4x scale, 384 DPI)
-      let exportLrn = studentProfile.lrn;
-      try {
-        const fetchedLrn = await fetchEphemeralLrn(identifier);
-        if (fetchedLrn) exportLrn = fetchedLrn;
-      } catch (fetchErr) {
-        console.warn("Could not fetch ephemeral LRN, falling back to current:", fetchErr);
-      }
-
-      const temporaryProfile = {
-        ...studentProfile,
-        lrn: exportLrn,
-      };
-
-      await exportSf9Pdf({
-        studentProfile: temporaryProfile,
-        grades,
-        performanceDescriptors,
-        attendanceData,
-        comments,
-        depedLogo,
-        gccnhsLogo,
-      });
-
-      // Clear ephemeral LRN immediately from function scope
-      temporaryProfile.lrn = null;
-      exportLrn = null;
-
-      showToast(`Downloaded PDF SF9 Performance Report for ${studentProfile.name}`, "success", CheckCircle2);
-    } catch (err) {
-      console.error("Failed to export SF9 PDF:", err);
-      showToast("Failed to download SF9 PDF. Please try again.", "error");
+      const pdf = await downloadStudentSf9Pdf(identifier, { schoolYearId, comments, signal });
+      if (pdf?.size > 1000) return pdf;
+    } catch (error) {
+      if (signal.aborted || error.status < 500) throw error;
+      console.warn("Server SF9 PDF unavailable, using browser rendering:", error);
     }
+
+    assertCurrentSession(draftScope);
+    let lrn = studentProfile.lrn;
+    try {
+      lrn = await fetchEphemeralLrn(identifier, { signal }) || lrn;
+    } catch (error) {
+      if (signal.aborted) throw error;
+      console.warn("Could not fetch official SF9 export credential:", error);
+    }
+
+    assertCurrentSession(draftScope);
+    const { blob } = await exportSf9Pdf({
+      studentProfile: { ...studentProfile, lrn },
+      grades,
+      performanceDescriptors,
+      attendanceData,
+      comments,
+      depedLogo,
+      gccnhsLogo,
+      fileName,
+      skipDownload: true,
+    });
+    return blob;
   };
 
-  const handlePrint = async () => {
-    if (loading || loadError || !sf9Data) return;
+  const handleSf9Action = async (action) => {
+    if (loading || loadError || !sf9Data || sf9ActionController.current) return;
+    const controller = new AbortController();
+    sf9ActionController.current = controller;
+    setSf9Action(action);
     try {
-      showToast(`Preparing print document for ${studentProfile.name || "Student"}...`, "info", Printer);
+      assertCurrentSession(draftScope);
+      const title = getStudentLastName() + "_SF9";
+      const fileName = title + ".pdf";
+      const pdf = await prepareSf9Pdf(fileName, controller.signal);
+      if (controller.signal.aborted) return;
+      assertCurrentSession(draftScope);
 
-      // Attempt 1: Native Vector PDF via Backend for crystal-clear print
-      try {
-        const syId = schoolYearId || studentProfile.schoolYearId || studentProfile.school_year_id;
-        const pdfBlob = await downloadStudentSf9Pdf(identifier, {
-          schoolYearId: syId,
-          comments,
-        });
-
-        if (pdfBlob && pdfBlob.size > 1000) {
-          const blobUrl = window.URL.createObjectURL(pdfBlob);
-          const iframe = document.createElement("iframe");
-          iframe.style.position = "fixed";
-          iframe.style.right = "0";
-          iframe.style.bottom = "0";
-          iframe.style.width = "0";
-          iframe.style.height = "0";
-          iframe.style.border = "none";
-          iframe.src = blobUrl;
-          document.body.appendChild(iframe);
-
-          iframe.onload = () => {
-            try {
-              iframe.contentWindow.focus();
-              iframe.contentWindow.print();
-            } catch {
-              window.open(blobUrl, "_blank");
-            } finally {
-              setTimeout(() => {
-                if (document.body.contains(iframe)) {
-                  document.body.removeChild(iframe);
-                }
-                window.URL.revokeObjectURL(blobUrl);
-              }, 60000);
-            }
-          };
-          return;
+      if (action === "print") {
+        await printSf9Pdf(pdf, title, controller.signal);
+      } else {
+        const url = URL.createObjectURL(pdf);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = fileName;
+        try {
+          document.body.appendChild(link);
+          link.click();
+        } finally {
+          link.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
         }
-      } catch (backendErr) {
-        console.warn("Backend print PDF unavailable, falling back to high-res client renderer:", backendErr);
+        showToast("SF9 PDF downloaded.");
       }
-
-      // Attempt 2: Fallback to high-res client PDF
-      let exportLrn = studentProfile.lrn;
-      try {
-        const fetchedLrn = await fetchEphemeralLrn(identifier);
-        if (fetchedLrn) exportLrn = fetchedLrn;
-      } catch (fetchErr) {
-        console.warn("Could not fetch ephemeral LRN, falling back to current:", fetchErr);
+    } catch (error) {
+      if (!controller.signal.aborted && error.code !== "SESSION_CHANGED") {
+        console.error("SF9 " + action + " failed:", error);
+        showToast(action === "print" ? "Failed to open SF9 print preview." : "Failed to download SF9 PDF.", "error");
       }
-
-      const temporaryProfile = {
-        ...studentProfile,
-        lrn: exportLrn,
-      };
-
-      const sf9Result = await exportSf9Pdf({
-        studentProfile: temporaryProfile,
-        grades,
-        performanceDescriptors,
-        attendanceData,
-        comments,
-        depedLogo,
-        gccnhsLogo,
-        skipDownload: true,
-      });
-
-      temporaryProfile.lrn = null;
-      exportLrn = null;
-
-      if (sf9Result?.blob) {
-        const blobUrl = window.URL.createObjectURL(sf9Result.blob);
-        const iframe = document.createElement("iframe");
-        iframe.style.position = "fixed";
-        iframe.style.right = "0";
-        iframe.style.bottom = "0";
-        iframe.style.width = "0";
-        iframe.style.height = "0";
-        iframe.style.border = "none";
-        iframe.src = blobUrl;
-        document.body.appendChild(iframe);
-
-        iframe.onload = () => {
-          try {
-            iframe.contentWindow.focus();
-            iframe.contentWindow.print();
-          } catch {
-            window.open(blobUrl, "_blank");
-          } finally {
-            setTimeout(() => {
-              if (document.body.contains(iframe)) {
-                document.body.removeChild(iframe);
-              }
-              window.URL.revokeObjectURL(blobUrl);
-            }, 60000);
-          }
-        };
-      }
-    } catch (err) {
-      console.error("Failed to print SF9 PDF:", err);
-      showToast("Failed to prepare SF9 document for printing.", "error");
+    } finally {
+      sf9ActionController.current = null;
+      if (!controller.signal.aborted) setSf9Action(null);
     }
   };
 
@@ -768,21 +669,21 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
 
             <button
               className="sf9-print-btn"
-              onClick={handlePrint}
-              disabled={loading || loadError || !sf9Data}
+              onClick={() => handleSf9Action("print")}
+              disabled={loading || loadError || !sf9Data || Boolean(sf9Action)}
               title="Open browser print dialog to print or save SF9 as PDF"
             >
               <Printer size={16} />
-              <span>Print</span>
+              <span>{sf9Action === "print" ? "Preparing print…" : "Print"}</span>
             </button>
             <button
               className="sf9-download-btn"
-              onClick={handleDownloadPDF}
-              disabled={loading || loadError || !sf9Data}
+              onClick={() => handleSf9Action("download")}
+              disabled={loading || loadError || !sf9Data || Boolean(sf9Action)}
               title="Download SF9 PDF"
             >
               <Download size={16} />
-              <span>Download PDF</span>
+              <span>{sf9Action === "download" ? "Preparing PDF…" : "Download PDF"}</span>
             </button>
           </div>
         )}
@@ -1273,10 +1174,10 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
                           <Eye size={14} />
                           <span>Preview</span>
                         </button>
-                        <button className="btn-doc-action download" onClick={handleDownloadPDF}
-                          disabled={loadError || !sf9Data} title="Download SF9">
+                        <button className="btn-doc-action download" onClick={() => handleSf9Action("download")}
+                          disabled={loadError || !sf9Data || Boolean(sf9Action)} title="Download SF9">
                           <Download size={14} />
-                          <span>Download</span>
+                          <span>{sf9Action === "download" ? "Preparing PDF…" : "Download"}</span>
                         </button>
                       </div>
                     </div>

@@ -84,7 +84,8 @@ function buildSf9Html({ studentProfile = {}, grades = [], performanceDescriptors
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>${studentProfile.name || "Student"} - SF9</title>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
+<title>${getSf9PdfTitle(studentProfile)}</title>
   <style>
     @page {
       size: 816px 1056px;
@@ -408,17 +409,18 @@ function buildSf9Html({ studentProfile = {}, grades = [], performanceDescriptors
 </html>`;
 }
 
-/**
- * Generates an official SF9 PDF buffer given learner details
- * @param {Object} options
- * @returns {Promise<Buffer>}
- */
-async function generateSf9Pdf(options) {
-  const executablePath = resolveBrowserExecutable();
-  const html = buildSf9Html(options);
+function getSf9PdfTitle(studentProfile = {}) {
+  const lastName = (studentProfile.name || '').split(',')[0].trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '');
+  return `${lastName || 'STUDENT'}_SF9`;
+}
 
-  const browser = await puppeteer.launch({
-    executablePath,
+let browserPromise;
+
+function getSf9Browser() {
+  if (browserPromise) return browserPromise;
+
+  const launch = puppeteer.launch({
+    executablePath: resolveBrowserExecutable(),
     headless: true,
     args: [
       '--no-sandbox',
@@ -428,20 +430,33 @@ async function generateSf9Pdf(options) {
       '--font-render-hinting=none',
     ],
   });
+  browserPromise = launch;
+  const reset = () => {
+    if (browserPromise === launch) browserPromise = undefined;
+  };
+  launch.then(browser => browser.once('disconnected', reset), reset);
+  return launch;
+}
 
+/** Generates an official SF9 PDF from the learner's report data. */
+async function generateSf9Pdf(options) {
+  const html = buildSf9Html(options);
+  const browser = await getSf9Browser();
+  // Keep each learner's report isolated while sharing the Chrome process.
+  const context = await browser.createBrowserContext();
   try {
-    const page = await browser.newPage();
-    await page.setViewport({ width: 816, height: 1056, deviceScaleFactor: 2 });
+    const page = await context.newPage();
+    await page.setJavaScriptEnabled(false);
+    await page.setViewport({ width: 816, height: 1056 });
     await page.setContent(html, { waitUntil: 'load' });
-    const pdfBuffer = await page.pdf({
+    return await page.pdf({
       width: '816px',
       height: '1056px',
       printBackground: true,
       preferCSSPageSize: true,
     });
-    return pdfBuffer;
   } finally {
-    await browser.close();
+    await context.close();
   }
 }
 

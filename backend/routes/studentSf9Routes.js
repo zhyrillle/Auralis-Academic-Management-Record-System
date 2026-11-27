@@ -294,7 +294,9 @@ async function fetchStudentSf9Data(cleanId, schoolYearId) {
     let masterSheetStudent = null;
     if (adviserAssignmentId && adviserUserId) {
       try {
-        const msData = await MasterSheetService.getMasterSheet(adviserAssignmentId, adviserUserId);
+        const msData = await MasterSheetService.getMasterSheet(adviserAssignmentId, adviserUserId, {
+          studentId: student.student_id,
+        });
         if (msData && msData.students) {
           masterSheetStudent = msData.students.find(s =>
             Number(s.studentId) === Number(student.student_id) ||

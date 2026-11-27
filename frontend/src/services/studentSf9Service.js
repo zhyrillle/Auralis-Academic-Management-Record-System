@@ -21,26 +21,30 @@ export const getStudentSF9Details = async (identifier, { schoolYearId } = {}) =>
   }
 };
 
-export const downloadStudentSf9Pdf = async (identifier, { schoolYearId, comments } = {}) => {
+export const downloadStudentSf9Pdf = async (identifier, { schoolYearId, comments, signal } = {}) => {
   if (!identifier) throw new Error("Student identifier is required");
   const query = schoolYearId ? `?schoolYearId=${encodeURIComponent(schoolYearId)}` : "";
   const response = await window.fetch(`${API_BASE_URL}/student-sf9/student/${encodeURIComponent(identifier)}/export-pdf${query}`, {
     method: "POST",
+    signal,
     headers: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ comments: comments || {} }),
   });
   if (!response.ok) {
-    throw new Error(`Failed to generate SF9 PDF: ${response.statusText}`);
+    const error = new Error(`Failed to generate SF9 PDF: ${response.statusText}`);
+    error.status = response.status;
+    throw error;
   }
   return await response.blob();
 };
 
-export const fetchEphemeralLrn = async (identifier) => {
+export const fetchEphemeralLrn = async (identifier, { signal } = {}) => {
   if (!identifier) return null;
   const response = await window.fetch(`${API_BASE_URL}/student-sf9/student/${encodeURIComponent(identifier)}/ephemeral-lrn`, {
     method: "POST",
+    signal,
     headers: {
       "Content-Type": "application/json",
     },
