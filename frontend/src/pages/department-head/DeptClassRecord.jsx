@@ -642,20 +642,6 @@ export default function DeptClassRecord({ selection, onBack }) {
             </div>
 
             <div className="dept-cr-btn-group">
-              <button
-                type="button"
-                className="dept-cr-download-btn"
-                onClick={handleDownload}
-disabled={isDownloading || isLoadingRecord || Boolean(recordError) || !activeOfferingId}
-                title="Download official DepEd Excel spreadsheet"
-              >
-                {isDownloading ? (
-                  <LoaderCircle size={15} className="spin-icon" />
-                ) : (
-                  <span className="action-icon" aria-hidden="true">↓</span>
-                )}
-                <span>{isDownloading ? "Downloading…" : "Download"}</span>
-              </button>
 
               <div className="term-buttons">
                 <button
