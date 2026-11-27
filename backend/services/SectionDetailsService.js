@@ -182,6 +182,10 @@ class SectionDetailsService {
     response.capabilities.predictionUnavailableReason = eligibility.reason;
     response.capabilities.predictionUnavailableLabel = eligibility.label || '';
     if (validated.riskMode === 'prediction' && eligibility.ready) {
+      await this.attachMonitoring(response, assignment, database, monitoringService, now);
+      response.capabilities.atRiskAvailable = false;
+      response.summary.atRiskCount = null;
+      delete response.summary.riskCounts;
       return this.attachPredictions(response, assignment, database, predictionService);
     }
     if (validated.riskMode === 'prediction') response.notice = `${eligibility.reason} Showing current-term monitoring.`;

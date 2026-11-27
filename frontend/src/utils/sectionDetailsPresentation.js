@@ -69,7 +69,11 @@ export function findFocusedLearner(learners = [], targetStudentId = null, target
 }
 
 export function getSectionGrade(learner, mode) {
-  return mode === 'monitoring' ? learner.academic?.gradePreview : learner.termGrade;
+  if (mode === 'monitoring') return learner.academic?.gradePreview;
+  if (mode === 'prediction' && Number.isFinite(learner.academic?.gradePreview)) {
+    return learner.academic.gradePreview;
+  }
+  return learner.termGrade;
 }
 
 export function getSectionRisk(learner, mode) {

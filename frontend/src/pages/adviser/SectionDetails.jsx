@@ -8,7 +8,6 @@ import Badge from "../../components/common/Badge.jsx";
 import SearchBar from "../../components/common/SearchBar.jsx";
 import SelectFilter from "../../components/common/SelectFilter.jsx";
 import TermToggleGroup from "../../components/common/TermToggleGroup.jsx";
-import PredictionInfoButton from "../../components/at-risk/PredictionInfoButton.jsx";
 import { RISK_BANDS, missingRiskSourcesText } from "../../utils/riskPresentation.js";
 import { getStoredUser } from "../../utils/auth.js";
 import {
@@ -27,7 +26,6 @@ import SectionDetailsSkeleton from "./SectionDetailsSkeleton.jsx";
 import BackButton from "../../components/common/BackButton";
 
 import "../../styles/sectionDetails.css";
-import "../../styles/modelPreview.css";
 
 const PERFORMANCE_BANDS = [
   { key: "ADVANCING", colorClass: "advancing" },
@@ -408,11 +406,6 @@ export default function SectionDetails({
           <RefreshCw size={16} aria-hidden="true" />Refresh
         </button>
       </div>
-
-      {isEnglishTeachingClass && <div className="section-details-status-note" role="status">
-        <div aria-hidden="true" />
-        <PredictionInfoButton />
-      </div>}
 
       {data?.notice && <div className="section-details-info-banner" role="status">{data.notice}</div>}
       <SkeletonContent loading={changingContext} skeleton={<SkeletonCards count={5} />}>

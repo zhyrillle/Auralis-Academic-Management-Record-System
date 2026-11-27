@@ -58,12 +58,8 @@
 .ar-grade-chart .chart-svg--wide .grouped-bar-chart__value { font-size: 18px !important; font-weight: 650; }
 
 .ar-filter-toolbar { display: flex; flex-direction: column; gap: 8px; }
-.ar-filter-info { display: flex; justify-content: flex-end; }
 .ar-filter-row .ar-filter-group { align-items: center; }
-.ar-prediction-info-button { display: inline-flex; align-items: center; justify-content: flex-end; gap: 6px; padding: 0; background: transparent; border: 0; color: #8a6116; font-size: 12px; cursor: pointer; }
-.ar-prediction-info-button:hover { color: #69460c; }
 .ar-prediction-page .ar-header { flex-wrap: wrap; }
-.ar-prediction-page .ar-header > .ar-prediction-info-button { margin-left: auto; align-self: flex-end; flex-shrink: 0; white-space: nowrap; }
 .ar-prediction-info-dialog { margin: auto; padding: 0; width: min(520px, calc(100vw - 40px)); max-height: calc(100dvh - 48px); overflow-y: auto; border: 1px solid #dce4ef; border-radius: 16px; color: #334155; box-shadow: 0 20px 60px rgba(15, 23, 42, .2); }
 .ar-prediction-info-dialog::backdrop { background: rgba(15, 23, 42, .42); }
 .ar-prediction-info-content { padding: 24px; }
@@ -75,7 +71,7 @@
 .ar-prediction-info-content p { margin: 0; font-size: 13px; line-height: 1.65; }
 .ar-prediction-info-content p + p { margin-top: 8px; }
 .ar-prediction-info-done { display: block; margin: 22px 0 0 auto; padding: 9px 20px; border: 0; border-radius: 8px; color: #fff; background: #123062; font-size: 13px; font-weight: 600; cursor: pointer; }
-.ar-prediction-info-content button:focus-visible, .ar-prediction-info-button:focus-visible { outline: 2px solid #315da5; outline-offset: 3px; }
+.ar-prediction-info-content button:focus-visible { outline: 2px solid #315da5; outline-offset: 3px; }
 
 .ar-list-heading { display: flex; align-items: center; gap: 14px; }
 .ar-list-back { flex-shrink: 0; text-decoration: none; }
