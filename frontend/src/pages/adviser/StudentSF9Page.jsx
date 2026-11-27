@@ -10,7 +10,7 @@ import { getStoredUser, normalizeRole } from "../../utils/auth";
 import { getStudentSF9Details, downloadStudentSf9Pdf, fetchEphemeralLrn } from "../../services/studentSf9Service";
 import { getStudentSF10Details, fetchEphemeralSf10Lrn } from "../../services/reportService";
 import Toast from "../../components/common/Toast.jsx";
-import { exportSf9Pdf, printSf9Pdf } from "../../utils/exportSf9Pdf";
+import { exportSf9Pdf, printSf9Report } from "../../utils/exportSf9Pdf";
 import SF10PreviewModal from "../../components/SF10PreviewModal.jsx";
 import { exportSf10Excel } from "../../utils/exportSf10Excel.js";
 import MaskedLrn from "../../components/common/MaskedLrn.jsx";
@@ -84,7 +84,11 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
   const [downloadingZip, setDownloadingZip] = useState(false);
   const [sf9Action, setSf9Action] = useState(null);
   const sf9ActionController = useRef(null);
-  useEffect(() => () => sf9ActionController.current?.abort(), []);
+  const sf9PrintController = useRef(null);
+  useEffect(() => () => {
+    sf9ActionController.current?.abort();
+    sf9PrintController.current?.abort();
+  }, []);
   // This details component remounts for a different learner/school year.
   const [cachedSF10Data, setCachedSF10Data] = useState(null);
 
@@ -241,26 +245,19 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
     return "STUDENT";
   };
 
-  const prepareSf9Pdf = async (fileName, signal) => {
-    try {
-      const pdf = await downloadStudentSf9Pdf(identifier, { schoolYearId, comments, signal });
-      if (pdf?.size > 1000) return pdf;
-    } catch (error) {
-      if (signal.aborted || error.status < 500) throw error;
-      console.warn("Server SF9 PDF unavailable, using browser rendering:", error);
-    }
-
+  const getSf9ExportOptions = async (signal) => {
     assertCurrentSession(draftScope);
     let lrn = studentProfile.lrn;
     try {
-      lrn = await fetchEphemeralLrn(identifier, { signal }) || lrn;
+      const studentId = sf9Data.studentProfile?.studentId || identifier;
+      lrn = await fetchEphemeralLrn(studentId, { signal }) || lrn;
     } catch (error) {
       if (signal.aborted) throw error;
       console.warn("Could not fetch official SF9 export credential:", error);
     }
 
     assertCurrentSession(draftScope);
-    const { blob } = await exportSf9Pdf({
+    return {
       studentProfile: { ...studentProfile, lrn },
       grades,
       performanceDescriptors,
@@ -268,9 +265,27 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
       comments,
       depedLogo,
       gccnhsLogo,
-      fileName,
-      skipDownload: true,
-    });
+    };
+  };
+
+  const prepareSf9Pdf = async (fileName, signal) => {
+    // Give the vector exporter a short head start before using the loaded report.
+    const serverDeadline = AbortSignal.timeout(2000);
+    try {
+      const pdf = await downloadStudentSf9Pdf(identifier, {
+        schoolYearId,
+        comments,
+        signal: AbortSignal.any([signal, serverDeadline]),
+      });
+      if (pdf?.size > 1000 && pdf.type === "application/pdf") return pdf;
+    } catch (error) {
+      if (signal.aborted || error.status < 500) throw error;
+      if (!serverDeadline.aborted) console.warn("Server SF9 PDF unavailable, using browser rendering:", error);
+    }
+
+    const options = await getSf9ExportOptions(signal);
+    signal.throwIfAborted();
+    const { blob } = await exportSf9Pdf({ ...options, fileName, skipDownload: true });
     return blob;
   };
 
@@ -283,13 +298,16 @@ function StudentSF9Details({ student, onBack, userRole: propUserRole, initialTab
       assertCurrentSession(draftScope);
       const title = getStudentLastName() + "_SF9";
       const fileName = title + ".pdf";
-      const pdf = await prepareSf9Pdf(fileName, controller.signal);
-      if (controller.signal.aborted) return;
-      assertCurrentSession(draftScope);
-
       if (action === "print") {
-        await printSf9Pdf(pdf, title, controller.signal);
+        sf9PrintController.current?.abort();
+        const options = await getSf9ExportOptions(controller.signal);
+        controller.signal.throwIfAborted();
+        sf9PrintController.current = controller;
+        await printSf9Report(options, title, controller.signal);
       } else {
+        const pdf = await prepareSf9Pdf(fileName, controller.signal);
+        controller.signal.throwIfAborted();
+        assertCurrentSession(draftScope);
         const url = URL.createObjectURL(pdf);
         const link = document.createElement("a");
         link.href = url;

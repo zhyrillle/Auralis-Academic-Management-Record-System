@@ -1,82 +1,18 @@
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
 
-export function printSf9Pdf(pdf, title, signal) {
-  return new Promise((resolve, reject) => {
-    if (signal.aborted) return resolve();
-    const url = URL.createObjectURL(pdf);
-    const iframe = document.createElement("iframe");
-    iframe.title = title;
-    iframe.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0";
-    let originalTitle;
-    let finished = false;
+const HTML_ENTITIES = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => HTML_ENTITIES[character]);
 
-    const finish = (error) => {
-      if (finished) return;
-      finished = true;
-      clearTimeout(loadTimeout);
-      signal.removeEventListener("abort", onAfterPrint);
-      window.removeEventListener("afterprint", onAfterPrint);
-      if (originalTitle !== undefined && document.title === title) document.title = originalTitle;
-      iframe.remove();
-      URL.revokeObjectURL(url);
-      if (error) reject(error);
-      else resolve();
-    };
-    const onAfterPrint = () => finish();
-    const loadTimeout = setTimeout(() => finish(new Error("SF9 print preview did not load.")), 15000);
-
-    signal.addEventListener("abort", onAfterPrint, { once: true });
-    iframe.onerror = () => finish(new Error("SF9 print preview could not load."));
-    iframe.onload = () => {
-      clearTimeout(loadTimeout);
-      try {
-        const printWindow = iframe.contentWindow;
-        originalTitle = document.title;
-        document.title = title;
-        window.addEventListener("afterprint", onAfterPrint, { once: true });
-        printWindow.addEventListener("afterprint", onAfterPrint, { once: true });
-        printWindow.focus();
-        printWindow.print();
-      } catch (error) {
-        finish(error);
-      }
-    };
-    iframe.src = url;
-    document.body.appendChild(iframe);
-  });
-}
-
-/**
- * Multi-page portrait PDF exporter for Student SF9 Learner's Performance Report.
- * Renders Front Page (Performance Report & Descriptors) and Back Page (Attendance, Comments, Signatures & Certificate of Transfer)
- * matching official DepEd format, font sizes, spacing, seals, and table borders.
- */
-export async function exportSf9Pdf({
+function buildSf9Pages({
   studentProfile = {},
   grades = [],
   performanceDescriptors = [],
   attendanceData = { months: [], classDays: [], daysPresent: [], daysAbsent: [] },
-  comments = { term1: "", term2: "", term3: "" },
+  comments = {},
   depedLogo,
   gccnhsLogo,
-  skipDownload = false,
-  fileName,
 }) {
-  const container = document.createElement("div");
-  container.style.position = "fixed";
-  container.style.left = "0";
-  container.style.top = "0";
-  container.style.width = "816px";
-  container.style.backgroundColor = "#ffffff";
-  container.style.fontFamily = "'Times New Roman', Times, Georgia, serif";
-  container.style.boxSizing = "border-box";
-  container.style.zIndex = "-9999";
-  container.style.opacity = "0";
-  container.style.pointerEvents = "none";
-  container.style.webkitFontSmoothing = "antialiased";
-  container.style.textRendering = "geometricPrecision";
-
   const getAttendanceTotal = (arr = []) =>
     arr.reduce((acc, curr) => acc + (Number(curr) || 0), 0);
 
@@ -110,7 +46,7 @@ export async function exportSf9Pdf({
           <div style="text-align: center;">
             ${
               depedLogo
-                ? `<img src="${depedLogo}" alt="DepEd Seal" style="width: 74px; height: 74px; object-fit: contain;" />`
+                ? `<img src="${escapeHtml(depedLogo)}" alt="DepEd Seal" style="width: 74px; height: 74px; object-fit: contain;" />`
                 : `<div style="width: 74px; height: 74px; border: 1px solid #000; display: flex; align-items: center; justify-content: center; font-size: 9px;">DepEd Logo</div>`
             }
           </div>
@@ -123,12 +59,12 @@ export async function exportSf9Pdf({
             <p style="font-size: 11px; margin: 0;">Gingoog City, Misamis Oriental</p>
             <h3 style="font-size: 12px; font-weight: bold; margin: 4px 0 2px 0; text-transform: uppercase;">GINGOOG CITY COMPREHENSIVE NATIONAL HIGH SCHOOL</h3>
             <h2 style="font-size: 13px; font-weight: bold; margin: 2px 0 2px 0; letter-spacing: 0.4px; text-transform: uppercase;">LEARNER'S PERFORMANCE REPORT</h2>
-            <p style="font-size: 11px; margin: 0;">School Year ${studentProfile.schoolYear || ""}</p>
+            <p style="font-size: 11px; margin: 0;">School Year ${escapeHtml(studentProfile.schoolYear || "")}</p>
           </div>
           <div style="text-align: center;">
             ${
               gccnhsLogo
-                ? `<img src="${gccnhsLogo}" alt="School Seal" style="width: 74px; height: 74px; object-fit: contain;" />`
+                ? `<img src="${escapeHtml(gccnhsLogo)}" alt="School Seal" style="width: 74px; height: 74px; object-fit: contain;" />`
                 : `<div style="width: 74px; height: 74px; border: 1px solid #000; display: flex; align-items: center; justify-content: center; font-size: 9px;">School Logo</div>`
             }
           </div>
@@ -139,37 +75,37 @@ export async function exportSf9Pdf({
           <div style="display: flex; align-items: flex-end; gap: 16px; height: 22px;">
             <div style="display: flex; align-items: flex-end; gap: 6px; flex: 2;">
               <span style="font-size: 11.5px; font-weight: bold; white-space: nowrap;">Name:</span>
-              <span style="border-bottom: 1px solid #000000; flex: 1; font-weight: bold; padding: 0 6px; font-size: 11px; text-transform: uppercase;">${studentProfile.name || ""}</span>
+              <span style="border-bottom: 1px solid #000000; flex: 1; font-weight: bold; padding: 0 6px; font-size: 11px; text-transform: uppercase;">${escapeHtml(studentProfile.name || "")}</span>
             </div>
             <div style="display: flex; align-items: flex-end; gap: 6px; width: 85px;">
               <span style="font-size: 11.5px; font-weight: bold; white-space: nowrap;">Age:</span>
-              <span style="border-bottom: 1px solid #000000; flex: 1; font-weight: bold; text-align: center; font-size: 11px;">${studentProfile.age ?? ""}</span>
+              <span style="border-bottom: 1px solid #000000; flex: 1; font-weight: bold; text-align: center; font-size: 11px;">${escapeHtml(studentProfile.age ?? "")}</span>
             </div>
             <div style="display: flex; align-items: flex-end; gap: 6px; width: 100px;">
               <span style="font-size: 11.5px; font-weight: bold; white-space: nowrap;">Sex:</span>
-              <span style="border-bottom: 1px solid #000000; flex: 1; font-weight: bold; text-align: center; font-size: 11px;">${studentProfile.sex || ""}</span>
+              <span style="border-bottom: 1px solid #000000; flex: 1; font-weight: bold; text-align: center; font-size: 11px;">${escapeHtml(studentProfile.sex || "")}</span>
             </div>
           </div>
 
           <div style="display: flex; align-items: flex-end; gap: 16px; height: 22px;">
             <div style="display: flex; align-items: flex-end; gap: 6px; flex: 2;">
               <span style="font-size: 11.5px; font-weight: bold; white-space: nowrap;">LRN:</span>
-              <span style="border-bottom: 1px solid #000000; flex: 1; font-weight: bold; padding: 0 6px; font-size: 11px;">${studentProfile.lrn || ""}</span>
+              <span style="border-bottom: 1px solid #000000; flex: 1; font-weight: bold; padding: 0 6px; font-size: 11px;">${escapeHtml(studentProfile.lrn || "")}</span>
             </div>
             <div style="display: flex; align-items: flex-end; gap: 6px; width: 90px;">
               <span style="font-size: 11.5px; font-weight: bold; white-space: nowrap;">Grade:</span>
-              <span style="border-bottom: 1px solid #000000; flex: 1; font-weight: bold; text-align: center; font-size: 11px;">${studentProfile.grade || studentProfile.gradeLevel || ""}</span>
+              <span style="border-bottom: 1px solid #000000; flex: 1; font-weight: bold; text-align: center; font-size: 11px;">${escapeHtml(studentProfile.grade || studentProfile.gradeLevel || "")}</span>
             </div>
             <div style="display: flex; align-items: flex-end; gap: 6px; flex: 1.2;">
               <span style="font-size: 11.5px; font-weight: bold; white-space: nowrap;">Section:</span>
-              <span style="border-bottom: 1px solid #000000; flex: 1; font-weight: bold; text-align: center; font-size: 11px;">${studentProfile.section || ""}</span>
+              <span style="border-bottom: 1px solid #000000; flex: 1; font-weight: bold; text-align: center; font-size: 11px;">${escapeHtml(studentProfile.section || "")}</span>
             </div>
           </div>
 
           <div style="display: flex; align-items: flex-end; gap: 16px; height: 22px;">
             <div style="display: flex; align-items: flex-end; gap: 6px; width: 100%;">
               <span style="font-size: 11.5px; font-weight: bold; white-space: nowrap;">Program:</span>
-              <span style="border-bottom: 1px solid #000000; flex: 1; font-weight: bold; padding: 0 6px; font-size: 11px;">${studentProfile.program || ""}</span>
+              <span style="border-bottom: 1px solid #000000; flex: 1; font-weight: bold; padding: 0 6px; font-size: 11px;">${escapeHtml(studentProfile.program || "")}</span>
             </div>
           </div>
         </div>
@@ -208,19 +144,19 @@ export async function exportSf9Pdf({
               ${grades.map((row) => `
                 <tr style="height: 27px; ${row.isHeader ? 'font-weight: bold;' : ''}">
                   <td style="border: 1px solid #000000; padding: 3px 6px; text-align: left; font-size: 15px; ${row.isSubSubject ? 'padding-left: 16px; font-style: italic;' : ''}">
-                    ${row.name}
+                    ${escapeHtml(row.name)}
                   </td>
-                  <td style="border: 1px solid #000000; padding: 3px 6px; text-align: center; font-size: 15px;">${row.t1 || ""}</td>
-                  <td style="border: 1px solid #000000; padding: 3px 6px; text-align: center; font-size: 15px;">${row.t2 || ""}</td>
-                  <td style="border: 1px solid #000000; padding: 3px 6px; text-align: center; font-size: 15px;">${row.t3 || ""}</td>
-                  <td style="border: 1px solid #000000; padding: 3px 6px; text-align: center; font-weight: bold; font-size: 15px;">${row.final || ""}</td>
-                  <td style="border: 1px solid #000000; padding: 3px 6px; text-align: center; font-size: 15px;">${row.remark || ""}</td>
+                  <td style="border: 1px solid #000000; padding: 3px 6px; text-align: center; font-size: 15px;">${escapeHtml(row.t1 || "")}</td>
+                  <td style="border: 1px solid #000000; padding: 3px 6px; text-align: center; font-size: 15px;">${escapeHtml(row.t2 || "")}</td>
+                  <td style="border: 1px solid #000000; padding: 3px 6px; text-align: center; font-size: 15px;">${escapeHtml(row.t3 || "")}</td>
+                  <td style="border: 1px solid #000000; padding: 3px 6px; text-align: center; font-weight: bold; font-size: 15px;">${escapeHtml(row.final || "")}</td>
+                  <td style="border: 1px solid #000000; padding: 3px 6px; text-align: center; font-size: 15px;">${escapeHtml(row.remark || "")}</td>
                 </tr>
               `).join("")}
               <tr style="height: 27px; font-weight: bold;">
                 <td colspan="4" style="border: 1px solid #000000; padding: 3px 6px; text-align: center; font-weight: bold; font-size: 15px;">General Average</td>
-                <td style="border: 1px solid #000000; padding: 3px 6px; text-align: center; font-weight: bold; font-size: 15px;">${studentProfile.termGrade || ""}</td>
-                <td style="border: 1px solid #000000; padding: 3px 6px; text-align: center; font-weight: bold; font-size: 15px;">${studentProfile.termGrade !== "" ? (studentProfile.honorStatus || "Passed") : ""}</td>
+                <td style="border: 1px solid #000000; padding: 3px 6px; text-align: center; font-weight: bold; font-size: 15px;">${escapeHtml(studentProfile.termGrade || "")}</td>
+                <td style="border: 1px solid #000000; padding: 3px 6px; text-align: center; font-weight: bold; font-size: 15px;">${escapeHtml(studentProfile.termGrade !== "" ? (studentProfile.honorStatus || "Passed") : "")}</td>
               </tr>
             </tbody>
           </table>
@@ -242,9 +178,9 @@ export async function exportSf9Pdf({
             <tbody>
               ${descriptorsToUse.map((desc) => `
                 <tr style="height: 26px;">
-                  <td style="border: 1px solid #000000; padding: 3px 6px; text-align: center; font-size: 15px;">${desc.scale}</td>
-                  <td style="border: 1px solid #000000; padding: 3px 6px; text-align: center; font-size: 15px;">${desc.desc}</td>
-                  <td style="border: 1px solid #000000; padding: 3px 6px; text-align: center; font-size: 15px;">${desc.remarks}</td>
+                  <td style="border: 1px solid #000000; padding: 3px 6px; text-align: center; font-size: 15px;">${escapeHtml(desc.scale)}</td>
+                  <td style="border: 1px solid #000000; padding: 3px 6px; text-align: center; font-size: 15px;">${escapeHtml(desc.desc)}</td>
+                  <td style="border: 1px solid #000000; padding: 3px 6px; text-align: center; font-size: 15px;">${escapeHtml(desc.remarks)}</td>
                 </tr>
               `).join("")}
             </tbody>
@@ -267,25 +203,25 @@ export async function exportSf9Pdf({
           <thead>
             <tr style="height: 30px;">
               <th style="border: 1px solid #000000; padding: 4px 8px; width: 25%; text-align: left; font-weight: bold; font-size: 12px;">Month</th>
-              ${months.map((m) => `<th style="border: 1px solid #000000; padding: 4px 2px; text-align: center; font-size: 11.5px; font-weight: bold;">${m}</th>`).join("")}
+              ${months.map((m) => `<th style="border: 1px solid #000000; padding: 4px 2px; text-align: center; font-size: 11.5px; font-weight: bold;">${escapeHtml(m)}</th>`).join("")}
               <th style="border: 1px solid #000000; padding: 4px 2px; text-align: center; font-size: 12px; font-weight: bold;">Total</th>
             </tr>
           </thead>
           <tbody>
             <tr style="height: 26px;">
               <td style="border: 1px solid #000000; padding: 4px 8px; text-align: left; font-size: 12px; font-weight: bold;">No. of Class Days</td>
-              ${classDays.map((d) => `<td style="border: 1px solid #000000; padding: 4px 2px; text-align: center; font-size: 13px;">${d}</td>`).join("")}
-              <td style="border: 1px solid #000000; padding: 4px 2px; text-align: center; font-size: 13px; font-weight: bold;">${getAttendanceTotal(classDays)}</td>
+              ${classDays.map((d) => `<td style="border: 1px solid #000000; padding: 4px 2px; text-align: center; font-size: 13px;">${escapeHtml(d)}</td>`).join("")}
+              <td style="border: 1px solid #000000; padding: 4px 2px; text-align: center; font-size: 13px; font-weight: bold;">${escapeHtml(getAttendanceTotal(classDays))}</td>
             </tr>
             <tr style="height: 26px;">
               <td style="border: 1px solid #000000; padding: 4px 8px; text-align: left; font-size: 12px; font-weight: bold;">No. of Days Present</td>
-              ${daysPresent.map((d) => `<td style="border: 1px solid #000000; padding: 4px 2px; text-align: center; font-size: 13px;">${d}</td>`).join("")}
-              <td style="border: 1px solid #000000; padding: 4px 2px; text-align: center; font-size: 13px; font-weight: bold;">${getAttendanceTotal(daysPresent)}</td>
+              ${daysPresent.map((d) => `<td style="border: 1px solid #000000; padding: 4px 2px; text-align: center; font-size: 13px;">${escapeHtml(d)}</td>`).join("")}
+              <td style="border: 1px solid #000000; padding: 4px 2px; text-align: center; font-size: 13px; font-weight: bold;">${escapeHtml(getAttendanceTotal(daysPresent))}</td>
             </tr>
             <tr style="height: 26px;">
               <td style="border: 1px solid #000000; padding: 4px 8px; text-align: left; font-size: 12px; font-weight: bold;">No. of Days Absent</td>
-              ${daysAbsent.map((d) => `<td style="border: 1px solid #000000; padding: 4px 2px; text-align: center; font-size: 13px;">${d}</td>`).join("")}
-              <td style="border: 1px solid #000000; padding: 4px 2px; text-align: center; font-size: 13px; font-weight: bold;">${getAttendanceTotal(daysAbsent)}</td>
+              ${daysAbsent.map((d) => `<td style="border: 1px solid #000000; padding: 4px 2px; text-align: center; font-size: 13px;">${escapeHtml(d)}</td>`).join("")}
+              <td style="border: 1px solid #000000; padding: 4px 2px; text-align: center; font-size: 13px; font-weight: bold;">${escapeHtml(getAttendanceTotal(daysAbsent))}</td>
             </tr>
           </tbody>
         </table>
@@ -299,15 +235,15 @@ export async function exportSf9Pdf({
         <div style="border: 1px solid #000000; height: 126px; width: 100%; box-sizing: border-box; display: flex; flex-direction: column;">
           <div style="border-bottom: 1px solid #000000; padding: 4px 8px; height: 42px; box-sizing: border-box;">
             <span style="font-size: 11px; font-weight: bold; display: block;">Term 1</span>
-            <div style="font-size: 10.5px; line-height: 1.25; white-space: pre-wrap; overflow: hidden; max-height: 24px;">${comments.term1 || ""}</div>
+            <div style="font-size: 10.5px; line-height: 1.25; white-space: pre-wrap; overflow: hidden; max-height: 24px;">${escapeHtml(comments.term1 || "")}</div>
           </div>
           <div style="border-bottom: 1px solid #000000; padding: 4px 8px; height: 42px; box-sizing: border-box;">
             <span style="font-size: 11px; font-weight: bold; display: block;">Term 2</span>
-            <div style="font-size: 10.5px; line-height: 1.25; white-space: pre-wrap; overflow: hidden; max-height: 24px;">${comments.term2 || ""}</div>
+            <div style="font-size: 10.5px; line-height: 1.25; white-space: pre-wrap; overflow: hidden; max-height: 24px;">${escapeHtml(comments.term2 || "")}</div>
           </div>
           <div style="padding: 4px 8px; height: 42px; box-sizing: border-box;">
             <span style="font-size: 11px; font-weight: bold; display: block;">Term 3</span>
-            <div style="font-size: 10.5px; line-height: 1.25; white-space: pre-wrap; overflow: hidden; max-height: 24px;">${comments.term3 || ""}</div>
+            <div style="font-size: 10.5px; line-height: 1.25; white-space: pre-wrap; overflow: hidden; max-height: 24px;">${escapeHtml(comments.term3 || "")}</div>
           </div>
         </div>
       </div>
@@ -344,11 +280,11 @@ export async function exportSf9Pdf({
         <div style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px;">
           <div style="display: flex; align-items: flex-end; gap: 6px;">
             <span style="white-space: nowrap; font-size: 10.5px; font-weight: bold;">Admitted to Grade:</span>
-            <span style="border-bottom: 1px solid #000000; width: 140px; font-weight: bold; padding: 0 4px; font-size: 11px; text-align: center;">${studentProfile.admittedToGrade || ""}</span>
+            <span style="border-bottom: 1px solid #000000; width: 140px; font-weight: bold; padding: 0 4px; font-size: 11px; text-align: center;">${escapeHtml(studentProfile.admittedToGrade || "")}</span>
           </div>
           <div style="display: flex; align-items: flex-end; gap: 6px;">
             <span style="white-space: nowrap; font-size: 10.5px; font-weight: bold;">Eligible for Admission to Grade:</span>
-            <span style="border-bottom: 1px solid #000000; width: 180px; font-weight: bold; padding: 0 4px; font-size: 11px; text-align: center;">${studentProfile.eligibleForAdmission || ""}</span>
+            <span style="border-bottom: 1px solid #000000; width: 180px; font-weight: bold; padding: 0 4px; font-size: 11px; text-align: center;">${escapeHtml(studentProfile.eligibleForAdmission || "")}</span>
           </div>
         </div>
 
@@ -357,14 +293,14 @@ export async function exportSf9Pdf({
           <!-- Adviser signature on the right -->
           <div style="display: flex; justify-content: flex-end; margin-right: 40px; margin-bottom: 6px;">
             <div style="width: 180px; text-align: center;">
-              <div style="border-bottom: 1px solid #000000; font-weight: bold; font-size: 11px; padding-bottom: 2px; min-height: 16px;">${studentProfile.adviserName || ""}</div>
+              <div style="border-bottom: 1px solid #000000; font-weight: bold; font-size: 11px; padding-bottom: 2px; min-height: 16px;">${escapeHtml(studentProfile.adviserName || "")}</div>
               <div style="font-size: 10px; margin-top: 2px;">Adviser</div>
             </div>
           </div>
           <!-- School Head signature on the left below Adviser -->
           <div style="display: flex; justify-content: flex-start; margin-left: 40px;">
             <div style="width: 180px; text-align: center;">
-              <div style="border-bottom: 1px solid #000000; font-weight: bold; font-size: 11px; padding-bottom: 2px; min-height: 16px;">${(studentProfile.principalName || "").toUpperCase()}</div>
+              <div style="border-bottom: 1px solid #000000; font-weight: bold; font-size: 11px; padding-bottom: 2px; min-height: 16px;">${escapeHtml((studentProfile.principalName || "").toUpperCase())}</div>
               <div style="font-size: 10px; margin-top: 2px;">School Head</div>
             </div>
           </div>
@@ -389,7 +325,7 @@ export async function exportSf9Pdf({
 
         <div style="display: flex; justify-content: flex-start; margin-left: 10px;">
           <div style="width: 180px; text-align: center;">
-            <div style="border-bottom: 1px solid #000000; font-weight: bold; font-size: 11px; padding-bottom: 2px; min-height: 16px;">${(studentProfile.principalName || "").toUpperCase()}</div>
+            <div style="border-bottom: 1px solid #000000; font-weight: bold; font-size: 11px; padding-bottom: 2px; min-height: 16px;">${escapeHtml((studentProfile.principalName || "").toUpperCase())}</div>
             <div style="font-size: 10px; margin-top: 2px;">School Head</div>
           </div>
         </div>
@@ -397,6 +333,74 @@ export async function exportSf9Pdf({
     </div>
   `;
 
+  return [frontHtml, backHtml];
+}
+
+export function printSf9Report(options, title, signal) {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) return resolve();
+    const pages = buildSf9Pages(options);
+    const frame = document.createElement("iframe");
+    frame.title = title;
+    frame.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0";
+    let originalTitle;
+    let cleanupTimer;
+    let cleanedUp = false;
+
+    const cleanup = () => {
+      if (cleanedUp) return;
+      cleanedUp = true;
+      clearTimeout(cleanupTimer);
+      signal.removeEventListener("abort", cleanup);
+      window.removeEventListener("afterprint", cleanup);
+      if (originalTitle !== undefined && document.title === title) document.title = originalTitle;
+      frame.remove();
+      resolve();
+    };
+
+    const fail = (error) => {
+      reject(error);
+      cleanup();
+    };
+
+    cleanupTimer = setTimeout(() => fail(new Error("SF9 print preview did not load.")), 5000);
+    signal.addEventListener("abort", cleanup, { once: true });
+    frame.onerror = () => fail(new Error("SF9 print preview could not load."));
+    frame.onload = () => {
+      clearTimeout(cleanupTimer);
+      try {
+        const printWindow = frame.contentWindow;
+        originalTitle = document.title;
+        document.title = title;
+        window.addEventListener("afterprint", cleanup, { once: true });
+        printWindow.addEventListener("afterprint", cleanup, { once: true });
+        printWindow.focus();
+        printWindow.print();
+        // Some browsers return from print without dispatching afterprint.
+        // Button availability must not depend on that event.
+        resolve();
+        if (!cleanedUp) cleanupTimer = setTimeout(cleanup, 120_000);
+      } catch (error) {
+        fail(error);
+      }
+    };
+
+    frame.srcdoc = '<!doctype html><html lang="en"><head><meta charset="utf-8">' +
+      '<title>' + escapeHtml(title) + '</title><style>' +
+      '@page { size: letter; margin: 0; } html,body { margin: 0; padding: 0; }' +
+      'section { break-inside: avoid; } section + section { break-before: page; }' +
+      '</style></head><body>' + pages.map((page) => '<section>' + page + '</section>').join('') +
+      '</body></html>';
+    document.body.appendChild(frame);
+  });
+}
+
+/** Creates a two-page SF9 PDF in the browser. */
+export async function exportSf9Pdf(options) {
+  const { studentProfile = {}, skipDownload = false, fileName } = options;
+  const [frontHtml, backHtml] = buildSf9Pages(options);
+  const container = document.createElement("div");
+  container.style.cssText = "position:fixed;left:0;top:0;width:816px;z-index:-9999;opacity:0;pointer-events:none";
   const page1Div = document.createElement("div");
   page1Div.innerHTML = frontHtml;
   container.appendChild(page1Div);
@@ -415,11 +419,8 @@ export async function exportSf9Pdf({
       backgroundColor: "#ffffff",
       windowWidth: 816,
       windowHeight: 1056,
-      imageTimeout: 15000,
+      imageTimeout: 5000,
     };
-
-    const canvas1 = await html2canvas(page1Div.firstElementChild, canvasOptions);
-    const canvas2 = await html2canvas(page2Div.firstElementChild, canvasOptions);
 
     const pdf = new jsPDF({
       orientation: "portrait",
@@ -428,12 +429,22 @@ export async function exportSf9Pdf({
       compress: true,
     });
 
-    const img1Data = canvas1.toDataURL("image/png");
-    pdf.addImage(img1Data, "PNG", 0, 0, 612, 792, undefined, "FAST");
-
-    pdf.addPage();
-    const img2Data = canvas2.toDataURL("image/png");
-    pdf.addImage(img2Data, "PNG", 0, 0, 612, 792, undefined, "FAST");
+    for (const page of [page1Div, page2Div]) {
+      const canvas = await html2canvas(page.firstElementChild, canvasOptions);
+      try {
+        // Encode directly to bytes so jsPDF can embed the image without re-compressing it.
+        const image = await new Promise((resolve, reject) => {
+          canvas.toBlob((blob) => {
+            if (blob) resolve(blob);
+            else reject(new Error("Could not encode SF9 PDF page."));
+          }, "image/jpeg", 0.98);
+        });
+        if (page === page2Div) pdf.addPage();
+        pdf.addImage(new Uint8Array(await image.arrayBuffer()), "JPEG", 0, 0, 612, 792);
+      } finally {
+        canvas.width = canvas.height = 0;
+      }
+    }
 
     const nameParts = (studentProfile.name || "STUDENT").split(",");
     const lastName = nameParts[0].trim().toUpperCase().replace(/[^A-Z0-9_-]/gi, "");
