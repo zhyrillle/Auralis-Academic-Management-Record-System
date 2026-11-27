@@ -1181,7 +1181,7 @@ router.post('/section/:sectionId/export-pdf-zip', async (req, res) => {
     }
 
     const renderedFiles = typeof generateSf9PdfBatch === 'function'
-      ? await generateSf9PdfBatch(items, { concurrency: 4 })
+      ? await generateSf9PdfBatch(items, { concurrency: 1 })
       : await Promise.all(
           items.map(async (item) => ({
             fileName: item.fileName,
@@ -1202,6 +1202,117 @@ router.post('/section/:sectionId/export-pdf-zip', async (req, res) => {
   } catch (error) {
     console.error("Error generating bulk section SF9 ZIP:", error);
     return res.status(500).json({ error: "Failed to generate bulk SF9 ZIP", message: error.message });
+  }
+});
+
+// POST /section/:sectionId/export-pdf-stream - Streams each SF9 PDF as NDJSON so UI shows live per-student progress
+router.post('/section/:sectionId/export-pdf-stream', async (req, res) => {
+  try {
+    const cleanSectionId = String(req.params.sectionId || '').trim();
+    if (!/^[1-9]\d*$/.test(cleanSectionId)) {
+      return res.status(400).json({ error: "Invalid section ID" });
+    }
+    const schoolYearId = req.query.schoolYearId;
+    if (schoolYearId !== undefined && (typeof schoolYearId !== 'string' || !/^[1-9]\d*$/.test(schoolYearId))) {
+      return res.status(400).json({ error: "Invalid school year" });
+    }
+
+    const { sectionInfo, items } = await fetchSectionSf9DataBatch(Number(cleanSectionId), schoolYearId);
+    if (!sectionInfo || items.length === 0) {
+      return res.status(404).json({ error: "No students found in this section.", code: "NO_STUDENTS_FOUND" });
+    }
+
+    const comments = (req.body && typeof req.body.comments === 'object') ? req.body.comments : null;
+    if (comments) {
+      for (const item of items) {
+        item.options.comments = comments;
+      }
+    }
+
+    res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('X-Accel-Buffering', 'no');
+    if (typeof res.flushHeaders === 'function') res.flushHeaders();
+
+    res.write(`${JSON.stringify({
+      type: 'start',
+      total: items.length,
+      sectionName: sectionInfo.section_name || '',
+      firstStudentName: items[0]?.options?.studentProfile?.name || '',
+    })}\n`);
+
+    let streamedCount = 0;
+    const onProgress = ({ completed, total, fileName, studentName, buffer }) => {
+      streamedCount += 1;
+      res.write(`${JSON.stringify({
+        type: 'file',
+        completed,
+        total,
+        fileName,
+        studentName,
+        data: buffer.toString('base64'),
+      })}\n`);
+    };
+
+    if (typeof generateSf9PdfBatch === 'function') {
+      await generateSf9PdfBatch(items, { concurrency: 1, onProgress, retainBuffers: false });
+    } else {
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        const pdfBytes = await generateSf9Pdf(item.options);
+        const buffer = Buffer.isBuffer(pdfBytes) ? pdfBytes : Buffer.from(pdfBytes);
+        onProgress({
+          completed: i + 1,
+          total: items.length,
+          fileName: item.fileName,
+          studentName: item.options?.studentProfile?.name || item.fileName,
+          buffer,
+        });
+      }
+    }
+
+    res.write(`${JSON.stringify({ type: 'done', count: streamedCount })}\n`);
+    return res.end();
+  } catch (error) {
+    console.error("Error streaming bulk section SF9 PDFs:", error);
+    if (!res.headersSent) {
+      return res.status(500).json({ error: "Failed to stream SF9 PDFs", message: error.message });
+    }
+    res.write(`${JSON.stringify({ type: 'error', error: error.message || 'Failed to generate SF9 PDFs' })}\n`);
+    return res.end();
+  }
+});
+
+// POST /section/:sectionId/batch-data - Single batched section SF9 payload for fast client-side vector PDF export
+router.post('/section/:sectionId/batch-data', async (req, res) => {
+  try {
+    const cleanSectionId = String(req.params.sectionId || '').trim();
+    if (!/^[1-9]\d*$/.test(cleanSectionId)) {
+      return res.status(400).json({ error: "Invalid section ID" });
+    }
+    const schoolYearId = req.query.schoolYearId;
+    if (schoolYearId !== undefined && (typeof schoolYearId !== 'string' || !/^[1-9]\d*$/.test(schoolYearId))) {
+      return res.status(400).json({ error: "Invalid school year" });
+    }
+
+    const { sectionInfo, items } = await fetchSectionSf9DataBatch(Number(cleanSectionId), schoolYearId);
+    if (!sectionInfo || items.length === 0) {
+      return res.status(404).json({ error: "No students found in this section.", code: "NO_STUDENTS_FOUND" });
+    }
+
+    return res.json({
+      sectionName: sectionInfo.section_name || "",
+      count: items.length,
+      items: items.map((item) => ({
+        fileName: item.fileName,
+        studentProfile: item.options.studentProfile,
+        grades: item.options.grades,
+        attendanceData: item.options.attendanceData,
+      })),
+    });
+  } catch (error) {
+    console.error("Error fetching bulk section SF9 data:", error);
+    return res.status(500).json({ error: "Failed to fetch bulk SF9 data", message: error.message });
   }
 });
 

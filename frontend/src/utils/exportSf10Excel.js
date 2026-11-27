@@ -51,36 +51,88 @@ function parseNameParts(fullName) {
 }
 
 /**
- * Helper to fetch image asset as base64 string for ExcelJS image attachment
+ * Helper to fetch, downscale (if oversized), and cache image asset as base64 string for ExcelJS.
+ * Prevents re-fetching and DEFLATE-compressing a 1.19MB logo on every single student in bulk exports.
  */
+const cachedExcelLogoPromises = new Map();
+
 async function fetchImageBase64(url) {
   if (!url || typeof window === "undefined" || !window.fetch) return null;
-  try {
-    const res = await fetch(url);
-    const blob = await res.blob();
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const result = reader.result;
-        if (typeof result === "string" && result.includes(",")) {
-          const mimeMatch = result.match(/data:([^;]+);/);
-          const mime = mimeMatch ? mimeMatch[1] : "";
-          const ext = mime.includes("gif") ? "gif" : (mime.includes("jpeg") || mime.includes("jpg")) ? "jpeg" : "png";
-          resolve({
-            base64: result.split(",")[1],
-            extension: ext
-          });
-        } else {
-          resolve(null);
-        }
-      };
-      reader.onerror = () => resolve(null);
-      reader.readAsDataURL(blob);
-    });
-  } catch (err) {
-    console.warn("Could not load logo image for Excel attachment:", err);
-    return null;
-  }
+  if (cachedExcelLogoPromises.has(url)) return cachedExcelLogoPromises.get(url);
+
+  const promise = (async () => {
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+
+      // Downscale oversized PNG logos (>60KB) once to 240x240 PNG (~35KB) so ExcelJS writeBuffer is 10x faster
+      if (
+        blob.size > 60000 &&
+        blob.type !== "image/gif" &&
+        typeof document !== "undefined" &&
+        typeof Image !== "undefined"
+      ) {
+        const resized = await new Promise((resolve) => {
+          const objectUrl = URL.createObjectURL(blob);
+          const img = new Image();
+          img.onload = () => {
+            try {
+              const maxDim = 240;
+              const scale = Math.min(1, maxDim / Math.max(img.naturalWidth || 1, img.naturalHeight || 1));
+              const w = Math.max(1, Math.round((img.naturalWidth || maxDim) * scale));
+              const h = Math.max(1, Math.round((img.naturalHeight || maxDim) * scale));
+              const canvas = document.createElement("canvas");
+              canvas.width = w;
+              canvas.height = h;
+              const ctx = canvas.getContext("2d");
+              ctx.imageSmoothingEnabled = true;
+              ctx.imageSmoothingQuality = "high";
+              ctx.drawImage(img, 0, 0, w, h);
+              const dataUrl = canvas.toDataURL("image/png");
+              resolve({ base64: dataUrl.split(",")[1], extension: "png" });
+            } catch {
+              resolve(null);
+            } finally {
+              URL.revokeObjectURL(objectUrl);
+            }
+          };
+          img.onerror = () => {
+            URL.revokeObjectURL(objectUrl);
+            resolve(null);
+          };
+          img.src = objectUrl;
+        });
+        if (resized) return resized;
+      }
+
+      return await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const result = reader.result;
+          if (typeof result === "string" && result.includes(",")) {
+            const mimeMatch = result.match(/data:([^;]+);/);
+            const mime = mimeMatch ? mimeMatch[1] : "";
+            const ext = mime.includes("gif") ? "gif" : (mime.includes("jpeg") || mime.includes("jpg")) ? "jpeg" : "png";
+            resolve({
+              base64: result.split(",")[1],
+              extension: ext
+            });
+          } else {
+            resolve(null);
+          }
+        };
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(blob);
+      });
+    } catch (err) {
+      cachedExcelLogoPromises.delete(url);
+      console.warn("Could not load logo image for Excel attachment:", err);
+      return null;
+    }
+  })();
+
+  cachedExcelLogoPromises.set(url, promise);
+  return promise;
 }
 
 /**

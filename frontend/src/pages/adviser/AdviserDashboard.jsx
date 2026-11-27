@@ -17,14 +17,14 @@ import { getStoredUser } from "../../utils/auth";
 import { getAdviserBannerIllustration } from "../../utils/adviserBannerIllustration";
 
 // Exporters & Assets
-import { exportSf9Pdf } from "../../utils/exportSf9Pdf";
+import { generateVectorSf9Pdf } from "../../utils/generateVectorSf9Pdf";
 import { exportSf10Excel } from "../../utils/exportSf10Excel";
 import depedLogo from "../../assets/deped_logo.png";
 import gccnhsLogo from "../../assets/gccnhs_logo.png";
 import Toast from "../../components/common/Toast.jsx";
 
 // Student & Report Services
-import { getStudentSF9Details, downloadStudentSf9Pdf, downloadSectionSf9Zip, fetchEphemeralLrn } from "../../services/studentSf9Service";
+import { getStudentSF9Details, fetchSectionSf9BatchData, fetchEphemeralLrn } from "../../services/studentSf9Service";
 import { getStudentSF10Details, fetchEphemeralSf10Lrn } from "../../services/reportService";
 import { getAdviserSections, getStudentsBySection } from "../../services/sectionService";
 import { getSectionDetails } from "../../services/sectionDetailsService";
@@ -444,35 +444,77 @@ export default function AdviserDashboard() {
         }
       };
 
-      // Fast path for SF9-only bulk download: single batched backend request (pooled SQL + parallel PDFs + ZIP)
+      const yieldToUi = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+      // Fast path for SF9-only bulk download: 1 batched DB request + instant native vector PDF generation (~5ms/student)
       if (isSF9 && numericSectionId) {
-        showToast(`Generating SF9 Report Cards for section ${sectionName}...`, "info", Loader2, true);
+        showToast(`Loading students for section ${sectionName}...`, "info", Loader2, true);
         try {
-          const zipBlob = await downloadSectionSf9Zip(numericSectionId, {
+          const batchPayload = await fetchSectionSf9BatchData(numericSectionId, {
             schoolYearId: syId,
-            comments: { term1: "", term2: "", term3: "" },
           });
-          if (zipBlob && zipBlob.size > 100) {
-            const zipFileName = `${cleanSectionName}_All_SF9_Report_Cards.zip`;
-            triggerZipDownload(zipBlob, zipFileName);
-            showToast(`Successfully downloaded ${zipFileName}!`, "success", CheckCircle2, false);
-            return;
+          const batchItems = Array.isArray(batchPayload?.items) ? batchPayload.items : [];
+          if (batchItems.length === 0) {
+            throw new Error(`No students found in advisory section ${sectionName}.`);
           }
+
+          const zip = new JSZip();
+          let generatedCount = 0;
+
+          for (let i = 0; i < batchItems.length; i++) {
+            const item = batchItems[i];
+            const displayName = item.studentProfile?.name || item.fileName;
+            showToast(
+              `Generating documents (${i + 1}/${batchItems.length}): ${displayName}...`,
+              "info",
+              Loader2,
+              true
+            );
+            await yieldToUi();
+
+            try {
+              const sf9Result = await generateVectorSf9Pdf({
+                studentProfile: item.studentProfile,
+                grades: item.grades || [],
+                attendanceData: item.attendanceData || {},
+                comments: { term1: "", term2: "", term3: "" },
+                depedLogo,
+                gccnhsLogo,
+                fileName: item.fileName,
+                skipDownload: true,
+              });
+              if (sf9Result?.blob) {
+                zip.file(item.fileName, sf9Result.blob);
+                generatedCount++;
+              }
+            } finally {
+              // Immediately wipe ephemeral plaintext LRN from function scope
+              if (item.studentProfile) item.studentProfile.lrn = null;
+            }
+          }
+
+          if (generatedCount === 0) {
+            throw new Error("No document files could be generated.");
+          }
+
+          showToast("Packing files into ZIP archive...", "info", Loader2, true);
+          const zipBlob = await zip.generateAsync({ type: "blob", compression: "STORE" });
+          const zipFileName = `${cleanSectionName}_All_SF9_Report_Cards.zip`;
+          triggerZipDownload(zipBlob, zipFileName);
+          showToast(`Successfully downloaded ${zipFileName}!`, "success", CheckCircle2, false);
+          return;
         } catch (batchErr) {
           if (batchErr?.status === 404 && batchErr?.code === "NO_STUDENTS_FOUND") {
             throw new Error(`No students found in advisory section ${sectionName}.`);
           }
-          console.warn("Bulk SF9 ZIP endpoint unavailable, falling back to per-student generation:", batchErr);
+          console.warn("Bulk SF9 batch-data endpoint unavailable, falling back to per-student generation:", batchErr);
         }
       }
 
-      // Start bulk SF9 ZIP in parallel when downloading Bulk Documents (SF9 + SF10)
-      const bulkSf9ZipPromise = isBulk && numericSectionId
-        ? downloadSectionSf9Zip(numericSectionId, {
-            schoolYearId: syId,
-            comments: { term1: "", term2: "", term3: "" },
-          }).catch((batchErr) => {
-            console.warn("Bulk SF9 ZIP unavailable during combined export, will fall back per student:", batchErr);
+      // Fetch batched SF9 data in parallel when downloading Bulk Documents (SF9 + SF10)
+      const bulkSf9BatchPromise = isBulk && numericSectionId
+        ? fetchSectionSf9BatchData(numericSectionId, { schoolYearId: syId }).catch((err) => {
+            console.warn("Bulk SF9 batch-data unavailable during combined export, falling back per student:", err);
             return null;
           })
         : Promise.resolve(null);
@@ -537,34 +579,20 @@ export default function AdviserDashboard() {
 
       let successCount = 0;
 
-      // If combined Bulk Documents got the server-built SF9 ZIP, merge its PDFs directly into SF9/
-      let handledBulkSf9 = false;
-      if (isBulk && numericSectionId) {
-        const bulkSf9ZipBlob = await bulkSf9ZipPromise;
-        if (bulkSf9ZipBlob && bulkSf9ZipBlob.size > 100) {
-          try {
-            const loadedSf9Zip = await JSZip.loadAsync(bulkSf9ZipBlob);
-            const entries = Object.values(loadedSf9Zip.files).filter((f) => !f.dir);
-            for (const entry of entries) {
-              const fileData = await entry.async("uint8array");
-              sf9Folder.file(entry.name, fileData);
-              successCount++;
-            }
-            if (entries.length > 0) handledBulkSf9 = true;
-          } catch (unpackErr) {
-            console.warn("Could not unpack bulk SF9 ZIP, falling back per student:", unpackErr);
+      // Index pre-fetched SF9 batch items by studentId for instant lookup in Bulk Documents
+      const bulkSf9Batch = await bulkSf9BatchPromise;
+      const bulkSf9ByStudentId = new Map();
+      if (bulkSf9Batch && Array.isArray(bulkSf9Batch.items)) {
+        for (const item of bulkSf9Batch.items) {
+          if (item.studentProfile?.studentId != null) {
+            bulkSf9ByStudentId.set(Number(item.studentProfile.studentId), item);
           }
         }
       }
 
-      // 4. Process students with bounded concurrency for fast generation without memory spikes
-      const needPerStudentSf9 = (isSF9 || isBulk) && !handledBulkSf9;
-      const needPerStudentSf10 = isSF10 || isBulk;
-      const concurrency = needPerStudentSf9 ? 3 : 4;
-      let completedStudents = 0;
-      let nextStudentIndex = 0;
-
-      const processStudent = async (student) => {
+      // 4. Process students sequentially to keep CPU/DB responsive and show clean live progress
+      for (let i = 0; i < students.length; i++) {
+        const student = students[i];
         const studentIdentifier =
           student.student_id ||
           student.studentId ||
@@ -587,44 +615,53 @@ export default function AdviserDashboard() {
 
         const studentBaseName = firstName ? `${lastName}_${firstName}` : lastName;
 
-        // --- Generate SF9 if requested and not already handled via bulk endpoint ---
-        if (needPerStudentSf9) {
+        showToast(
+          `Generating documents (${i + 1}/${students.length}): ${student.name || `${lastName}, ${firstName}`}...`,
+          "info",
+          Loader2,
+          true
+        );
+
+        // --- Generate SF9 if requested ---
+        if (isSF9 || isBulk) {
           try {
-            let sf9Blob = null;
-
-            // Attempt 1: Native Vector PDF via Backend (Razor-sharp, 100% crisp vector fonts, zero blur)
-            try {
-              const backendBlob = await downloadStudentSf9Pdf(studentIdentifier, {
-                schoolYearId: syId,
-                comments: { term1: "", term2: "", term3: "" },
-              });
-              if (backendBlob && backendBlob.size > 1000) {
-                sf9Blob = backendBlob;
-              }
-            } catch (backendErr) {
-              console.warn(`Backend PDF unavailable for student ${studentIdentifier}, using client fallback:`, backendErr);
-            }
-
-            // Attempt 2: Fallback to high-resolution client-side PDF with ephemeral LRN
-            if (!sf9Blob) {
-              let sf9Data = null;
-              if (studentIdentifier) {
-                try {
-                  sf9Data = await getStudentSF9Details(studentIdentifier, {
-                    schoolYearId: syId,
-                  });
-                } catch (sf9FetchErr) {
-                  console.warn(`Could not fetch dynamic SF9 data for student ${studentIdentifier}:`, sf9FetchErr);
-                }
-              }
-
-              let exportLrn = sf9Data?.studentProfile?.lrn || student.lrn;
+            const preloaded = bulkSf9ByStudentId.get(Number(student.student_id || student.studentId || student.id));
+            if (preloaded) {
               try {
-                const fetchedLrn = await fetchEphemeralLrn(studentIdentifier) || await fetchEphemeralSf10Lrn(studentIdentifier);
-                if (fetchedLrn) exportLrn = fetchedLrn;
-              } catch (lrnErr) {
-                console.warn(`Could not fetch ephemeral LRN for student ${studentIdentifier}:`, lrnErr);
+                const sf9Result = await generateVectorSf9Pdf({
+                  studentProfile: preloaded.studentProfile,
+                  grades: preloaded.grades || [],
+                  attendanceData: preloaded.attendanceData || {},
+                  comments: { term1: "", term2: "", term3: "" },
+                  depedLogo,
+                  gccnhsLogo,
+                  fileName: preloaded.fileName,
+                  skipDownload: true,
+                });
+                if (sf9Result?.blob) {
+                  const uniqueSf9FileName = makeUniqueName(`${studentBaseName}_SF9`, "pdf", usedSf9Names);
+                  sf9Folder.file(uniqueSf9FileName, sf9Result.blob);
+                  successCount++;
+                }
+              } finally {
+                if (preloaded.studentProfile) preloaded.studentProfile.lrn = null;
               }
+            } else {
+              const [sf9Data, fetchedLrn] = await Promise.all([
+                studentIdentifier
+                  ? getStudentSF9Details(studentIdentifier, { schoolYearId: syId }).catch((sf9FetchErr) => {
+                      console.warn(`Could not fetch dynamic SF9 data for student ${studentIdentifier}:`, sf9FetchErr);
+                      return null;
+                    })
+                  : Promise.resolve(null),
+                studentIdentifier
+                  ? fetchEphemeralLrn(studentIdentifier)
+                      .catch(() => fetchEphemeralSf10Lrn(studentIdentifier))
+                      .catch(() => null)
+                  : Promise.resolve(null),
+              ]);
+
+              let exportLrn = fetchedLrn || sf9Data?.studentProfile?.lrn || student.lrn;
 
               const temporaryProfile = {
                 ...(sf9Data?.studentProfile || {}),
@@ -639,7 +676,7 @@ export default function AdviserDashboard() {
                 schoolYear: sf9Data?.studentProfile?.schoolYear || advClass.schoolYear || advClass.school_year || "",
               };
 
-              const sf9Result = await exportSf9Pdf({
+              const sf9Result = await generateVectorSf9Pdf({
                 studentProfile: temporaryProfile,
                 grades: sf9Data?.grades || [],
                 performanceDescriptors: sf9Data?.performanceDescriptors || [],
@@ -655,19 +692,14 @@ export default function AdviserDashboard() {
                 skipDownload: true,
               });
 
-              // Clear ephemeral decrypted LRN immediately from function scope
               temporaryProfile.lrn = null;
               exportLrn = null;
 
               if (sf9Result?.blob) {
-                sf9Blob = sf9Result.blob;
+                const uniqueSf9FileName = makeUniqueName(`${studentBaseName}_SF9`, "pdf", usedSf9Names);
+                sf9Folder.file(uniqueSf9FileName, sf9Result.blob);
+                successCount++;
               }
-            }
-
-            if (sf9Blob) {
-              const uniqueSf9FileName = makeUniqueName(`${studentBaseName}_SF9`, "pdf", usedSf9Names);
-              sf9Folder.file(uniqueSf9FileName, sf9Blob);
-              successCount++;
             }
           } catch (sf9Err) {
             console.error(`Error generating SF9 for student ${studentIdentifier}:`, sf9Err);
@@ -675,25 +707,24 @@ export default function AdviserDashboard() {
         }
 
         // --- Generate SF10 if requested ---
-        if (needPerStudentSf10) {
+        if (isSF10 || isBulk) {
           try {
-            let sf10Data = null;
-            if (studentIdentifier) {
-              try {
-                sf10Data = await getStudentSF10Details(studentIdentifier);
-              } catch (sf10FetchErr) {
-                console.warn(`Could not fetch dynamic SF10 data for student ${studentIdentifier}:`, sf10FetchErr);
-              }
-            }
+            const [sf10Data, fetchedLrn] = await Promise.all([
+              studentIdentifier
+                ? getStudentSF10Details(studentIdentifier).catch((sf10FetchErr) => {
+                    console.warn(`Could not fetch dynamic SF10 data for student ${studentIdentifier}:`, sf10FetchErr);
+                    return null;
+                  })
+                : Promise.resolve(null),
+              studentIdentifier
+                ? fetchEphemeralSf10Lrn(studentIdentifier)
+                    .catch(() => fetchEphemeralLrn(studentIdentifier))
+                    .catch(() => null)
+                : Promise.resolve(null),
+            ]);
 
             // Ephemeral on-demand fetch of official 12-digit LRN strictly for document export (DPA compliance)
-            let exportSf10Lrn = student.lrn || sf10Data?.learner?.lrn;
-            try {
-              const fetchedLrn = await fetchEphemeralSf10Lrn(studentIdentifier) || await fetchEphemeralLrn(studentIdentifier);
-              if (fetchedLrn) exportSf10Lrn = fetchedLrn;
-            } catch (lrnErr) {
-              console.warn(`Could not fetch ephemeral LRN for student ${studentIdentifier}:`, lrnErr);
-            }
+            let exportSf10Lrn = fetchedLrn || student.lrn || sf10Data?.learner?.lrn;
 
             const temporarySf10Student = {
               ...student,
@@ -739,25 +770,7 @@ export default function AdviserDashboard() {
             console.error(`Error generating SF10 for student ${studentIdentifier}:`, sf10Err);
           }
         }
-
-        completedStudents++;
-        showToast(
-          `Generating documents (${completedStudents}/${students.length}): ${student.name || `${lastName}, ${firstName}`}...`,
-          "info",
-          Loader2,
-          true
-        );
-      };
-
-      const workerCount = Math.min(concurrency, students.length);
-      await Promise.all(
-        Array.from({ length: workerCount }, async () => {
-          while (nextStudentIndex < students.length) {
-            const idx = nextStudentIndex++;
-            await processStudent(students[idx]);
-          }
-        })
-      );
+      }
 
       if (successCount === 0) {
         throw new Error("No document files could be generated.");

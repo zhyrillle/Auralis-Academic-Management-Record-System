@@ -546,16 +546,16 @@ async function generateSf9Pdf(options) {
  * a single isolated browser context (JS disabled + strict CSP guarantees zero cross-learner state).
  *
  * @param {Array<{ fileName: string, options: object }>} items
- * @param {{ concurrency?: number }} [config]
+ * @param {{ concurrency?: number, onProgress?: (info: { index: number, completed: number, total: number, fileName: string, studentName: string, buffer: Buffer }) => void|Promise<void>, retainBuffers?: boolean }} [config]
  * @returns {Promise<Array<{ fileName: string, buffer: Buffer }>>}
  */
-async function generateSf9PdfBatch(items, { concurrency = 4 } = {}) {
+async function generateSf9PdfBatch(items, { concurrency = 1, onProgress = null, retainBuffers = true } = {}) {
   if (!Array.isArray(items) || items.length === 0) return [];
   const browser = await getSf9Browser();
   await ensureOptimizedLogos(browser);
 
-  const workerCount = Math.max(1, Math.min(Number(concurrency) || 4, items.length));
-  const results = new Array(items.length);
+  const workerCount = Math.max(1, Math.min(Number(concurrency) || 1, items.length));
+  const results = retainBuffers ? new Array(items.length) : [];
   const context = await browser.createBrowserContext();
 
   try {
@@ -569,6 +569,7 @@ async function generateSf9PdfBatch(items, { concurrency = 4 } = {}) {
     );
 
     let nextIndex = 0;
+    let completed = 0;
     await Promise.all(
       pages.map(async (page) => {
         while (nextIndex < items.length) {
@@ -577,15 +578,31 @@ async function generateSf9PdfBatch(items, { concurrency = 4 } = {}) {
           const html = buildSf9Html(item.options);
           await page.setContent(html, { waitUntil: 'load' });
           const pdfBytes = await page.pdf(PDF_OPTIONS);
-          results[currentIndex] = {
-            fileName: item.fileName,
-            buffer: Buffer.isBuffer(pdfBytes) ? pdfBytes : Buffer.from(pdfBytes),
-          };
+          const buffer = Buffer.isBuffer(pdfBytes) ? pdfBytes : Buffer.from(pdfBytes);
+          completed += 1;
+
+          if (retainBuffers) {
+            results[currentIndex] = {
+              fileName: item.fileName,
+              buffer,
+            };
+          }
+
+          if (typeof onProgress === 'function') {
+            await onProgress({
+              index: currentIndex,
+              completed,
+              total: items.length,
+              fileName: item.fileName,
+              studentName: item.options?.studentProfile?.name || item.fileName,
+              buffer,
+            });
+          }
         }
       })
     );
 
-    return results.filter(Boolean);
+    return retainBuffers ? results.filter(Boolean) : [];
   } finally {
     await context.close();
   }

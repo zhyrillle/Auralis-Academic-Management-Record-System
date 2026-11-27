@@ -239,4 +239,175 @@ test('Sf9PdfService default performance descriptors mark Developing and Emerging
   assert.doesNotMatch(html, /Emerging[\s\S]{0,200}Passed/);
 });
 
+test('POST /section/:sectionId/export-pdf-stream streams start, per-student file progress, and done NDJSON events', async () => {
+  let streamHandler;
+  const router = {
+    get: () => {},
+    post: (routePath, route) => {
+      if (routePath === '/section/:sectionId/export-pdf-stream') streamHandler = route;
+    },
+  };
+
+  const db = {
+    execute: async (sql) => {
+      if (sql.includes('FROM SECTION sec')) {
+        return [[{
+          section_id: 7, section_name: 'Cedar', program_id: 1,
+          program_code: 'EBEC', program_name: 'Enhanced Basic Education Curriculum',
+          grade_level_name: 'Grade 9', school_year_id: 2,
+          starts_on: '2025-06-01', ends_on: '2026-03-31',
+        }]];
+      }
+      if (sql.includes('FROM STUDENT_SECTION ss')) {
+        return [[
+          { student_section_id: 501, section_id: 7, school_year_id: 2, student_id: 41, LRN: '100000000041', first_name: 'Juan', last_name: 'Dela Cruz', sex: 'M' },
+          { student_section_id: 502, section_id: 7, school_year_id: 2, student_id: 42, LRN: '100000000042', first_name: 'Maria', last_name: 'Santos', sex: 'F' },
+        ]];
+      }
+      if (sql.includes('FROM SECTION_ADVISER_ASSIGNMENT')) {
+        return [[{ adviser_assignment_id: 90, user_id: 10, first_name: 'Ana', last_name: 'Reyes' }]];
+      }
+      if (sql.includes("WHERE role IN ('1', 'principal', '5')")) {
+        return [[{ first_name: 'Jose', last_name: 'Cruz' }]];
+      }
+      return [[]];
+    },
+  };
+
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../routes/studentSf9Routes.js'), 'utf8'), {
+    module: { exports: {} }, console,
+    require: (name) => {
+      if (name === 'express') return { Router: () => router };
+      if (name === '../config/db') return db;
+      if (name === '../services/MasterSheetService') return { getMasterSheet: async () => ({ students: [] }) };
+      if (name === '../services/AttendanceSummaryService') return require('../services/AttendanceSummaryService');
+      if (name === '../utils/encryption') return require('../utils/encryption');
+      if (name === '../services/Sf9PdfService') {
+        return {
+          generateSf9Pdf: async () => Buffer.from('%PDF-1.4'),
+          generateSf9PdfBatch: async (items, { onProgress }) => {
+            for (let i = 0; i < items.length; i++) {
+              await onProgress({
+                index: i,
+                completed: i + 1,
+                total: items.length,
+                fileName: items[i].fileName,
+                studentName: items[i].options.studentProfile.name,
+                buffer: Buffer.from(`%PDF-1.4 ${items[i].options.studentProfile.name}`),
+              });
+            }
+            return [];
+          },
+          createZipBuffer: () => Buffer.alloc(0),
+        };
+      }
+      throw new Error(`Unexpected dependency: ${name}`);
+    },
+  });
+
+  const chunks = [];
+  const headers = {};
+  const response = {
+    statusCode: 200,
+    headersSent: false,
+    setHeader(k, v) { headers[k] = v; },
+    flushHeaders() { this.headersSent = true; },
+    write(chunk) { chunks.push(chunk); },
+    end() { this.ended = true; return this; },
+    status(code) { this.statusCode = code; return this; },
+    json(body) { this.body = body; return this; },
+  };
+
+  await streamHandler({ params: { sectionId: '7' }, query: { schoolYearId: '2' }, body: {} }, response);
+
+  assert.equal(response.statusCode, 200);
+  assert.match(headers['Content-Type'], /application\/x-ndjson/);
+  assert.equal(response.ended, true);
+  const events = chunks.join('').trim().split('\n').map((line) => JSON.parse(line));
+  assert.equal(events[0].type, 'start');
+  assert.equal(events[0].total, 2);
+  assert.equal(events[0].firstStudentName, 'DELA CRUZ, JUAN');
+  assert.equal(events[1].type, 'file');
+  assert.equal(events[1].completed, 1);
+  assert.equal(events[1].studentName, 'DELA CRUZ, JUAN');
+  assert.equal(Buffer.from(events[1].data, 'base64').toString('utf8'), '%PDF-1.4 DELA CRUZ, JUAN');
+  assert.equal(events[2].type, 'file');
+  assert.equal(events[2].completed, 2);
+  assert.equal(events[2].studentName, 'SANTOS, MARIA');
+  assert.equal(events[3].type, 'done');
+  assert.equal(events[3].count, 2);
+});
+
+test('POST /section/:sectionId/batch-data returns all learners SF9 payload in one batched pass', async () => {
+  let batchDataHandler;
+  let masterSheetCalls = 0;
+  const router = {
+    get: () => {},
+    post: (routePath, route) => {
+      if (routePath === '/section/:sectionId/batch-data') batchDataHandler = route;
+    },
+  };
+
+  const db = {
+    execute: async (sql) => {
+      if (sql.includes('FROM SECTION sec')) {
+        return [[{
+          section_id: 7, section_name: 'Cedar', program_id: 1,
+          program_code: 'EBEC', program_name: 'Enhanced Basic Education Curriculum',
+          grade_level_name: 'Grade 9', school_year_id: 2,
+          starts_on: '2025-06-01', ends_on: '2026-03-31',
+        }]];
+      }
+      if (sql.includes('FROM STUDENT_SECTION ss')) {
+        return [[
+          { student_section_id: 501, section_id: 7, school_year_id: 2, student_id: 41, LRN: '100000000041', first_name: 'Juan', last_name: 'Dela Cruz', sex: 'M' },
+          { student_section_id: 502, section_id: 7, school_year_id: 2, student_id: 42, LRN: '100000000042', first_name: 'Maria', last_name: 'Santos', sex: 'F' },
+        ]];
+      }
+      if (sql.includes('FROM SECTION_ADVISER_ASSIGNMENT')) {
+        return [[{ adviser_assignment_id: 90, user_id: 10, first_name: 'Ana', last_name: 'Reyes' }]];
+      }
+      if (sql.includes("WHERE role IN ('1', 'principal', '5')")) {
+        return [[{ first_name: 'Jose', last_name: 'Cruz' }]];
+      }
+      return [[]];
+    },
+  };
+
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../routes/studentSf9Routes.js'), 'utf8'), {
+    module: { exports: {} }, console,
+    require: (name) => {
+      if (name === 'express') return { Router: () => router };
+      if (name === '../config/db') return db;
+      if (name === '../services/MasterSheetService') {
+        return {
+          getMasterSheet: async () => {
+            masterSheetCalls += 1;
+            return { students: [] };
+          },
+        };
+      }
+      if (name === '../services/AttendanceSummaryService') return require('../services/AttendanceSummaryService');
+      if (name === '../utils/encryption') return require('../utils/encryption');
+      if (name === '../services/Sf9PdfService') return { generateSf9Pdf: async () => Buffer.from('%PDF-1.4') };
+      throw new Error(`Unexpected dependency: ${name}`);
+    },
+  });
+
+  const response = {
+    statusCode: 200,
+    status(code) { this.statusCode = code; return this; },
+    json(body) { this.body = body; return this; },
+  };
+
+  await batchDataHandler({ params: { sectionId: '7' }, query: { schoolYearId: '2' }, body: {} }, response);
+  assert.equal(response.statusCode, 200);
+  assert.equal(masterSheetCalls, 1);
+  assert.equal(response.body.sectionName, 'Cedar');
+  assert.equal(response.body.count, 2);
+  assert.equal(response.body.items[0].fileName, 'DELACRUZ_JUAN_SF9.pdf');
+  assert.equal(response.body.items[0].studentProfile.name, 'DELA CRUZ, JUAN');
+  assert.equal(response.body.items[1].fileName, 'SANTOS_MARIA_SF9.pdf');
+});
+
 
